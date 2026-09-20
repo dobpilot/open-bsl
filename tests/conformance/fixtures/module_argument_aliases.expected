@@ -1,0 +1,8 @@
+file.begin	module-reference-arguments-1
+argument.local.error	77
+argument.module.error	77
+argument.module.inside	31
+argument.module.after	31
+argument.module.alias	41
+argument.module.alias_after	42
+file.end	module-reference-arguments-1

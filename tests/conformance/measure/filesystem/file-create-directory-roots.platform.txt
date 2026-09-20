@@ -1,0 +1,13 @@
+file.begin	create-directory-roots-1
+context.effective	НеИспользовать
+create.root.one	ok
+create.root.two	ok
+create.root.three	ok
+create.relative.dot	ok
+create.relative.dot_slash	ok
+create.relative.parent	ok
+create.relative.parent_slash	ok
+create.file_object.new	ok|exists=0|file=0|string=Файл
+create.file_object.directory	ok|exists=1|file=0|string=Файл
+create.file_object.regular	ok|exists=1|file=1|string=Файл
+file.end	create-directory-roots-1

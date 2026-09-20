@@ -322,7 +322,7 @@ struct LinkAccumulator {
 
 impl LinkAccumulator {
     fn slot(&mut self, link: crate::resolved::ResolvedLink) -> Result<u32, SemaError> {
-        if let Some(found) = self.entries.iter().position(|e| *e == link) {
+        if let Some(found) = self.entries.iter().position(|e| e == &link) {
             return Ok(found as u32);
         }
         if self.entries.len() >= u16::MAX as usize {
@@ -535,6 +535,10 @@ fn resolve_program_impl(
         module_vars,
         module_var_exports,
         links: links.into_inner().entries,
+        imports: imports
+            .iter()
+            .map(|module| (module.alias.clone(), module.module))
+            .collect(),
     })
 }
 
@@ -760,6 +764,62 @@ fn resolve_snippet_stmts_mode_registry(
     allow_await: bool,
     registry: Option<&bsl_rt::RuntimeRegistry>,
 ) -> Result<ResolvedSnippetWithRequirements, SemaError> {
+    let (locals, body, requirements, _) = resolve_snippet_stmts_imports_impl(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        strict_stmt_calls,
+        allow_await,
+        registry,
+        &[],
+    )?;
+    Ok((locals, body, requirements))
+}
+
+/// Результат фрагмента с собственными межмодульными связями.
+pub type ResolvedImportedSnippet = (
+    Vec<String>,
+    Vec<RStmt>,
+    Vec<bsl_rt::LibraryRequirement>,
+    Vec<crate::resolved::ResolvedLink>,
+);
+
+/// Разрешает синхронный динамический текст с точным импортным окружением.
+///
+/// # Errors
+/// Ошибки обычного резолвинга, экспорта, арности и видимости импортов.
+pub fn resolve_snippet_stmts_with_imports(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[SnippetSignature],
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    imports: &[ImportedModule],
+) -> Result<ResolvedImportedSnippet, SemaError> {
+    resolve_snippet_stmts_imports_impl(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        true,
+        false,
+        registry,
+        imports,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_snippet_stmts_imports_impl(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[SnippetSignature],
+    strict_stmt_calls: bool,
+    allow_await: bool,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    imports: &[ImportedModule],
+) -> Result<ResolvedImportedSnippet, SemaError> {
     let empty_funcs: HashMap<String, FuncSig> = signatures
         .iter()
         .enumerate()
@@ -798,6 +858,7 @@ fn resolve_snippet_stmts_mode_registry(
         .map(|(i, name)| (name.to_uppercase(), i as u32))
         .collect();
     let labels = resolve_labels(stmts)?;
+    let links = std::cell::RefCell::new(LinkAccumulator::default());
     let mut r = Resolver {
         locals: existing_locals.to_vec(),
         index,
@@ -810,15 +871,15 @@ fn resolve_snippet_stmts_mode_registry(
         core_locals: None,
         core_module: None,
         labels: &labels,
-        imports: &[],
-        links: None,
+        imports,
+        links: Some(&links),
     };
     let body = r.resolve_block(stmts)?;
     let requirements = match registry {
         Some(registry) => registry.requirements_for(r.used_libraries.iter().cloned()),
         None => vec![bsl_rt::LibraryRequirement::bsl_rt()],
     };
-    Ok((r.locals, body, requirements))
+    Ok((r.locals, body, requirements, links.into_inner().entries))
 }
 
 /// Типы БАЗОВОГО рантайма, которые умеет строить `Новый`, — в каноническом
@@ -1141,16 +1202,27 @@ impl<'a> Resolver<'a> {
                 self.core_locals?.get(&name.to_uppercase()).copied()
             }
             RExpr::ModuleVar(slot) => self.core_module?.get(slot).copied(),
-            RExpr::NewTextWriter { .. } => Some(CoreReceiver),
-            RExpr::CreateObject { library, .. } if library.as_str() == bsl_rt::PACKAGE_NAME => {
-                Some(CoreReceiver)
+            RExpr::NewTextWriter { .. } => Some(CoreReceiver::Core),
+            RExpr::CreateObject {
+                library,
+                constructor,
+                ..
+            } => {
+                if library.as_str() == bsl_rt::PACKAGE_NAME {
+                    Some(CoreReceiver::Core)
+                } else {
+                    self.registry?
+                        .library_by_package(library.as_str())?
+                        .constructor_type(*constructor)
+                        .map(CoreReceiver::Component)
+                }
             }
             RExpr::NewArray { .. }
             | RExpr::NewStructure { .. }
             | RExpr::NewTable
             | RExpr::NewMap
             | RExpr::NewTypeDescription(_)
-            | RExpr::NewValueComparison => Some(CoreReceiver),
+            | RExpr::NewValueComparison => Some(CoreReceiver::Core),
             _ => None,
         }
     }
@@ -1242,6 +1314,49 @@ impl<'a> Resolver<'a> {
                         _ => String::new(),
                     };
                     return Err(SemaError::BuiltinFunctionAsStatement(shown));
+                }
+                // Выход RunApp — явное присваивание до SSA, а не скрытая
+                // запись VM после анализа констант и раскладки регистров.
+                if let RExpr::CallBuiltinFn {
+                    builtin: bsl_rt::BuiltinFn::RunApp,
+                    args,
+                } = &r
+                {
+                    match args.get(3) {
+                        Some(RExpr::Local(slot)) => {
+                            return Ok(Some(RStmtKind::AssignLocal {
+                                slot: *slot,
+                                value: r,
+                            }));
+                        }
+                        Some(RExpr::ModuleVar(slot)) => {
+                            return Ok(Some(RStmtKind::AssignModuleVar {
+                                slot: *slot,
+                                value: r,
+                            }));
+                        }
+                        Some(RExpr::ImportedVar(link)) => {
+                            return Ok(Some(RStmtKind::AssignImportedVar {
+                                link: *link,
+                                value: r,
+                            }));
+                        }
+                        Some(RExpr::Field { obj, name }) => {
+                            return Ok(Some(RStmtKind::AssignField {
+                                obj: (**obj).clone(),
+                                name: name.clone(),
+                                value: r,
+                            }));
+                        }
+                        Some(RExpr::Index { obj, index }) => {
+                            return Ok(Some(RStmtKind::AssignIndex {
+                                obj: (**obj).clone(),
+                                index: (**index).clone(),
+                                value: r,
+                            }));
+                        }
+                        _ => {}
+                    }
                 }
                 Ok(Some(RStmtKind::ExprStmt(r)))
             }
@@ -1407,12 +1522,16 @@ impl<'a> Resolver<'a> {
                         })
                     }
                     // В standalone-среде глобальное свойство `Метаданные`
-                    // существует, но описывает пустую конфигурацию.
-                    None if bsl_rt::BuiltinFn::lookup(name)
-                        == Some(bsl_rt::BuiltinFn::Metadata) =>
+                    // описывает пустую конфигурацию. `ЭтотОбъект` получает
+                    // текущий экземпляр BSL-модуля из VM. Переменные выше
+                    // сохраняют прежний приоритет над обоими свойствами.
+                    None if matches!(
+                        bsl_rt::BuiltinFn::lookup(name),
+                        Some(bsl_rt::BuiltinFn::Metadata | bsl_rt::BuiltinFn::ThisObject)
+                    ) =>
                     {
                         Ok(RExpr::CallBuiltinFn {
-                            builtin: bsl_rt::BuiltinFn::Metadata,
+                            builtin: bsl_rt::BuiltinFn::lookup(name).expect("проверено выше"),
                             args: Vec::new(),
                         })
                     }
@@ -2074,8 +2193,52 @@ impl<'a> Resolver<'a> {
                     // позиция 1, `СтрШаблон` — пустая подстановка).
                     let mut rargs = self.resolve_builtin_args(args)?;
                     if !builtin.is_variadic() {
+                        let application_call = matches!(
+                            builtin,
+                            bsl_rt::BuiltinFn::RunApp | bsl_rt::BuiltinFn::RunAppAsync
+                        );
+                        if application_call {
+                            for (index, default) in
+                                [(1, RExpr::Str(String::new())), (2, RExpr::Bool(false))]
+                            {
+                                if args.get(index).is_some_and(Option::is_none) {
+                                    rargs[index] = default;
+                                }
+                            }
+                        }
+                        // Пропуск запятой тоже выбирает default, но явное
+                        // Неопределено сохраняется: file-search-types.platform.txt.
+                        if matches!(
+                            builtin,
+                            bsl_rt::BuiltinFn::FindFiles | bsl_rt::BuiltinFn::FindFilesAsync
+                        ) && args.get(2).is_some_and(Option::is_none)
+                        {
+                            rargs[2] = RExpr::Bool(false);
+                        }
                         while rargs.len() < max {
-                            rargs.push(RExpr::Undefined);
+                            if application_call && rargs.len() == 1 {
+                                rargs.push(RExpr::Str(String::new()));
+                                continue;
+                            }
+                            if application_call && rargs.len() == 2 {
+                                rargs.push(RExpr::Bool(false));
+                                continue;
+                            }
+                            // У НайтиФайлы отсутствующая рекурсия означает Ложь,
+                            // а явное Неопределено вызывает ошибку. Измерено в
+                            // file-search-edges.platform.txt, find.recursive.undefined.
+                            rargs.push(
+                                if matches!(
+                                    builtin,
+                                    bsl_rt::BuiltinFn::FindFiles
+                                        | bsl_rt::BuiltinFn::FindFilesAsync
+                                ) && rargs.len() == 2
+                                {
+                                    RExpr::Bool(false)
+                                } else {
+                                    RExpr::Undefined
+                                },
+                            );
                         }
                     }
                     return Ok(RExpr::CallBuiltinFn {
@@ -2107,6 +2270,22 @@ impl<'a> Resolver<'a> {
                     return self.resolve_imported_call(module, name, args, position);
                 }
                 let method = bsl_rt::BuiltinMethod::lookup(name);
+                let obj = self.resolve_expr(obj)?;
+                let receiver = self.core_receiver_of(&obj);
+                let closed_is_safe = receiver == Some(CoreReceiver::Core);
+                let component_type = match receiver {
+                    Some(CoreReceiver::Component(ty)) => Some(ty),
+                    _ => None,
+                };
+                let component_link = component_type
+                    .map(|ty| {
+                        self.link_slot(crate::resolved::ResolvedLink::ObjectMethod {
+                            library: bsl_rt::LibraryKey::new(ty.package),
+                            type_name: ty.name,
+                            method: name.clone(),
+                        })
+                    })
+                    .transpose()?;
                 // Фиксированные арности методов вынесены в
                 // `BuiltinMethod::static_arity` (bsl-rt), чтобы их проверял и
                 // резолвер здесь, и связывание VM на крафтнутом байт-коде.
@@ -2115,6 +2294,7 @@ impl<'a> Resolver<'a> {
                 // BSL здесь ещё не известен), и её решает рантайм.
                 let expected: Option<usize> = method.and_then(bsl_rt::BuiltinMethod::static_arity);
                 if let Some(expected) = expected
+                    && closed_is_safe
                     && args.len() != expected
                 {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -2123,21 +2303,39 @@ impl<'a> Resolver<'a> {
                         found: args.len(),
                     });
                 }
-                let rargs = self.resolve_required_args(args)?;
-                let obj = self.resolve_expr(obj)?;
+                let rargs = if closed_is_safe {
+                    self.resolve_required_args(args)?
+                        .into_iter()
+                        .map(ResolvedArg::Value)
+                        .collect()
+                } else {
+                    args.iter()
+                        .map(|arg| match arg {
+                            Some(expr) => self.resolve_expr(expr).map(ResolvedArg::Value),
+                            None => Ok(ResolvedArg::Default),
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                };
                 // Открытый вызов обязателен, когда получатель может
-                // оказаться компонентным объектом. Если же приёмник
+                // оказаться компонентным объектом или BSL-модулем. Если же приёмник
                 // статически доказан ядровым (все его перепривязки — один
                 // `Новый T` из `NEW_TYPES`, см. `core_receivers`),
                 // закрытый путь семантически совпадает с открытым и
                 // остаётся измеренным горячим. Имена вне ядровой таблицы
                 // компилятор и при `open=false` выпускает открытым
                 // `CallObjectMethod`.
-                let closed_is_safe = self.core_receiver_of(&obj).is_some();
                 Ok(RExpr::CallMethod {
                     obj: Box::new(obj),
                     method: name.clone(),
-                    open: self.registry.is_some() && !closed_is_safe,
+                    // Для Set массива/строки и Insert массива нужен result_required
+                    // открытого опкода. Insert оператором сохраняет закрытый
+                    // путь; компонент сам проверяет свой контракт.
+                    open: method == Some(bsl_rt::BuiltinMethod::BufSet)
+                        || method == Some(bsl_rt::BuiltinMethod::Insert)
+                            && position == CallPosition::Expression
+                        || receiver.is_none(),
+                    component_type,
+                    component_link,
                     args: rargs,
                 })
             }
@@ -2171,13 +2369,9 @@ impl<'a> Resolver<'a> {
         Ok(rargs)
     }
 
-    /// Аргументы там, где пропуск позиции подставить нечем: методы
-    /// объектов и `Вычислить`. У метода нет ни объявленных умолчаний (он
-    /// не пользовательский), ни фиксированной арности, по которой можно
-    /// было бы отличить пропущенный необязательный аргумент от
-    /// пропущенного обязательного, — тип получателя в BSL известен только
-    /// в рантайме. Поэтому здесь `Ф(1, , 3)` остаётся ошибкой резолвинга,
-    /// в отличие от [`resolve_builtin_args`](Self::resolve_builtin_args).
+    /// Аргументы без пропусков: закрытые ядровые методы и `Вычислить`.
+    /// Открытый метод сохраняет пропуск как `ResolvedArg::Default`,
+    /// поскольку его объявление будет известно только при исполнении.
     fn resolve_required_args(&mut self, args: &[Option<AExpr>]) -> Result<Vec<RExpr>, SemaError> {
         let mut rargs = Vec::with_capacity(args.len());
         for a in args {
@@ -2548,6 +2742,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn registry_calls_reject_gaps_in_constructor_and_function_arities() {
+        fn call(
+            _: &mut bsl_rt::CallContext<'_>,
+            _: &[bsl_rt::BslValue],
+        ) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+            Ok(bsl_rt::BslValue::Undefined)
+        }
+        const COUNTS: bsl_rt::Arity = bsl_rt::Arity::one_of(&[0, 2, 3, 5]);
+        const LIBRARY: bsl_rt::LibraryDescriptor =
+            bsl_rt::LibraryDescriptor::new("arity-test", "0.0.0")
+                .with_constructors(&[bsl_rt::ConstructorDescriptor {
+                    code: bsl_rt::ConstructorCode::new(1),
+                    names: &["Раздельный"],
+                    arity: COUNTS,
+                    call,
+                }])
+                .with_functions(&[bsl_rt::FunctionDescriptor {
+                    code: bsl_rt::FunctionCode::new(1),
+                    names: &["Раздельная"],
+                    arity: COUNTS,
+                    kind: bsl_rt::FunctionKind::Function,
+                    call,
+                }]);
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder.register(bsl_rt::core_library()).register(LIBRARY);
+        let registry = builder.build().unwrap();
+        for count in 0..=6 {
+            let arguments = vec!["1"; count].join(", ");
+            for prefix in ["Новый Раздельный", "Раздельная"] {
+                let source = format!("x = {prefix}({arguments});");
+                let parsed = parse(&source).unwrap();
+                let resolved = resolve_program_with_registry(&parsed.items, &registry);
+                assert_eq!(
+                    resolved.is_ok(),
+                    [0, 2, 3, 5].contains(&count),
+                    "{source}: {resolved:?}"
+                );
+            }
+        }
+    }
+
     /// Процедура компонента подчиняется тому же измеренному правилу, что и
     /// встроенная (`CALL.EXPR.PROCEDURE`): оператором — можно, в позиции
     /// выражения — «Обращение к процедуре как к функции».
@@ -2589,7 +2825,11 @@ mod tests {
                 value: RExpr::CallMethod {
                     obj: Box::new(RExpr::Local(0)),
                     method: "Count".to_string(),
-                    open: false,
+                    // resolve_script не выполняет анализ всего модуля;
+                    // отсутствие доказательства оставляет вызов открытым.
+                    open: true,
+                    component_type: None,
+                    component_link: None,
                     args: vec![],
                 },
             }
@@ -3277,11 +3517,14 @@ mod tests {
                     method,
                     open,
                     args,
+                    ..
                 } => {
                     from_expr(obj, into);
                     into.push((method.clone(), *open));
                     for arg in args {
-                        from_expr(arg, into);
+                        if let ResolvedArg::Value(expr) = arg {
+                            from_expr(expr, into);
+                        }
                     }
                 }
                 RExpr::Unary { expr, .. } => from_expr(expr, into),

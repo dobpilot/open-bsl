@@ -1,0 +1,23 @@
+file.begin	create-directory-types-async-1
+context.effective	НеИспользовать
+create.type.string	repr=plain|sync=ok:exists=1|async=ok:String:same=1:exists=1
+create.type.number	repr=17|sync=ok:exists=1|async=ok:Number:same=1:exists=1
+create.type.true	repr=Yes|sync=ok:exists=1|async=ok:Boolean:same=1:exists=1
+create.type.false	repr=No|sync=ok:exists=1|async=ok:Boolean:same=1:exists=1
+create.type.date	repr=1/15/2020 12:34:56 PM|sync=ok:exists=1|async=ok:Date:same=1:exists=1
+create.type.array	repr=Массив|sync=ok:exists=1|async=ok:Array:same=1:exists=1
+create.type.structure	repr=Структура|sync=ok:exists=1|async=ok:Structure:same=1:exists=1
+create.type.map	repr=Соответствие|sync=ok:exists=1|async=ok:Map:same=1:exists=1
+create.type.fixed_array	repr=ФиксированныйМассив|sync=ok:exists=1|async=ok:Fixed value array:same=1:exists=1
+create.type.fixed_structure	repr=ФиксированнаяСтруктура|sync=ok:exists=1|async=ok:Fixed structure:same=1:exists=1
+create.type.fixed_map	repr=ФиксированноеСоответствие|sync=ok:exists=1|async=ok:Fixed map:same=1:exists=1
+create.type.value_table	repr=ТаблицаЗначений|sync=ok:exists=1|async=ok:Value table:same=1:exists=1
+create.type.value_list	repr=|sync=error:exists=0|async=error:exists=0
+create.type.uuid	repr=00112233-4455-6677-8899-aabbccddeeff|sync=ok:exists=1|async=ok:Unique identifier:same=1:exists=1
+create.type.file	repr=Файл|sync=ok:exists=1|async=ok:File:same=1:exists=1
+create.type.binary	repr=41 42|sync=ok:exists=1|async=ok:Binary data:same=1:exists=1
+create.type.enum	repr=UTF8|sync=ok:exists=1|async=ok:КодировкаТекста:same=1:exists=1
+create.type.type	repr=String|sync=ok:exists=1|async=ok:Type:same=1:exists=1
+create.type.undefined	repr=|sync=error:exists=0|async=error:exists=0
+create.type.null	repr=|sync=error:exists=0|async=error:exists=0
+file.end	create-directory-types-async-1

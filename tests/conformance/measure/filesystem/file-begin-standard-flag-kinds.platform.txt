@@ -1,0 +1,26 @@
+file.begin	file-begin-standard-flag-kinds-1
+flagkind.return	0
+flagkind.assigned	date|type=Date
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	type|type=Type
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	enum|type=КодировкаТекста
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	map|type=Map
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	file|type=File
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	binary|type=Binary data
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	buffer|type=Binary data buffer
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	uuid|type=Unique identifier
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	type_description|type=Type descriptions
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	notification|type=Notification description
+client.error	Type mismatch (parameter number '1')
+flagkind.assigned	module|type=Client application form
+client.error	Type mismatch (parameter number '1')
+flagkind.count	11
+file.end	file-begin-standard-flag-kinds-1

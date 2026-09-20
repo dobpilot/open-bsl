@@ -2,15 +2,113 @@ use super::{Frame, LinkedComponents, MAX_CALL_DEPTH, RunCaches, at, push_own_reg
 use bsl_bytecode::Program;
 use bsl_rt::{BslValue, RtError};
 
+mod reference_call;
+pub(super) use reference_call::call_reference;
+mod aliases;
+pub(super) use aliases::{
+    bind_module_argument, ensure_imported_arguments_ready, find_module_alias,
+    load_imported_argument, load_module_argument, park_task, publish_aliases, refresh_aliases,
+};
+
 pub(super) struct ModuleState {
     pub(super) slots: Vec<BslValue>,
+    // Разделяется с динамическими фрагментами, но не с новым запуском.
+    // Пустой scratch при перестановке кадра не создаёт ссылку.
+    identity: Option<BslValue>,
 }
 
 impl ModuleState {
     pub(super) fn new(program: &Program) -> Self {
         Self {
             slots: vec![BslValue::Undefined; program.module_vars.len()],
+            identity: Some(BslValue::new_object(ModuleReference {
+                exports: program
+                    .function_names
+                    .iter()
+                    .zip(&program.exported_functions)
+                    .filter(|(_, exported)| **exported)
+                    .map(|(name, _)| name.to_uppercase())
+                    .collect(),
+            })),
         }
+    }
+
+    pub(super) fn empty() -> Self {
+        Self {
+            slots: Vec::new(),
+            identity: None,
+        }
+    }
+
+    /// Переносит переменные во вложенный исполнитель того же модуля.
+    pub(super) fn take_for_execution(&mut self) -> Self {
+        Self {
+            slots: std::mem::take(&mut self.slots),
+            identity: self.identity.clone(),
+        }
+    }
+
+    pub(super) fn reference(&self) -> Result<BslValue, RtError> {
+        let identity = self.identity.as_ref().ok_or(RtError::InvalidBytecode(
+            "ссылка на модуль запрошена у временного пустого состояния",
+        ))?;
+        Ok(identity.clone())
+    }
+
+    fn owns_reference(&self, value: &BslValue) -> bool {
+        self.identity.as_ref() == Some(value)
+    }
+}
+
+/// Не содержит переменных или ссылки обратно на ModuleState: значение
+/// в собственной модульной переменной не образует цикл владения.
+#[derive(Debug)]
+pub(super) struct ModuleReference {
+    exports: Vec<String>,
+}
+
+impl bsl_rt::ObjectProtocol for ModuleReference {
+    fn type_descriptor(&self) -> &'static bsl_rt::TypeDescriptor {
+        &bsl_rt::BSL_MODULE_TYPE
+    }
+
+    fn has_method(&self, name: &str) -> bool {
+        let name = name.to_uppercase();
+        self.exports.iter().any(|export| export == &name)
+    }
+}
+
+#[cfg(test)]
+mod reference_tests {
+    use super::*;
+
+    #[test]
+    fn an_external_reference_does_not_resurrect_a_completed_module_instance() {
+        let ast = bsl_syntax::parse("Функция Значение() Экспорт Возврат 42; КонецФункции Функция Вызвать(Получатель) Возврат Получатель.Значение(); КонецФункции Возврат ЭтотОбъект;").unwrap();
+        let resolved = bsl_sema::resolve_program(&ast.items).unwrap();
+        let program = bsl_compiler::compile_program(&resolved).unwrap();
+        let reference = crate::run_program(&program).unwrap();
+        let error =
+            crate::call_module_function(&program, &mut [], "Вызвать", vec![reference]).unwrap_err();
+        assert!(
+            matches!(error, RtError::DynamicError(message) if message.contains("не принадлежит текущему исполнению"))
+        );
+    }
+
+    #[test]
+    fn a_module_variable_holding_its_owner_reference_does_not_retain_the_state() {
+        let ast = bsl_syntax::parse("Перем Ссылка; Процедура Обработать() Экспорт КонецПроцедуры")
+            .unwrap();
+        let resolved = bsl_sema::resolve_program(&ast.items).unwrap();
+        let program = bsl_compiler::compile_program(&resolved).unwrap();
+        let mut state = ModuleState::new(&program);
+        let reference = state.reference().unwrap();
+        state.slots[0] = reference.clone();
+        let nested = state.take_for_execution();
+        assert_eq!(nested.reference().unwrap(), reference);
+        drop(nested);
+        drop(state);
+        assert!(reference.object_ref().unwrap().has_method("Обработать"));
     }
 }
 
@@ -71,6 +169,7 @@ pub struct CatalogContext<'a> {
 /// параметров — регистровое давление в цикле диспетчеризации измеримо
 /// (A/B чередованием: +10% `call_overhead` на трёх параметрах).
 pub(super) struct ModulesCtx<'a, 'b> {
+    pub(super) root_program: &'a Program,
     pub(super) session: &'a mut SessionModules,
     pub(super) catalog: Option<&'a CatalogContext<'b>>,
     /// Корневое состояние, когда текущий кадр — модульный (его собственное
@@ -89,7 +188,7 @@ impl<'a> CatalogContext<'a> {
             ))
     }
 
-    fn linked(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
+    pub(super) fn linked(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
         self.linked
             .get(module as usize)
             .ok_or(RtError::InvalidBytecode(
@@ -158,6 +257,7 @@ pub(super) fn ensure_module_ready(
             let own_base = stack.len();
             push_own_registers(stack, chunk0);
             frames.push(Frame {
+                code: None,
                 module: target,
                 func_id: 0,
                 pc: 0,

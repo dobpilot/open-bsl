@@ -1,0 +1,21 @@
+d	<root>	
+d	<root>/first space	
+l	<root>/first space/space link dir	../targets/linked target
+l	<root>/first space/broken link.txt	absent target
+f	<root>/first space/before.txt	
+f	<root>/first space/middle.txt	
+f	<root>/first space/after space.txt	
+d	<root>/first space/plain dir	
+f	<root>/first space/plain dir/child space.txt	
+d	<root>/late space	
+l	<root>/late space/broken link.txt	absent target
+l	<root>/late space/space link dir	../targets/linked target
+f	<root>/late space/before.txt	
+f	<root>/late space/middle.txt	
+f	<root>/late space/after space.txt	
+d	<root>/late space/plain dir	
+f	<root>/late space/plain dir/child space.txt	
+d	<root>/targets	
+d	<root>/targets/linked target	
+f	<root>/targets/linked target/inside.bin	
+f	<root>/targets/linked target/inside space.txt

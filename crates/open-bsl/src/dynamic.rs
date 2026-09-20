@@ -108,11 +108,30 @@ impl DynamicCompiler for DynamicCode {
         self.compiles += 1;
         let scope = std::num::NonZeroU64::new(self.scopes)
             .expect("счётчик увеличен перед этим вызовом, ноль недостижим");
-        let unit = Rc::new(bsl_compiler::compile_dynamic_snippet(
+        let imports = request
+            .imports
+            .iter()
+            .map(|import| {
+                let target = self
+                    .engine
+                    .catalog()
+                    .and_then(|catalog| catalog.module(import.module))
+                    .ok_or_else(|| {
+                        "импорт динамического фрагмента отсутствует в каталоге".to_string()
+                    })?;
+                Ok(crate::engine::imported_module_from_program(
+                    &import.alias,
+                    import.module.index() as u32,
+                    &target.program,
+                ))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let unit = Rc::new(bsl_compiler::compile_dynamic_snippet_with_imports(
             request,
             Some(self.engine.registry()),
             &self.engine.preproc_symbols(),
             scope,
+            &imports,
         )?);
         self.cache.insert(key, Rc::clone(&unit));
         Ok(unit)
@@ -129,6 +148,7 @@ mod tests {
         requirements: &'a [bsl_bytecode::LibraryRequirement],
     ) -> DynamicRequest<'a> {
         DynamicRequest {
+            imports: &[],
             source,
             debug_info: false,
             kind: DynamicKind::Eval,
@@ -148,6 +168,7 @@ mod tests {
 
     fn root() -> DynamicScope {
         DynamicScope {
+            module: None,
             program: DynamicScope::ROOT,
             chunk: 0,
         }
@@ -181,6 +202,7 @@ mod tests {
             .compile(&request(
                 "2 + 2",
                 DynamicScope {
+                    module: None,
                     program: DynamicScope::ROOT,
                     chunk: 1,
                 },
@@ -191,6 +213,7 @@ mod tests {
             .compile(&request(
                 "2 + 2",
                 DynamicScope {
+                    module: None,
                     program: first.scope.get(),
                     chunk: 0,
                 },
@@ -199,6 +222,32 @@ mod tests {
             .unwrap();
         assert!(!Rc::ptr_eq(&first, &other_chunk));
         assert!(!Rc::ptr_eq(&first, &inside_fragment));
+    }
+
+    #[test]
+    fn catalog_owners_are_part_of_the_scope_and_reuse_only_their_own_fragments() {
+        let mut dynamic = code();
+        let mut previous = Vec::new();
+        for module in [
+            None,
+            Some(bsl_bytecode::ModuleId::new(0)),
+            Some(bsl_bytecode::ModuleId::new(1)),
+        ] {
+            for program in [DynamicScope::ROOT, 1] {
+                let scope = DynamicScope {
+                    module,
+                    program,
+                    chunk: 1,
+                };
+                let first = dynamic.compile(&request("2 + 2", scope, &core())).unwrap();
+                let second = dynamic.compile(&request("2 + 2", scope, &core())).unwrap();
+                assert!(Rc::ptr_eq(&first, &second));
+                assert!(previous.iter().all(|other| !Rc::ptr_eq(other, &first)));
+                previous.push(first);
+            }
+        }
+        assert_eq!(dynamic.compiles(), 6);
+        assert_eq!(dynamic.cached(), 6);
     }
 
     /// И в разных МОДУЛЯХ одной сессии — тоже заново: нулевой чанк есть у

@@ -1,0 +1,48 @@
+file.begin	file-begin-error-handlers-1
+errorhandler.root_return	0
+errorhandler.enter	procedure.suppress|initial=1|type=Error information
+errorhandler.return	procedure.suppress
+errorhandler.enter	function.suppress|initial=1|type=Error information
+errorhandler.return	function.suppress
+errorhandler.enter	procedure.throw|initial=1|type=Error information
+client.error	error-handler:procedure.throw
+errorhandler.enter	function.throw|initial=1|type=Error information
+client.error	error-handler:function.throw
+errorhandler.enter	async.procedure.suppress.before|initial=1|type=Error information
+errorhandler.before	async.procedure.suppress.before|flag=0
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.procedure.suppress.before
+errorhandler.enter	async.function.suppress.before|initial=1|type=Error information
+errorhandler.before	async.function.suppress.before|flag=0
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.function.suppress.before
+errorhandler.enter	async.procedure.suppress.after|initial=1|type=Error information
+errorhandler.before	async.procedure.suppress.after|flag=1
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.procedure.suppress.after
+errorhandler.enter	async.function.suppress.after|initial=1|type=Error information
+errorhandler.before	async.function.suppress.after|flag=1
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.function.suppress.after
+errorhandler.enter	async.procedure.throw.before|initial=1|type=Error information
+errorhandler.before	async.procedure.throw.before|flag=0
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.procedure.throw.before
+errorhandler.enter	async.function.throw.before|initial=1|type=Error information
+errorhandler.before	async.function.throw.before|flag=0
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.function.throw.before
+errorhandler.enter	async.procedure.throw.after|initial=1|type=Error information
+errorhandler.before	async.procedure.throw.after|flag=1
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.procedure.throw.after
+errorhandler.enter	async.function.throw.after|initial=1|type=Error information
+errorhandler.before	async.function.throw.after|flag=1
+client.error	Error accessing file: /open-bsl-error-handler-20260917-async.function.throw.after
+client.error	error-handler:async.procedure.throw.before
+errorhandler.after	async.procedure.suppress.before|flag=0|exists=0
+errorhandler.return	async.procedure.suppress.before
+errorhandler.after	async.function.suppress.before|flag=0|exists=0
+errorhandler.return	async.function.suppress.before
+errorhandler.after	async.procedure.suppress.after|flag=0|exists=0
+errorhandler.return	async.procedure.suppress.after
+errorhandler.after	async.function.suppress.after|flag=0|exists=0
+errorhandler.return	async.function.suppress.after
+errorhandler.after	async.procedure.throw.after|flag=0|exists=0
+errorhandler.after	async.function.throw.after|flag=0|exists=0
+client.error	error-handler:async.procedure.throw.after
+errorhandler.count	12
+file.end	file-begin-error-handlers-1

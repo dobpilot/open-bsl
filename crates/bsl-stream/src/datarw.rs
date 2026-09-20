@@ -395,6 +395,19 @@ impl ByteStreamProtocol for SourceStreamObject {
         state.stream(op)?.len(op)
     }
 
+    fn set_len(&self, size: u64, op: &'static str) -> RtResult<()> {
+        let mut state = self
+            .state
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?;
+        state.check_not_moved()?;
+        let result = state.stream(op)?.set_len(size, op);
+        if let Ok(position) = state.stream(op)?.position(op) {
+            state.pos = position;
+        }
+        result
+    }
+
     fn read_bytes(&self, count: usize, op: &'static str) -> RtResult<Vec<u8>> {
         let mut state = self
             .state

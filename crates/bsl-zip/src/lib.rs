@@ -106,6 +106,24 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::archive::reader::ZIP_READER_TYPE,
     &crate::archive::reader::ZIP_WRITER_TYPE,
 ];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (
+        ConstructorCode::new(1),
+        &crate::archive::reader::ZIP_READER_TYPE,
+    ),
+    (
+        ConstructorCode::new(2),
+        &crate::archive::reader::ARCHIVE_READER_TYPE,
+    ),
+    (
+        ConstructorCode::new(3),
+        &crate::archive::reader::ZIP_WRITER_TYPE,
+    ),
+    (
+        ConstructorCode::new(4),
+        &crate::archive::reader::ARCHIVE_WRITER_TYPE,
+    ),
+];
 
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] =
     &[archive::objects::API_MEMBERS];
@@ -114,6 +132,7 @@ const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] =
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }

@@ -1,0 +1,13 @@
+file.begin	create-directory-roots-async-1
+context.effective	НеИспользовать
+create.root.one	promise=Promise|ok|type=String|same=1
+create.root.two	promise=Promise|ok|type=String|same=1
+create.root.three	promise=Promise|ok|type=String|same=1
+create.relative.dot	promise=Promise|ok|type=String|same=1
+create.relative.dot_slash	promise=Promise|ok|type=String|same=1
+create.relative.parent	promise=Promise|ok|type=String|same=1
+create.relative.parent_slash	promise=Promise|ok|type=String|same=1
+create.file_object.new	promise=Promise|ok|type=File|same=1|exists=0|file=0
+create.file_object.directory	promise=Promise|ok|type=File|same=1|exists=1|file=0
+create.file_object.regular	promise=Promise|ok|type=File|same=1|exists=1|file=1
+file.end	create-directory-roots-async-1

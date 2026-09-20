@@ -1,0 +1,5 @@
+phase	case	state	inode	size
+after_enterprise	closed	absent	-	-
+after_enterprise	released	absent	-	-
+after_enterprise	open	absent	-	-
+after_enterprise	name	absent	-	-

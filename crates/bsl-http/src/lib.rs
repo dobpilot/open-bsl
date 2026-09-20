@@ -32,6 +32,7 @@ pub const fn library() -> bsl_rt::LibraryDescriptor {
             version: bsl_stream::PACKAGE_VERSION,
         }])
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
@@ -148,4 +149,25 @@ const TYPES: &[&bsl_rt::TypeDescriptor] = &[
     &objects::FILE_ROOTS_TYPE,
     &objects::FILE_CLIENT_CERTIFICATE_TYPE,
     &objects::WINDOWS_CLIENT_CERTIFICATE_TYPE,
+];
+const CONSTRUCTOR_TYPES: &[(bsl_rt::ConstructorCode, &bsl_rt::TypeDescriptor)] = &[
+    (bsl_rt::ConstructorCode::new(1), &objects::HTTP_REQUEST_TYPE),
+    (
+        bsl_rt::ConstructorCode::new(2),
+        &objects::HTTP_CONNECTION_TYPE,
+    ),
+    (
+        bsl_rt::ConstructorCode::new(3),
+        &objects::INTERNET_PROXY_TYPE,
+    ),
+    (bsl_rt::ConstructorCode::new(4), &objects::SYSTEM_ROOTS_TYPE),
+    (
+        bsl_rt::ConstructorCode::new(5),
+        &objects::SECURE_CONNECTION_TYPE,
+    ),
+    (bsl_rt::ConstructorCode::new(6), &objects::FILE_ROOTS_TYPE),
+    (
+        bsl_rt::ConstructorCode::new(7),
+        &objects::FILE_CLIENT_CERTIFICATE_TYPE,
+    ),
 ];

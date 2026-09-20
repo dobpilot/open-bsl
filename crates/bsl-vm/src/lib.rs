@@ -26,13 +26,18 @@ pub use debug::{DebugAction, DebugHook, DebugPosition, DebugValues};
 mod modules;
 
 pub use modules::{CatalogContext, ROOT_MODULE, SessionModules};
-use modules::{ModuleInitState, ModuleState, ModulesCtx, ensure_module_ready};
+use modules::{
+    ModuleInitState, ModuleState, ModulesCtx, bind_module_argument, ensure_module_ready,
+    find_module_alias, load_module_argument,
+};
+mod notifications;
 mod scheduler;
 mod snippet;
 
 use scheduler::{
-    AsyncState, PromiseState, Task, TaskCompletion, TaskId, consume_scheduler_safe_point,
-    crossed_scheduler_safe_point, resume_parked_task, take_frozen_ready, task_position,
+    AsyncState, PromiseState, ReadyEvent, Task, TaskCompletion, TaskId,
+    consume_scheduler_safe_point, crossed_scheduler_safe_point, resume_parked_task,
+    take_frozen_ready, task_position,
 };
 pub use scheduler::{ExecutionWaker, SchedulerConfig};
 
@@ -46,7 +51,7 @@ use linking::{
 use snippet::run_dynamic_snippet;
 
 use bsl_bytecode::{ArgMode, DynamicCompiler, Instr, Program};
-use bsl_rt::{BslValue, RtError};
+use bsl_rt::{BslValue, HostPromiseSpawner as _, RtError};
 use std::io::Write;
 
 struct Frame {
@@ -54,13 +59,13 @@ struct Frame {
     /// в каталоге конфигурации. Кадры разных модулей чередуются в одном
     /// стеке кадров, а программа кадра резолвится драйвером по этому полю.
     module: u32,
+    /// Динамический образ либо статическая программа владельца модуля.
+    code: Option<std::rc::Rc<snippet::DynamicImage>>,
     func_id: usize,
     pc: usize,
-    /// Слоты параметров вызванной функции (длина — её `n_params`). Пуст у
-    /// кадра, заведённого не инструкцией `Call`, — у чанка верхнего уровня,
-    /// у фрагмента `Выполнить` и у вызова по имени из Rust: там параметры
-    /// лежат обычными собственными регистрами кадра, а пропустить аргумент
-    /// вызывающему просто нечем.
+    /// Слоты параметров вызванной функции либо существующих локалей
+    /// динамического фрагмента. Пуст у статического верхнего уровня и
+    /// вызова по имени из Rust, где параметры лежат в собственных регистрах.
     param_aliases: Vec<ParamSlot>,
     /// Абсолютный индекс начала "собственных" регистров кадра (локалы
     /// сверх параметров + временные) — они всегда свежие, только что
@@ -242,6 +247,8 @@ fn drive_with(
         env: Some(&mut env),
         dynamic: Some(&mut dynamic),
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     let mut module_state = ModuleState::new(program);
     let (value, _) = drive_linked(
@@ -300,17 +307,42 @@ pub enum ProgramPoll {
 /// и номер слота поля в ней.
 type PropCacheSlot = std::cell::RefCell<Option<(std::rc::Rc<bsl_rt::Shape>, u32)>>;
 
-/// Слот инлайн-кэша `CallObjectMethod`: адрес статической таблицы методов
-/// типа-получателя и разрешённый по ней дескриптор. Кэшируется дескриптор
-/// целиком, чтобы попадание не платило отдельно за поиск арности.
-type MethodCacheSlot =
-    std::cell::RefCell<Option<(usize, Option<&'static bsl_rt::MethodDescriptor>)>>;
+/// Разрешённый план открытого вызова для одного типа получателя.
+#[derive(Clone, Copy)]
+enum ObjectMethodPlan {
+    ModuleReference,
+    Descriptor(&'static bsl_rt::MethodDescriptor),
+    DynamicFallback,
+}
+
+/// Место открытого вызова: неизменяемые метаданны готовятся до
+/// первой инструкции, а мономорфный план запоминается при первом вызове.
+/// Обе части живут в одной таблице: два параллельных поиска на каждом вызове
+/// заметны в `json_write` и `xml_write`.
+struct OpenCallSite {
+    arg_modes: u16,
+    count: u8,
+    name: bsl_rt::NameId,
+    builtin: Option<bsl_rt::BuiltinMethod>,
+    property_output: bool,
+    cache: std::cell::Cell<Option<(usize, ObjectMethodPlan)>>,
+}
+
+/// Типизированная цель межмодульной инструкции. Периметр образа уже
+/// доказал, что вариант `LinkEntry` согласован с опкодом.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ImportSite {
+    owner: u32,
+    target: usize,
+    arg_modes: u16,
+}
 
 /// Инлайн-кэши одного запуска: по вектору ячеек на чанк, по одной ячейке
 /// каждого вида на инструкцию.
 struct RunCaches {
     prop: Vec<Vec<PropCacheSlot>>,
-    method: Vec<Vec<MethodCacheSlot>>,
+    open_call: Vec<Vec<Option<OpenCallSite>>>,
+    import: Vec<Vec<Option<ImportSite>>>,
 }
 
 impl RunCaches {
@@ -324,16 +356,89 @@ impl RunCaches {
                     .collect()
             })
             .collect();
-        let method = program
+        let open_call = program
             .chunks
             .iter()
             .map(|chunk| {
-                std::iter::repeat_with(|| std::cell::RefCell::new(None))
-                    .take(chunk.instrs.len())
+                chunk
+                    .instrs
+                    .iter()
+                    .map(|instr| {
+                        let (method, arg_modes) = match instr {
+                            Instr::CallObjectMethod {
+                                method, arg_modes, ..
+                            }
+                            | Instr::CallObjectProcedure {
+                                method, arg_modes, ..
+                            } => (*method, *arg_modes),
+                            _ => return None,
+                        };
+                        let modes = chunk.call_arg_modes.get(arg_modes as usize)?;
+                        let count = u8::try_from(modes.len()).ok()?;
+                        let name = bsl_rt::NameId::from_index(method as u32);
+                        let builtin = bsl_rt::BuiltinMethod::lookup(
+                            program.names.get(method as usize)?.as_str(),
+                        );
+                        Some(OpenCallSite {
+                            arg_modes,
+                            count,
+                            name,
+                            builtin,
+                            property_output: count == 2
+                                && builtin == Some(bsl_rt::BuiltinMethod::Property),
+                            cache: std::cell::Cell::new(None),
+                        })
+                    })
                     .collect()
             })
             .collect();
-        Self { prop, method }
+        let import = program
+            .chunks
+            .iter()
+            .map(|chunk| {
+                chunk
+                    .instrs
+                    .iter()
+                    .map(|instr| match *instr {
+                        Instr::CallImported {
+                            link_slot,
+                            arg_modes,
+                            ..
+                        } => {
+                            let bsl_bytecode::LinkEntry::Function { module, func } =
+                                *program.links.get(link_slot as usize)?
+                            else {
+                                return None;
+                            };
+                            Some(ImportSite {
+                                owner: module.index() as u32,
+                                target: func as usize,
+                                arg_modes,
+                            })
+                        }
+                        Instr::GetImportedVar { link_slot, .. }
+                        | Instr::SetImportedVar { link_slot, .. } => {
+                            let bsl_bytecode::LinkEntry::Variable { module, slot } =
+                                *program.links.get(link_slot as usize)?
+                            else {
+                                return None;
+                            };
+                            Some(ImportSite {
+                                owner: module.index() as u32,
+                                target: slot as usize,
+                                arg_modes: 0,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .collect();
+        Self {
+            prop,
+            open_call,
+            import,
+        }
     }
 }
 
@@ -350,6 +455,9 @@ pub struct ProgramExecution {
     /// проверка `Option` во ВНЕШНЕМ цикле, вне `step`.
     debug: Option<Box<dyn DebugHook>>,
     root_result: Option<(BslValue, Vec<BslValue>)>,
+    /// Локальные записи фрагмента не откатываются при исключении. Стек
+    /// сохраняется отдельно от успешного результата для переноса владельцу.
+    failed_root_stack: Option<Vec<BslValue>>,
     module_state: ModuleState,
     /// Кэши корневой программы этого запуска.
     caches: RunCaches,
@@ -376,9 +484,28 @@ pub struct ProgramExecution {
     /// более частая проверка стоила бы горячему циклу.
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     finished: bool,
+    /// Вложенный evaluate исполняет только новые задачи и возвращается
+    /// сразу после результата выражения, сохраняя обещания владельцу.
+    debug_task_floor: Option<TaskId>,
 }
 
 impl ProgramExecution {
+    /// Ошибка могла произойти в корневом коде, во вложенном фрагменте или
+    /// в async-задаче до/после возврата корня. Во всех случаях владельцу
+    /// нужны локали корня, а не стек той задачи, которая выбросила ошибку.
+    fn take_root_stack_after_error(&mut self) -> Option<Vec<BslValue>> {
+        self.failed_root_stack
+            .take()
+            .or_else(|| self.root_result.take().map(|(_, stack)| stack))
+            .or_else(|| {
+                self.async_state
+                    .tasks
+                    .get_mut(self.debug_task_floor.unwrap_or(0))
+                    .and_then(Option::as_mut)
+                    .map(|task| std::mem::take(&mut task.stack))
+            })
+    }
+
     fn new_linked(
         program: &Program,
         func_id: usize,
@@ -390,6 +517,7 @@ impl ProgramExecution {
         let root = Task {
             frames: vec![Frame {
                 module: ROOT_MODULE,
+                code: None,
                 func_id,
                 pc: 0,
                 param_aliases: Vec::new(),
@@ -412,6 +540,7 @@ impl ProgramExecution {
             merge_linear: true,
             debug: None,
             root_result: None,
+            failed_root_stack: None,
             module_state,
             caches: RunCaches::for_program(program),
             catalog_caches: Vec::new(),
@@ -419,6 +548,7 @@ impl ProgramExecution {
             force_scheduled: false,
             cancel_flag: None,
             finished: false,
+            debug_task_floor: None,
         }
     }
 
@@ -516,6 +646,7 @@ impl ProgramExecution {
             push_own_registers(&mut root.stack, chunk0);
             root.frames.push(Frame {
                 module: *module,
+                code: None,
                 func_id: 0,
                 pc: 0,
                 param_aliases: Vec::new(),
@@ -652,6 +783,8 @@ impl ProgramExecution {
             env: Some(host_env),
             dynamic: Some(dynamic),
             dynamic_depth: &dynamic_depth,
+            cancel_flag: self.cancel_flag.clone(),
+            file_promises: None,
         };
         self.poll_linked(program, &linked, None, &mut host, host_slice, None)
     }
@@ -720,11 +853,11 @@ impl ProgramExecution {
             host_env.message_sink(),
             bsl_bytecode::DynamicScope::ROOT,
         )?;
-        // Области динамического кода модулей нумеруются с единицы: ROOT
-        // принадлежит entry, и пересечение областей склеило бы кэши
-        // фрагментов разных модулей.
+        // Статические чанки каждого модуля имеют область ROOT.
+        // Владелец задаётся отдельно в DynamicScope.module, а не номером
+        // из пространства фрагментов, выдаваемого компилятором хоста.
         let mut linked_modules = Vec::with_capacity(catalog.modules.len());
-        for (i, module) in catalog.modules.iter().enumerate() {
+        for module in &catalog.modules {
             linked_modules.push(link_components(
                 &module.program,
                 Some(registry),
@@ -735,7 +868,7 @@ impl ProgramExecution {
                 host_env.background_jobs(),
                 host_env.temp_storage(),
                 host_env.message_sink(),
-                i as u64 + 1,
+                bsl_bytecode::DynamicScope::ROOT,
             )?);
         }
         let ctx = CatalogContext {
@@ -749,6 +882,8 @@ impl ProgramExecution {
             env: Some(host_env),
             dynamic: Some(dynamic),
             dynamic_depth: &dynamic_depth,
+            cancel_flag: self.cancel_flag.clone(),
+            file_promises: None,
         };
         self.poll_linked(
             entry,
@@ -783,6 +918,7 @@ impl ProgramExecution {
             merge_linear,
             debug,
             root_result,
+            failed_root_stack,
             module_state,
             caches,
             catalog_caches,
@@ -790,6 +926,7 @@ impl ProgramExecution {
             force_scheduled,
             cancel_flag,
             finished,
+            debug_task_floor,
             ..
         } = self;
         let mut host_remaining = host_slice;
@@ -801,12 +938,18 @@ impl ProgramExecution {
             // ветка вынесена: укладка этой функции несёт быстрый путь
             // пустого цикла, и лишние байты здесь стоили DSB (измерено на
             // `empty_for`).
-            let next_ready = if async_state.sync_wait.is_none() {
-                async_state.ready.pop_front()
-            } else {
+            let next_ready = if async_state.sync_wait.is_some() {
                 take_frozen_ready(async_state)
+            } else if let Some(floor) = *debug_task_floor {
+                let position = async_state.ready.iter().position(|event| match event {
+                    ReadyEvent::Task(id) => *id >= floor,
+                    ReadyEvent::Error(_) => true,
+                });
+                position.and_then(|index| async_state.ready.remove(index))
+            } else {
+                async_state.ready.pop_front()
             };
-            let Some(task_id) = next_ready else {
+            let Some(event) = next_ready else {
                 if async_state.has_pending_host_promises() {
                     // Отмена, пришедшая во время host-ожидания: без этой
                     // проверки резидент, ждущий медленный транспорт,
@@ -846,6 +989,10 @@ impl ProgramExecution {
             {
                 return Err(RtError::Canceled);
             }
+            let task_id = match event {
+                ReadyEvent::Task(id) => id,
+                ReadyEvent::Error(error) => return Err(*error),
+            };
             let mut task = async_state
                 .tasks
                 .get_mut(task_id)
@@ -853,20 +1000,27 @@ impl ProgramExecution {
                 .ok_or(RtError::InvalidBytecode(
                     "готовая очередь ссылается на отсутствующую задачу",
                 ))?;
+            modules::refresh_aliases(&mut task, module_state, session_modules)?;
             // Пробуждение синхронного host-вызова: применение результата
             // вынесено (см. `resume_parked_task`) — по той же причине
             // укладки, что и `take_frozen_ready`.
-            if async_state.sync_wait.is_some()
-                && !resume_parked_task(
+            if async_state.sync_wait.is_some() {
+                let resumed = resume_parked_task(
                     &mut task,
                     task_id,
                     async_state,
                     program,
                     catalog,
                     session_modules,
-                )?
-            {
-                continue;
+                    module_state,
+                );
+                if resumed.is_err() && matches!(task.completion, TaskCompletion::Root) {
+                    modules::publish_aliases(&task, module_state, session_modules)?;
+                    *failed_root_stack = Some(std::mem::take(&mut task.stack));
+                }
+                if !resumed? {
+                    continue;
+                }
             }
             let scheduled = async_state.has_other_live_task() || *force_scheduled;
             if task.quantum_remaining == 0 || !scheduled {
@@ -917,8 +1071,14 @@ impl ProgramExecution {
                         scheduled,
                         async_state.scheduler_quantum(),
                     ) {
-                        async_state.tasks[task_id] = Some(task);
-                        async_state.ready.push_back(task_id);
+                        modules::park_task(
+                            task_id,
+                            task,
+                            async_state,
+                            module_state,
+                            session_modules,
+                        )?;
+                        async_state.ready.push_back(ReadyEvent::Task(task_id));
                         if let Some(budget) = quanta_budget.as_mut() {
                             *budget = budget.saturating_sub(1);
                             if *budget == 0 {
@@ -930,26 +1090,6 @@ impl ProgramExecution {
                     continue;
                 }
 
-                // Модуль верхнего кадра определяет программу, линковку и
-                // состояние модульных переменных этого шага. Резолв стоит
-                // ПОСЛЕ быстрого numeric-for: пустой цикл не должен платить
-                // за ветку и чтение поля на каждом back-edge. У одиночной
-                // программы ветка всегда предсказана: модуль — ROOT_MODULE.
-                let cur_module = task
-                    .frames
-                    .last()
-                    .expect("инвариант VM: drive всегда держит хотя бы один кадр")
-                    .module;
-                let (cur_program, cur_linked, cur_caches) = if cur_module == ROOT_MODULE {
-                    (program, linked, &*caches)
-                } else {
-                    let Some(ctx) = catalog else {
-                        return Err(RtError::InvalidBytecode(
-                            "кадр модуля конфигурации без каталожного контекста",
-                        ));
-                    };
-                    ctx.execution_parts(cur_module, &*catalog_caches)?
-                };
                 // `step` исполняет целый VLIW-бандл (см. `bsl_bytecode::bundle`),
                 // так что проверка fast numeric-for выше происходит на границах
                 // бандлов, а не на каждой инструкции. При ошибке члена
@@ -960,53 +1100,92 @@ impl ProgramExecution {
                 // Внутри `step` ему делать нечего: диспетчер живёт на
                 // грани uop-кэша, и лишняя проверка там стоила бы больше,
                 // чем отладчик даёт.
-                if let Some(hook) = debug.as_mut() {
+                // Прежний контракт DAP проходит динамический вызов насквозь,
+                // без остановок внутри фрагмента и вызванных им функций.
+                if let Some(hook) = debug.as_mut()
+                    && !task.frames.iter().any(|frame| frame.code.is_some())
+                {
                     let frames: Vec<(u32, usize, usize)> = task
                         .frames
                         .iter()
                         .map(|f| (f.module, f.func_id, f.pc))
                         .collect();
-                    let line = task.frames.last().and_then(|f| {
-                        cur_program
-                            .lines
-                            .get(f.func_id)
-                            .and_then(|rows| rows.get(f.pc))
-                            .copied()
-                    });
-                    // Модульное состояние здесь КОРНЕВОЕ: изъятие в
-                    // `scratch_state` для чужого модуля идёт ниже, уже
-                    // после крючка. Вычисление в кадре чужого модуля
-                    // каталога поэтому увидит корневые переменные — это
-                    // ограничение, а не случайность, и снимать его надо
-                    // отдельной работой.
                     let mut values = FrameValues {
                         task: &mut task,
-                        program: cur_program,
-                        linked: cur_linked,
+                        program,
+                        linked,
                         host,
                         module_state,
+                        async_state,
+                        catalog,
+                        session_modules,
+                        runtime_shapes,
                     };
+                    let line = values.line_of(frames.len() - 1);
                     let mut at = DebugPosition {
                         frames: &frames,
                         line,
                         values: &mut values,
                     };
                     if hook.before_instruction(&mut at) == DebugAction::Terminate {
-                        async_state.tasks[task_id] = Some(task);
+                        modules::park_task(
+                            task_id,
+                            task,
+                            async_state,
+                            module_state,
+                            session_modules,
+                        )?;
                         return Err(RtError::DynamicError("прогон прекращён отладчиком".into()));
                     }
                 }
+                // Модуль верхнего кадра определяет программу, линковку и
+                // состояние модульных переменных этого шага. Резолв стоит
+                // ПОСЛЕ быстрого numeric-for: пустой цикл не должен платить
+                // за ветку и чтение поля на каждом back-edge. У одиночной
+                // программы ветка всегда предсказана: модуль — ROOT_MODULE.
+                let cur_module = task
+                    .frames
+                    .last()
+                    .expect("инвариант VM: drive всегда держит хотя бы один кадр")
+                    .module;
+                let code = task.frames.last().unwrap().code.clone();
+                let dynamic_linked;
+                let mut dynamic_shapes;
+                let (cur_program, cur_linked, cur_caches, cur_shapes) = if let Some(code) = &code {
+                    dynamic_linked = LinkedComponents {
+                        registry: linked.registry,
+                        tables: code.tables.clone(),
+                    };
+                    dynamic_shapes = code.shapes.borrow_mut();
+                    (
+                        &code.program,
+                        &dynamic_linked,
+                        &code.caches,
+                        &mut *dynamic_shapes,
+                    )
+                } else if cur_module == ROOT_MODULE {
+                    (program, linked, &*caches, &mut *runtime_shapes)
+                } else {
+                    let Some(ctx) = catalog else {
+                        return Err(RtError::InvalidBytecode(
+                            "кадр модуля конфигурации без каталожного контекста",
+                        ));
+                    };
+                    let (program, linked, caches) =
+                        ctx.execution_parts(cur_module, &*catalog_caches)?;
+                    (program, linked, caches, &mut *runtime_shapes)
+                };
                 let before = task_position(&task);
                 // Состояние модульных переменных текущего модуля на время
                 // шага изымается из сессии: `step` видит его обычным
                 // `module_state`, а чужие модули достаёт через сессию, в
                 // которой изъятая ячейка не встречается (self-link запрещён
                 // периметром образа).
-                let mut scratch_state = ModuleState { slots: Vec::new() };
+                let mut scratch_state = ModuleState::empty();
                 if cur_module != ROOT_MODULE {
                     std::mem::swap(
-                        &mut scratch_state.slots,
-                        &mut session_modules.instances[cur_module as usize].state.slots,
+                        &mut scratch_state,
+                        &mut session_modules.instances[cur_module as usize].state,
                     );
                 }
                 // Кадру модуля корневое состояние отдаётся отдельной
@@ -1019,6 +1198,7 @@ impl ProgramExecution {
                         (&mut scratch_state, Some(&mut *module_state))
                     };
                 let mut modules_ctx = ModulesCtx {
+                    root_program: program,
                     session: session_modules,
                     catalog,
                     root_state: step_root,
@@ -1031,7 +1211,7 @@ impl ProgramExecution {
                     step_state,
                     &mut modules_ctx,
                     &mut task.current_exception,
-                    runtime_shapes,
+                    cur_shapes,
                     cur_linked,
                     host,
                     *merge_linear && !scheduled,
@@ -1040,8 +1220,8 @@ impl ProgramExecution {
                 );
                 if cur_module != ROOT_MODULE {
                     std::mem::swap(
-                        &mut scratch_state.slots,
-                        &mut session_modules.instances[cur_module as usize].state.slots,
+                        &mut scratch_state,
+                        &mut session_modules.instances[cur_module as usize].state,
                     );
                 }
                 match step_result {
@@ -1052,7 +1232,13 @@ impl ProgramExecution {
                         // requeue через safe point вернул бы задачу в
                         // готовые до завершения host-операции.
                         if async_state.sync_wait.is_some() {
-                            async_state.tasks[task_id] = Some(task);
+                            modules::park_task(
+                                task_id,
+                                task,
+                                async_state,
+                                module_state,
+                                session_modules,
+                            )?;
                             break;
                         }
                         if crossed_scheduler_safe_point(before, &task)
@@ -1062,8 +1248,14 @@ impl ProgramExecution {
                                 async_state.scheduler_quantum(),
                             )
                         {
-                            async_state.tasks[task_id] = Some(task);
-                            async_state.ready.push_back(task_id);
+                            modules::park_task(
+                                task_id,
+                                task,
+                                async_state,
+                                module_state,
+                                session_modules,
+                            )?;
+                            async_state.ready.push_back(ReadyEvent::Task(task_id));
                             if let Some(budget) = quanta_budget.as_mut() {
                                 *budget = budget.saturating_sub(1);
                                 if *budget == 0 {
@@ -1075,8 +1267,27 @@ impl ProgramExecution {
                         continue;
                     }
                     Ok(Step::Yield) => {
-                        async_state.tasks[task_id] = Some(task);
-                        async_state.ready.push_back(task_id);
+                        // Первый Await служебного чанка извлекает результат,
+                        // но не переносит готовое оповещение за более поздние
+                        // события (async-procedure-error-order). Пользовательский
+                        // Await внутри обработчика уступает очередь как прежде.
+                        let notification_ready =
+                            matches!(task.completion, TaskCompletion::Notification(_))
+                                && task.frames.len() == 1
+                                && task.frames[0].func_id == 0
+                                && task.frames[0].pc == 1;
+                        modules::park_task(
+                            task_id,
+                            task,
+                            async_state,
+                            module_state,
+                            session_modules,
+                        )?;
+                        if notification_ready {
+                            async_state.ready.push_front(ReadyEvent::Task(task_id));
+                        } else {
+                            async_state.ready.push_back(ReadyEvent::Task(task_id));
+                        }
                         if let Some(budget) = quanta_budget.as_mut() {
                             *budget = budget.saturating_sub(1);
                             if *budget == 0 {
@@ -1086,16 +1297,28 @@ impl ProgramExecution {
                         break;
                     }
                     Ok(Step::StartAsync(child_id)) => {
-                        async_state.tasks[task_id] = Some(task);
+                        modules::park_task(
+                            task_id,
+                            task,
+                            async_state,
+                            module_state,
+                            session_modules,
+                        )?;
                         // Async-callee исполняется немедленно до первого `Await`.
                         // Вызывающий продолжает сразу после него; задачи, уже
                         // стоявшие в FIFO, остаются за этой парой.
-                        async_state.ready.push_front(task_id);
-                        async_state.ready.push_front(child_id);
+                        async_state.ready.push_front(ReadyEvent::Task(task_id));
+                        async_state.ready.push_front(ReadyEvent::Task(child_id));
                         break;
                     }
                     Ok(Step::Suspend) => {
-                        async_state.tasks[task_id] = Some(task);
+                        modules::park_task(
+                            task_id,
+                            task,
+                            async_state,
+                            module_state,
+                            session_modules,
+                        )?;
                         break;
                     }
                     Ok(Step::Done(value)) => {
@@ -1105,6 +1328,9 @@ impl ProgramExecution {
                                 async_state.resolve_promise(promise_id, Ok(value))?;
                             }
                             TaskCompletion::Detached => {}
+                            TaskCompletion::Notification(promise_id) => {
+                                notifications::finish(async_state, promise_id, value)?;
+                            }
                         }
                         break;
                     }
@@ -1115,11 +1341,23 @@ impl ProgramExecution {
                             program,
                             catalog,
                             session_modules,
+                            module_state,
                             &e,
                             &mut task.current_exception,
                         ) {
+                            modules::publish_aliases(&task, module_state, session_modules)?;
                             match task.completion {
-                                TaskCompletion::Root | TaskCompletion::Detached => return Err(e),
+                                TaskCompletion::Root => {
+                                    *failed_root_stack = Some(task.stack);
+                                    return Err(e);
+                                }
+                                TaskCompletion::Notification(_) => {
+                                    return Err(e);
+                                }
+                                TaskCompletion::Detached => {
+                                    async_state.defer_detached_error(e)?;
+                                    break;
+                                }
                                 TaskCompletion::Promise(promise_id) => {
                                     async_state.resolve_promise(promise_id, Err(e))?;
                                     break;
@@ -1132,7 +1370,10 @@ impl ProgramExecution {
                 }
             }
 
-            if root_result.is_some() && !async_state.has_live_tasks() {
+            if root_result.is_some()
+                && (debug_task_floor.is_some()
+                    || (!async_state.has_live_tasks() && async_state.ready.is_empty()))
+            {
                 let result = root_result.take().expect("результат проверен выше");
                 *finished = true;
                 return Ok(ProgramPoll::Complete(result.0, result.1));
@@ -1151,9 +1392,7 @@ fn drive_linked(
     module_state: &mut ModuleState,
     debug: Option<Box<dyn DebugHook>>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let owned_module_state = ModuleState {
-        slots: std::mem::take(&mut module_state.slots),
-    };
+    let owned_module_state = module_state.take_for_execution();
     let mut execution = ProgramExecution::new_linked(
         program,
         func_id,
@@ -1233,6 +1472,59 @@ fn reg_store(stack: &mut [BslValue], i: usize, v: BslValue) -> Result<(), RtErro
         None => Err(RtError::InvalidBytecode(
             "запись регистра за границей стека значений",
         )),
+    }
+}
+
+struct OpenOutputContext<'a, 'session, 'host> {
+    program: &'a Program,
+    module_state: &'a mut ModuleState,
+    modules: &'a mut ModulesCtx<'session, 'host>,
+    frames: &'a [Frame],
+    frame_idx: usize,
+    stack: &'a mut [BslValue],
+}
+
+fn store_open_output(
+    mode: ArgMode,
+    value: BslValue,
+    context: OpenOutputContext<'_, '_, '_>,
+) -> Result<(), RtError> {
+    let OpenOutputContext {
+        program,
+        module_state,
+        modules,
+        frames,
+        frame_idx,
+        stack,
+    } = context;
+    match mode {
+        ArgMode::Value | ArgMode::Default => Ok(()),
+        ArgMode::ByRefLocal(slot) => reg_store(stack, frames[frame_idx].reg_index(slot), value),
+        ArgMode::ByRefModuleVar(slot) => {
+            let owner = frames[frame_idx].module;
+            if let Some(index) = find_module_alias(frames, owner, slot as usize) {
+                reg_store(stack, index, value)
+            } else {
+                reg_store(&mut module_state.slots, slot as usize, value)
+            }
+        }
+        ArgMode::ByRefImportedVar(link) => {
+            let (owner, slot, _) =
+                modules::load_imported_argument(program, link, modules.session, frames, stack)?;
+            if let Some(index) = find_module_alias(frames, owner, slot) {
+                reg_store(stack, index, value)
+            } else {
+                let instance = modules.session.instances.get_mut(owner as usize).ok_or(
+                    RtError::InvalidBytecode("ссылочная цель ведёт мимо сессии модулей"),
+                )?;
+                reg_store(&mut instance.state.slots, slot, value)
+            }
+        }
+        ArgMode::ByRefIndex { object, index } => {
+            let object = reg_load(stack, frames[frame_idx].reg_index(object))?;
+            let index = reg_load(stack, frames[frame_idx].reg_index(index))?;
+            object.set_index(&index, value)
+        }
     }
 }
 
@@ -1357,47 +1649,63 @@ fn prop_cache(caches: &RunCaches, func_id: usize, pc: usize) -> Result<&PropCach
     at(chunk, pc, "нет ячейки инлайн-кэша для инструкции")
 }
 
-/// Ячейка инлайн-кэша `CallObjectMethod` на позиции `pc` — см.
-/// [`cached_component_method`].
 #[inline]
-fn method_cache(
-    caches: &RunCaches,
-    func_id: usize,
-    pc: usize,
-) -> Result<&MethodCacheSlot, RtError> {
+fn open_call_site(caches: &RunCaches, func_id: usize, pc: usize) -> Result<&OpenCallSite, RtError> {
     let chunk = at(
-        &caches.method,
+        &caches.open_call,
         func_id,
-        "номер чанка вне инлайн-кэша методов",
+        "номер чанка вне таблицы подготовленных вызовов",
     )?;
-    at(chunk, pc, "нет ячейки кэша метода для инструкции")
+    at(chunk, pc, "нет метаданных для инструкции")?
+        .as_ref()
+        .ok_or(RtError::InvalidBytecode(
+            "инструкция не является открытым вызовом",
+        ))
 }
 
-/// Разрешение метода компонентного объекта с кэшем на позиции инструкции:
-/// мономорфный сайт после первого вызова читает обработчик из своей ячейки
-/// по одному сравнению адреса таблицы, не трогая карту мемоизации. Смена
-/// типа получателя на том же сайте (полиморфизм) перечитывает карту и
-/// перезаписывает ячейку; `None` кэшируется наравне с попаданием — тип без
-/// имени в таблице не платит за строку и хэш на каждый вызов.
-fn cached_component_method(
-    caches: &RunCaches,
-    func_id: usize,
-    pc: usize,
+#[inline(never)]
+fn import_site(caches: &RunCaches, func_id: usize, pc: usize) -> Result<ImportSite, RtError> {
+    let chunk = at(
+        &caches.import,
+        func_id,
+        "номер чанка вне таблицы подготовленных импортов",
+    )?;
+    at(chunk, pc, "нет импортных метаданных для инструкции")?.ok_or(RtError::InvalidBytecode(
+        "инструкция не является межмодульным доступом",
+    ))
+}
+
+/// Разрешение плана открытого вызова с мономорфным кэшем. Попадание
+/// сравнивает один адрес дескриптора типа. Поиск имени, арность и допустимость
+/// результата оплачиваются только на промахе.
+fn cached_object_method_plan(
+    site: &OpenCallSite,
     map: &ComponentMethodMap,
-    table: &'static [bsl_rt::MethodDescriptor],
-    name: bsl_rt::NameId,
+    object: &bsl_rt::ObjectRef,
+    result_required: bool,
     program: &Program,
-) -> Result<Option<&'static bsl_rt::MethodDescriptor>, RtError> {
-    let slot = method_cache(caches, func_id, pc)?;
-    let key = table.as_ptr() as usize;
-    if let Some((cached_table, resolved)) = *slot.borrow()
-        && cached_table == key
+) -> Result<ObjectMethodPlan, RtError> {
+    let descriptor = object.type_descriptor();
+    let key = std::ptr::from_ref(descriptor) as usize;
+    if let Some((cached_type, plan)) = site.cache.get()
+        && cached_type == key
     {
-        return Ok(resolved);
+        return Ok(plan);
     }
-    let resolved = resolve_component_method(map, table, name, program)?;
-    *slot.borrow_mut() = Some((key, resolved));
-    Ok(resolved)
+    let plan = if std::ptr::eq(descriptor, &bsl_rt::BSL_MODULE_TYPE) {
+        ObjectMethodPlan::ModuleReference
+    } else {
+        match resolve_component_method(map, object.method_table(), site.name, program)? {
+            Some(method) => {
+                method.check_result_use(result_required)?;
+                method.check_arity(site.count, descriptor.name)?;
+                ObjectMethodPlan::Descriptor(method)
+            }
+            None => ObjectMethodPlan::DynamicFallback,
+        }
+    };
+    site.cache.set(Some((key, plan)));
+    Ok(plan)
 }
 
 /// Оригинальное написание имени поля — нужно строковому пути доступа
@@ -1663,7 +1971,13 @@ fn step(
                         "номер переменной модуля вне таблицы",
                     ));
                 }
-                let v = reg_load(&module_state.slots, slot as usize)?;
+                let v = load_module_argument(
+                    frames[frame_idx].module,
+                    slot as usize,
+                    frames,
+                    stack,
+                    &module_state.slots,
+                )?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -1675,7 +1989,13 @@ fn step(
                     ));
                 }
                 let v = reg_load(stack, frames[frame_idx].reg_index(src))?;
-                reg_store(&mut module_state.slots, slot as usize, v)?;
+                if let Some(index) =
+                    find_module_alias(frames, frames[frame_idx].module, slot as usize)
+                {
+                    reg_store(stack, index, v)?;
+                } else {
+                    reg_store(&mut module_state.slots, slot as usize, v)?;
+                }
                 frames[frame_idx].pc += 1;
             }
             Instr::Move { dst, src } => {
@@ -1944,6 +2264,14 @@ fn step(
                     "номер вызываемого чанка вне таблицы функций",
                 )?;
 
+                if !program.links.is_empty()
+                    && modules::ensure_imported_arguments_ready(
+                        program, modes, modules, frames, stack,
+                    )?
+                {
+                    return Ok(Step::Continue);
+                }
+
                 if callee_chunk.is_async {
                     let mut child_stack = Vec::with_capacity(callee_chunk.n_regs as usize);
                     let mut param_aliases = Vec::with_capacity(modes.len());
@@ -1956,12 +2284,30 @@ fn step(
                             ArgMode::ByRefLocal(slot) => {
                                 (reg_load(stack, frames[frame_idx].reg_index(*slot))?, true)
                             }
-                            ArgMode::ByRefModuleVar(slot) => {
-                                (reg_load(&module_state.slots, *slot as usize)?, true)
-                            }
-                            ArgMode::ByRefImportedVar(_) => {
+                            ArgMode::ByRefModuleVar(slot) => (
+                                load_module_argument(
+                                    frames[frame_idx].module,
+                                    *slot as usize,
+                                    frames,
+                                    stack,
+                                    &module_state.slots,
+                                )?,
+                                true,
+                            ),
+                            ArgMode::ByRefImportedVar(link) => (
+                                modules::load_imported_argument(
+                                    program,
+                                    *link,
+                                    modules.session,
+                                    frames,
+                                    stack,
+                                )?
+                                .2,
+                                true,
+                            ),
+                            ArgMode::ByRefIndex { .. } => {
                                 return Err(RtError::InvalidBytecode(
-                                    "режим byimport вне каталога конфигурации",
+                                    "индексная ссылочная цель у статического вызова",
                                 ));
                             }
                             ArgMode::Default => (BslValue::Undefined, false),
@@ -1984,6 +2330,7 @@ fn step(
                     let child_id = async_state.insert_task(Task {
                         frames: vec![Frame {
                             module: frames[frame_idx].module,
+                            code: frames[frame_idx].code.clone(),
                             func_id: func as usize,
                             pc: 0,
                             param_aliases,
@@ -2020,6 +2367,9 @@ fn step(
                 // (`check_call_geometry`). Без той проверки номер
                 // заворачивался, и аргумент становился алиасом чужого
                 // регистра вызывающего.
+                // Граница возврата включает новые ячейки модульных
+                // аргументов, а не только собственные регистры callee.
+                let call_start = stack.len();
                 let mut param_aliases = Vec::with_capacity(modes.len());
                 let mut module_copybacks = Vec::new();
                 for (i, mode) in modes.iter().enumerate() {
@@ -2040,19 +2390,35 @@ fn step(
                         ArgMode::ByRefModuleVar(slot) => {
                             let module_slot = *slot as usize;
                             let value = reg_load(&module_state.slots, module_slot)?;
-                            let idx = stack.len();
-                            stack.push(value);
-                            module_copybacks.push((idx, frames[frame_idx].module, module_slot));
-                            ParamSlot {
-                                idx,
-                                provided: true,
-                            }
+                            bind_module_argument(
+                                frames[frame_idx].module,
+                                module_slot,
+                                value,
+                                frames,
+                                &mut module_copybacks,
+                                stack,
+                            )
                         }
-                        // Импортированная переменная по ссылке появляется
-                        // только внутри каталога конфигурации.
-                        ArgMode::ByRefImportedVar(_) => {
+                        ArgMode::ByRefImportedVar(link) => {
+                            let (owner, slot, value) = modules::load_imported_argument(
+                                program,
+                                *link,
+                                modules.session,
+                                frames,
+                                stack,
+                            )?;
+                            bind_module_argument(
+                                owner,
+                                slot,
+                                value,
+                                frames,
+                                &mut module_copybacks,
+                                stack,
+                            )
+                        }
+                        ArgMode::ByRefIndex { .. } => {
                             return Err(RtError::InvalidBytecode(
-                                "режим byimport вне каталога конфигурации",
+                                "индексная ссылочная цель у статического вызова",
                             ));
                         }
                         // Вызывающий в этот регистр ничего не вычислял, там
@@ -2075,12 +2441,12 @@ fn step(
                     param_aliases.push(slot);
                 }
 
-                let call_start = stack.len();
                 let own_base = stack.len();
                 push_own_registers(stack, callee_chunk);
 
                 frames.push(Frame {
                     module: frames[frame_idx].module,
+                    code: frames[frame_idx].code.clone(),
                     func_id: func as usize,
                     pc: 0,
                     param_aliases,
@@ -2187,6 +2553,9 @@ fn step(
                             host_promises: None,
                             function_caller: None,
                         });
+                    if let Some(env) = host.env.as_ref() {
+                        context.set_temporary_files(env.temporary_files());
+                    }
                     component_prop_get(
                         object,
                         &linked.component_properties,
@@ -2226,6 +2595,9 @@ fn step(
                             host_promises: None,
                             function_caller: None,
                         });
+                    if let Some(env) = host.env.as_ref() {
+                        context.set_temporary_files(env.temporary_files());
+                    }
                     component_prop_set(
                         object,
                         &linked.component_properties,
@@ -2252,6 +2624,49 @@ fn step(
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
                 let v = if builtin == bsl_rt::BuiltinFn::ErrorInfo {
                     current_error_info(current_exception.as_ref())?
+                } else if builtin == bsl_rt::BuiltinFn::ThisObject {
+                    module_state.reference()?
+                } else if builtin == bsl_rt::BuiltinFn::RunApp {
+                    match bsl_rt::call_run_app(args.as_slice(), host.env()?)? {
+                        bsl_rt::CallOutcome::Ready(value) => value,
+                        bsl_rt::CallOutcome::Pending(pending) => {
+                            async_state.begin_sync_host_call(task_id, dst, pending)?;
+                            return Ok(Step::Suspend);
+                        }
+                    }
+                } else if builtin == bsl_rt::BuiltinFn::RunAppAsync {
+                    let outcome = bsl_rt::call_run_app_async(args.as_slice(), host.env()?);
+                    // Как файловые обещания, результат динамического вызова
+                    // принадлежит внешнему execution, а не временному фрагменту.
+                    host.file_promises
+                        .as_deref_mut()
+                        .unwrap_or(async_state)
+                        .spawn_application(outcome)?
+                } else if builtin.host_effect() == Some(bsl_rt::HostEffect::FileAsync) {
+                    if builtin == bsl_rt::BuiltinFn::CreateDirectoryAsync
+                        && let Some(result) = bsl_rt::prepare_create_directory_noop(args.as_slice())
+                    {
+                        host.file_promises
+                            .as_deref_mut()
+                            .unwrap_or(async_state)
+                            .ready_file_promise(Ok(result))?
+                    } else {
+                        let env = host.env()?;
+                        let files = env.files();
+                        let zone = env.zone();
+                        let request = bsl_rt::prepare_file_operation(
+                            builtin,
+                            args.as_slice(),
+                            bsl_format::format_value,
+                        );
+                        let result_value = (builtin == bsl_rt::BuiltinFn::CreateDirectoryAsync)
+                            .then(|| args.as_slice().first().cloned())
+                            .flatten();
+                        host.file_promises
+                            .as_deref_mut()
+                            .unwrap_or(async_state)
+                            .spawn_file_operation_with_result(request, files, zone, result_value)?
+                    }
                 } else {
                     call_builtin_with_format(builtin, args.as_slice(), runtime_shapes, host)?
                 };
@@ -2269,6 +2684,13 @@ fn step(
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
                 let v = if let Some(object) = ov.object_ref() {
+                    let mut promises = scheduler::ComponentPromises {
+                        local: async_state,
+                        files: host.file_promises.as_deref_mut(),
+                        program,
+                        linked,
+                        module: frames[frame_idx].module,
+                    };
                     let mut context =
                         bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                             runtime_shapes,
@@ -2282,9 +2704,12 @@ fn step(
                             background_jobs: linked.background_jobs.as_ref(),
                             temp_storage: linked.temp_storage.as_ref(),
                             message_sink: linked.message_sink.as_ref(),
-                            host_promises: Some(async_state),
+                            host_promises: Some(&mut promises),
                             function_caller: None,
                         });
+                    if let Some(env) = host.env.as_ref() {
+                        context.set_temporary_files(env.temporary_files());
+                    }
                     object.call_method(method.primary_name(), args.as_slice(), &mut context)?
                 } else {
                     bsl_rt::call_builtin_method_files(
@@ -2325,6 +2750,9 @@ fn step(
             | Instr::NewTextWriter { .. }
             | Instr::Raise { .. }
             | Instr::CallObjectMethod { .. }
+            | Instr::CallObjectProcedure { .. }
+            | Instr::CallLinkedObjectMethod { .. }
+            | Instr::CallLinkedObjectProcedure { .. }
             | Instr::GetObjectProp { .. }
             | Instr::SetObjectProp { .. }
             | Instr::CallComponent { .. }
@@ -2333,7 +2761,7 @@ fn step(
             | Instr::GetImportedVar { .. }
             | Instr::SetImportedVar { .. }
             | Instr::RunDynamic { .. } => {
-                step_cold(
+                if let Some(child) = step_cold(
                     instr,
                     frames,
                     stack,
@@ -2350,7 +2778,9 @@ fn step(
                     frame_idx,
                     func_id,
                     chunk,
-                )?;
+                )? {
+                    return Ok(Step::StartAsync(child));
+                }
             }
             Instr::CollectionLen { dst, obj } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
@@ -2433,7 +2863,7 @@ fn step_cold(
     frame_idx: usize,
     func_id: usize,
     chunk: &bsl_bytecode::Chunk,
-) -> Result<(), RtError> {
+) -> Result<Option<TaskId>, RtError> {
     match instr {
         Instr::NewArray { dst, base, count } => {
             let mut dims = Vec::with_capacity(count as usize);
@@ -2526,6 +2956,9 @@ fn step_cold(
                     host_promises: None,
                     function_caller: None,
                 });
+                if let Some(env) = host.env.as_ref() {
+                    context.set_temporary_files(env.temporary_files());
+                }
                 component_prop_get(
                     object,
                     &linked.component_properties,
@@ -2567,6 +3000,9 @@ fn step_cold(
                     host_promises: None,
                     function_caller: None,
                 });
+                if let Some(env) = host.env.as_ref() {
+                    context.set_temporary_files(env.temporary_files());
+                }
                 component_prop_set(
                     object,
                     &linked.component_properties,
@@ -2605,12 +3041,15 @@ fn step_cold(
             // Окружение прогона едет и в обратный вызов: функция модуля,
             // позванная компонентом, обязана видеть те же часы и те же
             // аргументы, что и остальной код этого `State`.
+            let temporary_files = host.env.as_ref().map(|env| env.temporary_files());
             let HostIo {
                 stdout: host_stdout,
                 stderr: host_stderr,
                 env: host_env,
                 dynamic: host_dynamic,
                 dynamic_depth: host_dynamic_depth,
+                cancel_flag: host_cancel_flag,
+                file_promises: host_file_promises,
             } = host;
             let mut function_caller =
                 |name: &str,
@@ -2628,6 +3067,8 @@ fn step_cold(
                         // Тот же счётчик вложенности, что у прогона: обратный
                         // вызов продолжает ту же сессию, а не открывает свою.
                         dynamic_depth: host_dynamic_depth,
+                        cancel_flag: host_cancel_flag.clone(),
+                        file_promises: host_file_promises.as_deref_mut(),
                     };
                     call_module_function_in_execution(
                         program,
@@ -2653,6 +3094,9 @@ fn step_cold(
                 host_promises: None,
                 function_caller: Some(&mut function_caller),
             });
+            if let Some(registry) = temporary_files {
+                context.set_temporary_files(registry);
+            }
             let value = call(&mut context, args.as_slice())?;
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
@@ -2678,19 +3122,121 @@ fn step_cold(
                 host_promises: None,
                 function_caller: None,
             });
+            if let Some(env) = host.env.as_ref() {
+                context.set_temporary_files(env.temporary_files());
+            }
             let value = call(&mut context, args.as_slice())?;
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
             frames[frame_idx].pc += 1;
         }
-        Instr::CallObjectMethod {
-            result_required,
-            dst,
-            obj,
-            method,
-            base,
-            count,
-        } => {
+        Instr::CallLinkedObjectMethod { dst, obj, base, .. }
+        | Instr::CallLinkedObjectProcedure { dst, obj, base, .. } => {
+            if async_state.sync_wait.is_some() {
+                return Ok(None);
+            }
+            let linked_method = linked.object_method(func_id, frames[frame_idx].pc)?;
+            let ov = at(
+                stack,
+                frames[frame_idx].reg_index(obj),
+                "чтение объекта за границей стека значений",
+            )?;
+            let object = ov.object_ref().ok_or_else(|| RtError::TypeError {
+                expected: linked_method.ty.name,
+                op: "вызов связанного метода",
+            })?;
+            if !std::ptr::eq(object.type_descriptor(), linked_method.ty) {
+                return Err(RtError::TypeError {
+                    expected: linked_method.ty.name,
+                    op: "вызов связанного метода",
+                });
+            }
+            let count = linked_method.count;
+            if let Some(descriptor) = linked_method.descriptor {
+                if linked_method.invalid_arity {
+                    descriptor.check_arity(
+                        u8::try_from(count).unwrap_or(u8::MAX),
+                        linked_method.ty.name,
+                    )?;
+                }
+                if linked_method.invalid_result_use {
+                    descriptor
+                        .check_result_use(matches!(instr, Instr::CallLinkedObjectMethod { .. }))?;
+                }
+            }
+            let contiguous_args = base as usize >= frames[frame_idx].param_aliases.len();
+            let fallback_args;
+            let args: &[BslValue] = if count == 0 {
+                &[]
+            } else if contiguous_args {
+                let start = frames[frame_idx].reg_index(base);
+                stack
+                    .get(start..start + count)
+                    .ok_or(RtError::InvalidBytecode(
+                        "чтение аргументов за границей стека значений",
+                    ))?
+            } else {
+                fallback_args = CallArgs::load(
+                    stack,
+                    &frames[frame_idx],
+                    base,
+                    u8::try_from(count).map_err(|_| {
+                        RtError::InvalidBytecode("слишком много аргументов связанного метода")
+                    })?,
+                )?;
+                fallback_args.as_slice()
+            };
+            let mut promises = scheduler::ComponentPromises {
+                local: async_state,
+                files: host.file_promises.as_deref_mut(),
+                program,
+                linked,
+                module: frames[frame_idx].module,
+            };
+            let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
+                runtime_shapes,
+                stdout: &mut *host.stdout,
+                stderr: &mut *host.stderr,
+                formatter: bsl_format::format_value,
+                zone: &linked.zone,
+                files: &linked.files,
+                random: &linked.random,
+                network: linked.network.as_ref(),
+                background_jobs: linked.background_jobs.as_ref(),
+                temp_storage: linked.temp_storage.as_ref(),
+                message_sink: linked.message_sink.as_ref(),
+                host_promises: Some(&mut promises),
+                function_caller: None,
+            });
+            if let Some(env) = host.env.as_ref() {
+                context.set_temporary_files(env.temporary_files());
+            }
+            let outcome = match linked_method.descriptor {
+                Some(descriptor) => descriptor.invoke(object.as_dyn(), args, &mut context)?,
+                None => bsl_rt::CallOutcome::Ready(object.call_method(
+                    field_name(program, linked_method.name)?,
+                    args,
+                    &mut context,
+                )?),
+            };
+            let value = match outcome {
+                bsl_rt::CallOutcome::Ready(value) => value,
+                bsl_rt::CallOutcome::Pending(pending) => {
+                    return async_state
+                        .begin_sync_host_call(task_id, dst, pending)
+                        .map(|()| None);
+                }
+            };
+            let destination = frames[frame_idx].reg_index(dst);
+            reg_store(stack, destination, value)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::CallObjectMethod { dst, obj, base, .. }
+        | Instr::CallObjectProcedure { dst, obj, base, .. } => {
+            let result_required = matches!(instr, Instr::CallObjectMethod { .. });
+            let site = open_call_site(caches, func_id, frames[frame_idx].pc)?;
+            let name_id = site.name;
+            let count = site.count;
             // Задача уже припаркована этим самым вызовом: `pc` остался на
             // инструкции, и внутри бандла `step` диспатчит её повторно,
             // пока не дойдёт до границы. Повторный вход — пустой: сам
@@ -2698,13 +3244,44 @@ fn step_cold(
             // кеша микроопераций), а паркует задачу арм `Continue`
             // планировщика.
             if async_state.sync_wait.is_some() {
-                return Ok(());
+                return Ok(None);
             }
             let ov = at(
                 stack,
                 frames[frame_idx].reg_index(obj),
                 "чтение объекта за границей стека значений",
             )?;
+            let object_plan = ov
+                .object_ref()
+                .map(|object| {
+                    cached_object_method_plan(
+                        site,
+                        &linked.component_methods,
+                        object,
+                        result_required,
+                        program,
+                    )
+                })
+                .transpose()?;
+            if matches!(object_plan, Some(ObjectMethodPlan::ModuleReference)) {
+                let receiver = ov.clone();
+                let name = field_name(program, name_id)?;
+                let modes = &chunk.call_arg_modes[site.arg_modes as usize];
+                return modules::call_reference(
+                    &receiver,
+                    name,
+                    result_required,
+                    base,
+                    modes,
+                    dst,
+                    program,
+                    module_state,
+                    modules,
+                    frames,
+                    stack,
+                    async_state,
+                );
+            }
             // Аргументы открытого вызова кодоген кладёт в свежие временные
             // регистры — в стеке значений они лежат подряд, и обработчик
             // получает их срезом стека без поштучного клонирования (это
@@ -2730,8 +3307,16 @@ fn step_cold(
                 fallback_args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
                 fallback_args.as_slice()
             };
-            let name_id = bsl_rt::NameId::from_index(method as u32);
+            let property_output = site.property_output;
+            let mut output_argument = None;
             let value = if let Some(object) = ov.object_ref() {
+                let mut promises = scheduler::ComponentPromises {
+                    local: async_state,
+                    files: host.file_promises.as_deref_mut(),
+                    program,
+                    linked,
+                    module: frames[frame_idx].module,
+                };
                 let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                     runtime_shapes,
                     stdout: &mut *host.stdout,
@@ -2744,26 +3329,24 @@ fn step_cold(
                     background_jobs: linked.background_jobs.as_ref(),
                     temp_storage: linked.temp_storage.as_ref(),
                     message_sink: linked.message_sink.as_ref(),
-                    host_promises: Some(async_state),
+                    host_promises: Some(&mut promises),
                     function_caller: None,
                 });
+                if let Some(env) = host.env.as_ref() {
+                    context.set_temporary_files(env.temporary_files());
+                }
                 // Тип со статической таблицей методов идёт кэшем ячейки
                 // этой инструкции поверх мемоизированного моста «номер
                 // имени → обработчик»; промах и тип без таблицы —
                 // строковым `call_method`, там единственный источник
                 // текста ошибки о неизвестном методе.
-                match cached_component_method(
-                    caches,
-                    func_id,
-                    frames[frame_idx].pc,
-                    &linked.component_methods,
-                    object.method_table(),
-                    name_id,
-                    program,
-                )? {
-                    Some(descriptor) => {
-                        descriptor.check_result_use(result_required)?;
-                        descriptor.check_arity(count, object.type_descriptor().name)?;
+                let value = match object_plan
+                    .expect("объектное значение получило план открытого вызова")
+                {
+                    ObjectMethodPlan::ModuleReference => {
+                        unreachable!("ссылка на модуль обработана до подготовки аргументов")
+                    }
+                    ObjectMethodPlan::Descriptor(descriptor) => {
                         match descriptor.invoke(object.as_dyn(), args, &mut context)? {
                             bsl_rt::CallOutcome::Ready(value) => value,
                             // Приостанавливающий метод: host-операция
@@ -2775,33 +3358,99 @@ fn step_cold(
                             // (`resume_sync_host_call`), повторного входа
                             // в обработчик нет.
                             bsl_rt::CallOutcome::Pending(pending) => {
-                                return async_state.begin_sync_host_call(task_id, dst, pending);
+                                return async_state
+                                    .begin_sync_host_call(task_id, dst, pending)
+                                    .map(|()| None);
                             }
                         }
                     }
-                    None => {
+                    ObjectMethodPlan::DynamicFallback => {
                         let method_name = field_name(program, name_id)?;
                         object.call_method(method_name, args, &mut context)?
                     }
+                };
+                if property_output && object.type_descriptor().name == "ФиксированнаяСтруктура"
+                {
+                    let found = value == BslValue::Boolean(true);
+                    output_argument = Some(if found {
+                        let BslValue::Str(name) = &args[0] else {
+                            return Err(RtError::TypeError {
+                                expected: "Строка",
+                                op: "Свойство",
+                            });
+                        };
+                        let name = name.to_string();
+                        object.get_property(&name, &mut context)?
+                    } else {
+                        BslValue::Undefined
+                    });
                 }
+                value
             } else {
                 // Нативный получатель: обработчик по номеру имени из таблицы
                 // связывания, строка нужна только тексту ошибки.
-                let builtin =
-                    linked
-                        .builtin_method(name_id)
-                        .ok_or_else(|| RtError::UnknownMethod {
-                            method: field_name(program, name_id).unwrap_or("?").to_string(),
-                            receiver: ov.type_name(),
-                        })?;
-                bsl_rt::call_builtin_method_files(
+                let builtin = site.builtin.ok_or_else(|| RtError::UnknownMethod {
+                    method: field_name(program, name_id).unwrap_or("?").to_string(),
+                    receiver: ov.type_name(),
+                })?;
+                if result_required
+                    && matches!(
+                        builtin,
+                        bsl_rt::BuiltinMethod::BufSet | bsl_rt::BuiltinMethod::Insert
+                    )
+                    && matches!(ov, BslValue::Object(object)
+                        if matches!(&**object, bsl_rt::BslObject::Array(_))
+                            || builtin == bsl_rt::BuiltinMethod::BufSet
+                                && matches!(&**object, bsl_rt::BslObject::TableRow(..)))
+                {
+                    return Err(RtError::Raised(BslValue::Str(
+                        "Вызов процедуры объекта как функции".into(),
+                    )));
+                }
+                if builtin
+                    .static_arity()
+                    .is_some_and(|arity| arity != args.len())
+                {
+                    return Err(RtError::MethodNotApplicable {
+                        method: builtin.primary_name(),
+                        receiver: ov.type_name(),
+                    });
+                }
+                let value = bsl_rt::call_builtin_method_files(
                     builtin,
                     ov,
                     args,
                     runtime_shapes,
                     linked.files.as_ref(),
-                )?
+                )?;
+                if property_output && builtin == bsl_rt::BuiltinMethod::Property {
+                    let BslValue::Str(name) = &args[0] else {
+                        return Err(RtError::TypeError {
+                            expected: "Строка",
+                            op: "Свойство",
+                        });
+                    };
+                    let field = runtime_shapes.names.intern_bsl(name);
+                    let (_, output) = ov.structure_property(field)?;
+                    output_argument = Some(output);
+                }
+                value
             };
+            if let Some(output) = output_argument {
+                let modes = &chunk.call_arg_modes[site.arg_modes as usize];
+                store_open_output(
+                    modes[1],
+                    output,
+                    OpenOutputContext {
+                        program,
+                        module_state,
+                        modules,
+                        frames,
+                        frame_idx,
+                        stack,
+                    },
+                )?;
+            }
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
             frames[frame_idx].pc += 1;
@@ -2821,88 +3470,46 @@ fn step_cold(
                     });
                 }
             };
-            // Область видимости фрагмента — материализованная таблица
-            // имён ЭТОГО кадра (`Chunk::local_names`), а не только
-            // верхнего уровня: `Выполнить` внутри процедуры видит её
-            // локальные. Таблица есть у всех чанков, помеченных
-            // `uses_dynamic` в `bsl-sema`, а `RunDynamic` эмитится
-            // только в них — так что пустой она здесь быть не может,
-            // кроме как у кадра вообще без локальных переменных.
-            let value = run_dynamic_snippet(
+            snippet::push_dynamic_frame(
                 &code,
                 is_eval,
+                dst,
                 program,
-                &chunk.local_names,
-                func_id,
+                frames,
                 stack,
-                &frames[frame_idx],
                 linked,
                 host,
-                module_state,
+                modules.catalog.map(|catalog| catalog.catalog),
             )?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, value)?;
-            frames[frame_idx].pc += 1;
         }
         // Вызов экспортного метода чужого модуля. Протокол ленивой
         // инициализации: если какой-то из затрагиваемых модулей ещё не
         // инициализирован, `ensure_module_ready` пушит кадр его тела и
         // возвращает управление БЕЗ продвижения `pc` — после возврата тела
         // эта же инструкция исполняется повторно, уже с готовым модулем.
-        Instr::CallImported {
-            link_slot,
-            base,
-            arg_modes,
-            ret,
-        } => {
+        Instr::CallImported { base, ret, .. } => {
             let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
                 "межмодульный опкод вне каталога конфигурации",
             ))?;
-            let Some(&bsl_bytecode::LinkEntry::Function {
-                module: target,
-                func,
-            }) = program.links.get(link_slot as usize)
-            else {
-                return Err(RtError::InvalidBytecode(
-                    "CallImported ведёт мимо таблицы связей или на переменную",
-                ));
-            };
-            let target = target.index() as u32;
+            let ImportSite {
+                owner: target,
+                target: func,
+                arg_modes,
+            } = import_site(caches, func_id, frames[frame_idx].pc)?;
             if ensure_module_ready(target, ctx, modules.session, frames, stack)? {
-                return Ok(());
+                return Ok(None);
             }
-            let modes = at(
-                &chunk.call_arg_modes,
-                arg_modes as usize,
-                "номер набора режимов аргументов вне таблицы чанка",
-            )?;
+            let modes = &chunk.call_arg_modes[arg_modes as usize];
             // Все модули, чьи переменные уходят по ссылке, тоже должны быть
             // готовы до первого побочного действия: построение кадра ниже
             // уже пушит значения в стек и продвигает `pc`.
-            for mode in modes {
-                if let ArgMode::ByRefImportedVar(slot) = mode {
-                    let Some(&bsl_bytecode::LinkEntry::Variable { module, .. }) =
-                        program.links.get(*slot as usize)
-                    else {
-                        return Err(RtError::InvalidBytecode(
-                            "byimport ведёт мимо таблицы связей или на функцию",
-                        ));
-                    };
-                    if ensure_module_ready(
-                        module.index() as u32,
-                        ctx,
-                        modules.session,
-                        frames,
-                        stack,
-                    )? {
-                        return Ok(());
-                    }
-                }
+            if modules::ensure_imported_arguments_ready(program, modes, modules, frames, stack)? {
+                return Ok(None);
             }
             let callee_program = ctx.program(target)?;
             let callee_chunk = at(
                 &callee_program.chunks,
-                func as usize,
+                func,
                 "связь ведёт на несуществующий чанк модуля",
             )?;
             // Асинхронная цель межмодульного вызова не поддержана до замера
@@ -2918,6 +3525,7 @@ fn step_cold(
                 });
             }
             frames[frame_idx].pc += 1;
+            let call_start = stack.len();
             let mut param_aliases = Vec::with_capacity(modes.len());
             let mut module_copybacks = Vec::new();
             for (i, mode) in modes.iter().enumerate() {
@@ -2936,42 +3544,40 @@ fn step_cold(
                     ArgMode::ByRefModuleVar(slot) => {
                         let module_slot = *slot as usize;
                         let value = reg_load(&module_state.slots, module_slot)?;
-                        let idx = stack.len();
-                        stack.push(value);
-                        module_copybacks.push((idx, frames[frame_idx].module, module_slot));
-                        ParamSlot {
-                            idx,
-                            provided: true,
-                        }
+                        bind_module_argument(
+                            frames[frame_idx].module,
+                            module_slot,
+                            value,
+                            frames,
+                            &mut module_copybacks,
+                            stack,
+                        )
                     }
                     // Экспортная переменная ТРЕТЬЕГО модуля: то же, но
                     // состояние берётся из сессии (модуль готов — ensure
                     // выше; собственный модуль в связях запрещён периметром
                     // образа, так что изъятая ячейка не встретится).
-                    ArgMode::ByRefImportedVar(slot) => {
-                        let Some(&bsl_bytecode::LinkEntry::Variable {
-                            module,
-                            slot: var_slot,
-                        }) = program.links.get(*slot as usize)
-                        else {
-                            return Err(RtError::InvalidBytecode(
-                                "byimport ведёт мимо таблицы связей или на функцию",
-                            ));
-                        };
-                        let owner = module.index() as u32;
-                        let value = {
-                            let instance = modules.session.instances.get(owner as usize).ok_or(
-                                RtError::InvalidBytecode("связь ведёт мимо сессии модулей"),
-                            )?;
-                            reg_load(&instance.state.slots, var_slot as usize)?
-                        };
-                        let idx = stack.len();
-                        stack.push(value);
-                        module_copybacks.push((idx, owner, var_slot as usize));
-                        ParamSlot {
-                            idx,
-                            provided: true,
-                        }
+                    ArgMode::ByRefImportedVar(link) => {
+                        let (owner, slot, value) = modules::load_imported_argument(
+                            program,
+                            *link,
+                            modules.session,
+                            frames,
+                            stack,
+                        )?;
+                        bind_module_argument(
+                            owner,
+                            slot,
+                            value,
+                            frames,
+                            &mut module_copybacks,
+                            stack,
+                        )
+                    }
+                    ArgMode::ByRefIndex { .. } => {
+                        return Err(RtError::InvalidBytecode(
+                            "индексная ссылочная цель у статического вызова",
+                        ));
                     }
                     ArgMode::Default => {
                         let idx = frames[frame_idx].reg_index(base + i as u8);
@@ -2984,12 +3590,12 @@ fn step_cold(
                 };
                 param_aliases.push(slot);
             }
-            let call_start = stack.len();
             let own_base = stack.len();
             push_own_registers(stack, callee_chunk);
             frames.push(Frame {
                 module: target,
-                func_id: func as usize,
+                code: None,
+                func_id: func,
                 pc: 0,
                 param_aliases,
                 own_base,
@@ -3001,20 +3607,17 @@ fn step_cold(
         }
         // Чтение экспортной переменной чужого модуля — с той же ленивой
         // инициализацией владельца.
-        Instr::GetImportedVar { dst, link_slot } => {
+        Instr::GetImportedVar { dst, .. } => {
             let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
                 "межмодульный опкод вне каталога конфигурации",
             ))?;
-            let Some(&bsl_bytecode::LinkEntry::Variable { module, slot }) =
-                program.links.get(link_slot as usize)
-            else {
-                return Err(RtError::InvalidBytecode(
-                    "импортная переменная ведёт мимо таблицы связей или на функцию",
-                ));
-            };
-            let owner = module.index() as u32;
+            let ImportSite {
+                owner,
+                target: slot,
+                ..
+            } = import_site(caches, func_id, frames[frame_idx].pc)?;
             if ensure_module_ready(owner, ctx, modules.session, frames, stack)? {
-                return Ok(());
+                return Ok(None);
             }
             let value = {
                 let instance = modules
@@ -3022,26 +3625,23 @@ fn step_cold(
                     .instances
                     .get(owner as usize)
                     .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
-                reg_load(&instance.state.slots, slot as usize)?
+                load_module_argument(owner, slot, frames, stack, &instance.state.slots)?
             };
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, value)?;
             frames[frame_idx].pc += 1;
         }
-        Instr::SetImportedVar { link_slot, src } => {
+        Instr::SetImportedVar { src, .. } => {
             let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
                 "межмодульный опкод вне каталога конфигурации",
             ))?;
-            let Some(&bsl_bytecode::LinkEntry::Variable { module, slot }) =
-                program.links.get(link_slot as usize)
-            else {
-                return Err(RtError::InvalidBytecode(
-                    "импортная переменная ведёт мимо таблицы связей или на функцию",
-                ));
-            };
-            let owner = module.index() as u32;
+            let ImportSite {
+                owner,
+                target: slot,
+                ..
+            } = import_site(caches, func_id, frames[frame_idx].pc)?;
             if ensure_module_ready(owner, ctx, modules.session, frames, stack)? {
-                return Ok(());
+                return Ok(None);
             }
             let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
             let instance = modules
@@ -3049,7 +3649,11 @@ fn step_cold(
                 .instances
                 .get_mut(owner as usize)
                 .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
-            reg_store(&mut instance.state.slots, slot as usize, value)?;
+            if let Some(index) = find_module_alias(frames, owner, slot) {
+                reg_store(stack, index, value)?;
+            } else {
+                reg_store(&mut instance.state.slots, slot, value)?;
+            }
             frames[frame_idx].pc += 1;
         }
         _ => {
@@ -3058,7 +3662,7 @@ fn step_cold(
             ));
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 /// Размерность в `Новый Массив(d1, d2, ...)` обязана быть целым
@@ -3116,23 +3720,19 @@ enum ReturnOutcome {
 }
 use ReturnOutcome::{Continuing, Done};
 
-fn do_return_with_value(
-    frames: &mut Vec<Frame>,
-    stack: &mut Vec<BslValue>,
+fn copy_back_module_arguments(
+    frame: &Frame,
+    current_module: u32,
+    stack: &[BslValue],
     module_state: &mut ModuleState,
     modules: &mut ModulesCtx<'_, '_>,
-    value: BslValue,
-) -> Result<ReturnOutcome, RtError> {
-    let frame = frames
-        .pop()
-        .expect("инвариант VM: возврат исполняется только при непустом стеке кадров");
+) -> Result<(), RtError> {
     for (stack_slot, target_module, module_slot) in &frame.module_copybacks {
         let value = reg_load(stack, *stack_slot)?;
-        // `module_state` — состояние модуля ВОЗВРАЩАЮЩЕГОСЯ кадра (у
-        // модульного кадра оно на время шага изъято из сессии драйвером);
-        // корневое состояние приходит отдельной ссылкой, остальные модули —
-        // через сессию.
-        let slots = if *target_module == frame.module {
+        // При возврате current_module — модуль текущего кадра, изъятый
+        // драйвером на время шага. При разматывании это ROOT_MODULE:
+        // все состояния каталога уже возвращены в сессию.
+        let slots = if *target_module == current_module {
             &mut module_state.slots
         } else if *target_module == ROOT_MODULE {
             &mut modules
@@ -3155,9 +3755,23 @@ fn do_return_with_value(
         };
         reg_store(slots, *module_slot, value)?;
     }
+    Ok(())
+}
+
+fn do_return_with_value(
+    frames: &mut Vec<Frame>,
+    stack: &mut Vec<BslValue>,
+    module_state: &mut ModuleState,
+    modules: &mut ModulesCtx<'_, '_>,
+    value: BslValue,
+) -> Result<ReturnOutcome, RtError> {
+    let frame = frames
+        .pop()
+        .expect("инвариант VM: возврат исполняется только при непустом стеке кадров");
+    copy_back_module_arguments(&frame, frame.module, stack, module_state, modules)?;
     // Возврат из кадра инициализации модуля: тело модуля отработало,
     // экземпляр готов; результата у тела нет, и писать его некуда.
-    if frame.module != ROOT_MODULE && frame.func_id == 0 {
+    if frame.module != ROOT_MODULE && frame.func_id == 0 && frame.code.is_none() {
         if let Some(instance) = modules.session.instances.get_mut(frame.module as usize) {
             instance.init = ModuleInitState::Ready;
         }
@@ -3209,12 +3823,14 @@ fn find_handler(chunk: &bsl_bytecode::Chunk, pc: usize) -> Option<usize> {
 /// из-за того, что внутренний вызов не поймал исключение сам) проверяется
 /// по `pc - 1` — позиции его собственной инструкции `Call`, а не следующей
 /// за ней (которая уже была продвинута в момент самого вызова).
+#[allow(clippy::too_many_arguments)]
 fn unwind_to_handler(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     program: &Program,
     catalog: Option<&CatalogContext<'_>>,
     session: &mut SessionModules,
+    module_state: &mut ModuleState,
     err: &RtError,
     current_exception: &mut Option<BslValue>,
 ) -> bool {
@@ -3225,12 +3841,14 @@ fn unwind_to_handler(
     if !err.is_bsl_exception() {
         return false;
     }
-    let mut first = true;
+    let mut at_current_pc = true;
     loop {
         let frame_idx = frames.len() - 1;
         // Чанк кадра лежит в программе ЕГО модуля: кадры конфигурации
         // разматываются через каталог.
-        let frame_program = if frames[frame_idx].module == ROOT_MODULE {
+        let frame_program = if let Some(code) = &frames[frame_idx].code {
+            &code.program
+        } else if frames[frame_idx].module == ROOT_MODULE {
             program
         } else {
             match catalog.map(|ctx| ctx.program(frames[frame_idx].module)) {
@@ -3244,15 +3862,14 @@ fn unwind_to_handler(
             // уже несут наружу, обработчик в нём всё равно не найти.
             None => return false,
         };
-        let check_pc = if first {
+        let check_pc = if at_current_pc {
             frames[frame_idx].pc
         } else {
-            // Кадр выше по стеку всегда стоит ЗА своей инструкцией `Call`,
+            // После обычного вызова кадр стоит ЗА инструкцией `Call`,
             // так что `pc >= 1`; насыщение — страховка от того, что кадр
             // собрали не мы (см. классификацию паник в шапке модуля).
             frames[frame_idx].pc.saturating_sub(1)
         };
-        first = false;
 
         if let Some(handler_pc) = find_handler(chunk, check_pc) {
             *current_exception = Some(err_to_value(err));
@@ -3266,11 +3883,29 @@ fn unwind_to_handler(
         let frame = frames
             .pop()
             .expect("инвариант VM: `frames.len() >= 2` проверено строкой выше");
+        // Ленивое тело запускается без продвижения инструкции владельца:
+        // после успешной инициализации её повторяют. Ошибка относится к
+        // этой инструкции, а не к предыдущей за границей Попытка.
+        at_current_pc = frame.module != ROOT_MODULE && frame.func_id == 0 && frame.code.is_none();
+        // Состояния уже возвращены в сессию после шага. Изменение аргумента
+        // не является транзакцией: исключение не отменяет его запись.
+        let mut modules = ModulesCtx {
+            root_program: program,
+            session,
+            catalog,
+            root_state: None,
+        };
+        if copy_back_module_arguments(&frame, ROOT_MODULE, stack, module_state, &mut modules)
+            .is_err()
+        {
+            return false;
+        }
         // Ошибка вылетела из тела модуля: инициализация не удалась, и
         // повторное касание модуля отвечает ловимой ошибкой, а не повторным
         // запуском тела — до замера `JOB.MODULE.INIT`.
         if frame.module != ROOT_MODULE
             && frame.func_id == 0
+            && frame.code.is_none()
             && let Some(instance) = session.instances.get_mut(frame.module as usize)
         {
             instance.init = ModuleInitState::Failed;
@@ -3336,7 +3971,9 @@ fn call_builtin_with_format(
     // позиции `Неопределено`. Вариадические `Мин`/`Макс`, напротив,
     // сохраняют фактическое число аргументов, поэтому им достаточно
     // измеренного минимума.
-    let required = if builtin.is_variadic() {
+    // Старый байт-код УдалитьФайлы передавал ровно один аргумент;
+    // добавление необязательной маски не делает этот вызов некорректным.
+    let required = if builtin.is_variadic() || builtin == BuiltinFn::DeleteFiles {
         builtin.arity_range().0
     } else {
         builtin.arity_range().1
@@ -3413,6 +4050,41 @@ fn call_builtin_with_format(
                 let files = env.files();
                 bsl_rt::call_builtin_temp_file(other, args, files.as_ref(), &entropy)
             }
+            Some(bsl_rt::HostEffect::FileSearch) => {
+                let env = host.env()?;
+                let files = env.files();
+                let zone = env.zone();
+                bsl_rt::call_builtin_find_files(
+                    args,
+                    files,
+                    zone,
+                    bsl_format::format_value,
+                    &mut || host.check_canceled(),
+                )
+            }
+            Some(bsl_rt::HostEffect::FileDelete) => {
+                let files = host.env()?.files();
+                bsl_rt::call_builtin_delete_files_formatted(
+                    args,
+                    files.as_ref(),
+                    bsl_format::format_value,
+                    &mut || host.check_canceled(),
+                )
+            }
+            Some(bsl_rt::HostEffect::FileCreate) => {
+                let files = host.env()?.files();
+                bsl_rt::call_builtin_create_directory_formatted(
+                    args,
+                    files.as_ref(),
+                    bsl_format::format_value,
+                )
+            }
+            Some(bsl_rt::HostEffect::FileAsync) => Err(RtError::InvalidBytecode(
+                "файловое обещание требует планировщика исполнения",
+            )),
+            Some(bsl_rt::HostEffect::Application) => Err(RtError::InvalidBytecode(
+                "запуск приложения требует планировщика исполнения",
+            )),
             // `Сообщить` перехвачен веткой выше — до сюда доходит только
             // то, что считает ответ по одним аргументам.
             Some(bsl_rt::HostEffect::Output) | None => {

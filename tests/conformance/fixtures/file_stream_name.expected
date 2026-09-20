@@ -1,0 +1,8 @@
+file.begin	stream-name-1
+stream.name.plain	<root>/plain|same=1|readonly
+stream.name.dot	<root>/./dot|same=1|readonly
+stream.name.parent	<root>/nested/../parent|same=1|readonly
+stream.name.slashes	<root>//slashes|same=1|readonly
+stream.name.space	<root>/space |same=1|readonly
+stream.name.memory	error
+file.end	stream-name-1

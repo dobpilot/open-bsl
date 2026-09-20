@@ -1,0 +1,26 @@
+file.begin	create-paths-async-1
+create.plain	promise=Обещание|ok|type=Строка|same=1|block|leaf|bytes=3
+create.english	promise=Обещание|ok|type=Строка|same=1|block|leaf|bytes=3
+create.repeat	promise=Обещание|ok|type=Строка|same=1|block|branch|branch/leaf|bytes=3
+create.dot	promise=Обещание|ok|type=Строка|same=1|block|branch|branch/leaf|bytes=3
+create.parent	promise=Обещание|ok|type=Строка|same=1|block|leaf|bytes=3
+create.file	promise=Обещание|error|stage=await|block|bytes=3
+create.file_child	promise=Обещание|error|stage=await|block|bytes=3
+create.file_parent	promise=Обещание|ok|type=Строка|same=1|block|leaf|bytes=3
+create.backslash	promise=Обещание|ok|type=Строка|same=1|block|branch|branch/leaf|bytes=3
+create.backslash_tail	promise=Обещание|ok|type=Строка|same=1|block|branch|bytes=3
+create.backslash_parent	promise=Обещание|ok|type=Строка|same=1|block|leaf|bytes=3
+create.mixed	promise=Обещание|ok|type=Строка|same=1|block|branch|branch/middle|branch/middle/leaf|bytes=3
+create.spaces	promise=Обещание|ok|type=Строка|same=1| spaced|block|bytes=3
+create.trailing_dot	promise=Обещание|ok|type=Строка|same=1|block|leaf.|bytes=3
+create.unicode	promise=Обещание|ok|type=Строка|same=1|block|каталог|каталог/файл|bytes=3
+create.star	promise=Обещание|error|stage=await|block|bytes=3
+create.question	promise=Обещание|ok|type=Строка|same=1|block|question?|bytes=3
+create.tab	promise=Обещание|ok|type=Строка|same=1|block|tab<TAB>leaf|bytes=3
+create.nul	promise=Обещание|ok|type=Строка|same=1|block|nul|bytes=3
+create.nul_child	promise=Обещание|ok|type=Строка|same=1|block|nul|bytes=3
+create.extra_argument	promise=none|error|stage=call|block|bytes=3
+create.empty	promise=Обещание|error|stage=await
+create.undefined	promise=Обещание|error|stage=await
+create.null	promise=Обещание|error|stage=await
+file.end	create-paths-async-1

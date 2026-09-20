@@ -247,21 +247,3 @@ pub type HttpResponseMapper = fn(
 
 /// Преобразование синхронного отказа транспорта до принятия операции.
 pub type HttpErrorMapper = fn(NetworkError) -> crate::RtError;
-
-/// Узкая возможность `Execution`, через которую компонент заводит обещание
-/// для внешней HTTP-операции. Конкретный future и канал остаются в host-слое.
-pub trait HttpPromiseSpawner {
-    /// Запускает операцию и возвращает непрозрачное BSL-обещание.
-    ///
-    /// # Errors
-    ///
-    /// Возвращает ошибку создания обещания или синхронный отказ транспорта
-    /// до принятия запроса.
-    fn spawn_http(
-        &mut self,
-        client: Arc<dyn HttpClient>,
-        request: HttpWireRequest,
-        mapper: HttpResponseMapper,
-        error_mapper: HttpErrorMapper,
-    ) -> crate::RtResult<crate::BslValue>;
-}

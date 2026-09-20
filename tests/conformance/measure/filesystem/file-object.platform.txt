@@ -1,0 +1,45 @@
+file.begin	1
+path.name	String:имя.tar.gz
+path.basename	String:имя.tar
+path.extension	String:.gz
+path.parent	String:каталог/
+path.full	String:каталог/имя.tar.gz
+path.empty	String:
+path.dotfile	String:|.hidden
+path.trailing	String:каталог|
+path.dots	String:имя.txt
+path.backslash	String:имя.txt|каталог/
+constructor.en	File:directory/name.txt
+path.name.en	String:имя.tar.gz
+path.basename.en	String:имя.tar
+path.extension.en	String:.gz
+path.parent.en	String:каталог/
+path.full.en	String:каталог/имя.tar.gz
+file.scratch	/tmp/v8_SHyFYH_5.files
+directory.exists	Boolean:Yes
+directory.isfile	Boolean:No
+directory.isdir	Boolean:Yes
+directory.size	error:Error calling context method (Размер)
+directory.trailing.isdir	Boolean:Yes
+refresh.before	No
+refresh.created	Yes
+refresh.size.before	1
+refresh.size.after	5
+refresh.deleted	No
+missing.exists	Boolean:No
+missing.isfile	error:Error calling context method (ЭтоФайл)
+missing.isdir	error:Error calling context method (ЭтоКаталог)
+missing.size	error:Error calling context method (Размер)
+existing.exists	Boolean:Yes
+existing.isfile	Boolean:Yes
+existing.isdir	Boolean:No
+existing.size	Number:3
+existing.hidden	Boolean:No
+existing.readonly	Boolean:No
+time.local	Boolean:Yes
+time.utc	Boolean:Yes
+attribute.hidden	Boolean:No
+attribute.readonly.set	Boolean:Yes
+attribute.readonly.clear	Boolean:No
+file.cleanup	ok
+file.end	1

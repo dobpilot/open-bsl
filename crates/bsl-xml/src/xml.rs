@@ -61,6 +61,25 @@ impl XmlReaderState {
     pub fn current_attr(&self) -> Option<&XmlAttr> {
         self.attr_cursor.and_then(|i| self.attrs().get(i))
     }
+
+    /// Имя из текущего события или атрибута без промежуточной BSL-строки.
+    fn current_name(&self) -> &str {
+        if let Some(a) = self.current_attr() {
+            return &a.name;
+        }
+        match &self.current {
+            None => "",
+            Some(XmlEvent::ElementStart { name, .. }) | Some(XmlEvent::ElementEnd { name, .. }) => {
+                name
+            }
+            Some(XmlEvent::Text(_)) => TEXT_NODE_NAME,
+            Some(XmlEvent::ProcessingInstruction { target, .. }) => target,
+            // Недостижимо — см. `node_type`.
+            Some(XmlEvent::Comment(_)) => COMMENT_NODE_NAME,
+            // У ссылки на сущность имя — имя сущности (измерено).
+            Some(XmlEvent::EntityReference { name }) => name,
+        }
+    }
 }
 
 // --- Склейка с объектами BSL --------------------------------------------
@@ -200,11 +219,70 @@ pub fn writer_settings_from_args(
 
 fn need_str(arg: Option<&BslValue>, op: &'static str) -> RtResult<String> {
     match arg {
-        Some(BslValue::Str(s)) => Ok(s.to_string()),
+        Some(BslValue::Str(s)) => Ok(s.to_utf8_string()),
         _ => Err(RtError::TypeError {
             expected: "Строка",
             op,
         }),
+    }
+}
+
+#[test]
+fn xml_string_arguments_preserve_utf16_replacement_semantics() {
+    for units in [
+        vec![],
+        vec![0x41, 0, 0x42],
+        vec![0x0410, 0x0431],
+        vec![0xd83d, 0xde00],
+        vec![0xd800, 0x41, 0xdc00],
+    ] {
+        let value = BslValue::Str(BslString::from_units(units.clone()));
+        assert_eq!(
+            need_str(Some(&value), "ЗаписатьТекст").unwrap(),
+            String::from_utf16_lossy(&units)
+        );
+    }
+    assert!(need_str(Some(&BslValue::Undefined), "ЗаписатьТекст").is_err());
+}
+
+#[test]
+fn reader_utf16_input_matches_the_utf8_conversion() {
+    for body in [
+        vec![],
+        vec![0x41, 0, 0x42],
+        vec![0x0410, 0x0431],
+        vec![0xd83d, 0xde00],
+        vec![0xd800, 0x41, 0xdc00],
+        vec![0xdc00, 0xd800, 0xd800, 0xdc00],
+        vec![0x3c],
+        vec![0x26],
+    ] {
+        let units: Vec<u16> = "<а>"
+            .encode_utf16()
+            .chain(body)
+            .chain("</а>".encode_utf16())
+            .collect();
+        let mut reference = XmlParser::new(&String::from_utf16_lossy(&units));
+        let reader = new_xml_reader(Rc::new(bsl_rt::SystemFileSystem));
+        let object = arg_object(&reader).unwrap();
+        set_string(object, &[BslValue::Str(BslString::from_units(units))]).unwrap();
+        let mut state = as_reader(object).unwrap().borrow_mut();
+        let parser = state.parser.as_mut().unwrap();
+        loop {
+            match (parser.read(), reference.read()) {
+                (Ok(actual), Ok(expected)) => {
+                    assert_eq!(actual, expected);
+                    if actual.is_none() {
+                        break;
+                    }
+                }
+                (Err(actual), Err(expected)) => {
+                    assert_eq!(actual.to_string(), expected.to_string());
+                    break;
+                }
+                pair => panic!("разбор после конверсии отличается: {pair:?}"),
+            }
+        }
     }
 }
 
@@ -237,8 +315,13 @@ fn settings_from(arg: Option<&BslValue>) -> RtResult<XmlWriterSettings> {
 /// того типа.
 pub fn set_string(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     if let Ok(reader) = as_reader(obj) {
-        let text = need_str(args.first(), "УстановитьСтроку")?;
-        *reader.borrow_mut() = XmlReaderState::over(XmlParser::new(&text));
+        let Some(BslValue::Str(text)) = args.first() else {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "УстановитьСтроку",
+            });
+        };
+        *reader.borrow_mut() = XmlReaderState::over(XmlParser::from_utf16(text.units()));
         return Ok(());
     }
     let writer = as_writer(obj)?;
@@ -257,6 +340,8 @@ pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     // Файл читается файловой системой СЕССИИ (ABI-G) — той, что пришла к
     // объекту при построении.
     if let Some(reader) = obj.downcast_ref::<XmlReaderObject>() {
+        let path = bsl_rt::prepare_file_operation_path(&path, reader.files.as_ref())
+            .map_err(|error| RtError::IoError(error.to_string()))?;
         let bytes = reader
             .files
             .read(&path)
@@ -268,14 +353,18 @@ pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
         *reader.state.borrow_mut() = XmlReaderState::over(XmlParser::new(&text));
         return Ok(());
     }
-    let writer = as_writer(obj)?;
+    let writer_obj = obj
+        .downcast_ref::<XmlWriterObject>()
+        .ok_or_else(|| not_applicable(obj))?;
+    let path = bsl_rt::prepare_file_operation_path(&path, writer_obj.files.as_ref())
+        .map_err(|error| RtError::IoError(error.to_string()))?;
     // У файлового приёмника объявление получает `encoding` — измерено на
     // содержимом записанного файла.
     let settings = XmlWriterSettings {
         encoding: Some("UTF-8".to_string()),
         ..XmlWriterSettings::default()
     };
-    *writer.borrow_mut() = Some(XmlWriter::to_file(PathBuf::from(path), settings));
+    *writer_obj.writer.borrow_mut() = Some(XmlWriter::to_file(PathBuf::from(path), settings));
     Ok(())
 }
 
@@ -432,23 +521,7 @@ pub fn name(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
 
 fn name_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
     let state = reader.borrow();
-    if let Some(a) = state.current_attr() {
-        return Ok(BslValue::Str(BslString::from_str(&a.name)));
-    }
-    let s = match &state.current {
-        None => String::new(),
-        Some(XmlEvent::ElementStart { name, .. }) | Some(XmlEvent::ElementEnd { name, .. }) => {
-            name.clone()
-        }
-        Some(XmlEvent::Text(_)) => TEXT_NODE_NAME.to_string(),
-        Some(XmlEvent::ProcessingInstruction { target, .. }) => target.clone(),
-        // Недостижимо — см. `node_type`.
-        Some(XmlEvent::Comment(_)) => COMMENT_NODE_NAME.to_string(),
-        // У ссылки на сущность `Имя` — имя сущности, а `Значение` пусто
-        // (измерено).
-        Some(XmlEvent::EntityReference { name }) => name.clone(),
-    };
-    Ok(BslValue::Str(BslString::from_str(&s)))
+    Ok(BslValue::Str(BslString::from_str(state.current_name())))
 }
 
 /// `Значение` текущего узла; у элемента оно пустое (измерено).
@@ -461,33 +534,90 @@ fn value_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
     if let Some(a) = state.current_attr() {
         return Ok(BslValue::Str(BslString::from_str(&a.value)));
     }
-    let s = match &state.current {
-        Some(XmlEvent::Text(t)) => t.clone(),
-        Some(XmlEvent::ProcessingInstruction { data, .. }) => data.clone(),
+    let s: &str = match &state.current {
+        Some(XmlEvent::Text(t)) => t,
+        Some(XmlEvent::ProcessingInstruction { data, .. }) => data,
         // Недостижимо — см. `node_type`; ответ дан по образцу дерева DOM,
         // где значение комментария и есть его текст.
-        Some(XmlEvent::Comment(t)) => t.clone(),
+        Some(XmlEvent::Comment(t)) => t,
         // У элемента значения нет (измерено), у ссылки на сущность — тоже:
         // `Значение` на ней пусто, хотя текст замены известен.
         Some(XmlEvent::ElementStart { .. })
         | Some(XmlEvent::ElementEnd { .. })
         | Some(XmlEvent::EntityReference { .. })
-        | None => String::new(),
+        | None => "",
     };
-    Ok(BslValue::Str(BslString::from_str(&s)))
+    Ok(BslValue::Str(BslString::from_str(s)))
+}
+
+#[test]
+fn reader_name_properties_preserve_node_and_attribute_views() {
+    let text = |value: BslValue| match value {
+        BslValue::Str(s) => s.to_string(),
+        _ => panic!("ожидалась строка"),
+    };
+    for (event, expected) in [
+        (None, ""),
+        (Some(XmlEvent::Text("текст".into())), TEXT_NODE_NAME),
+        (Some(XmlEvent::Comment("текст".into())), COMMENT_NODE_NAME),
+        (
+            Some(XmlEvent::EntityReference {
+                name: "сущность".into(),
+            }),
+            "сущность",
+        ),
+        (
+            Some(XmlEvent::ProcessingInstruction {
+                target: "п:цель".into(),
+                data: "данные".into(),
+            }),
+            "п:цель",
+        ),
+        (
+            Some(XmlEvent::ElementEnd {
+                name: "п:узел𐐀".into(),
+                uri: "urn:пример".into(),
+            }),
+            "п:узел𐐀",
+        ),
+    ] {
+        let state = RefCell::new(XmlReaderState {
+            current: event,
+            ..Default::default()
+        });
+        assert_eq!(text(name_from(&state).unwrap()), expected);
+        assert_eq!(text(local_name_from(&state).unwrap()), local_of(expected));
+        assert_eq!(text(prefix_from(&state).unwrap()), prefix_of(expected));
+    }
+    let state = RefCell::new(XmlReaderState {
+        current: Some(XmlEvent::ElementStart {
+            name: "п:узел".into(),
+            uri: "urn:пример".into(),
+            attrs: Rc::new(vec![XmlAttr {
+                name: "а:свойство𐐀".into(),
+                value: "значение".into(),
+            }]),
+        }),
+        ..Default::default()
+    });
+    for (cursor, full, local, prefix) in [
+        (None, "п:узел", "узел", "п"),
+        (Some(0), "а:свойство𐐀", "свойство𐐀", "а"),
+    ] {
+        state.borrow_mut().attr_cursor = cursor;
+        assert_eq!(text(name_from(&state).unwrap()), full);
+        assert_eq!(text(local_name_from(&state).unwrap()), local);
+        assert_eq!(text(prefix_from(&state).unwrap()), prefix);
+        assert_eq!(text(namespace_uri_from(&state).unwrap()), "urn:пример");
+    }
 }
 
 /// `ЛокальноеИмя` — имя без префикса.
-///
-/// # Errors
-///
-/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
 fn local_name_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
-    let full = name_from(reader)?;
-    let BslValue::Str(s) = &full else {
-        return Ok(full);
-    };
-    Ok(BslValue::Str(BslString::from_str(local_of(&s.to_string()))))
+    let state = reader.borrow();
+    Ok(BslValue::Str(BslString::from_str(local_of(
+        state.current_name(),
+    ))))
 }
 
 /// `Префикс` — часть имени до двоеточия.
@@ -496,12 +626,9 @@ fn local_name_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
 fn prefix_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
-    let full = name_from(reader)?;
-    let BslValue::Str(s) = &full else {
-        return Ok(full);
-    };
+    let state = reader.borrow();
     Ok(BslValue::Str(BslString::from_str(prefix_of(
-        &s.to_string(),
+        state.current_name(),
     ))))
 }
 
@@ -512,13 +639,11 @@ fn prefix_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
 fn namespace_uri_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
     let state = reader.borrow();
-    let s = match &state.current {
-        Some(XmlEvent::ElementStart { uri, .. }) | Some(XmlEvent::ElementEnd { uri, .. }) => {
-            uri.clone()
-        }
-        _ => String::new(),
+    let s: &str = match &state.current {
+        Some(XmlEvent::ElementStart { uri, .. }) | Some(XmlEvent::ElementEnd { uri, .. }) => uri,
+        _ => "",
     };
-    Ok(BslValue::Str(BslString::from_str(&s)))
+    Ok(BslValue::Str(BslString::from_str(s)))
 }
 
 /// `КоличествоАтрибутов()`.
@@ -562,7 +687,7 @@ pub fn attribute_value(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<
     let state = reader.borrow();
     match args.first() {
         Some(BslValue::Str(s)) => {
-            let wanted = s.to_string();
+            let wanted = s.to_utf8_string();
             Ok(state
                 .attrs()
                 .iter()
@@ -582,6 +707,45 @@ pub fn attribute_value(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<
             op: "ЗначениеАтрибута",
         }),
     }
+}
+
+#[test]
+fn attribute_key_reuse_preserves_unicode_and_changed_strings() {
+    let reader = new_xml_reader(Rc::new(bsl_rt::SystemFileSystem));
+    let object = arg_object(&reader).unwrap();
+    set_string(
+        object,
+        &[BslValue::Str(BslString::from_str(
+            "<а ид='один' ид2='два' ключ𐐀='три' �='четыре'/>",
+        ))],
+    )
+    .unwrap();
+    read(object).unwrap();
+    for (key, expected) in [
+        (BslString::from_str("ид"), "один"),
+        (BslString::from_str("ключ𐐀"), "три"),
+        (BslString::from_units(vec![0xd800]), "четыре"),
+    ] {
+        for _ in 0..2 {
+            let BslValue::Str(value) =
+                attribute_value(object, &[BslValue::Str(key.clone())]).unwrap()
+            else {
+                panic!("ожидалось значение атрибута");
+            };
+            assert_eq!(value.to_string(), expected);
+        }
+    }
+    let mut key = BslString::from_str("ид");
+    attribute_value(object, &[BslValue::Str(key.clone())]).unwrap();
+    key = key.append(&BslString::from_str("2"));
+    let BslValue::Str(value) = attribute_value(object, &[BslValue::Str(key)]).unwrap() else {
+        panic!("ожидалось значение изменённого ключа");
+    };
+    assert_eq!(value.to_string(), "два");
+    assert!(matches!(
+        attribute_value(object, &[BslValue::Str(BslString::from_str("нет"))]).unwrap(),
+        BslValue::Undefined
+    ));
 }
 
 fn index_arg(arg: Option<&BslValue>) -> RtResult<usize> {

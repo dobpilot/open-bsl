@@ -1,0 +1,77 @@
+﻿file.begin	temp-storage-1
+tempstream.default.new.state	File stream|0|0
+tempstream.default.new.disk	1|0
+tempstream.default.new.name	/tmp/v8_ivxznD_5.tmp
+tempstream.default.new.getname	error
+tempstream.default.before.state	File stream|65535|65535
+tempstream.default.before.disk	1|65535
+tempstream.default.before.name	/tmp/v8_ivxznD_5.tmp
+tempstream.default.before.getname	error
+tempstream.default.after.state	File stream|65536|65536
+tempstream.default.after.disk	1|65536
+tempstream.default.after.name	/tmp/v8_ivxznD_5.tmp
+tempstream.default.after.getname	error
+tempstream.default.read	65536|65|90
+tempstream.default.closed.disk	1|65536
+tempstream.default.closed	error
+tempstream.zero.new.state	File stream|0|0
+tempstream.zero.new.disk	1|0
+tempstream.zero.new.name	/tmp/v8_ivxznD_6.tmp
+tempstream.zero.new.getname	error
+tempstream.zero.before.state	File stream|0|0
+tempstream.zero.before.disk	1|0
+tempstream.zero.before.name	/tmp/v8_ivxznD_6.tmp
+tempstream.zero.before.getname	error
+tempstream.zero.after.state	File stream|1|1
+tempstream.zero.after.disk	1|1
+tempstream.zero.after.name	/tmp/v8_ivxznD_6.tmp
+tempstream.zero.after.getname	error
+tempstream.zero.read	1|90|90
+tempstream.zero.closed.disk	1|1
+tempstream.zero.closed	error
+tempstream.one.new.state	File stream|0|0
+tempstream.one.new.disk	1|0
+tempstream.one.new.name	/tmp/v8_ivxznD_7.tmp
+tempstream.one.new.getname	error
+tempstream.one.before.state	File stream|1|1
+tempstream.one.before.disk	1|1
+tempstream.one.before.name	/tmp/v8_ivxznD_7.tmp
+tempstream.one.before.getname	error
+tempstream.one.after.state	File stream|2|2
+tempstream.one.after.disk	1|2
+tempstream.one.after.name	/tmp/v8_ivxznD_7.tmp
+tempstream.one.after.getname	error
+tempstream.one.read	2|65|90
+tempstream.one.closed.disk	1|2
+tempstream.one.closed	error
+tempstream.eight.new.state	File stream|0|0
+tempstream.eight.new.disk	1|0
+tempstream.eight.new.name	/tmp/v8_ivxznD_8.tmp
+tempstream.eight.new.getname	error
+tempstream.eight.before.state	File stream|8|8
+tempstream.eight.before.disk	1|8
+tempstream.eight.before.name	/tmp/v8_ivxznD_8.tmp
+tempstream.eight.before.getname	error
+tempstream.eight.after.state	File stream|9|9
+tempstream.eight.after.disk	1|9
+tempstream.eight.after.name	/tmp/v8_ivxznD_8.tmp
+tempstream.eight.after.getname	error
+tempstream.eight.read	9|65|90
+tempstream.eight.closed.disk	1|9
+tempstream.eight.closed	error
+tempstream.buffer.zero.new.state	File stream|0|0
+tempstream.buffer.zero.new.disk	1|0
+tempstream.buffer.zero.new.name	/tmp/v8_ivxznD_9.tmp
+tempstream.buffer.zero.new.getname	error
+tempstream.buffer.zero.before.state	File stream|8|8
+tempstream.buffer.zero.before.disk	1|8
+tempstream.buffer.zero.before.name	/tmp/v8_ivxznD_9.tmp
+tempstream.buffer.zero.before.getname	error
+tempstream.buffer.zero.after.state	File stream|9|9
+tempstream.buffer.zero.after.disk	1|9
+tempstream.buffer.zero.after.name	/tmp/v8_ivxznD_9.tmp
+tempstream.buffer.zero.after.getname	error
+tempstream.buffer.zero.read	9|65|90
+tempstream.buffer.zero.closed.disk	1|9
+tempstream.buffer.zero.closed	error
+file.end	temp-storage-1

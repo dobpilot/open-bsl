@@ -1,0 +1,4 @@
+lexical.spaces	<root>/spaces/ spaced /leaf
+lexical.space-leaf	<root>/space-leaf/leaf
+lexical.space-parent	<root>/space-parent/branch /leaf
+lexical.space-leading	<root>/space-leading/ leaf

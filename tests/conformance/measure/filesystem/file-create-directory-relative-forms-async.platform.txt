@@ -1,0 +1,15 @@
+file.begin	create-directory-relative-forms-async-1
+context.effective	НеИспользовать
+create.relative.dot_dot	sync=ok|async=ok|same=1|value=./.
+create.relative.dot_dot_slash	sync=ok|async=ok|same=1|value=././
+create.relative.dot_double_slash	sync=ok|async=ok|same=1|value=.//
+create.relative.parent_dot	sync=ok|async=ok|same=1|value=../.
+create.relative.parent_dot_slash	sync=ok|async=ok|same=1|value=.././
+create.relative.parent_double_slash	sync=ok|async=ok|same=1|value=..//
+create.relative.dot_parent	sync=ok|async=ok|same=1|value=./..
+create.relative.dot_parent_slash	sync=ok|async=ok|same=1|value=./../
+create.relative.dot_parent_dot	sync=ok|async=ok|same=1|value=./../.
+create.relative.two_parents	sync=ok|async=ok|same=1|value=../../
+create.root.dot	sync=ok|async=ok|same=1|value=/./
+create.root.parent	sync=ok|async=ok|same=1|value=/../
+file.end	create-directory-relative-forms-async-1

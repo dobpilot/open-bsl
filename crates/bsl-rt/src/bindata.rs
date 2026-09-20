@@ -228,12 +228,12 @@ pub fn new_binary_buffer(size: &BslValue, order: &BslValue) -> RtResult<BslValue
 /// Значение BSL вокруг готового окна — и для конструктора, и для среза, и
 /// для `Скопировать`.
 fn wrap(d: BinBufData) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(RefCell::new(d)))))
+    BslValue::Object(Rc::new(BslObject::BinaryBuffer(RefCell::new(d))))
 }
 
 /// Внутренности буфера; для любого другого значения — ошибка «метод не
 /// применим», с именем операции, которая его потребовала.
-fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<BinBufData>>> {
+fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a RefCell<BinBufData>> {
     match v {
         BslValue::Object(o) => match &**o {
             BslObject::BinaryBuffer(d) => Ok(d),
@@ -697,7 +697,7 @@ fn count_of(v: &BslValue, op: &'static str) -> RtResult<usize> {
 }
 
 /// Аргумент-буфер у методов, которые ничего другого не принимают.
-fn buffer_arg<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<BinBufData>>> {
+fn buffer_arg<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a RefCell<BinBufData>> {
     match v {
         BslValue::Object(o) => match &**o {
             BslObject::BinaryBuffer(b) => Ok(b),
@@ -1496,6 +1496,21 @@ mod tests {
         assert_eq!(dump(&s), vec![99, 13, 14]);
         set_byte(&s, &num(0), &num(77)).unwrap();
         assert_eq!(dump(&b), vec![10, 11, 77, 13, 14, 15, 16, 17]);
+    }
+
+    #[test]
+    fn a_slice_outlives_its_source_and_a_clone_keeps_object_identity() {
+        let source = buf(&[10, 11, 12, 13]);
+        let alias = source.clone();
+        let slice = get_slice(&source, &[num(1), num(2)]).unwrap();
+        assert_eq!(source, alias);
+        assert_ne!(source, slice);
+        set_byte(&alias, &num(1), &num(99)).unwrap();
+        assert_eq!(dump(&slice), vec![99, 12]);
+        drop(source);
+        drop(alias);
+        set_byte(&slice, &num(1), &num(77)).unwrap();
+        assert_eq!(dump(&slice), vec![99, 77]);
     }
 
     #[test]

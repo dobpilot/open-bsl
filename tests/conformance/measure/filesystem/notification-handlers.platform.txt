@@ -1,0 +1,34 @@
+﻿file.begin	notification-handlers-1
+handler.zero.1	ok|name=НольДанных
+handler.zero.2	ok|name=НольДанных
+handler.one.1	ok|name=ОдниДанные
+handler.one.2	ok|name=ОдниДанные
+handler.two.1	ok|name=ПараДанных
+handler.two.2	ok|name=ПараДанных
+handler.three.1	ok|name=ТриДанных
+handler.three.2	ok|name=ТриДанных
+handler.optional.1	ok|name=НеобязательныеДанные
+handler.optional.2	ok|name=НеобязательныеДанные
+handler.private.1	error:The export method is not found: ЗакрытаяПроцедура
+handler.private.2	error:The export method is not found: ЗакрытаяПроцедура
+handler.function.1	ok|name=ЭкспортнаяФункция
+handler.function.2	ok|name=ЭкспортнаяФункция
+handler.private_function.1	error:The export method is not found: ЗакрытаяФункция
+handler.private_function.2	error:The export method is not found: ЗакрытаяФункция
+handler.async.1	ok|name=АсинхроннаяФункция
+handler.async.2	ok|name=АсинхроннаяФункция
+handler.upper.1	ok|name=ПАРАДАННЫХ
+handler.upper.2	ok|name=ПАРАДАННЫХ
+handler.spaces.1	error:The export method is not found:  ПараДанных 
+handler.spaces.2	error:The export method is not found:  ПараДанных 
+handler.empty.1	error:Type mismatch (parameter number '1')
+handler.empty.2	error:Invalid parameter value (parameter number '4')
+handler.number.1	error:The export method is not found: 123
+handler.number.2	error:The export method is not found: 123
+handler.undefined.1	error:Type mismatch (parameter number '1')
+handler.undefined.2	error:Invalid parameter value (parameter number '4')
+module.ЭтотОбъект	same
+module.ThisObject	same
+module.ЭтаФорма	same
+module.ThisForm	same
+file.end	notification-handlers-1

@@ -1,0 +1,12 @@
+file.begin	search-sfile-directory-1
+flat.literal	ok:1|sfile://sfile://a*|dir=error
+flat.name	ok:1|sfile://sfile://a*|dir=error
+flat.question	ok:1|sfile://sfile://a*|dir=error
+flat.all	ok:0
+recursive.literal	ok:1|sfile://sfile://a*|dir=error
+recursive.name	ok:1|sfile://sfile://a*|dir=error
+recursive.question	ok:1|sfile://sfile://a*|dir=error
+recursive.all	ok:0
+recursive.txt	ok:0
+direct.path	ok:0
+file.end	search-sfile-directory-1

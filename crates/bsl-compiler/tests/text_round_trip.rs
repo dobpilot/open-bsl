@@ -87,6 +87,9 @@ const CORPUS: &[&str] = &[
     // Открытое имя метода, которого нет в таблице ядра: такой вызов
     // предназначен для объекта статически подключённого компонента.
     "объект = Новый Структура;\nобъект.МетодКомпонента();\n",
+    // Открытый вызов в выражении использует отдельный тег. Ссылочные
+    // кандидаты, пропуск и явное Неопределено сохраняются независимо.
+    "Процедура Проверить(Объект, Аргумент) Результат = Объект.МетодКомпонента(Аргумент, , Неопределено); КонецПроцедуры",
     // Модификатор `Экспорт` у метода и у переменной модуля: флаг
     // `export` в секциях `.functions` и `.module-vars` обязан пережить
     // печать и разбор, а неэкспортные соседи — остаться без флага.
@@ -124,6 +127,16 @@ fn call_component_program() -> Program {
     };
     let name: u16 = program.names.len().try_into().unwrap();
     program.names.push("ПолеКомпонента".to_string());
+    let type_name: u16 = program.names.len().try_into().unwrap();
+    program.names.push("ТипКомпонента".to_string());
+    let method: u16 = program.names.len().try_into().unwrap();
+    program.names.push("МетодКомпонента".to_string());
+    program.links.push(LinkEntry::ObjectMethod {
+        library: 1,
+        type_name,
+        method,
+    });
+    program.chunks[0].call_arg_modes.push(vec![]);
     program.chunks[0].instrs.extend([
         Instr::GetObjectProp {
             dst: 0,
@@ -134,6 +147,20 @@ fn call_component_program() -> Program {
             obj: 0,
             name,
             src: 0,
+        },
+        Instr::CallLinkedObjectMethod {
+            dst: 0,
+            obj: 0,
+            link_slot: 0,
+            base: 0,
+            arg_modes: 0,
+        },
+        Instr::CallLinkedObjectProcedure {
+            dst: 0,
+            obj: 0,
+            link_slot: 0,
+            base: 0,
+            arg_modes: 0,
         },
     ]);
     bsl_bytecode::image::finalize(&mut program);
@@ -302,12 +329,11 @@ fn effectful_core_constructors_use_the_component_abi() {
     assert_eq!(constructors, [(0, 1, 1), (0, 2, 0), (0, 2, 1)]);
 }
 
-/// Метод компонентного получателя не может попасть в закрытый `CallMethod`.
-/// `Закрыть` остаётся в базовом `BuiltinMethod`, остальные имена принадлежали
-/// разным вынесенным пакетам; решение о форме опкода зависит от получателя,
-/// а не от общего словаря имён.
+/// Конструктор без объявленного единственного типа не даёт доказательства:
+/// его методы остаются открытыми и не могут попасть ни в ядровой, ни в
+/// типизированный компонентный опкод.
 #[test]
-fn component_receiver_methods_compile_only_to_the_open_opcode() {
+fn component_constructor_without_a_result_type_keeps_methods_open() {
     fn construct(
         _context: &mut bsl_rt::CallContext<'_>,
         _arguments: &[bsl_rt::BslValue],
@@ -340,11 +366,13 @@ fn component_receiver_methods_compile_only_to_the_open_opcode() {
     let mut open = Vec::new();
     for instruction in &program.chunks[0].instrs {
         match instruction {
-            Instr::CallObjectMethod {
-                result_required, ..
-            } => open.push(*result_required),
+            Instr::CallObjectMethod { .. } => open.push(true),
+            Instr::CallObjectProcedure { .. } => open.push(false),
             Instr::CallMethod { method, .. } => {
                 panic!("компонентный метод ушёл в закрытый опкод: {method:?}")
+            }
+            Instr::CallLinkedObjectMethod { .. } | Instr::CallLinkedObjectProcedure { .. } => {
+                panic!("конструктор без типа получил типизированный вызов")
             }
             _ => {}
         }

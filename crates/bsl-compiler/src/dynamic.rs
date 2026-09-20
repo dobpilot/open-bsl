@@ -33,6 +33,30 @@ pub fn compile_dynamic_snippet(
     symbols: &bsl_syntax::PreprocSymbols,
     scope: std::num::NonZeroU64,
 ) -> Result<DynamicUnit, String> {
+    compile_dynamic_snippet_with_imports(request, registry, symbols, scope, &[])
+}
+
+/// Компилирует фрагмент с экспортными поверхностями ровно объявленных импортов.
+///
+/// # Errors
+/// Ошибки обычного фрагмента или несовпадение переданного окружения с запросом.
+pub fn compile_dynamic_snippet_with_imports(
+    request: &DynamicRequest<'_>,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    symbols: &bsl_syntax::PreprocSymbols,
+    scope: std::num::NonZeroU64,
+    imports: &[bsl_sema::ImportedModule],
+) -> Result<DynamicUnit, String> {
+    if imports.len() != request.imports.len()
+        || imports
+            .iter()
+            .zip(request.imports)
+            .any(|(actual, expected)| {
+                actual.alias != expected.alias || actual.module as usize != expected.module.index()
+            })
+    {
+        return Err("окружение импортов фрагмента не совпадает с исходным модулем".into());
+    }
     // `Вычислить` заворачивается в `Возврат (...)`, чтобы значение
     // выражения получалось тем же путём, что и у обычного `Возврат`.
     let source = match request.kind {
@@ -72,47 +96,19 @@ pub fn compile_dynamic_snippet(
             has_default: f.param_has_default.to_vec(),
         })
         .collect();
-    let (all_locals, body, fragment_requirements) = match registry {
-        Some(registry) => {
-            let resolved = if request.caller_is_async {
-                bsl_sema::resolve_async_snippet_stmts_with_registry(
-                    request.locals,
-                    request.module_vars,
-                    &stmts,
-                    &signatures,
-                    registry,
-                )
-            } else {
-                bsl_sema::resolve_snippet_stmts_with_registry(
-                    request.locals,
-                    request.module_vars,
-                    &stmts,
-                    &signatures,
-                    registry,
-                )
-            };
-            resolved.map_err(|e| format!("{e}"))?
-        }
-        None => {
-            let resolved = if request.caller_is_async {
-                bsl_sema::resolve_async_snippet_stmts(
-                    request.locals,
-                    request.module_vars,
-                    &stmts,
-                    &signatures,
-                )
-            } else {
-                bsl_sema::resolve_snippet_stmts(
-                    request.locals,
-                    request.module_vars,
-                    &stmts,
-                    &signatures,
-                )
-            };
-            let (locals, body) = resolved.map_err(|e| format!("{e}"))?;
-            (locals, body, vec![LibraryRequirement::bsl_rt()])
-        }
-    };
+    // ИЗМЕРЕНО на 1С 8.3.27: строка не наследует разрешение Ждать из
+    // async-метода. Ошибка должна предшествовать исполнению всего фрагмента,
+    // включая инструкции до Ждать (dynamic-async-await 2026-09-17).
+    let (all_locals, body, fragment_requirements, links) =
+        bsl_sema::resolve_snippet_stmts_with_imports(
+            request.locals,
+            request.module_vars,
+            &stmts,
+            &signatures,
+            registry,
+            imports,
+        )
+        .map_err(|error| error.to_string())?;
     let requirements = merge_requirements(request.requirements, &fragment_requirements)?;
     let callee_params: Vec<Vec<bool>> = request
         .functions
@@ -120,7 +116,7 @@ pub fn compile_dynamic_snippet(
         .map(|f| f.param_by_val.to_vec())
         .collect();
     let crate::SnippetUnit {
-        mut chunk,
+        chunk,
         names,
         shapes,
         lines,
@@ -133,14 +129,15 @@ pub fn compile_dynamic_snippet(
         request.debug_info,
     )
     .map_err(|e| format!("{e}"))?;
-    chunk.is_async = request.caller_is_async;
 
+    let compiled_links = crate::compiler::compile_links(&links, &requirements, &names);
     Ok(DynamicUnit {
         scope,
         chunk,
         names,
         shapes,
         requirements,
+        links: compiled_links,
         lines,
     })
 }

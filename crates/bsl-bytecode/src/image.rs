@@ -174,6 +174,16 @@ fn check_line_table(program: &Program) -> Result<(), RtError> {
 }
 
 pub fn verify(program: &Program) -> Result<(), RtError> {
+    let aliases: Vec<String> = program
+        .imports
+        .iter()
+        .map(|import| import.alias.clone())
+        .collect();
+    if aliases.iter().any(String::is_empty) || bsl_rt::first_folded_duplicate(&aliases).is_some() {
+        return Err(RtError::InvalidBytecode(
+            "пустой или повторный псевдоним импорта",
+        ));
+    }
     check_program_tables(program)?;
     check_line_table(program)?;
     for chunk in &program.chunks {
@@ -457,6 +467,37 @@ fn check_program_tables(program: &Program) -> Result<(), RtError> {
     Ok(())
 }
 
+/// Ссылочная цель должна адресовать переменную вызывающего.
+fn check_reference_target(program: &Program, chunk: &Chunk, mode: &ArgMode) -> Result<(), RtError> {
+    match mode {
+        ArgMode::ByRefLocal(slot) if *slot as usize >= chunk.n_locals as usize => Err(
+            RtError::InvalidBytecode("параметр по ссылке указывает за локали кадра"),
+        ),
+        ArgMode::ByRefModuleVar(slot) if *slot as usize >= program.module_vars.len() => Err(
+            RtError::InvalidBytecode("параметр по ссылке указывает за переменные модуля"),
+        ),
+        ArgMode::ByRefImportedVar(slot)
+            if !matches!(
+                program.links.get(*slot as usize),
+                Some(crate::configuration::LinkEntry::Variable { .. })
+            ) =>
+        {
+            Err(RtError::InvalidBytecode(
+                "byimport ведёт мимо таблицы связей или на функцию",
+            ))
+        }
+        ArgMode::ByRefIndex { object, index }
+            if *object as usize >= chunk.n_regs as usize
+                || *index as usize >= chunk.n_regs as usize =>
+        {
+            Err(RtError::InvalidBytecode(
+                "индексная ссылочная цель указывает за регистры кадра",
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Геометрия одной инструкции вызова и пролога умолчаний.
 ///
 /// Три свойства, каждое из которых воспроизводится правкой одной строки в
@@ -475,6 +516,84 @@ fn check_program_tables(program: &Program) -> Result<(), RtError> {
 ///   вычисляется и функция возвращает `Неопределено`.
 fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Result<(), RtError> {
     match instr {
+        Instr::CallObjectMethod {
+            arg_modes: index,
+            base,
+            method,
+            ..
+        }
+        | Instr::CallObjectProcedure {
+            arg_modes: index,
+            base,
+            method,
+            ..
+        } => {
+            if *method as usize >= program.names.len() {
+                return Err(RtError::InvalidBytecode(
+                    "номер имени свойства или метода вне таблицы имён программы",
+                ));
+            }
+            let modes =
+                chunk
+                    .call_arg_modes
+                    .get(*index as usize)
+                    .ok_or(RtError::InvalidBytecode(
+                        "номер набора режимов аргументов вне таблицы чанка",
+                    ))?;
+            if modes.len() > u8::MAX as usize {
+                return Err(RtError::InvalidBytecode(
+                    "слишком много аргументов открытого вызова",
+                ));
+            }
+            if *base as usize + modes.len() > chunk.n_regs as usize {
+                return Err(RtError::InvalidBytecode(
+                    "регистры аргументов вызова выходят за кадр",
+                ));
+            }
+            for mode in modes {
+                check_reference_target(program, chunk, mode)?;
+            }
+            Ok(())
+        }
+        Instr::CallLinkedObjectMethod {
+            link_slot,
+            arg_modes: index,
+            base,
+            ..
+        }
+        | Instr::CallLinkedObjectProcedure {
+            link_slot,
+            arg_modes: index,
+            base,
+            ..
+        } => {
+            if !matches!(
+                program.links.get(*link_slot as usize),
+                Some(crate::LinkEntry::ObjectMethod { .. })
+            ) {
+                return Err(RtError::InvalidBytecode(
+                    "типизированный вызов ссылается не на метод объекта",
+                ));
+            }
+            let modes =
+                chunk
+                    .call_arg_modes
+                    .get(*index as usize)
+                    .ok_or(RtError::InvalidBytecode(
+                        "номер набора режимов аргументов вне таблицы чанка",
+                    ))?;
+            if modes.len() > u8::MAX as usize
+                || *base as usize + modes.len() > chunk.n_regs as usize
+            {
+                return Err(RtError::InvalidBytecode(
+                    "регистры аргументов вызова выходят за кадр",
+                ));
+            }
+            for mode in modes {
+                check_reference_target(program, chunk, mode)?;
+            }
+            Ok(())
+        }
         Instr::JumpIfNotSkipped { src, .. } if *src >= chunk.n_params => Err(
             RtError::InvalidBytecode("пролог умолчаний ссылается на несуществующий параметр"),
         ),
@@ -533,6 +652,11 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
             // локальной переменной не является, и проверка по `n_regs`
             // пропустила бы алиас на чужой временный слот.
             for (i, mode) in modes.iter().enumerate() {
+                if matches!(mode, ArgMode::ByRefIndex { .. }) {
+                    return Err(RtError::InvalidBytecode(
+                        "индексная ссылочная цель допустима только у открытого метода",
+                    ));
+                }
                 // Режим места вызова обязан согласовываться с ОБЪЯВЛЕНИЕМ
                 // параметра: кадр строится по режимам, а не по `param_by_val`,
                 // поэтому `byref` против `Знач` молча превращает копию в алиас
@@ -557,37 +681,7 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
                         "вызов передаёт по ссылке параметр, объявленный «Знач»",
                     ));
                 }
-                match mode {
-                    ArgMode::ByRefLocal(slot) if *slot as usize >= chunk.n_locals as usize => {
-                        return Err(RtError::InvalidBytecode(
-                            "параметр по ссылке указывает за локали кадра",
-                        ));
-                    }
-                    // Модульная переменная по ссылке — алиас module-слота;
-                    // граница — число переменных модуля, иначе алиас указывал
-                    // бы за таблицу модульных слотов.
-                    ArgMode::ByRefModuleVar(slot)
-                        if *slot as usize >= program.module_vars.len() =>
-                    {
-                        return Err(RtError::InvalidBytecode(
-                            "параметр по ссылке указывает за переменные модуля",
-                        ));
-                    }
-                    // Импортированная переменная по ссылке обязана вести на
-                    // запись-переменную СВОЕЙ таблицы связей; чужой модуль и
-                    // его слот проверяет `verify_configuration`.
-                    ArgMode::ByRefImportedVar(slot)
-                        if !matches!(
-                            program.links.get(*slot as usize),
-                            Some(crate::configuration::LinkEntry::Variable { .. })
-                        ) =>
-                    {
-                        return Err(RtError::InvalidBytecode(
-                            "byimport ведёт мимо таблицы связей или на функцию",
-                        ));
-                    }
-                    _ => {}
-                }
+                check_reference_target(program, chunk, mode)?;
             }
             Ok(())
         }
@@ -620,31 +714,12 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
                 ));
             }
             for mode in modes {
-                match mode {
-                    ArgMode::ByRefLocal(slot) if *slot as usize >= chunk.n_locals as usize => {
-                        return Err(RtError::InvalidBytecode(
-                            "параметр по ссылке указывает за локали кадра",
-                        ));
-                    }
-                    ArgMode::ByRefModuleVar(slot)
-                        if *slot as usize >= program.module_vars.len() =>
-                    {
-                        return Err(RtError::InvalidBytecode(
-                            "параметр по ссылке указывает за переменные модуля",
-                        ));
-                    }
-                    ArgMode::ByRefImportedVar(slot)
-                        if !matches!(
-                            program.links.get(*slot as usize),
-                            Some(crate::configuration::LinkEntry::Variable { .. })
-                        ) =>
-                    {
-                        return Err(RtError::InvalidBytecode(
-                            "byimport ведёт мимо таблицы связей или на функцию",
-                        ));
-                    }
-                    _ => {}
+                if matches!(mode, ArgMode::ByRefIndex { .. }) {
+                    return Err(RtError::InvalidBytecode(
+                        "индексная ссылочная цель допустима только у открытого метода",
+                    ));
                 }
+                check_reference_target(program, chunk, mode)?;
             }
             Ok(())
         }
@@ -699,9 +774,7 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
             }
             Ok(())
         }
-        Instr::GetObjectProp { name, .. }
-        | Instr::SetObjectProp { name, .. }
-        | Instr::CallObjectMethod { method: name, .. } => {
+        Instr::GetObjectProp { name, .. } | Instr::SetObjectProp { name, .. } => {
             if *name as usize >= program.names.len() {
                 return Err(RtError::InvalidBytecode(
                     "номер имени свойства или метода вне таблицы имён программы",
@@ -738,6 +811,143 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
         }
         _ => Ok(()),
     }
+}
+
+fn check_links(
+    program: &Program,
+    catalog: &crate::ConfigurationProgram,
+    own: Option<usize>,
+) -> Result<(), RtError> {
+    use crate::configuration::LinkEntry;
+    for import in &program.imports {
+        if own == Some(import.module.index()) || catalog.module(import.module).is_none() {
+            return Err(RtError::InvalidBytecode(
+                "импорт указывает на себя или мимо каталога",
+            ));
+        }
+    }
+    for link in &program.links {
+        if let LinkEntry::ObjectMethod {
+            library,
+            type_name,
+            method,
+        } = link
+        {
+            if *library as usize >= program.requirements.len()
+                || *type_name as usize >= program.names.len()
+                || *method as usize >= program.names.len()
+            {
+                return Err(RtError::InvalidBytecode(
+                    "связь метода объекта выходит за таблицу requirements или names",
+                ));
+            }
+            continue;
+        }
+        let (module, target_is_function) = match link {
+            LinkEntry::Function { module, .. } => (*module, true),
+            LinkEntry::Variable { module, .. } => (*module, false),
+            LinkEntry::ObjectMethod { .. } => unreachable!(),
+        };
+        if own == Some(module.index()) {
+            return Err(RtError::InvalidBytecode(
+                "связь указывает на собственный модуль",
+            ));
+        }
+        let Some(target) = catalog.module(module) else {
+            return Err(RtError::InvalidBytecode("связь ведёт мимо каталога"));
+        };
+        match link {
+            LinkEntry::Function { func, .. } => {
+                debug_assert!(target_is_function);
+                let index = *func as usize;
+                if index == 0
+                    || index >= target.program.chunks.len()
+                    || index > target.program.function_names.len()
+                {
+                    return Err(RtError::InvalidBytecode(
+                        "связь ведёт на несуществующую функцию модуля",
+                    ));
+                }
+                if target.program.exported_functions.get(index - 1) != Some(&true) {
+                    return Err(RtError::InvalidBytecode(
+                        "связь ведёт на неэкспортный метод модуля",
+                    ));
+                }
+            }
+            LinkEntry::Variable { slot, .. } => {
+                let index = *slot as usize;
+                if index >= target.program.module_vars.len() {
+                    return Err(RtError::InvalidBytecode(
+                        "связь ведёт на несуществующую переменную модуля",
+                    ));
+                }
+                if target.program.exported_module_vars.get(index) != Some(&true) {
+                    return Err(RtError::InvalidBytecode(
+                        "связь ведёт на неэкспортную переменную модуля",
+                    ));
+                }
+            }
+            LinkEntry::ObjectMethod { .. } => unreachable!(),
+        }
+    }
+    Ok(())
+}
+fn check_calls(program: &Program, catalog: &crate::ConfigurationProgram) -> Result<(), RtError> {
+    use crate::configuration::LinkEntry;
+    for chunk in &program.chunks {
+        for instr in &chunk.instrs {
+            let Instr::CallImported {
+                link_slot,
+                arg_modes,
+                ..
+            } = instr
+            else {
+                continue;
+            };
+            let Some(LinkEntry::Function { module, func }) = program.links.get(*link_slot as usize)
+            else {
+                unreachable!("одиночный verify уже проверил вид связи");
+            };
+            let callee = &catalog.modules[module.index()].program.chunks[*func as usize];
+            let modes = &chunk.call_arg_modes[*arg_modes as usize];
+            if modes.len() != callee.n_params as usize {
+                return Err(RtError::InvalidBytecode(
+                    "режимов аргументов не столько, сколько параметров у импортированной функции",
+                ));
+            }
+            for (i, mode) in modes.iter().enumerate() {
+                if callee.param_by_val.get(i) == Some(&true)
+                    && matches!(
+                        mode,
+                        ArgMode::ByRefLocal(_)
+                            | ArgMode::ByRefModuleVar(_)
+                            | ArgMode::ByRefImportedVar(_)
+                            | ArgMode::ByRefIndex { .. }
+                    )
+                {
+                    return Err(RtError::InvalidBytecode(
+                        "вызов передаёт по ссылке параметр, объявленный «Знач»",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Проверяет программу с новыми связями против ранее проверенного каталога.
+/// Не повторяет проверку графа неизменённых модулей.
+///
+/// # Errors
+/// Несогласованный образ программы, недоступная цель или неверная арность связи.
+pub fn verify_linked_program(
+    program: &Program,
+    catalog: &crate::ConfigurationProgram,
+    own: Option<crate::ModuleId>,
+) -> Result<(), RtError> {
+    verify(program)?;
+    check_links(program, catalog, own.map(crate::ModuleId::index))?;
+    check_calls(program, catalog)
 }
 
 /// Периметр конфигурационного образа: то, что нельзя проверить на одном
@@ -784,60 +994,11 @@ pub fn verify_configuration(
 
     // Разрешимость и экспортность целей. `own` — номер модуля-владельца
     // таблицы; у entry владельца в каталоге нет.
-    let check_links = |program: &Program, own: Option<usize>| -> Result<(), RtError> {
-        for link in &program.links {
-            let (module, target_is_function) = match link {
-                LinkEntry::Function { module, .. } => (*module, true),
-                LinkEntry::Variable { module, .. } => (*module, false),
-            };
-            if own == Some(module.index()) {
-                return Err(RtError::InvalidBytecode(
-                    "связь указывает на собственный модуль",
-                ));
-            }
-            let Some(target) = catalog.module(module) else {
-                return Err(RtError::InvalidBytecode("связь ведёт мимо каталога"));
-            };
-            match link {
-                LinkEntry::Function { func, .. } => {
-                    debug_assert!(target_is_function);
-                    let index = *func as usize;
-                    if index == 0
-                        || index >= target.program.chunks.len()
-                        || index > target.program.function_names.len()
-                    {
-                        return Err(RtError::InvalidBytecode(
-                            "связь ведёт на несуществующую функцию модуля",
-                        ));
-                    }
-                    if !target.program.exported_functions[index - 1] {
-                        return Err(RtError::InvalidBytecode(
-                            "связь ведёт на неэкспортный метод модуля",
-                        ));
-                    }
-                }
-                LinkEntry::Variable { slot, .. } => {
-                    let index = *slot as usize;
-                    if index >= target.program.module_vars.len() {
-                        return Err(RtError::InvalidBytecode(
-                            "связь ведёт на несуществующую переменную модуля",
-                        ));
-                    }
-                    if !target.program.exported_module_vars[index] {
-                        return Err(RtError::InvalidBytecode(
-                            "связь ведёт на неэкспортную переменную модуля",
-                        ));
-                    }
-                }
-            }
-        }
-        Ok(())
-    };
     for (i, module) in catalog.modules.iter().enumerate() {
-        check_links(&module.program, Some(i))?;
+        check_links(&module.program, catalog, Some(i))?;
     }
     if let Some(entry) = entry {
-        check_links(&entry.program, None)?;
+        check_links(&entry.program, catalog, None)?;
     }
 
     // Граф импортов обязан быть ациклическим: цикл превратил бы ленивую
@@ -859,11 +1020,15 @@ pub fn verify_configuration(
             _ => {}
         }
         state[index] = 1;
+        for import in &catalog.modules[index].program.imports {
+            visit(catalog, state, import.module.index())?;
+        }
         for link in &catalog.modules[index].program.links {
             let target = match link {
                 LinkEntry::Function { module, .. } | LinkEntry::Variable { module, .. } => {
                     module.index()
                 }
+                LinkEntry::ObjectMethod { .. } => continue,
             };
             visit(catalog, state, target)?;
         }
@@ -877,52 +1042,11 @@ pub fn verify_configuration(
     // Арность и «Знач» у CallImported: целевой чанк известен только на
     // уровне каталога. Локальная геометрия (`base`, границы режимов) уже
     // проверена одиночным verify.
-    let check_calls = |program: &Program| -> Result<(), RtError> {
-        for chunk in &program.chunks {
-            for instr in &chunk.instrs {
-                let Instr::CallImported {
-                    link_slot,
-                    arg_modes,
-                    ..
-                } = instr
-                else {
-                    continue;
-                };
-                let Some(LinkEntry::Function { module, func }) =
-                    program.links.get(*link_slot as usize)
-                else {
-                    unreachable!("одиночный verify уже проверил вид связи");
-                };
-                let callee = &catalog.modules[module.index()].program.chunks[*func as usize];
-                let modes = &chunk.call_arg_modes[*arg_modes as usize];
-                if modes.len() != callee.n_params as usize {
-                    return Err(RtError::InvalidBytecode(
-                        "режимов аргументов не столько, сколько параметров у импортированной функции",
-                    ));
-                }
-                for (i, mode) in modes.iter().enumerate() {
-                    if callee.param_by_val.get(i) == Some(&true)
-                        && matches!(
-                            mode,
-                            ArgMode::ByRefLocal(_)
-                                | ArgMode::ByRefModuleVar(_)
-                                | ArgMode::ByRefImportedVar(_)
-                        )
-                    {
-                        return Err(RtError::InvalidBytecode(
-                            "вызов передаёт по ссылке параметр, объявленный «Знач»",
-                        ));
-                    }
-                }
-            }
-        }
-        Ok(())
-    };
     for module in &catalog.modules {
-        check_calls(&module.program)?;
+        check_calls(&module.program, catalog)?;
     }
     if let Some(entry) = entry {
-        check_calls(&entry.program)?;
+        check_calls(&entry.program, catalog)?;
     }
     Ok(())
 }
@@ -1039,6 +1163,7 @@ mod tests {
             exported_module_vars: vec![true],
             function_names: vec!["Ф".to_string()],
             exported_functions: vec![true],
+            imports: Vec::new(),
             links: Vec::new(),
             lines: Vec::new(),
         };

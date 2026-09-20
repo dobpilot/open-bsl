@@ -1,0 +1,11 @@
+file.begin	delete-masks-1
+delete.mask.txt	ok|1|0|1|0|0|0|1
+delete.mask.star	ok|1|0|0|0|0|0|0
+delete.mask.empty	ok|0|0|0|0|0|0|0
+delete.mask.undefined	ok|0|0|0|0|0|0|0
+delete.mask.missing	ok|1|1|1|1|1|1|1
+delete.mask.file	ok|1|1|1|1|1|1|1
+delete.readonly.file	ok|1|1|1|0|1|1|1
+delete.readonly.mask	ok|1|1|1|0|1|1|1
+delete.readonly.tree	ok|0|0|0|0|0|0|0
+file.end	delete-masks-1

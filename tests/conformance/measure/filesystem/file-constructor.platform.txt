@@ -1,0 +1,26 @@
+﻿file.begin	file-constructor-1
+ctor.noargs.ru	ok|full=|parent=|name=|base=|extension=|input_string=
+ctor.noargs.en	ok|full=|parent=|name=|base=|extension=|input_string=
+ctor.undefined	ok|full=|parent=|name=|base=|extension=|input_string=
+ctor.null	ok|full=|parent=|name=|base=|extension=|input_string=
+ctor.number	ok|full=123|parent=|name=123|base=123|extension=|input_string=123
+ctor.boolean	ok|full=Yes|parent=|name=Yes|base=Yes|extension=|input_string=Yes
+ctor.date	ok|full=1/2/2020 3:04:05 AM|parent=1/2/|name=2020 3:04:05 AM|base=2020 3:04:05 AM|extension=|input_string=1/2/2020 3:04:05 AM
+ctor.array	ok|full=Массив|parent=|name=Массив|base=Массив|extension=|input_string=Массив
+ctor.structure	ok|full=Структура|parent=|name=Структура|base=Структура|extension=|input_string=Структура
+ctor.empty	ok|full=|parent=|name=|base=|extension=|input_string=
+ctor.dot	ok|full=|parent=|name=|base=|extension=|input_string=.
+ctor.dotdot	ok|full=|parent=|name=|base=|extension=|input_string=..
+ctor.parents	ok|full=|parent=|name=|base=|extension=|input_string=../..
+ctor.relative_parent	ok|full=b|parent=|name=b|base=b|extension=|input_string=a/../../b
+ctor.absolute_parent	ok|full=/b|parent=/|name=b|base=b|extension=|input_string=/../../b
+ctor.root	ok|full=/|parent=/|name=|base=|extension=|input_string=/
+ctor.roots	ok|full=///|parent=///|name=|base=|extension=|input_string=///
+ctor.repeat	ok|full=a/b/c|parent=a/b/|name=c|base=c|extension=|input_string=a//b///c/
+ctor.dotfile	ok|full=/tmp/.hidden|parent=/tmp/|name=.hidden|base=|extension=.hidden|input_string=/tmp/.hidden
+ctor.trailing_dot	ok|full=a.|parent=|name=a.|base=a|extension=.|input_string=a.
+ctor.three_dots	ok|full=...|parent=|name=...|base=..|extension=.|input_string=...
+ctor.drive	ok|full=C:/b.txt|parent=C:/|name=b.txt|base=b|extension=.txt|input_string=C:\alpha\..\b.txt
+ctor.nul	ok|full=abc<NUL>def|parent=|name=abc<NUL>def|base=abc<NUL>def|extension=|input_string=abc<NUL>def
+ctor.tab	ok|full=a<TAB>b|parent=|name=a<TAB>b|base=a<TAB>b|extension=|input_string=a<TAB>b
+file.end	file-constructor-1

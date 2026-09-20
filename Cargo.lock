@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-binbuf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-number",
  "bsl-rt",
@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-bytecode"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "bsl-number",
  "bsl-rt",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-cli"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "bsl-bytecode",
  "bsl-compiler",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-compiler"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "bsl-bytecode",
  "bsl-number",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-crypto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-rt",
  "digest",
@@ -210,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-http"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bsl-rt",
  "bsl-stream",
@@ -221,14 +221,14 @@ dependencies = [
 
 [[package]]
 name = "bsl-json"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-rt",
 ]
 
 [[package]]
 name = "bsl-number"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "num-bigint",
  "num-traits",
@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-pdf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-rt",
  "flate2",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-regexp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-number",
  "bsl-rt",
@@ -253,14 +253,14 @@ dependencies = [
 
 [[package]]
 name = "bsl-rt"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bsl-number",
 ]
 
 [[package]]
 name = "bsl-sema"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bsl-number",
  "bsl-rt",
@@ -269,7 +269,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-spreadsheet"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-format",
  "bsl-pdf",
@@ -281,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "bsl-stream"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-binbuf",
  "bsl-rt",
@@ -296,14 +296,14 @@ dependencies = [
 
 [[package]]
 name = "bsl-textdoc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-rt",
 ]
 
 [[package]]
 name = "bsl-vm"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "bsl-bytecode",
  "bsl-compiler",
@@ -318,14 +318,14 @@ dependencies = [
 
 [[package]]
 name = "bsl-xml"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-rt",
 ]
 
 [[package]]
 name = "bsl-zip"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bsl-rt",
  "flate2",
@@ -1222,7 +1222,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "open-bsl"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "bsl-binbuf",
  "bsl-bytecode",

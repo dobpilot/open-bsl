@@ -1,0 +1,51 @@
+﻿file.begin	1
+context.zone	Europe/Moscow
+context.compatibility	НеИспользовать
+file.scratch	/tmp/v8_cBCfXV_5.times
+local.summer.set	ok
+local.summer.local	7/15/2020 12:34:56 PM
+local.summer.utc	7/15/2020 9:34:56 AM
+local.winter.set	ok
+local.winter.local	1/15/2020 12:34:56 PM
+local.winter.utc	1/15/2020 9:34:56 AM
+utc.summer.set	ok
+utc.summer.local	7/15/2020 3:34:56 PM
+utc.summer.utc	7/15/2020 12:34:56 PM
+utc.winter.set	ok
+utc.winter.local	1/15/2020 3:34:56 PM
+utc.winter.utc	1/15/2020 12:34:56 PM
+utc.1960.set	ok
+utc.1960.local	
+utc.1960.utc	1/15/1960 12:34:55 PM
+utc.1900.set	ok
+utc.1900.local	
+utc.1900.utc	1/15/1900 12:34:55 PM
+utc.minimum.set	ok
+utc.minimum.local	
+utc.minimum.utc	11/30/0002 12:00:00 AM
+utc.maximum.set	ok
+utc.maximum.local	
+utc.maximum.utc	12/31/9999 11:59:59 PM
+utc.reset.set	ok
+utc.reset.local	1/15/2020 3:34:56 PM
+utc.reset.utc	1/15/2020 12:34:56 PM
+utc.undefined.set	error:Error calling context method (УстановитьУниверсальноеВремяИзменения)
+utc.undefined.local	1/15/2020 3:34:56 PM
+utc.undefined.utc	1/15/2020 12:34:56 PM
+utc.number.set	error:Error calling context method (УстановитьУниверсальноеВремяИзменения)
+utc.number.local	1/15/2020 3:34:56 PM
+utc.number.utc	1/15/2020 12:34:56 PM
+utc.string.set	ok
+utc.string.local	1/15/2020 3:34:56 PM
+utc.string.utc	1/15/2020 12:34:56 PM
+utc.result.set	error:Object procedure called as function (УстановитьУниверсальноеВремяИзменения)
+utc.result.local	1/15/2020 3:34:56 PM
+utc.result.utc	1/15/2020 12:34:56 PM
+directory.utc.set	ok
+directory.utc.local	1/15/2020 3:34:56 PM
+directory.utc.utc	1/15/2020 12:34:56 PM
+missing.utc.set	error:Error calling context method (УстановитьУниверсальноеВремяИзменения)
+missing.utc.local	error:Error calling context method (ПолучитьВремяИзменения)
+missing.utc.utc	error:Error calling context method (ПолучитьУниверсальноеВремяИзменения)
+file.cleanup	ok
+file.end	1

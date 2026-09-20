@@ -18,6 +18,13 @@ pub trait ByteStreamProtocol: fmt::Debug {
     /// Длина носителя в байтах.
     fn len(&self, op: &'static str) -> RtResult<u64>;
 
+    /// Изменяет длину носителя, если поток это поддерживает.
+    fn set_len(&self, _size: u64, op: &'static str) -> RtResult<()> {
+        Err(RtError::IoError(format!(
+            "{op}: изменение размера не поддерживается"
+        )))
+    }
+
     /// Читает не больше `count` байт и сдвигает позицию.
     fn read_bytes(&self, count: usize, op: &'static str) -> RtResult<Vec<u8>>;
 
@@ -229,6 +236,17 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         &[]
     }
 
+    /// Проверяет наличие метода без исполнения и проверки будущих аргументов.
+    ///
+    /// По умолчанию использует ту же таблицу и правила поиска, что
+    /// [`ObjectProtocol::call_method`]. Динамическая реализация строкового
+    /// вызова должна явно переопределять эту проверку для имён вне таблицы.
+    /// Проверка не должна иметь побочных эффектов; успешный результат не
+    /// гарантирует допустимость произвольной арности или успешное исполнение.
+    fn has_method(&self, name: &str) -> bool {
+        crate::find_method_from_table(self.method_table(), name).is_some()
+    }
+
     /// Чтение и запись по индексу. Умолчание отвечает за все типы этого
     /// дерева: индексируемые коллекции ядра до трейта не доходят, их
     /// обслуживает `BslValue::get_index`/`set_index` напрямую. Пара
@@ -414,6 +432,12 @@ impl ObjectRef {
 
     pub fn has_property(&self, name: &str) -> bool {
         self.0.has_property(name)
+    }
+
+    /// Проверяет наличие метода через [`ObjectProtocol::has_method`],
+    /// не вызывая обработчик.
+    pub fn has_method(&self, name: &str) -> bool {
+        self.0.has_method(name)
     }
 
     pub fn fill_property(&self, name: &str, value: BslValue) -> RtResult<bool> {

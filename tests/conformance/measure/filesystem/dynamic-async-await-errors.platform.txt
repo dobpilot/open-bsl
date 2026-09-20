@@ -1,0 +1,47 @@
+file.begin	dynamic-async-await-errors-1
+dynamic.await.execute.reason	Error compiling or calculating expression or executing fragment of code
+{Обработка.Замеры.Форма.Форма.Форма(34)}:Выполнить(ВыражениеОжидания);
+{Обработка.Замеры.Форма.Форма.Форма(52)}:Ждать ПроверитьОжидание("dynamic.await.execute", "ЛокальнаяОжидания = Ждать ОбещаниеОжидания;", Ложь);
+{Обработка.Замеры.Форма.Форма.Форма(75)}:ИзмеритьОжидание();
+{Обработка.Замеры.Форма.Форма.Форма(65)}:ВыполнитьТестНаКлиенте();
+{МодульУправляемогоПриложения(6)}:ОткрытьФорму("Обработка.Замеры.Форма");
+
+[ОшибкаВоВремяВыполненияВстроенногоЯзыка, ОшибкаИспользованияВстроенногоЯзыка]
+Reason:
+{<Unknown module>(1,21)}: Await operation can be used only in asynchronous procedures or functions
+ЛокальнаяОжидания = <<?>>Ждать ОбещаниеОжидания;
+[ОшибкаКомпиляцииВстроенногоЯзыка]
+dynamic.await.execute	error|1
+dynamic.await.eval.reason	Error compiling or calculating expression or executing fragment of code
+{(1)}:ЛокальнаяОжидания = Вычислить("Ждать ОбещаниеОжидания");
+{Обработка.Замеры.Форма.Форма.Форма(34)}:Выполнить(ВыражениеОжидания);
+{Обработка.Замеры.Форма.Форма.Форма(53)}:Ждать ПроверитьОжидание("dynamic.await.eval", "ЛокальнаяОжидания = Вычислить(""Ждать ОбещаниеОжидания"");", Ложь);
+
+[ОшибкаВоВремяВыполненияВстроенногоЯзыка, ОшибкаИспользованияВстроенногоЯзыка]
+Reason:
+{<Unknown module>(1,1)}: Await operation can be used only in asynchronous procedures or functions
+<<?>>Ждать ОбещаниеОжидания
+[ОшибкаКомпиляцииВстроенногоЯзыка]
+dynamic.await.eval	error|1
+dynamic.await.execute.error.reason	Error compiling or calculating expression or executing fragment of code
+{Обработка.Замеры.Форма.Форма.Форма(34)}:Выполнить(ВыражениеОжидания);
+{Обработка.Замеры.Форма.Форма.Форма(54)}:Ждать ПроверитьОжидание("dynamic.await.execute.error", "ЛокальнаяОжидания = 11; ЛокальнаяОжидания = Ждать ОбещаниеОжидания;", Истина);
+
+[ОшибкаВоВремяВыполненияВстроенногоЯзыка, ОшибкаИспользованияВстроенногоЯзыка]
+Reason:
+{<Unknown module>(1,45)}: Await operation can be used only in asynchronous procedures or functions
+ЛокальнаяОжидания = 11; ЛокальнаяОжидания = <<?>>Ждать ОбещаниеОжидания;
+[ОшибкаКомпиляцииВстроенногоЯзыка]
+dynamic.await.execute.error	error|1
+dynamic.await.eval.error.reason	Error compiling or calculating expression or executing fragment of code
+{(1)}:ЛокальнаяОжидания = 11; ЛокальнаяОжидания = Вычислить("Ждать ОбещаниеОжидания");
+{Обработка.Замеры.Форма.Форма.Форма(34)}:Выполнить(ВыражениеОжидания);
+{Обработка.Замеры.Форма.Форма.Форма(55)}:Ждать ПроверитьОжидание("dynamic.await.eval.error", "ЛокальнаяОжидания = 11; ЛокальнаяОжидания = Вычислить(""Ждать ОбещаниеОжидания"");", Истина);
+
+[ОшибкаВоВремяВыполненияВстроенногоЯзыка, ОшибкаИспользованияВстроенногоЯзыка]
+Reason:
+{<Unknown module>(1,1)}: Await operation can be used only in asynchronous procedures or functions
+<<?>>Ждать ОбещаниеОжидания
+[ОшибкаКомпиляцииВстроенногоЯзыка]
+dynamic.await.eval.error	error|11
+file.end	dynamic-async-await-errors-1

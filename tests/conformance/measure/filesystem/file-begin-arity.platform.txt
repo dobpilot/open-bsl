@@ -1,0 +1,211 @@
+﻿file.begin	file-begin-arity-1
+context.compatibility	НеИспользовать
+begin.exists.ru.valid.call	returned|path_changed=0
+begin.exists.ru.none.call	error|path_changed=0
+begin.exists.ru.none.call.detail	Not enough actual parameters
+begin.exists.ru.extra.call	error|path_changed=0
+begin.exists.ru.extra.call.detail	Too many actual parameters
+begin.exists.en.valid.call	returned|path_changed=0
+begin.exists.en.none.call	error|path_changed=0
+begin.exists.en.none.call.detail	Not enough actual parameters
+begin.exists.en.extra.call	error|path_changed=0
+begin.exists.en.extra.call.detail	Too many actual parameters
+begin.isdir.ru.valid.call	returned|path_changed=0
+begin.isdir.ru.none.call	error|path_changed=0
+begin.isdir.ru.none.call.detail	Not enough actual parameters
+begin.isdir.ru.extra.call	error|path_changed=0
+begin.isdir.ru.extra.call.detail	Too many actual parameters
+begin.isdir.en.valid.call	returned|path_changed=0
+begin.isdir.en.none.call	error|path_changed=0
+begin.isdir.en.none.call.detail	Not enough actual parameters
+begin.isdir.en.extra.call	error|path_changed=0
+begin.isdir.en.extra.call.detail	Too many actual parameters
+begin.isfile.ru.valid.call	returned|path_changed=0
+begin.isfile.ru.none.call	error|path_changed=0
+begin.isfile.ru.none.call.detail	Not enough actual parameters
+begin.isfile.ru.extra.call	error|path_changed=0
+begin.isfile.ru.extra.call.detail	Too many actual parameters
+begin.isfile.en.valid.call	returned|path_changed=0
+begin.isfile.en.none.call	error|path_changed=0
+begin.isfile.en.none.call.detail	Not enough actual parameters
+begin.isfile.en.extra.call	error|path_changed=0
+begin.isfile.en.extra.call.detail	Too many actual parameters
+begin.hidden.ru.valid.call	returned|path_changed=0
+begin.hidden.ru.none.call	error|path_changed=0
+begin.hidden.ru.none.call.detail	Not enough actual parameters
+begin.hidden.ru.extra.call	error|path_changed=0
+begin.hidden.ru.extra.call.detail	Too many actual parameters
+begin.hidden.en.valid.call	returned|path_changed=0
+begin.hidden.en.none.call	error|path_changed=0
+begin.hidden.en.none.call.detail	Not enough actual parameters
+begin.hidden.en.extra.call	error|path_changed=0
+begin.hidden.en.extra.call.detail	Too many actual parameters
+begin.readonly.ru.valid.call	returned|path_changed=0
+begin.readonly.ru.none.call	error|path_changed=0
+begin.readonly.ru.none.call.detail	Not enough actual parameters
+begin.readonly.ru.extra.call	error|path_changed=0
+begin.readonly.ru.extra.call.detail	Too many actual parameters
+begin.readonly.en.valid.call	returned|path_changed=0
+begin.readonly.en.none.call	error|path_changed=0
+begin.readonly.en.none.call.detail	Not enough actual parameters
+begin.readonly.en.extra.call	error|path_changed=0
+begin.readonly.en.extra.call.detail	Too many actual parameters
+begin.size.ru.valid.call	returned|path_changed=0
+begin.size.ru.none.call	error|path_changed=0
+begin.size.ru.none.call.detail	Not enough actual parameters
+begin.size.ru.extra.call	error|path_changed=0
+begin.size.ru.extra.call.detail	Too many actual parameters
+begin.size.en.valid.call	returned|path_changed=0
+begin.size.en.none.call	error|path_changed=0
+begin.size.en.none.call.detail	Not enough actual parameters
+begin.size.en.extra.call	error|path_changed=0
+begin.size.en.extra.call.detail	Too many actual parameters
+begin.time.ru.valid.call	returned|path_changed=0
+begin.time.ru.none.call	error|path_changed=0
+begin.time.ru.none.call.detail	Not enough actual parameters
+begin.time.ru.extra.call	error|path_changed=0
+begin.time.ru.extra.call.detail	Too many actual parameters
+begin.time.en.valid.call	returned|path_changed=0
+begin.time.en.none.call	error|path_changed=0
+begin.time.en.none.call.detail	Not enough actual parameters
+begin.time.en.extra.call	error|path_changed=0
+begin.time.en.extra.call.detail	Too many actual parameters
+begin.utc.ru.valid.call	returned|path_changed=0
+begin.utc.ru.none.call	error|path_changed=0
+begin.utc.ru.none.call.detail	Not enough actual parameters
+begin.utc.ru.extra.call	error|path_changed=0
+begin.utc.ru.extra.call.detail	Too many actual parameters
+begin.utc.en.valid.call	returned|path_changed=0
+begin.utc.en.none.call	error|path_changed=0
+begin.utc.en.none.call.detail	Not enough actual parameters
+begin.utc.en.extra.call	error|path_changed=0
+begin.utc.en.extra.call.detail	Too many actual parameters
+begin.sethidden.ru.valid.call	returned|path_changed=0
+begin.sethidden.ru.none.call	error|path_changed=0
+begin.sethidden.ru.none.call.detail	Not enough actual parameters
+begin.sethidden.ru.extra.call	error|path_changed=0
+begin.sethidden.ru.extra.call.detail	Too many actual parameters
+begin.sethidden.ru.missing_value.call	error|path_changed=0
+begin.sethidden.ru.missing_value.call.detail	Not enough actual parameters
+begin.sethidden.ru.bad_value.call	returned|path_changed=0
+begin.sethidden.en.valid.call	returned|path_changed=0
+begin.sethidden.en.none.call	error|path_changed=0
+begin.sethidden.en.none.call.detail	Not enough actual parameters
+begin.sethidden.en.extra.call	error|path_changed=0
+begin.sethidden.en.extra.call.detail	Too many actual parameters
+begin.sethidden.en.missing_value.call	error|path_changed=0
+begin.sethidden.en.missing_value.call.detail	Not enough actual parameters
+begin.sethidden.en.bad_value.call	returned|path_changed=0
+begin.setreadonly.ru.valid.call	returned|path_changed=0
+begin.setreadonly.ru.none.call	error|path_changed=0
+begin.setreadonly.ru.none.call.detail	Not enough actual parameters
+begin.setreadonly.ru.extra.call	error|path_changed=0
+begin.setreadonly.ru.extra.call.detail	Too many actual parameters
+begin.setreadonly.ru.missing_value.call	error|path_changed=0
+begin.setreadonly.ru.missing_value.call.detail	Not enough actual parameters
+begin.setreadonly.ru.bad_value.call	returned|path_changed=0
+begin.setreadonly.en.valid.call	returned|path_changed=0
+begin.setreadonly.en.none.call	error|path_changed=0
+begin.setreadonly.en.none.call.detail	Not enough actual parameters
+begin.setreadonly.en.extra.call	error|path_changed=0
+begin.setreadonly.en.extra.call.detail	Too many actual parameters
+begin.setreadonly.en.missing_value.call	error|path_changed=0
+begin.setreadonly.en.missing_value.call.detail	Not enough actual parameters
+begin.setreadonly.en.bad_value.call	returned|path_changed=0
+begin.settime.ru.valid.call	returned|path_changed=0
+begin.settime.ru.none.call	error|path_changed=0
+begin.settime.ru.none.call.detail	Not enough actual parameters
+begin.settime.ru.extra.call	error|path_changed=0
+begin.settime.ru.extra.call.detail	Too many actual parameters
+begin.settime.ru.missing_value.call	error|path_changed=0
+begin.settime.ru.missing_value.call.detail	Not enough actual parameters
+begin.settime.ru.bad_value.call	returned|path_changed=0
+begin.settime.en.valid.call	returned|path_changed=0
+begin.settime.en.none.call	error|path_changed=0
+begin.settime.en.none.call.detail	Not enough actual parameters
+begin.settime.en.extra.call	error|path_changed=0
+begin.settime.en.extra.call.detail	Too many actual parameters
+begin.settime.en.missing_value.call	error|path_changed=0
+begin.settime.en.missing_value.call.detail	Not enough actual parameters
+begin.settime.en.bad_value.call	returned|path_changed=0
+begin.setutc.ru.valid.call	returned|path_changed=0
+begin.setutc.ru.none.call	error|path_changed=0
+begin.setutc.ru.none.call.detail	Not enough actual parameters
+begin.setutc.ru.extra.call	error|path_changed=0
+begin.setutc.ru.extra.call.detail	Too many actual parameters
+begin.setutc.ru.missing_value.call	error|path_changed=0
+begin.setutc.ru.missing_value.call.detail	Not enough actual parameters
+begin.setutc.ru.bad_value.call	returned|path_changed=0
+begin.setutc.en.valid.call	returned|path_changed=0
+begin.setutc.en.none.call	error|path_changed=0
+begin.setutc.en.none.call.detail	Not enough actual parameters
+begin.setutc.en.extra.call	error|path_changed=0
+begin.setutc.en.extra.call.detail	Too many actual parameters
+begin.setutc.en.missing_value.call	error|path_changed=0
+begin.setutc.en.missing_value.call.detail	Not enough actual parameters
+begin.setutc.en.bad_value.call	returned|path_changed=0
+begin.init.ru.valid.call	returned|path_changed=1
+begin.init.ru.none.call	error|path_changed=0
+begin.init.ru.none.call.detail	Not enough actual parameters
+begin.init.ru.extra.call	error|path_changed=0
+begin.init.ru.extra.call.detail	Too many actual parameters
+begin.init.ru.missing_value.call	error|path_changed=0
+begin.init.ru.missing_value.call.detail	Not enough actual parameters
+begin.init.ru.bad_value.call	returned|path_changed=1
+begin.init.en.valid.call	returned|path_changed=1
+begin.init.en.none.call	error|path_changed=0
+begin.init.en.none.call.detail	Not enough actual parameters
+begin.init.en.extra.call	error|path_changed=0
+begin.init.en.extra.call.detail	Too many actual parameters
+begin.init.en.missing_value.call	error|path_changed=0
+begin.init.en.missing_value.call.detail	Not enough actual parameters
+begin.init.en.bad_value.call	returned|path_changed=1
+begin.exists.ru.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.exists.en.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.isdir.ru.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.isdir.en.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.isfile.ru.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.isfile.en.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.hidden.ru.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.hidden.en.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.readonly.ru.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.readonly.en.valid.callback	ok|argc=2|returned=1|type=Boolean
+begin.size.ru.valid.callback	ok|argc=2|returned=1|type=Number
+begin.size.en.valid.callback	ok|argc=2|returned=1|type=Number
+begin.time.ru.valid.callback	ok|argc=2|returned=1|type=Date
+begin.time.en.valid.callback	ok|argc=2|returned=1|type=Date
+begin.utc.ru.valid.callback	ok|argc=2|returned=1|type=Date
+begin.utc.en.valid.callback	ok|argc=2|returned=1|type=Date
+begin.sethidden.ru.valid.callback	ok|argc=1|returned=1
+begin.sethidden.ru.bad_value.callback	error|returned=1|standard=1
+begin.sethidden.ru.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.sethidden.en.valid.callback	ok|argc=1|returned=1
+begin.sethidden.en.bad_value.callback	error|returned=1|standard=1
+begin.sethidden.en.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.setreadonly.ru.valid.callback	ok|argc=1|returned=1
+begin.setreadonly.ru.bad_value.callback	error|returned=1|standard=1
+begin.setreadonly.ru.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.setreadonly.en.valid.callback	ok|argc=1|returned=1
+begin.setreadonly.en.bad_value.callback	error|returned=1|standard=1
+begin.setreadonly.en.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.settime.ru.valid.callback	ok|argc=1|returned=1
+begin.settime.ru.bad_value.callback	error|returned=1|standard=1
+begin.settime.ru.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.settime.en.valid.callback	ok|argc=1|returned=1
+begin.settime.en.bad_value.callback	error|returned=1|standard=1
+begin.settime.en.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.setutc.ru.valid.callback	ok|argc=1|returned=1
+begin.setutc.ru.bad_value.callback	error|returned=1|standard=1
+begin.setutc.ru.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.setutc.en.valid.callback	ok|argc=1|returned=1
+begin.setutc.en.bad_value.callback	error|returned=1|standard=1
+begin.setutc.en.bad_value.callback.detail	Type mismatch (parameter number '1')
+begin.init.ru.valid.callback	ok|argc=2|returned=1|type=File
+begin.init.ru.bad_value.callback	ok|argc=2|returned=1|type=File
+begin.init.en.valid.callback	ok|argc=2|returned=1|type=File
+begin.init.en.bad_value.callback	ok|argc=2|returned=1|type=File
+begin.ready	1
+begin.expected	36
+begin.delivered	36
+begin.valid	26
+file.end	file-begin-arity-1

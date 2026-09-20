@@ -1,0 +1,28 @@
+d	
+d	file-twins
+f	file-twins/padded 
+d	file-twins/padded
+f	file-twins/padded/trimmed-only.txt
+d	tab
+d	tab/padded	
+f	tab/padded	/tab-only.txt
+d	leading
+d	leading/ padded
+f	leading/ padded/leading-only.txt
+d	file
+f	file/padded 
+f	file/after.txt
+f	file/before.txt
+d	twins
+d	twins/padded
+f	twins/padded/trimmed-only.txt
+d	twins/padded 
+f	twins/padded /raw-only.txt
+d	middle
+f	middle/after.txt
+d	middle/padded 
+f	middle/padded /raw-only.txt
+f	middle/before.txt
+d	alone
+d	alone/padded 
+f	alone/padded /raw-only.txt

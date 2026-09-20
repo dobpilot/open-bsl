@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::Write;
 use std::rc::Rc;
@@ -81,6 +81,8 @@ impl FunctionCode {
 pub struct Arity {
     min: u8,
     max: u8,
+    // Пустой срез означает непрерывный диапазон; one_of не допускает пустой набор.
+    counts: &'static [u8],
 }
 
 impl Arity {
@@ -88,24 +90,84 @@ impl Arity {
         Self {
             min: count,
             max: count,
+            counts: &[],
         }
     }
 
     pub const fn range(min: u8, max: u8) -> Self {
         assert!(min <= max, "минимальная арность больше максимальной");
-        Self { min, max }
+        Self {
+            min,
+            max,
+            counts: &[],
+        }
     }
 
+    /// Явный набор допустимых количеств, включая пропуски между ними.
+    ///
+    /// # Panics
+    ///
+    /// Список пуст, содержит повторения или не возрастает строго.
+    pub const fn one_of(counts: &'static [u8]) -> Self {
+        assert!(!counts.is_empty(), "набор арностей пуст");
+        let mut index = 1;
+        while index < counts.len() {
+            assert!(
+                counts[index - 1] < counts[index],
+                "арности должны строго возрастать"
+            );
+            index += 1;
+        }
+        Self {
+            min: counts[0],
+            max: counts[counts.len() - 1],
+            counts,
+        }
+    }
+
+    /// Нижняя граница; значения между границами могут быть недопустимы.
     pub const fn min(self) -> u8 {
         self.min
     }
 
+    /// Верхняя граница; принадлежность проверяется через [`Self::accepts`].
     pub const fn max(self) -> u8 {
         self.max
     }
 
     pub const fn accepts(self, count: u8) -> bool {
-        self.min <= count && count <= self.max
+        if count < self.min || count > self.max {
+            return false;
+        }
+        if self.counts.is_empty() {
+            return true;
+        }
+        let mut index = 0;
+        while index < self.counts.len() {
+            if self.counts[index] == count {
+                return true;
+            }
+            index += 1;
+        }
+        false
+    }
+}
+
+impl std::fmt::Display for Arity {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if !self.counts.is_empty() {
+            for (index, count) in self.counts.iter().enumerate() {
+                if index != 0 {
+                    out.write_str(", ")?;
+                }
+                write!(out, "{count}")?;
+            }
+            Ok(())
+        } else if self.min == self.max {
+            write!(out, "{}", self.min)
+        } else {
+            write!(out, "{}…{}", self.min, self.max)
+        }
     }
 }
 
@@ -142,6 +204,7 @@ pub enum Capability {
     Random,
     Network,
     HostPromises,
+    TemporaryFiles,
 }
 
 /// Каким контекстом прогона располагал вызов, у которого спросили
@@ -167,7 +230,7 @@ pub struct InterpreterServices<'a> {
     pub files: &'a Rc<dyn crate::FileSystem>,
     pub random: &'a crate::RandomHandle,
     pub network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
-    pub host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
+    pub host_promises: Option<&'a mut dyn crate::HostPromiseSpawner>,
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
     pub background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
     pub temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
@@ -206,11 +269,12 @@ pub struct CallContext<'a> {
     files: Option<&'a Rc<dyn crate::FileSystem>>,
     random: Option<&'a crate::RandomHandle>,
     network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
-    host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
+    host_promises: Option<&'a mut dyn crate::HostPromiseSpawner>,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
     background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
     temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
     message_sink: Option<&'a Rc<dyn crate::UserMessageSink>>,
+    temporary_files: Option<crate::TemporaryFileRegistry>,
 }
 
 impl<'a> CallContext<'a> {
@@ -231,6 +295,7 @@ impl<'a> CallContext<'a> {
             background_jobs: services.background_jobs,
             temp_storage: services.temp_storage,
             message_sink: services.message_sink,
+            temporary_files: None,
         }
     }
 
@@ -255,7 +320,27 @@ impl<'a> CallContext<'a> {
             background_jobs: None,
             temp_storage: None,
             message_sink: None,
+            temporary_files: None,
         }
+    }
+
+    /// Подключает учёт временных файлов исходного сеанса без изменения
+    /// прежней структуры `InterpreterServices`.
+    pub fn set_temporary_files(&mut self, registry: crate::TemporaryFileRegistry) {
+        self.temporary_files = Some(registry);
+    }
+
+    /// Дескриптор учёта исходного сеанса; объект вправе сохранить его клон.
+    ///
+    /// # Errors
+    /// Учёт не предоставлен данным исполнительным путём.
+    pub fn temporary_files(&self) -> RtResult<crate::TemporaryFileRegistry> {
+        self.temporary_files
+            .clone()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::TemporaryFiles,
+                path: self.path,
+            })
     }
 
     /// Сервис фоновых заданий host. Без внедрённого сервиса — ловимая
@@ -442,6 +527,83 @@ impl<'a> CallContext<'a> {
             .spawn_http(client, request, mapper, error_mapper)
     }
 
+    /// Регистрирует файловое оповещение без исполнения BSL-обработчика.
+    ///
+    /// # Errors
+    /// Отсутствие исполнителя или отказ регистрации до начала I/O.
+    pub fn begin_file_operation(
+        &mut self,
+        operation: crate::FileNotificationOperation,
+        description: crate::NotificationDescription,
+        with_result: bool,
+    ) -> RtResult<()> {
+        let path = self.path;
+        self.host_promises
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::HostPromises,
+                path,
+            })?
+            .begin_file_operation(operation, description, with_result)
+    }
+
+    /// Регистрирует готовое файловое значение без фонового ввода-вывода.
+    ///
+    /// # Errors
+    /// Отсутствие исполнителя обещаний или его файловой возможности.
+    pub fn ready_file_promise(&mut self, result: RtResult<BslValue>) -> RtResult<BslValue> {
+        let path = self.path;
+        self.host_promises
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::HostPromises,
+                path,
+            })?
+            .ready_file_promise(result)
+    }
+
+    /// Регистрирует файловое обещание с сервисами исходного объекта.
+    ///
+    /// # Errors
+    /// Отсутствие исполнителя обещаний или его файловой возможности;
+    /// поддерживающая VM доставляет ошибку запроса через обещание.
+    pub fn spawn_file_operation(
+        &mut self,
+        request: RtResult<crate::FileOperationRequest>,
+        files: std::rc::Rc<dyn crate::FileSystem>,
+        zone: std::rc::Rc<dyn crate::TimeZone>,
+    ) -> RtResult<BslValue> {
+        let path = self.path;
+        self.host_promises
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::HostPromises,
+                path,
+            })?
+            .spawn_file_operation(request, files, zone)
+    }
+
+    /// Регистрирует фоновое атомарное создание временного файла.
+    ///
+    /// # Errors
+    /// Отсутствие исполнителя обещаний либо его файловой возможности.
+    pub fn spawn_temporary_file_operation(
+        &mut self,
+        entropy: [u8; 16],
+        files: std::rc::Rc<dyn crate::FileSystem>,
+        registry: crate::TemporaryFileRegistry,
+        mapper: crate::TemporaryFileValueMapper,
+    ) -> RtResult<BslValue> {
+        let path = self.path;
+        self.host_promises
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::HostPromises,
+                path,
+            })?
+            .spawn_temporary_file_operation(entropy, files, registry, mapper)
+    }
+
     /// Таблица форм и зона ОДНОВРЕМЕННО: `runtime_shapes` берёт `self`
     /// изменяемо, поэтому после него `zone()` уже не позвать, а нужны они
     /// вместе на каждом чтении и записи JSON-значения.
@@ -559,6 +721,14 @@ pub enum CallOutcome {
 /// вариант, и каждый обслуживающий путь обязан разобрать его явно.
 /// VM обслуживает эту операцию через планировщик сохраняемого запуска.
 pub enum PendingHostCall {
+    /// Ожидание приложения без отмены дочернего процесса при потере
+    /// ожидателя. Преобразования BSL выбирает вызывающий обработчик.
+    ApplicationSync {
+        launcher: std::sync::Arc<dyn crate::ApplicationLauncher>,
+        request: crate::ApplicationRequest,
+        mapper: crate::ApplicationResponseMapper,
+        error_mapper: crate::ApplicationErrorMapper,
+    },
     /// Синхронная HTTP-операция: запрос уже снят с BSL-объектов,
     /// транспорт выполняет его вне VM, `mapper` материализует ответ в
     /// BSL-потоке после доставки.
@@ -801,6 +971,22 @@ pub fn set_property_from_table(
     }
 }
 
+/// Находит исходный дескриптор по имени или псевдониму без вызова метода.
+///
+/// Регистр не учитывается, пробелы не обрезаются. Арность здесь не
+/// проверяется: поиск имени и допустимость конкретного вызова — разные этапы.
+pub fn find_method_from_table(
+    table: &'static [MethodDescriptor],
+    name: &str,
+) -> Option<&'static MethodDescriptor> {
+    table.iter().find(|descriptor| {
+        descriptor
+            .names
+            .iter()
+            .any(|candidate| crate::folded_eq(candidate, name))
+    })
+}
+
 /// Диспетчеризация вызова по статической таблице методов для входов с
 /// именем-строкой: реализация `call_method` конвертированного типа. Имя
 /// сравнивается без учёта регистра, как в остальных таблицах имён.
@@ -817,29 +1003,20 @@ pub fn call_method_from_table(
     arguments: &[BslValue],
     context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    // Судья равенства имён один — [`crate::folded_eq`]. Он и без аллокаций
-    // на общем пути (побайтовое сравнение, свёрнутая строка лишь на входе
-    // вне быстрых алфавитов — см. `fold.rs`).
-    for descriptor in table {
-        if descriptor
-            .names
-            .iter()
-            .any(|candidate| crate::folded_eq(candidate, name))
-        {
-            // Рантаймная проверка арности до вызова обработчика — та же
-            // [`MethodDescriptor::check_arity`], что в арме `CallObjectMethod`
-            // у VM. Этот путь проходит строковый `call_method`.
-            let count = u8::try_from(arguments.len()).unwrap_or(u8::MAX);
-            descriptor.check_arity(count, type_name)?;
-            return match descriptor.invoke(receiver, arguments, context)? {
-                CallOutcome::Ready(value) => Ok(value),
-                // Строковый путь — закрытый `CallMethod` и вызов по имени
-                // — парковать VM не умеет, поэтому host-операция доводится
-                // блокирующе: ровно так синхронный HTTP работал до
-                // типизированного Pending.
-                CallOutcome::Pending(pending) => drive_pending_blocking(pending, context),
-            };
-        }
+    if let Some(descriptor) = find_method_from_table(table, name) {
+        // Рантаймная проверка арности до вызова обработчика — та же
+        // [`MethodDescriptor::check_arity`], что в арме `CallObjectMethod`
+        // у VM. Этот путь проходит строковый `call_method`.
+        let count = u8::try_from(arguments.len()).unwrap_or(u8::MAX);
+        descriptor.check_arity(count, type_name)?;
+        return match descriptor.invoke(receiver, arguments, context)? {
+            CallOutcome::Ready(value) => Ok(value),
+            // Строковый путь — закрытый `CallMethod` и вызов по имени
+            // — парковать VM не умеет, поэтому host-операция доводится
+            // блокирующе: ровно так синхронный HTTP работал до
+            // типизированного Pending.
+            CallOutcome::Pending(pending) => drive_pending_blocking(pending, context),
+        };
     }
     Err(crate::RtError::UnknownMethod {
         method: name.to_string(),
@@ -855,6 +1032,29 @@ fn drive_pending_blocking(
     context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     match pending {
+        PendingHostCall::ApplicationSync {
+            launcher,
+            request,
+            mapper,
+            error_mapper,
+        } => {
+            struct BlockingSink(std::sync::mpsc::Sender<std::io::Result<crate::ApplicationResult>>);
+            impl crate::ApplicationCompletionSink for BlockingSink {
+                fn complete(self: Box<Self>, result: std::io::Result<crate::ApplicationResult>) {
+                    let _ = self.0.send(result);
+                }
+            }
+            let (sender, receiver) = std::sync::mpsc::channel();
+            launcher
+                .submit(request, Box::new(BlockingSink(sender)))
+                .map_err(error_mapper)?;
+            let result = receiver.recv().map_err(|_| {
+                crate::RtError::DynamicError(
+                    "запуск приложения завершился без результата host".into(),
+                )
+            })?;
+            mapper(result, context.runtime_shapes())
+        }
         PendingHostCall::HttpSync {
             client,
             request,
@@ -995,6 +1195,7 @@ pub struct LibraryDescriptor {
     dependencies: &'static [LibraryDependency],
     functions: &'static [FunctionDescriptor],
     constructors: &'static [ConstructorDescriptor],
+    constructor_types: &'static [(ConstructorCode, &'static crate::TypeDescriptor)],
     /// Типы объектов, которые компонент вводит в язык. По ним `Тип("Имя")`
     /// находит тип: закрытый реестр `TypeId` ядра компонентных типов
     /// больше не знает. Не объявленный здесь тип остаётся доступен через
@@ -1022,6 +1223,7 @@ impl LibraryDescriptor {
             dependencies: &[],
             functions: &[],
             constructors: &[],
+            constructor_types: &[],
             types: &[],
             object_member_groups: &[],
             type_aliases: &[],
@@ -1045,6 +1247,17 @@ impl LibraryDescriptor {
     /// Конструкторы (`Новый ...`) библиотеки.
     pub const fn with_constructors(mut self, c: &'static [ConstructorDescriptor]) -> Self {
         self.constructors = c;
+        self
+    }
+
+    /// Конкретные типы результатов конструкторов. Отдельная таблица
+    /// сохраняет совместимость литералов `ConstructorDescriptor` и допускает
+    /// фабричный конструктор без доказуемого единственного типа.
+    pub const fn with_constructor_types(
+        mut self,
+        types: &'static [(ConstructorCode, &'static crate::TypeDescriptor)],
+    ) -> Self {
+        self.constructor_types = types;
         self
     }
 
@@ -1102,6 +1315,17 @@ impl LibraryDescriptor {
     /// Конструкторы библиотеки.
     pub const fn constructors(&self) -> &'static [ConstructorDescriptor] {
         self.constructors
+    }
+
+    /// Конкретный тип результата конструктора, если библиотека может
+    /// доказать его статически.
+    pub fn constructor_type(
+        &self,
+        code: ConstructorCode,
+    ) -> Option<&'static crate::TypeDescriptor> {
+        self.constructor_types
+            .iter()
+            .find_map(|(candidate, ty)| (*candidate == code).then_some(*ty))
     }
 
     /// Типы, которые библиотека вводит в язык.
@@ -1184,6 +1408,18 @@ fn construct_qualified_type_description(
 
 const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
+        code: ConstructorCode::new(10),
+        names: &["ОписаниеОповещения", "NotifyDescription"],
+        arity: Arity::one_of(&[0, 2, 3, 5]),
+        call: crate::notification::construct_notification,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(9),
+        names: &["Файл", "File"],
+        arity: Arity::range(0, 1),
+        call: crate::file::construct_file,
+    },
+    ConstructorDescriptor {
         code: ConstructorCode::new(1),
         names: &["ДвоичныеДанные", "BinaryData"],
         arity: Arity::exact(1),
@@ -1233,25 +1469,49 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: crate::user_message::construct_user_message,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(11),
+        names: &["ФиксированнаяСтруктура", "FixedStructure"],
+        arity: Arity::range(0, 1),
+        call: crate::fixed_collections::construct_fixed_structure,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(12),
+        names: &["ФиксированноеСоответствие", "FixedMap"],
+        arity: Arity::exact(1),
+        call: crate::fixed_collections::construct_fixed_map,
+    },
 ];
 
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
+    &crate::BSL_MODULE_TYPE,
+    &crate::notification::NOTIFICATION_TYPE,
+    &crate::promise::PROMISE_TYPE,
+    &crate::file::FILE_TYPE,
     &crate::fixed_array::FIXED_ARRAY_TYPE,
+    &crate::fixed_collections::FIXED_STRUCTURE_TYPE,
+    &crate::fixed_collections::FIXED_MAP_TYPE,
     &crate::background_jobs::BACKGROUND_JOBS_TYPE,
     &crate::background_jobs::BACKGROUND_JOB_TYPE,
     &crate::user_message::USER_MESSAGE_TYPE,
     &crate::error_info::ERROR_INFO_TYPE,
     &crate::value_list::VALUE_LIST_TYPE,
     &crate::value_list::VALUE_LIST_ITEM_TYPE,
+    &crate::value_table_indexes::VALUE_TABLE_INDEXES_TYPE,
+    &crate::value_table_indexes::VALUE_TABLE_INDEX_TYPE,
     &crate::type_description::DATE_QUALIFIERS_TYPE,
 ];
 
 const CORE_OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[
+    crate::notification::API_MEMBERS,
+    crate::file::API_MEMBERS,
     crate::fixed_array::API_MEMBERS,
+    crate::fixed_collections::API_MEMBERS,
     crate::background_jobs::API_MEMBERS,
     crate::user_message::API_MEMBERS,
     crate::error_info::API_MEMBERS,
     crate::value_list::API_MEMBERS,
+    crate::value_table_indexes::API_MEMBERS,
 ];
 
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
@@ -1355,6 +1615,22 @@ pub enum RegistryError {
         package: String,
         code: ConstructorCode,
     },
+    /// Таблица результата ссылается на код, которого нет среди
+    /// конструкторов той же библиотеки.
+    ConstructorTypeCodeNotDeclared {
+        package: String,
+        code: ConstructorCode,
+    },
+    /// Объявленный результат конструктора не принадлежит библиотеке.
+    ConstructorTypeNotDeclared {
+        package: String,
+        type_name: String,
+    },
+    /// Один конструктор получил два объявления конкретного результата.
+    DuplicateConstructorType {
+        package: String,
+        code: ConstructorCode,
+    },
     DuplicateFunctionName(String),
     DuplicateConstructorName(String),
     /// Поток над нативными `ДвоичныеДанные` может строить ровно один
@@ -1393,6 +1669,22 @@ impl fmt::Display for RegistryError {
             Self::DuplicateConstructorCode { package, code } => write!(
                 f,
                 "код конструктора {} повторён в компоненте {package}",
+                code.get()
+            ),
+            Self::ConstructorTypeCodeNotDeclared { package, code } => write!(
+                f,
+                "тип результата объявлен для отсутствующего конструктора {}/{}",
+                package,
+                code.get()
+            ),
+            Self::ConstructorTypeNotDeclared { package, type_name } => write!(
+                f,
+                "тип результата конструктора {type_name} не объявлен в types компонента {package}"
+            ),
+            Self::DuplicateConstructorType { package, code } => write!(
+                f,
+                "тип результата конструктора {}/{} объявлен дважды",
+                package,
                 code.get()
             ),
             Self::DuplicateFunctionName(name) => {
@@ -1735,6 +2027,32 @@ impl RuntimeBuilder {
                     }
                 }
             }
+
+            let mut typed_constructor_codes = HashSet::new();
+            for (code, ty) in library.constructor_types {
+                if !constructor_codes.contains_key(code) {
+                    return Err(RegistryError::ConstructorTypeCodeNotDeclared {
+                        package: library.package.to_string(),
+                        code: *code,
+                    });
+                }
+                if !library
+                    .types
+                    .iter()
+                    .any(|declared| std::ptr::eq(*declared, *ty))
+                {
+                    return Err(RegistryError::ConstructorTypeNotDeclared {
+                        package: library.package.to_string(),
+                        type_name: ty.name.to_string(),
+                    });
+                }
+                if !typed_constructor_codes.insert(*code) {
+                    return Err(RegistryError::DuplicateConstructorType {
+                        package: library.package.to_string(),
+                        code: *code,
+                    });
+                }
+            }
         }
 
         for library in &self.libraries {
@@ -1813,6 +2131,15 @@ impl RuntimeRegistry {
 
     pub fn lookup_constructor(&self, name: &str) -> Option<(u8, ConstructorCode)> {
         self.constructor_names.get(&name.to_uppercase()).copied()
+    }
+
+    /// Объявленный конкретный тип результата конструктора.
+    pub fn constructor_type(
+        &self,
+        library: u8,
+        code: ConstructorCode,
+    ) -> Option<&'static crate::TypeDescriptor> {
+        self.library(library)?.constructor_type(code)
     }
 
     /// Все типы, объявленные библиотеками реестра.
@@ -2002,6 +2329,17 @@ mod tests {
         arity: Arity::exact(0),
         call: no_call,
     }];
+    static JSON_READER_TYPE: crate::TypeDescriptor =
+        crate::TypeDescriptor::new("bsl-json", "ЧтениеJSON");
+    const JSON_TYPES: &[&crate::TypeDescriptor] = &[&JSON_READER_TYPE];
+    const BAD_CONSTRUCTOR_CODE: &[(ConstructorCode, &crate::TypeDescriptor)] =
+        &[(ConstructorCode::new(2), &JSON_READER_TYPE)];
+    const UNDECLARED_CONSTRUCTOR_TYPE: &[(ConstructorCode, &crate::TypeDescriptor)] =
+        &[(ConstructorCode::new(1), &JSON_READER_TYPE)];
+    const DUPLICATE_CONSTRUCTOR_TYPE: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
+        (ConstructorCode::new(1), &JSON_READER_TYPE),
+        (ConstructorCode::new(1), &JSON_READER_TYPE),
+    ];
 
     fn core() -> LibraryDescriptor {
         LibraryDescriptor::new(crate::PACKAGE_NAME, crate::PACKAGE_VERSION)
@@ -2069,6 +2407,35 @@ mod tests {
             builder.build(),
             Err(RegistryError::DependencyVersion { .. })
         ));
+    }
+
+    #[test]
+    fn constructor_result_must_name_an_owned_constructor_and_type_once() {
+        let cases = [
+            (BAD_CONSTRUCTOR_CODE, "code"),
+            (UNDECLARED_CONSTRUCTOR_TYPE, "type"),
+            (DUPLICATE_CONSTRUCTOR_TYPE, "duplicate"),
+        ];
+        for (constructor_types, expected) in cases {
+            let types: &'static [&'static crate::TypeDescriptor] =
+                if expected == "type" { &[] } else { JSON_TYPES };
+            let mut builder = RuntimeBuilder::new();
+            builder.register(core()).register(
+                json()
+                    .with_types(types)
+                    .with_constructor_types(constructor_types),
+            );
+            let error = match builder.build() {
+                Ok(_) => panic!("некорректная связь конструктора принята"),
+                Err(error) => error,
+            };
+            assert!(match expected {
+                "code" => matches!(error, RegistryError::ConstructorTypeCodeNotDeclared { .. }),
+                "type" => matches!(error, RegistryError::ConstructorTypeNotDeclared { .. }),
+                "duplicate" => matches!(error, RegistryError::DuplicateConstructorType { .. }),
+                _ => unreachable!(),
+            });
+        }
     }
 
     #[test]
@@ -2150,6 +2517,17 @@ mod tests {
         let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut context = CallContext::minimal(&mut shapes, |_v, _s| unreachable!());
         assert!(matches!(
+            context.spawn_file_operation(
+                Ok(crate::FileOperationRequest::TemporaryDirectory),
+                std::rc::Rc::new(crate::SystemFileSystem),
+                std::rc::Rc::new(crate::FixedTimeZone::new(0).unwrap()),
+            ),
+            Err(RtError::CapabilityMissing {
+                capability: Capability::HostPromises,
+                path: ContextKind::Reduced,
+            })
+        ));
+        assert!(matches!(
             context.stdout(),
             Err(RtError::CapabilityMissing {
                 capability: Capability::Stdout,
@@ -2186,22 +2564,26 @@ mod descriptor_sizes {
 
     /// Размеры дескрипторов зафиксированы намеренно (ABI-E плана
     /// `docs/archive/refactors/component-abi-f.md`). `LibraryDescriptor`
-    /// содержит толстые указатели на `type_aliases` и группы объектных членов
-    /// плюс обычный указатель `byte_stream_factory` — всего 136 байт на
-    /// x86-64. Последние 16 байт дают справочнику статическую поверхность
-    /// объектов; записи статические, так что рост платится один раз на
+    /// содержит толстые указатели на `type_aliases`, группы объектных членов и
+    /// типы результатов конструкторов плюс обычный указатель
+    /// `byte_stream_factory` — всего 152 байта на x86-64. Записи статические,
+    /// так что рост платится один раз на
     /// библиотеку, а не на объект. Удалённая вместе с JIT пометка требований
-    /// к контексту освободила 8 байт. `MethodDescriptor` — 40 байт:
+    /// к контексту освободила 8 байт. `MethodDescriptor` — 64 байта:
+    /// раздельные арности добавили статический срез к границам Arity
+    /// (extend-filesystem-async), увеличив прежние 40 байт на 24 с учётом
+    /// выравнивания. Дескриптор не содержит выделяемой на каждый вызов памяти.
+    /// Влияние этого роста на скорость не измерялось. Прежние 40 байт —
     /// написания, `arity` и обработчик-перечисление `MethodImpl`, чей тег
     /// (обычный или приостанавливающий, план фоновых заданий, этап 5)
     /// стоит 8 байт выравнивания. Union с тегом в паддинге `arity` вернул
     /// бы 32, но ценой первого `unsafe` в этом крейте — 8 статических
     /// байт на дескриптор того не стоят; горячий сайт читает один и тот
-    /// же дескриптор из мономорфного кэша, и рост в A/B не виден. Тест
+    /// же дескриптор из мономорфного кэша, и прежний рост в A/B не виден. Тест
     /// ловит незамеченный рост.
     #[test]
     fn descriptors_have_the_expected_size() {
-        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 136);
-        assert_eq!(std::mem::size_of::<MethodDescriptor>(), 40);
+        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 152);
+        assert_eq!(std::mem::size_of::<MethodDescriptor>(), 64);
     }
 }

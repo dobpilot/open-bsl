@@ -1,0 +1,14 @@
+file.begin	file-constructor-more-types-1
+context.compatibility	НеИспользовать
+ctor.more.map	ok|equals=1|input=Соответствие|full=Соответствие|parent=|name=Соответствие|base=Соответствие|extension=
+ctor.more.fixed_array	ok|equals=1|input=ФиксированныйМассив|full=ФиксированныйМассив|parent=|name=ФиксированныйМассив|base=ФиксированныйМассив|extension=
+ctor.more.fixed_structure	ok|equals=1|input=ФиксированнаяСтруктура|full=ФиксированнаяСтруктура|parent=|name=ФиксированнаяСтруктура|base=ФиксированнаяСтруктура|extension=
+ctor.more.fixed_map	ok|equals=1|input=ФиксированноеСоответствие|full=ФиксированноеСоответствие|parent=|name=ФиксированноеСоответствие|base=ФиксированноеСоответствие|extension=
+ctor.more.value_table	ok|equals=1|input=ТаблицаЗначений|full=ТаблицаЗначений|parent=|name=ТаблицаЗначений|base=ТаблицаЗначений|extension=
+ctor.more.value_list	ok|equals=1|input=|full=|parent=|name=|base=|extension=
+ctor.more.uuid	ok|equals=1|input=00112233-4455-6677-8899-aabbccddeeff|full=00112233-4455-6677-8899-aabbccddeeff|parent=|name=00112233-4455-6677-8899-aabbccddeeff|base=00112233-4455-6677-8899-aabbccddeeff|extension=
+ctor.more.file	ok|equals=1|input=Файл|full=Файл|parent=|name=Файл|base=Файл|extension=
+ctor.more.binary	ok|equals=1|input=41 42|full=41 42|parent=|name=41 42|base=41 42|extension=
+ctor.more.enum	ok|equals=1|input=UTF8|full=UTF8|parent=|name=UTF8|base=UTF8|extension=
+ctor.more.type	ok|equals=1|input=String|full=String|parent=|name=String|base=String|extension=
+file.end	file-constructor-more-types-1

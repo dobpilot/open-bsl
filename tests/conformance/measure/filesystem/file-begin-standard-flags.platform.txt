@@ -1,0 +1,34 @@
+file.begin	file-begin-standard-flags-1
+flag.return	0
+flag.enter	false|initial=1
+flag.assigned	false|Boolean
+flag.enter	true|initial=1
+flag.assigned	true|Boolean
+client.error	Type mismatch (parameter number '1')
+flag.enter	zero|initial=1
+flag.assigned	zero|Number
+flag.enter	one|initial=1
+flag.assigned	one|Number
+client.error	Type mismatch (parameter number '1')
+flag.enter	negative|initial=1
+flag.assigned	negative|Number
+client.error	Type mismatch (parameter number '1')
+flag.enter	undefined|initial=1
+flag.assigned	undefined|Undefined
+client.error	Type mismatch (parameter number '1')
+flag.enter	null|initial=1
+flag.assigned	null|Null
+client.error	Type mismatch (parameter number '1')
+flag.enter	empty|initial=1
+flag.assigned	empty|String
+client.error	Type mismatch (parameter number '1')
+flag.enter	string|initial=1
+flag.assigned	string|String
+flag.enter	array|initial=1
+flag.assigned	array|Array
+client.error	Type mismatch (parameter number '1')
+flag.enter	structure|initial=1
+flag.assigned	structure|Structure
+client.error	Type mismatch (parameter number '1')
+flag.count	11
+file.end	file-begin-standard-flags-1

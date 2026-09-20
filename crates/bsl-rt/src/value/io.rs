@@ -24,8 +24,8 @@ impl BslValue {
 
     /// Создаёт `БуферДвоичныхДанных` с готовыми байтами и малым порядком.
     pub fn binary_buffer_of(bytes: Vec<u8>) -> Self {
-        BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(
-            std::cell::RefCell::new(bindata::BinBufData::new(bytes, bindata::ByteOrder::Little)),
+        BslValue::Object(Rc::new(BslObject::BinaryBuffer(std::cell::RefCell::new(
+            bindata::BinBufData::new(bytes, bindata::ByteOrder::Little),
         ))))
     }
 
@@ -144,6 +144,8 @@ impl BslValue {
         files: &dyn crate::FileSystem,
     ) -> RtResult<Self> {
         let path = path.as_str("Новый ЗаписьТекста")?.to_string();
+        let path = crate::prepare_file_operation_path(&path, files)
+            .map_err(|error| RtError::IoError(error.to_string()))?;
         // `File::create` = открыть-или-создать с обрезанием.
         let handle = files
             .open(
@@ -289,6 +291,8 @@ impl BslValue {
         files: &dyn crate::FileSystem,
     ) -> RtResult<Self> {
         let path = path.as_str("Новый ДвоичныеДанные")?.to_string();
+        let path = crate::prepare_file_operation_path(&path, files)
+            .map_err(|e| RtError::IoError(e.to_string()))?;
         let bytes = files
             .read(&path)
             .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;

@@ -54,6 +54,8 @@ pub fn factory_of_file(
         ));
     };
     let path = path.to_string();
+    let path = bsl_rt::prepare_file_operation_path(&path, files)
+        .map_err(|error| RtError::Xdto(error.to_string()))?;
     // Схема читается файловой системой СЕССИИ (ABI-G). Фабрика после
     // построения к путям не обращается, поэтому берёт ФС ссылкой на время
     // конструктора (BORROW), а не запоминает её.

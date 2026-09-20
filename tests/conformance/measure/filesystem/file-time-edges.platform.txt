@@ -1,0 +1,42 @@
+﻿file.begin	1
+file.scratch	/tmp/open-bsl-time-edges-approved-osfJz9/scratch
+utc.minus1.set	ok
+utc.minus1.local	Date:1-1-1 0:0:0
+utc.minus1.utc	Date:1969-12-31 23:59:58
+utc.epoch.set	ok
+utc.epoch.local	Date:1970-1-1 3:0:0
+utc.epoch.utc	Date:1970-1-1 0:0:0
+utc.plus1.set	ok
+utc.plus1.local	Date:1970-1-1 3:0:1
+utc.plus1.utc	Date:1970-1-1 0:0:1
+utc.1960.set	ok
+utc.1960.local	Date:1-1-1 0:0:0
+utc.1960.utc	Date:1960-1-15 12:34:55
+utc.minimum.set	ok
+utc.minimum.local	Date:1-1-1 0:0:0
+utc.minimum.utc	Date:0-0-0 0:0:0
+utc.maximum.set	ok
+utc.maximum.local	Date:1-1-1 0:0:0
+utc.maximum.utc	Date:9999-12-31 23:59:59
+utc.string.set	ok
+utc.string.local	Date:2021-3-14 18:16:17
+utc.string.utc	Date:2021-3-14 15:16:17
+local.1960.set	ok
+local.1960.local	Date:1960-1-15 12:34:56
+local.1960.utc	Date:1960-1-15 9:34:56
+local.minimum.set	ok
+local.minimum.local	Date:1-1-1 0:0:0
+local.minimum.utc	Date:0-0-0 0:0:0
+local.maximum.set	ok
+local.maximum.local	Date:9999-12-31 23:59:59
+local.maximum.utc	Date:9999-12-31 20:59:59
+local.gap.set	ok
+local.gap.local	Date:1970-1-1 2:59:59
+local.gap.utc	Date:1969-12-31 23:59:59
+local.fold.set	ok
+local.fold.local	Date:2014-10-26 1:30:0
+local.fold.utc	Date:2014-10-25 22:30:0
+local.string.set	ok
+local.string.local	Date:2021-3-14 15:16:17
+local.string.utc	Date:2021-3-14 12:16:17
+file.end	1

@@ -1,0 +1,38 @@
+﻿file.begin	file-async-write-1
+write.a.readonly.ru	promise=Promise|ok|Undefined|undefined=1|after=1
+write.a.readonly.en	promise=Promise|ok|Undefined|undefined=1|after=1
+write.a.hidden.ru	promise=Promise|ok|Undefined|undefined=1|after=0
+write.a.hidden.en	promise=Promise|ok|Undefined|undefined=1|after=0
+write.a.time.ru	promise=Promise|ok|Undefined|undefined=1|after=20200102060405
+write.a.time.en	promise=Promise|ok|Undefined|undefined=1|after=20200102060405
+write.a.timeutc.ru	promise=Promise|ok|Undefined|undefined=1|after=20200102030405
+write.a.timeutc.en	promise=Promise|ok|Undefined|undefined=1|after=20200102030405
+write.directory.readonly.ru	promise=Promise|ok|Undefined|undefined=1|after=1
+write.directory.readonly.en	promise=Promise|ok|Undefined|undefined=1|after=1
+write.directory.hidden.ru	promise=Promise|ok|Undefined|undefined=1|after=0
+write.directory.hidden.en	promise=Promise|ok|Undefined|undefined=1|after=0
+write.directory.time.ru	promise=Promise|ok|Undefined|undefined=1|after=20200102060405
+write.directory.time.en	promise=Promise|ok|Undefined|undefined=1|after=20200102060405
+write.directory.timeutc.ru	promise=Promise|ok|Undefined|undefined=1|after=20200102030405
+write.directory.timeutc.en	promise=Promise|ok|Undefined|undefined=1|after=20200102030405
+write.missing.readonly.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.missing.readonly.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.missing.hidden.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.missing.hidden.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.missing.time.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.missing.time.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.missing.timeutc.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.missing.timeutc.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: <root>/missing
+write.undefined.readonly	promise=Promise|error|stage=await|Error calling context method|cause=Type mismatch (parameter number '1')
+write.undefined.hidden	promise=Promise|error|stage=await|Error calling context method|cause=Type mismatch (parameter number '1')
+write.undefined.time	promise=Promise|error|stage=await|Error calling context method|cause=Type mismatch (parameter number '1')
+write.undefined.timeutc	promise=Promise|error|stage=await|Error calling context method|cause=Type mismatch (parameter number '1')
+initialize.ru	promise=Promise|ok|File|result=<root>/b|after_call=<root>/b|receiver=<root>/b|alias=<root>/b
+initialize.en	promise=Promise|ok|File|result=<root>/b|after_call=<root>/b|receiver=<root>/b|alias=<root>/b
+initialize.missing	promise=Promise|ok|File|result=<root>/missing|after_call=<root>/missing|receiver=<root>/missing|alias=<root>/missing
+initialize.dot	promise=Promise|ok|File|result=<root>/b|after_call=<root>/b|receiver=<root>/b|alias=<root>/b
+initialize.empty	promise=Promise|ok|File|result=|after_call=|receiver=|alias=
+initialize.undefined	promise=Promise|ok|File|result=|after_call=|receiver=|alias=
+initialize.number	promise=Promise|ok|File|result=123|after_call=123|receiver=123|alias=123
+initialize.noargs	promise=none|error|stage=call|Not enough actual parameters|after_call=<not-called>|receiver=<root>/a|alias=<root>/a
+file.end	file-async-write-1

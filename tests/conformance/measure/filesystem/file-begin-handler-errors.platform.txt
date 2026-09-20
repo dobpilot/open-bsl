@@ -1,0 +1,16 @@
+file.begin	file-begin-handler-errors-1
+callback.return	0
+callback.enter	procedure
+client.error	handler-error:procedure
+callback.enter	function
+client.error	handler-error:function
+callback.enter	async.procedure.before
+callback.enter	async.function.before
+callback.enter	async.procedure.after
+callback.enter	async.function.after
+client.error	handler-error:async.procedure.before
+callback.await	async.procedure.after|0
+callback.await	async.function.after|0
+client.error	handler-error:async.procedure.after
+callback.count	6
+file.end	file-begin-handler-errors-1

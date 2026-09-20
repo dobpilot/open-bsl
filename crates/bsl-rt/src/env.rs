@@ -360,15 +360,18 @@ impl FileOpenOptions {
     }
 }
 
-/// Метаданные файла или каталога — ровно то, что читает боевой код:
-/// признак каталога и время изменения. Длины здесь нет — её `bsl-stream`
-/// берёт у ОТКРЫТОГО файла ([`FileHandle::len`]). НЕ реэкспорт
-/// `std::fs::Metadata`, иначе реализация в памяти невозможна.
+/// Метаданные по пути: вид объекта, время, необязательные размер и атрибуты.
+/// Это не реэкспорт `std::fs::Metadata`: пользовательская ФС может не знать
+/// размер. Потоки по-прежнему читают длину открытого файла через [`FileHandle::len`].
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct FileMetadata {
     is_dir: bool,
+    is_file: bool,
     modified: Option<i64>,
+    size: Option<u64>,
+    read_only: Option<bool>,
+    hidden: Option<bool>,
 }
 
 impl FileMetadata {
@@ -376,7 +379,11 @@ impl FileMetadata {
     pub fn file(modified: Option<i64>) -> Self {
         Self {
             is_dir: false,
+            is_file: true,
             modified,
+            size: None,
+            read_only: None,
+            hidden: None,
         }
     }
 
@@ -384,15 +391,70 @@ impl FileMetadata {
     pub fn directory(modified: Option<i64>) -> Self {
         Self {
             is_dir: true,
+            is_file: false,
             modified,
+            size: None,
+            read_only: None,
+            hidden: None,
         }
+    }
+
+    /// Метаданные иного объекта, например сокета или устройства.
+    pub fn other(modified: Option<i64>) -> Self {
+        Self {
+            is_dir: false,
+            is_file: false,
+            modified,
+            size: None,
+            read_only: None,
+            hidden: None,
+        }
+    }
+
+    /// Дополняет сведения размером, известным реализации файловой системы.
+    pub fn with_size(mut self, size: u64) -> Self {
+        self.size = Some(size);
+        self
+    }
+
+    /// Дополняет сведения известным host-атрибутом «Только чтение».
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = Some(read_only);
+        self
+    }
+
+    /// Атрибут «Только чтение». `None` не означает разрешённую запись.
+    pub fn read_only(&self) -> Option<bool> {
+        self.read_only
+    }
+
+    /// Дополняет сведения невидимостью, известной host.
+    pub fn with_hidden(mut self, hidden: bool) -> Self {
+        self.hidden = Some(hidden);
+        self
+    }
+
+    /// Невидимость по сведениям host; имя с точкой само по себе её не задаёт.
+    pub fn hidden(&self) -> Option<bool> {
+        self.hidden
+    }
+
+    /// Обычный файл; отрицание `is_dir` для этого недостаточно.
+    pub fn is_file(&self) -> bool {
+        self.is_file
+    }
+
+    /// Размер в байтах по сведениям host. `None` не означает пустой файл.
+    pub fn size(&self) -> Option<u64> {
+        self.size
     }
 
     pub fn is_dir(&self) -> bool {
         self.is_dir
     }
 
-    /// Секунды Unix. `None` — носитель времени не хранит.
+    /// Целые секунды UTC от Unix epoch, включая отрицательные значения.
+    /// `None` — время недоступно или не представимо в этом формате.
     pub fn modified(&self) -> Option<i64> {
         self.modified
     }
@@ -407,6 +469,7 @@ impl FileMetadata {
 pub struct DirEntry {
     name: String,
     is_dir: bool,
+    is_symlink: bool,
 }
 
 impl DirEntry {
@@ -414,12 +477,24 @@ impl DirEntry {
         Self {
             name: name.into(),
             is_dir,
+            is_symlink: false,
         }
     }
 
     /// Имя без пути — то, что складывается с путём каталога.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Сообщает, является ли элемент символической ссылкой, без изменения is_dir.
+    pub fn with_symlink(mut self, is_symlink: bool) -> Self {
+        self.is_symlink = is_symlink;
+        self
+    }
+
+    /// Признак ссылки, сообщённый host; прежний конструктор его не выставляет.
+    pub fn is_symlink(&self) -> bool {
+        self.is_symlink
     }
 
     pub fn is_dir(&self) -> bool {
@@ -443,6 +518,23 @@ pub trait FileHandle: io::Read + io::Write + io::Seek + fmt::Debug {
     /// Ошибку носителя.
     fn len(&self) -> io::Result<u64>;
 
+    /// Изменяет длину открытого носителя, не меняя текущую позицию.
+    /// При расширении добавленные байты читаются как нули.
+    ///
+    /// По умолчанию возможность отсутствует: старый host получает явный
+    /// отказ без чтения, записи, перемещения позиции или закрытия файла.
+    ///
+    /// # Errors
+    ///
+    /// `Unsupported`, если host не поддерживает изменение длины;
+    /// иначе — ошибка носителя или доступа на запись.
+    fn set_len(&mut self, _length: u64) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "host не поддерживает изменение длины открытого файла",
+        ))
+    }
+
     /// ЯВНОЕ закрытие: `Drop` не умеет ответить ошибкой, а `BufWriter` на
     /// нём молча глотает отказ записи. Берёт `&mut self`, а не
     /// `self: Box<Self>`: при `Err` дескриптор ОСТАЁТСЯ пригоден для
@@ -465,8 +557,109 @@ impl FileHandle for std::fs::File {
         Ok(self.metadata()?.len())
     }
 
+    fn set_len(&mut self, length: u64) -> io::Result<()> {
+        std::fs::File::set_len(self, length)
+    }
+
     fn close(&mut self) -> io::Result<()> {
         io::Write::flush(self)
+    }
+}
+
+/// Результат атомарного создания временного файла в пространстве host.
+///
+/// Запись не удаляет файл при освобождении. Для учёта сеанса host передаёт
+/// отдельное право очистки: один путь не защищает от последующей подмены.
+#[derive(Debug)]
+pub struct OpenedTemporaryFile {
+    path: String,
+    handle: Box<dyn FileHandle>,
+    resource: Option<Box<dyn crate::TemporaryFileResource>>,
+}
+
+impl OpenedTemporaryFile {
+    /// Собирает результат host-операции. Host гарантирует, что дескриптор
+    /// относится к только что созданному по указанному пути файлу.
+    pub fn new(path: String, handle: Box<dyn FileHandle>) -> Self {
+        Self {
+            path,
+            handle,
+            resource: None,
+        }
+    }
+
+    /// Собирает открытый файл вместе с правом очистки. Host гарантирует,
+    /// что дескриптор и ресурс относятся к одному только что созданному
+    /// файлу. Путь берётся из ресурса и не создаёт отдельного права удаления.
+    pub fn new_owned(
+        handle: Box<dyn FileHandle>,
+        resource: Box<dyn crate::TemporaryFileResource>,
+    ) -> Self {
+        Self {
+            path: resource.path().to_owned(),
+            handle,
+            resource: Some(resource),
+        }
+    }
+
+    /// Передаёт право очистки реестру до выдачи открытого дескриптора.
+    /// Не выполняет файловых операций, не меняет данные и позицию.
+    ///
+    /// # Errors
+    ///
+    /// Если учёт закрыт или host не передал право очистки, возвращает всю
+    /// запись с прежним дескриптором и ресурсом без закрытия или удаления.
+    pub fn into_registered_parts(
+        mut self,
+        registry: &crate::TemporaryFileRegistry,
+    ) -> Result<(String, Box<dyn FileHandle>), Self> {
+        let Some(resource) = self.resource.take() else {
+            return Err(self);
+        };
+        if let Err(resource) = registry.register(resource) {
+            self.resource = Some(resource);
+            return Err(self);
+        }
+        Ok((self.path, self.handle))
+    }
+
+    /// Передаёт путь и открытый дескриптор без регистрации. Необязательное
+    /// право очистки освобождается без удаления файла. Для сеансового учёта
+    /// используйте [`Self::into_registered_parts`].
+    pub fn into_parts(self) -> (String, Box<dyn FileHandle>) {
+        (self.path, self.handle)
+    }
+}
+
+/// Открытый временный носитель и право очистки, переносимые между потоками.
+///
+/// В отличие от [`OpenedTemporaryFile`], всегда содержит право очистки.
+/// Существующие локальные host-дескрипторы не обязаны реализовывать `Send`:
+/// ограничение относится только к обоим ресурсам этого результата.
+/// Освобождение записи закрывает дескрипторы, но не удаляет файл.
+#[derive(Debug)]
+pub struct TransferableTemporaryFile {
+    handle: Box<dyn FileHandle + Send>,
+    resource: Box<dyn crate::TemporaryFileResource + Send>,
+}
+
+impl TransferableTemporaryFile {
+    /// Собирает результат атомарного создания. Host гарантирует, что оба
+    /// дескриптора относятся к одному только что созданному файлу.
+    pub fn new(
+        handle: Box<dyn FileHandle + Send>,
+        resource: Box<dyn crate::TemporaryFileResource + Send>,
+    ) -> Self {
+        Self { handle, resource }
+    }
+
+    /// Передаёт исходные дескрипторы локальному владельцу без файлового I/O.
+    /// Данные и позиция сохраняются; путь не открывается повторно.
+    /// Регистрация права очистки остаётся обязанностью вызывающего через
+    /// [`OpenedTemporaryFile::into_registered_parts`].
+    #[must_use]
+    pub fn into_local(self) -> OpenedTemporaryFile {
+        OpenedTemporaryFile::new_owned(self.handle, self.resource)
     }
 }
 
@@ -475,6 +668,25 @@ impl FileHandle for std::fs::File {
 // а `ObjectProtocol` требует `Debug`. `FileHandle` уже с ним по той же
 // причине.
 pub trait FileSystem: fmt::Debug {
+    /// Может ли host создавать временные файлы с собственным правом очистки.
+    /// При `true` каждый успешный `create_temporary_file` обязан возвращать
+    /// [`OpenedTemporaryFile::new_owned`]. Проверка не выполняет I/O.
+    /// Прежний host без такого контракта не получает неявного права удаления.
+    fn supports_temporary_file_ownership(&self) -> bool {
+        false
+    }
+
+    /// Предоставляет доступ из фоновых потоков к тому же пространству файлов
+    /// и с теми же полномочиями. Отсутствие возможности не разрешает подмену
+    /// файловой системой процесса; по умолчанию возвращается `None` без I/O.
+    ///
+    /// Сама исходная ФС не обязана быть `Send` или `Sync`. Дескрипторы и
+    /// итераторы полученного сервиса создаются и используются в потоке
+    /// операции: их переносимость этой возможностью не гарантируется.
+    fn background_access(&self) -> Option<std::sync::Arc<dyn FileSystem + Send + Sync>> {
+        None
+    }
+
     /// # Errors
     ///
     /// Ошибку чтения — файла нет, нет прав, это каталог.
@@ -491,6 +703,48 @@ pub trait FileSystem: fmt::Debug {
     ///
     /// Ошибку доступа к пути.
     fn metadata(&self, path: &str) -> io::Result<FileMetadata>;
+
+    /// Устанавливает невидимость в пространстве этой файловой системы.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку доступа либо отсутствующего пути. По умолчанию возвращается
+    /// `Unsupported`, без обращения к файловой системе процесса.
+    fn set_hidden(&self, _path: &str, _hidden: bool) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "невидимость не поддерживается файловой системой",
+        ))
+    }
+
+    /// Устанавливает атрибут «Только чтение» по пути, не меняя содержимое.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку доступа или отсутствующего пути. По умолчанию возвращается
+    /// `Unsupported`, без обращения к файловой системе процесса.
+    fn set_read_only(&self, _path: &str, _read_only: bool) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "изменение атрибута только чтения не поддерживается файловой системой",
+        ))
+    }
+
+    /// Устанавливает время изменения в целых секундах UTC от Unix epoch.
+    ///
+    /// Отрицательное значение обозначает время до epoch. Содержимое и время
+    /// доступа не меняются; отсутствующий файл не создаётся.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку доступа или непредставимого времени. По умолчанию возможность
+    /// не поддерживается, без обращения к файловой системе процесса.
+    fn set_modified(&self, _path: &str, _unix_seconds: i64) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "установка времени изменения не поддерживается файловой системой",
+        ))
+    }
 
     /// Обход каталога. Итератор, а не `Vec`: ошибка ОТКРЫТИЯ каталога и
     /// ошибка ОТДЕЛЬНОГО элемента — разные события, и `bsl-zip`
@@ -519,6 +773,59 @@ pub trait FileSystem: fmt::Debug {
     /// Ошибку открытия — файла нет при `Never`, файл есть при `CreateNew`,
     /// нет прав.
     fn open(&self, path: &str, options: FileOpenOptions) -> io::Result<Box<dyn FileHandle>>;
+
+    /// Возвращает временный каталог в пространстве этой файловой системы.
+    ///
+    /// Не создаёт каталог или файл. Успешный ответ не гарантирует право
+    /// последующей записи. Реализация по умолчанию не обращается к ФС процесса.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку получения каталога; по умолчанию операция не поддерживается.
+    fn temporary_directory(&self) -> io::Result<String> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "временный каталог не предоставлен файловой системой",
+        ))
+    }
+
+    /// Атомарно создаёт пустой временный файл для чтения и записи.
+    ///
+    /// Не использует пару temporary_path/open и не удаляет существующий файл.
+    /// Источник имени принадлежит сеансу; повтор имени может дать коллизию.
+    ///
+    /// # Errors
+    /// Возвращает ошибку создания, включая AlreadyExists. По умолчанию
+    /// возвращается Unsupported без вызова других файловых операций.
+    fn create_temporary_file(&self, _entropy: &[u8; 16]) -> io::Result<OpenedTemporaryFile> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "создание открытого временного файла не поддерживается",
+        ))
+    }
+
+    /// Атомарно создаёт временный файл с переносимым носителем и правом очистки.
+    ///
+    /// Предназначен для вызова через [`Self::background_access`] в worker.
+    /// Не требует переносимости прежних результатов `open` и
+    /// `create_temporary_file`, не подменяет host файловой системой процесса.
+    /// Host обязан сохранять право очистки вместе с исходным носителем.
+    /// Возвращённая ошибка не передаёт вызывающему ресурс для очистки;
+    /// host отвечает за уже созданный носитель на своих путях отказа.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка атомарного создания, включая `AlreadyExists`. По умолчанию
+    /// `Unsupported` без вызова синхронного создания или других операций.
+    fn create_transferable_temporary_file(
+        &self,
+        _entropy: &[u8; 16],
+    ) -> io::Result<TransferableTemporaryFile> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "создание переносимого временного файла не поддерживается",
+        ))
+    }
 
     /// Выдаёт отсутствующий временный путь с дословным суффиксом.
     ///
@@ -569,8 +876,40 @@ pub trait FileSystem: fmt::Debug {
 #[derive(Debug)]
 pub struct SystemFileSystem;
 
+fn temporary_file_name(suffix: &str, entropy: &[u8; 16]) -> String {
+    format!(
+        "open-bsl-{}{}",
+        crate::encoding::encode_hex(entropy),
+        suffix
+    )
+}
+
+fn system_temporary_directory() -> std::path::PathBuf {
+    // Политика стандартного host: TEMP старше TMP, пустое значение
+    // пропускается. Некорректный выбранный путь не включает fallback.
+    ["TEMP", "TMP"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .find(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+}
+
 impl FileSystem for SystemFileSystem {
+    fn supports_temporary_file_ownership(&self) -> bool {
+        cfg!(target_os = "linux")
+    }
+
+    fn background_access(&self) -> Option<std::sync::Arc<dyn FileSystem + Send + Sync>> {
+        Some(std::sync::Arc::new(SystemFileSystem))
+    }
+
     fn read(&self, path: &str) -> io::Result<Vec<u8>> {
+        #[cfg(target_os = "linux")]
+        {
+            crate::temporary_file_access::read(path)
+        }
+        #[cfg(not(target_os = "linux"))]
         std::fs::read(path)
     }
 
@@ -580,16 +919,88 @@ impl FileSystem for SystemFileSystem {
 
     fn metadata(&self, path: &str) -> io::Result<FileMetadata> {
         let meta = std::fs::metadata(path)?;
-        let modified = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .and_then(|d| i64::try_from(d.as_secs()).ok());
-        Ok(if meta.is_dir() {
+        let modified =
+            meta.modified()
+                .ok()
+                .and_then(|time| match time.duration_since(UNIX_EPOCH) {
+                    Ok(duration) => i64::try_from(duration.as_secs()).ok(),
+                    Err(error) => {
+                        let duration = error.duration();
+                        // До epoch округление вниз требует учесть дробную часть.
+                        let seconds = -i128::from(duration.as_secs())
+                            - i128::from(duration.subsec_nanos() != 0);
+                        i64::try_from(seconds).ok()
+                    }
+                });
+        #[cfg(unix)]
+        let is_special_file = {
+            use std::os::unix::fs::FileTypeExt;
+            let file_type = meta.file_type();
+            file_type.is_fifo() || file_type.is_socket() || file_type.is_char_device()
+        };
+        #[cfg(not(unix))]
+        let is_special_file = false;
+        let metadata = if meta.is_dir() {
             FileMetadata::directory(modified)
-        } else {
+        } else if meta.is_file() || is_special_file {
+            // file-object-host-{edges,devices}: серверная Linux-1С считает
+            // FIFO, Unix-сокет и символьное устройство файлами с размером
+            // metadata.
             FileMetadata::file(modified)
-        })
+        } else {
+            FileMetadata::other(modified)
+        };
+        #[cfg(unix)]
+        let read_only = {
+            use std::os::unix::fs::PermissionsExt;
+            // Host-атрибут отражает запись владельцу, не общий access-check.
+            // На измеренных 0460 и 0577 getter 1С вернул Истина.
+            meta.permissions().mode() & 0o200 == 0
+        };
+        #[cfg(not(unix))]
+        let read_only = meta.permissions().readonly();
+        let metadata = metadata.with_size(meta.len()).with_read_only(read_only);
+        #[cfg(target_os = "linux")]
+        let metadata = metadata.with_hidden(false);
+        Ok(metadata)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn set_hidden(&self, path: &str, _hidden: bool) -> io::Result<()> {
+        // Измерено на Linux: setter не меняет имя, включая .hidden,
+        // но отсутствующий путь вызывает исключение.
+        std::fs::metadata(path)?;
+        Ok(())
+    }
+
+    fn set_read_only(&self, path: &str, read_only: bool) -> io::Result<()> {
+        let mut permissions = std::fs::metadata(path)?.permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = permissions.mode();
+            // Измерено: 0660 -> 0460, 0777 -> 0577. Меняется только
+            // запись владельцу, не права группы и остальных пользователей.
+            permissions.set_mode(if read_only {
+                mode & !0o200
+            } else {
+                mode | 0o200
+            });
+        }
+        #[cfg(not(unix))]
+        permissions.set_readonly(read_only);
+        std::fs::set_permissions(path, permissions)
+    }
+
+    fn set_modified(&self, path: &str, unix_seconds: i64) -> io::Result<()> {
+        let duration = std::time::Duration::from_secs(unix_seconds.unsigned_abs());
+        let time = if unix_seconds < 0 {
+            UNIX_EPOCH.checked_sub(duration)
+        } else {
+            UNIX_EPOCH.checked_add(duration)
+        }
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "время вне диапазона ОС"))?;
+        std::fs::File::open(path)?.set_times(std::fs::FileTimes::new().set_modified(time))
     }
 
     fn read_dir<'fs>(
@@ -598,11 +1009,12 @@ impl FileSystem for SystemFileSystem {
     ) -> io::Result<Box<dyn Iterator<Item = io::Result<DirEntry>> + 'fs>> {
         let iter = std::fs::read_dir(path)?.map(|entry| {
             let entry = entry?;
-            let is_dir = entry.file_type()?.is_dir();
+            let file_type = entry.file_type()?;
             Ok(DirEntry::new(
                 entry.file_name().to_string_lossy().into_owned(),
-                is_dir,
-            ))
+                file_type.is_dir(),
+            )
+            .with_symlink(file_type.is_symlink()))
         });
         Ok(Box::new(iter))
     }
@@ -629,23 +1041,99 @@ impl FileSystem for SystemFileSystem {
         Ok(Box::new(open.open(path)?))
     }
 
+    fn temporary_directory(&self) -> io::Result<String> {
+        let directory = system_temporary_directory();
+        if !std::fs::metadata(&directory)?.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotADirectory,
+                "выбранный временный путь не является каталогом",
+            ));
+        }
+        Ok(directory.to_string_lossy().into_owned())
+    }
+
     fn temporary_path(&self, suffix: &str, entropy: &[u8; 16]) -> io::Result<String> {
-        let name = format!(
-            "open-bsl-{}{}",
-            crate::encoding::encode_hex(entropy),
-            suffix
-        );
-        let path = std::env::temp_dir().join(name);
-        // ИЗМЕРЕНО: платформа возвращает ещё не существующий путь. Короткое
-        // `create_new` закрывает проверку коллизии без гонки, после чего
-        // файл удаляется до возврата имени.
+        let name = temporary_file_name(suffix, entropy);
+        let directory = system_temporary_directory();
+        let path = directory.join(&name);
+        // Суффикс может содержать разделитель: выдача имени не обещает
+        // существование его родителей. Резервируем первый компонент,
+        // не создавая дерево. При коллизии не трогаем существующий объект.
+        let first_component = name
+            .split(std::path::is_separator)
+            .next()
+            .expect("непустой префикс имени");
+        let reserved_path = directory.join(first_component);
         let reservation = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&path)?;
+            .open(&reserved_path)?;
         drop(reservation);
-        std::fs::remove_file(&path)?;
+        std::fs::remove_file(&reserved_path)?;
         Ok(path.to_string_lossy().into_owned())
+    }
+
+    fn create_temporary_file(&self, entropy: &[u8; 16]) -> io::Result<OpenedTemporaryFile> {
+        let path = system_temporary_directory().join(temporary_file_name(".tmp", entropy));
+        // Путь возвращается строковым host-интерфейсом. Потеря байтов могла
+        // бы направить последующую очистку на другой файл, поэтому отказ
+        // происходит до создания, а не после lossy-преобразования.
+        let path_text = path
+            .to_str()
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "временный путь не представим строкой UTF-8",
+                )
+            })?
+            .to_owned();
+        #[cfg(target_os = "linux")]
+        {
+            let (file, resource) = crate::temporary_file_access::create(path, path_text)?;
+            Ok(OpenedTemporaryFile::new_owned(
+                Box::new(file),
+                Box::new(resource),
+            ))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let mut options = std::fs::OpenOptions::new();
+            options.read(true).write(true).create_new(true);
+            let file = options.open(&path)?;
+            Ok(OpenedTemporaryFile::new(path_text, Box::new(file)))
+        }
+    }
+
+    fn create_transferable_temporary_file(
+        &self,
+        entropy: &[u8; 16],
+    ) -> io::Result<TransferableTemporaryFile> {
+        #[cfg(target_os = "linux")]
+        {
+            let path = system_temporary_directory().join(temporary_file_name(".tmp", entropy));
+            let path_text = path
+                .to_str()
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "временный путь не представим строкой UTF-8",
+                    )
+                })?
+                .to_owned();
+            let (file, resource) = crate::temporary_file_access::create(path, path_text)?;
+            Ok(TransferableTemporaryFile::new(
+                Box::new(file),
+                Box::new(resource),
+            ))
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = entropy;
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "создание переносимого временного файла не поддерживается",
+            ))
+        }
     }
 
     fn path_separator(&self) -> io::Result<String> {
@@ -653,12 +1141,25 @@ impl FileSystem for SystemFileSystem {
     }
 
     fn remove_path(&self, path: &str) -> io::Result<()> {
-        // Граница host-возможности сознательно не следует по симлинку:
-        // `УдалитьФайлы` удаляет сам указанный путь, а не выпускает
-        // sandbox-скрипт рекурсивно в чужое дерево.
+        // Конечный `/` заставляет ОС разыменовать даже последнюю ссылку.
+        // Убираем его до metadata, но сохраняем отказ для обычного файла.
+        // Корень не меняется; Windows-префиксы здесь не обрезаются.
+        #[cfg(unix)]
+        let (path, directory_syntax) = {
+            let trimmed = path.trim_end_matches('/');
+            (
+                if trimmed.is_empty() { path } else { trimmed },
+                path.ends_with('/'),
+            )
+        };
+        #[cfg(not(unix))]
+        let directory_syntax = false;
+        // Не следуем по конечной ссылке. Ссылки в родительских компонентах
+        // разрешаются ОС: SystemFileSystem не является sandbox.
         match std::fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_symlink() => std::fs::remove_file(path),
             Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path),
+            Ok(_) if directory_syntax => Err(io::ErrorKind::NotADirectory.into()),
             Ok(_) => std::fs::remove_file(path),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(error),
@@ -765,9 +1266,11 @@ pub struct HostEnv {
     zone: std::rc::Rc<dyn TimeZone>,
     files: std::rc::Rc<dyn FileSystem>,
     network: Option<std::rc::Rc<dyn crate::HttpClientFactory>>,
+    application_launcher: Option<std::sync::Arc<dyn crate::ApplicationLauncher>>,
     background_jobs: Option<std::rc::Rc<dyn crate::BackgroundJobService>>,
     temp_storage: Option<std::rc::Rc<std::cell::RefCell<crate::TempStorageSession>>>,
     message_sink: Option<std::rc::Rc<dyn crate::UserMessageSink>>,
+    temporary_files: crate::TemporaryFileRegistry,
 }
 
 impl HostEnv {
@@ -784,9 +1287,11 @@ impl HostEnv {
             // Базовый runtime не знает системного HTTP-адаптера: его
             // устанавливает верхний слой, подключивший `bsl-http`.
             network: None,
+            application_launcher: None,
             background_jobs: None,
             temp_storage: None,
             message_sink: None,
+            temporary_files: crate::TemporaryFileRegistry::default(),
         }
     }
 
@@ -795,6 +1300,23 @@ impl HostEnv {
     pub fn with_arguments(mut self, arguments: Vec<String>) -> Self {
         self.arguments = arguments;
         self
+    }
+
+    /// Явно предоставляет возможность запуска приложений этому сеансу.
+    /// Само внедрение не запускает процесс и не расширяет файловый host.
+    #[must_use]
+    pub fn with_application_launcher(
+        mut self,
+        launcher: impl crate::ApplicationLauncher + 'static,
+    ) -> Self {
+        self.application_launcher = Some(std::sync::Arc::new(launcher));
+        self
+    }
+
+    /// Сервис запуска, если host его предоставил. Системного fallback нет.
+    #[must_use]
+    pub fn application_launcher(&self) -> Option<std::sync::Arc<dyn crate::ApplicationLauncher>> {
+        self.application_launcher.clone()
     }
 
     #[must_use]
@@ -833,6 +1355,13 @@ impl HostEnv {
     #[must_use]
     pub fn files(&self) -> std::rc::Rc<dyn FileSystem> {
         std::rc::Rc::clone(&self.files)
+    }
+
+    /// Учёт собственных временных файлов этого сеанса. Смена FileSystem
+    /// не меняет владельца ранее зарегистрированных ресурсов.
+    #[must_use]
+    pub fn temporary_files(&self) -> crate::TemporaryFileRegistry {
+        self.temporary_files.clone()
     }
 
     /// Устанавливает HTTP-фабрику одной сессии.

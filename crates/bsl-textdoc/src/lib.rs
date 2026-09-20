@@ -476,6 +476,8 @@ impl TextDocument {
 
     fn read_file(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
         let path = need_str(arguments.first(), "Прочитать")?;
+        let path = bsl_rt::prepare_file_operation_path(&path, self.files.as_ref())
+            .map_err(|error| RtError::IoError(error.to_string()))?;
         let encoding = encoding_arg(arguments.get(1))?;
         let bytes = self
             .files
@@ -487,6 +489,8 @@ impl TextDocument {
 
     fn write_file(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
         let path = need_str(arguments.first(), "Записать")?;
+        let path = bsl_rt::prepare_file_operation_path(&path, self.files.as_ref())
+            .map_err(|error| RtError::IoError(error.to_string()))?;
         let encoding = encoding_arg(arguments.get(1))?;
         let data = self.data.borrow();
         self.files
@@ -822,11 +826,14 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
 
 /// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
 const TYPES: &[&TypeDescriptor] = &[&crate::DOCUMENT_TYPE, &crate::PARAMS_TYPE];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] =
+    &[(ConstructorCode::new(1), &crate::DOCUMENT_TYPE)];
 
 /// Дескриптор статически подключаемого компонента текстовых документов.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }

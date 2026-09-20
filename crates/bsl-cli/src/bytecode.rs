@@ -109,8 +109,7 @@ pub fn run(path: &str, arguments: Vec<String>) -> i32 {
             }
         }
     };
-    let mut state = engine
-        .state_builder()
+    let mut state = crate::session::builder(&engine)
         .arguments(arguments)
         .message_sink(std::rc::Rc::new(crate::StdoutMessageSink))
         .build();

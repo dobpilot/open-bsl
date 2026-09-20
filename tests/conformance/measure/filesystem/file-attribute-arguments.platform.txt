@@ -1,0 +1,323 @@
+﻿file.begin	file-attribute-arguments-1
+context.compatibility	НеИспользовать
+attribute.true.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.true.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.true.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.true.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.true.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.true.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.true.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.true.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.false.readonly.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.false.readonly.ru.1	ok|readonly=0|hidden=0|bytes=3
+attribute.false.readonly.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.false.readonly.en.1	ok|readonly=0|hidden=0|bytes=3
+attribute.false.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.false.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.false.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.false.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.zero.readonly.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.zero.readonly.ru.1	ok|readonly=0|hidden=0|bytes=3
+attribute.zero.readonly.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.zero.readonly.en.1	ok|readonly=0|hidden=0|bytes=3
+attribute.zero.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.zero.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.zero.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.zero.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.one.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.one.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.one.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.one.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.one.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.one.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.one.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.one.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.negative.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.negative.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.negative.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.negative.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.two.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.two.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.two.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.two.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.two.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.two.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.two.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.two.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.fraction.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.fraction.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.fraction.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.fraction.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.fraction.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.fraction.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.fraction.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.fraction.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative_fraction.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.negative_fraction.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative_fraction.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.negative_fraction.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative_fraction.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.negative_fraction.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.negative_fraction.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.negative_fraction.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_true.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_true.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_true.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_true.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_true.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_true.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_true.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_true.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_false.readonly.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_false.readonly.ru.1	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_false.readonly.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_false.readonly.en.1	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_false.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_false.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.ru_false.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.ru_false.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.en_true.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.en_true.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.en_true.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.en_true.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.en_true.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.en_true.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.en_true.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.en_true.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.en_false.readonly.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.en_false.readonly.ru.1	ok|readonly=0|hidden=0|bytes=3
+attribute.en_false.readonly.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.en_false.readonly.en.1	ok|readonly=0|hidden=0|bytes=3
+attribute.en_false.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.en_false.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.en_false.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.en_false.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.mixed.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.mixed.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.mixed.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.mixed.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.mixed.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.mixed.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.mixed.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.mixed.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.space.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.space.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.space.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.space.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.space.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.space.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.space.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.space.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.tab.readonly.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.tab.readonly.ru.1	ok|readonly=0|hidden=0|bytes=3
+attribute.tab.readonly.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.tab.readonly.en.1	ok|readonly=0|hidden=0|bytes=3
+attribute.tab.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.tab.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.tab.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.tab.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.nbsp.readonly.ru.0	ok|readonly=1|hidden=0|bytes=3
+attribute.nbsp.readonly.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.nbsp.readonly.en.0	ok|readonly=1|hidden=0|bytes=3
+attribute.nbsp.readonly.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.nbsp.hidden.ru.0	ok|readonly=0|hidden=0|bytes=3
+attribute.nbsp.hidden.ru.1	ok|readonly=1|hidden=0|bytes=3
+attribute.nbsp.hidden.en.0	ok|readonly=0|hidden=0|bytes=3
+attribute.nbsp.hidden.en.1	ok|readonly=1|hidden=0|bytes=3
+attribute.one_text.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.one_text.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.one_text.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.one_text.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.one_text.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.one_text.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.one_text.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.one_text.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.one_text.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.one_text.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.one_text.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.one_text.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.one_text.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.one_text.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.one_text.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.one_text.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.zero_text.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.zero_text.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.zero_text.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.zero_text.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.zero_text.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.zero_text.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.zero_text.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.zero_text.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.zero_text.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.zero_text.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.zero_text.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.zero_text.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.zero_text.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.zero_text.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.zero_text.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.zero_text.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.empty.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.empty.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.empty.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.empty.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.empty.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.empty.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.empty.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.empty.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.empty.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.empty.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.empty.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.empty.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.empty.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.empty.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.empty.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.empty.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.blank.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.blank.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.blank.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.blank.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.blank.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.blank.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.blank.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.blank.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.blank.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.blank.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.blank.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.blank.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.blank.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.blank.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.blank.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.blank.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.yes.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.yes.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.yes.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.yes.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.yes.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.yes.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.yes.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.yes.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.yes.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.yes.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.yes.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.yes.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.yes.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.yes.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.yes.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.yes.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.no.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.no.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.no.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.no.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.no.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.no.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.no.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.no.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.no.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.no.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.no.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.no.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.no.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.no.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.no.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.no.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.nul.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.nul.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.nul.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.nul.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.nul.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.nul.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.nul.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.nul.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.nul.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.nul.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.nul.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.nul.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.nul.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.nul.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.nul.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.nul.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.undefined.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.undefined.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.undefined.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.undefined.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.undefined.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.undefined.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.undefined.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.undefined.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.undefined.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.undefined.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.undefined.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.undefined.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.undefined.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.undefined.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.undefined.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.undefined.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.null.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.null.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.null.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.null.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.null.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.null.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.null.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.null.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.null.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.null.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.null.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.null.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.null.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.null.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.null.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.null.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.array.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.array.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.array.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.array.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.array.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.array.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.array.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.array.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.array.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.array.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.array.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.array.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.array.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.array.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.array.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.array.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.structure.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.structure.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.structure.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.structure.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.structure.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.structure.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.structure.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.structure.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.structure.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.structure.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.structure.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.structure.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.structure.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.structure.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.structure.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.structure.hidden.en.1.detail	Type mismatch (parameter number '1')
+attribute.date.readonly.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.date.readonly.ru.0.detail	Type mismatch (parameter number '1')
+attribute.date.readonly.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.date.readonly.ru.1.detail	Type mismatch (parameter number '1')
+attribute.date.readonly.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.date.readonly.en.0.detail	Type mismatch (parameter number '1')
+attribute.date.readonly.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.date.readonly.en.1.detail	Type mismatch (parameter number '1')
+attribute.date.hidden.ru.0	error|readonly=0|hidden=0|bytes=3
+attribute.date.hidden.ru.0.detail	Type mismatch (parameter number '1')
+attribute.date.hidden.ru.1	error|readonly=1|hidden=0|bytes=3
+attribute.date.hidden.ru.1.detail	Type mismatch (parameter number '1')
+attribute.date.hidden.en.0	error|readonly=0|hidden=0|bytes=3
+attribute.date.hidden.en.0.detail	Type mismatch (parameter number '1')
+attribute.date.hidden.en.1	error|readonly=1|hidden=0|bytes=3
+attribute.date.hidden.en.1.detail	Type mismatch (parameter number '1')
+file.end	file-attribute-arguments-1

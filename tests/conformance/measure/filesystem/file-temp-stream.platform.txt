@@ -1,0 +1,84 @@
+﻿file.begin	temp-stream-1
+tempstream.default.new.state	File stream|0|0
+tempstream.default.new.name	/tmp/v8_pjYNkH_5.tmp
+tempstream.default.new.getname	error
+tempstream.default.before.state	File stream|65535|65535
+tempstream.default.before.name	/tmp/v8_pjYNkH_5.tmp
+tempstream.default.before.getname	error
+tempstream.default.after.state	File stream|65536|65536
+tempstream.default.after.name	/tmp/v8_pjYNkH_5.tmp
+tempstream.default.after.getname	error
+tempstream.default.read	65536|65|90
+tempstream.default.closed	error
+tempstream.zero.new.state	File stream|0|0
+tempstream.zero.new.name	/tmp/v8_pjYNkH_6.tmp
+tempstream.zero.new.getname	error
+tempstream.zero.before.state	File stream|8|8
+tempstream.zero.before.name	/tmp/v8_pjYNkH_6.tmp
+tempstream.zero.before.getname	error
+tempstream.zero.after.state	File stream|9|9
+tempstream.zero.after.name	/tmp/v8_pjYNkH_6.tmp
+tempstream.zero.after.getname	error
+tempstream.zero.read	9|65|90
+tempstream.zero.closed	error
+tempstream.one.new.state	File stream|0|0
+tempstream.one.new.name	/tmp/v8_pjYNkH_7.tmp
+tempstream.one.new.getname	error
+tempstream.one.before.state	File stream|8|8
+tempstream.one.before.name	/tmp/v8_pjYNkH_7.tmp
+tempstream.one.before.getname	error
+tempstream.one.after.state	File stream|9|9
+tempstream.one.after.name	/tmp/v8_pjYNkH_7.tmp
+tempstream.one.after.getname	error
+tempstream.one.read	9|65|90
+tempstream.one.closed	error
+tempstream.eight.new.state	File stream|0|0
+tempstream.eight.new.name	/tmp/v8_pjYNkH_8.tmp
+tempstream.eight.new.getname	error
+tempstream.eight.before.state	File stream|8|8
+tempstream.eight.before.name	/tmp/v8_pjYNkH_8.tmp
+tempstream.eight.before.getname	error
+tempstream.eight.after.state	File stream|9|9
+tempstream.eight.after.name	/tmp/v8_pjYNkH_8.tmp
+tempstream.eight.after.getname	error
+tempstream.eight.read	9|65|90
+tempstream.eight.closed	error
+tempstream.undefined.new.state	File stream|0|0
+tempstream.undefined.new.name	/tmp/v8_pjYNkH_9.tmp
+tempstream.undefined.new.getname	error
+tempstream.undefined.before.state	File stream|8|8
+tempstream.undefined.before.name	/tmp/v8_pjYNkH_9.tmp
+tempstream.undefined.before.getname	error
+tempstream.undefined.after.state	File stream|9|9
+tempstream.undefined.after.name	/tmp/v8_pjYNkH_9.tmp
+tempstream.undefined.after.getname	error
+tempstream.undefined.read	9|65|90
+tempstream.undefined.closed	error
+tempstream.null.error	Error calling context method (СоздатьВременныйФайл)
+tempstream.negative.error	Error calling context method (СоздатьВременныйФайл)
+tempstream.fraction.error	Error calling context method (СоздатьВременныйФайл)
+tempstream.string.error	Error calling context method (СоздатьВременныйФайл)
+tempstream.buffer.zero.new.state	File stream|0|0
+tempstream.buffer.zero.new.name	/tmp/v8_pjYNkH_a.tmp
+tempstream.buffer.zero.new.getname	error
+tempstream.buffer.zero.before.state	File stream|8|8
+tempstream.buffer.zero.before.name	/tmp/v8_pjYNkH_a.tmp
+tempstream.buffer.zero.before.getname	error
+tempstream.buffer.zero.after.state	File stream|9|9
+tempstream.buffer.zero.after.name	/tmp/v8_pjYNkH_a.tmp
+tempstream.buffer.zero.after.getname	error
+tempstream.buffer.zero.read	9|65|90
+tempstream.buffer.zero.closed	error
+tempstream.buffer.one.new.state	File stream|0|0
+tempstream.buffer.one.new.name	/tmp/v8_pjYNkH_b.tmp
+tempstream.buffer.one.new.getname	error
+tempstream.buffer.one.before.state	File stream|8|8
+tempstream.buffer.one.before.name	/tmp/v8_pjYNkH_b.tmp
+tempstream.buffer.one.before.getname	error
+tempstream.buffer.one.after.state	File stream|9|9
+tempstream.buffer.one.after.name	/tmp/v8_pjYNkH_b.tmp
+tempstream.buffer.one.after.getname	error
+tempstream.buffer.one.read	9|65|90
+tempstream.buffer.one.closed	error
+tempstream.buffer.negative.error	Error calling context method (СоздатьВременныйФайл)
+file.end	temp-stream-1

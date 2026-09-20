@@ -48,6 +48,7 @@ pub fn program(chunks: Vec<Chunk>) -> Program {
         top_level_locals: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
+        imports: Vec::new(),
         links: Vec::new(),
         lines: Vec::new(),
         function_names: Vec::new(),

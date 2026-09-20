@@ -1,0 +1,280 @@
+file.begin	file-date-neighbors-1
+control.empty.value	Date:1-1-1 0:0:0|delta=0
+control.empty.gt_max	Boolean:0
+control.empty.add0_equal	Boolean:1
+control.empty.add1	Date:1-1-1 0:0:1|delta=1
+control.empty.sub1	Date:1-1-1 0:0:0|delta=0
+control.empty.add_tick	Date:1-1-1 0:0:0|delta=0.0001
+control.empty.sub_tick	Date:1-1-1 0:0:0|delta=0
+control.empty.add_half	Date:1-1-1 0:0:0|delta=0.5
+control.empty.add_half_equal	Boolean:0
+control.empty.add1_reverse	Boolean:1
+control.empty.week_equal	Boolean:1
+control.empty.format_ru	String:
+control.empty.format_en	String:
+control.ordinary.value	Date:2020-1-15 12:34:56|delta=63714688496
+control.ordinary.gt_max	Boolean:0
+control.ordinary.add0_equal	Boolean:1
+control.ordinary.add1	Date:2020-1-15 12:34:57|delta=63714688497
+control.ordinary.sub1	Date:2020-1-15 12:34:55|delta=63714688495
+control.ordinary.add_tick	Date:2020-1-15 12:34:56|delta=63714688496.0001
+control.ordinary.sub_tick	Date:2020-1-15 12:34:55|delta=63714688495.9999
+control.ordinary.add_half	Date:2020-1-15 12:34:56|delta=63714688496.5
+control.ordinary.add_half_equal	Boolean:0
+control.ordinary.add1_reverse	Boolean:1
+control.ordinary.week_equal	Boolean:0
+control.ordinary.format_ru	String:1/15/2020 12:34:56 PM
+control.ordinary.format_en	String:1/15/2020 12:34:56 PM
+utc.min+0.value	Date:0-0-0 0:0:0|delta=-0.1616
+utc.min+0.gt_max	Boolean:1
+utc.min+0.add0_equal	Boolean:1
+utc.min+0.add1	Date:1-1-1 0:0:0|delta=0.8384
+utc.min+0.sub1	Date:0-0-0 0:0:0|delta=-1.1616
+utc.min+0.add_tick	Date:9999-12-31 23:59:59|delta=315537897599.9999
+utc.min+0.sub_tick	Date:0-0-0 0:0:0|delta=-0.1617
+utc.min+0.add_half	Date:1-1-1 0:0:0|delta=0.3384
+utc.min+0.add_half_equal	Boolean:0
+utc.min+0.add1_reverse	Boolean:0
+utc.min+0.week_equal	Boolean:0
+utc.min+0.format_ru	String:11/30/0002 12:00:00 AM
+utc.min+0.format_en	String:11/30/0001 12:00:00 AM
+utc.min+0.repeat	1|1
+local.min+0.value	Date:0-0-0 0:0:0|delta=-9017
+local.min+0.gt_max	Boolean:1
+local.min+0.add0_equal	Boolean:1
+local.min+0.add1	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+0.sub1	Date:0-0-0 0:0:0|delta=-9018
+local.min+0.add_tick	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+0.sub_tick	Date:0-0-0 0:0:0|delta=-9017.0001
+local.min+0.add_half	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+0.add_half_equal	Boolean:0
+local.min+0.add1_reverse	Boolean:0
+local.min+0.week_equal	Boolean:0
+local.min+0.format_ru	String:11/30/0001 12:00:00 AM
+local.min+0.format_en	String:11/30/0001 12:00:00 AM
+local.min+0.repeat	1|1
+utc.min+1.value	Date:1-1-1 0:0:0|delta=0.8384
+utc.min+1.gt_max	Boolean:0
+utc.min+1.add0_equal	Boolean:1
+utc.min+1.add1	Date:1-1-1 0:0:1|delta=1.8384
+utc.min+1.sub1	Date:1-1-1 0:0:0|delta=0
+utc.min+1.add_tick	Date:1-1-1 0:0:0|delta=0.8385
+utc.min+1.sub_tick	Date:1-1-1 0:0:0|delta=0.8383
+utc.min+1.add_half	Date:1-1-1 0:0:1|delta=1.3384
+utc.min+1.add_half_equal	Boolean:0
+utc.min+1.add1_reverse	Boolean:1
+utc.min+1.week_equal	Boolean:0
+utc.min+1.format_ru	String:1/1/0001 12:00:00 AM
+utc.min+1.format_en	String:1/1/0001 12:00:00 AM
+utc.min+1.repeat	1|1
+local.min+1.value	Date:0-0-0 0:0:0|delta=-9016
+local.min+1.gt_max	Boolean:1
+local.min+1.add0_equal	Boolean:1
+local.min+1.add1	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+1.sub1	Date:0-0-0 0:0:0|delta=-9017
+local.min+1.add_tick	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+1.sub_tick	Date:0-0-0 0:0:0|delta=-9016.0001
+local.min+1.add_half	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+1.add_half_equal	Boolean:0
+local.min+1.add1_reverse	Boolean:0
+local.min+1.week_equal	Boolean:0
+local.min+1.format_ru	String:11/30/0001 12:00:00 AM
+local.min+1.format_en	String:11/30/0001 12:00:00 AM
+local.min+1.repeat	1|1
+utc.min+2.value	Date:1-1-1 0:0:1|delta=1.8384
+utc.min+2.gt_max	Boolean:0
+utc.min+2.add0_equal	Boolean:1
+utc.min+2.add1	Date:1-1-1 0:0:2|delta=2.8384
+utc.min+2.sub1	Date:1-1-1 0:0:0|delta=0.8384
+utc.min+2.add_tick	Date:1-1-1 0:0:1|delta=1.8385
+utc.min+2.sub_tick	Date:1-1-1 0:0:1|delta=1.8383
+utc.min+2.add_half	Date:1-1-1 0:0:2|delta=2.3384
+utc.min+2.add_half_equal	Boolean:0
+utc.min+2.add1_reverse	Boolean:1
+utc.min+2.week_equal	Boolean:0
+utc.min+2.format_ru	String:1/1/0001 12:00:01 AM
+utc.min+2.format_en	String:1/1/0001 12:00:01 AM
+utc.min+2.repeat	1|1
+local.min+2.value	Date:0-0-0 0:0:0|delta=-9015
+local.min+2.gt_max	Boolean:1
+local.min+2.add0_equal	Boolean:1
+local.min+2.add1	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+2.sub1	Date:0-0-0 0:0:0|delta=-9016
+local.min+2.add_tick	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+2.sub_tick	Date:0-0-0 0:0:0|delta=-9015.0001
+local.min+2.add_half	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+2.add_half_equal	Boolean:0
+local.min+2.add1_reverse	Boolean:0
+local.min+2.week_equal	Boolean:0
+local.min+2.format_ru	String:11/30/0001 12:00:00 AM
+local.min+2.format_en	String:11/30/0001 12:00:00 AM
+local.min+2.repeat	1|1
+utc.min+9016.value	Date:1-1-1 2:30:15|delta=9015.8384
+utc.min+9016.gt_max	Boolean:0
+utc.min+9016.add0_equal	Boolean:1
+utc.min+9016.add1	Date:1-1-1 2:30:16|delta=9016.8384
+utc.min+9016.sub1	Date:1-1-1 2:30:14|delta=9014.8384
+utc.min+9016.add_tick	Date:1-1-1 2:30:15|delta=9015.8385
+utc.min+9016.sub_tick	Date:1-1-1 2:30:15|delta=9015.8383
+utc.min+9016.add_half	Date:1-1-1 2:30:16|delta=9016.3384
+utc.min+9016.add_half_equal	Boolean:0
+utc.min+9016.add1_reverse	Boolean:1
+utc.min+9016.week_equal	Boolean:0
+utc.min+9016.format_ru	String:1/1/0001 2:30:15 AM
+utc.min+9016.format_en	String:1/1/0001 2:30:15 AM
+utc.min+9016.repeat	1|1
+local.min+9016.value	Date:0-0-0 0:0:0|delta=-1
+local.min+9016.gt_max	Boolean:1
+local.min+9016.add0_equal	Boolean:1
+local.min+9016.add1	Date:1-1-1 0:0:0|delta=0
+local.min+9016.sub1	Date:0-0-0 0:0:0|delta=-2
+local.min+9016.add_tick	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+9016.sub_tick	Date:0-0-0 0:0:0|delta=-1.0001
+local.min+9016.add_half	Date:9999-12-31 23:59:59|delta=315537897599.9999
+local.min+9016.add_half_equal	Boolean:0
+local.min+9016.add1_reverse	Boolean:0
+local.min+9016.week_equal	Boolean:0
+local.min+9016.format_ru	String:11/30/0001 12:00:00 AM
+local.min+9016.format_en	String:11/30/0001 12:00:00 AM
+local.min+9016.repeat	1|1
+utc.min+9017.value	Date:1-1-1 2:30:16|delta=9016.8384
+utc.min+9017.gt_max	Boolean:0
+utc.min+9017.add0_equal	Boolean:1
+utc.min+9017.add1	Date:1-1-1 2:30:17|delta=9017.8384
+utc.min+9017.sub1	Date:1-1-1 2:30:15|delta=9015.8384
+utc.min+9017.add_tick	Date:1-1-1 2:30:16|delta=9016.8385
+utc.min+9017.sub_tick	Date:1-1-1 2:30:16|delta=9016.8383
+utc.min+9017.add_half	Date:1-1-1 2:30:17|delta=9017.3384
+utc.min+9017.add_half_equal	Boolean:0
+utc.min+9017.add1_reverse	Boolean:1
+utc.min+9017.week_equal	Boolean:0
+utc.min+9017.format_ru	String:1/1/0001 2:30:16 AM
+utc.min+9017.format_en	String:1/1/0001 2:30:16 AM
+utc.min+9017.repeat	1|1
+local.min+9017.value	Date:1-1-1 0:0:0|delta=0
+local.min+9017.gt_max	Boolean:0
+local.min+9017.add0_equal	Boolean:1
+local.min+9017.add1	Date:1-1-1 0:0:1|delta=1
+local.min+9017.sub1	Date:1-1-1 0:0:0|delta=0
+local.min+9017.add_tick	Date:1-1-1 0:0:0|delta=0.0001
+local.min+9017.sub_tick	Date:1-1-1 0:0:0|delta=0
+local.min+9017.add_half	Date:1-1-1 0:0:0|delta=0.5
+local.min+9017.add_half_equal	Boolean:0
+local.min+9017.add1_reverse	Boolean:1
+local.min+9017.week_equal	Boolean:1
+local.min+9017.format_ru	String:
+local.min+9017.format_en	String:
+local.min+9017.repeat	1|1
+utc.min+9018.value	Date:1-1-1 2:30:17|delta=9017.8384
+utc.min+9018.gt_max	Boolean:0
+utc.min+9018.add0_equal	Boolean:1
+utc.min+9018.add1	Date:1-1-1 2:30:18|delta=9018.8384
+utc.min+9018.sub1	Date:1-1-1 2:30:16|delta=9016.8384
+utc.min+9018.add_tick	Date:1-1-1 2:30:17|delta=9017.8385
+utc.min+9018.sub_tick	Date:1-1-1 2:30:17|delta=9017.8383
+utc.min+9018.add_half	Date:1-1-1 2:30:18|delta=9018.3384
+utc.min+9018.add_half_equal	Boolean:0
+utc.min+9018.add1_reverse	Boolean:1
+utc.min+9018.week_equal	Boolean:0
+utc.min+9018.format_ru	String:1/1/0001 2:30:17 AM
+utc.min+9018.format_en	String:1/1/0001 2:30:17 AM
+utc.min+9018.repeat	1|1
+local.min+9018.value	Date:1-1-1 0:0:1|delta=1
+local.min+9018.gt_max	Boolean:0
+local.min+9018.add0_equal	Boolean:1
+local.min+9018.add1	Date:1-1-1 0:0:2|delta=2
+local.min+9018.sub1	Date:1-1-1 0:0:0|delta=0
+local.min+9018.add_tick	Date:1-1-1 0:0:1|delta=1.0001
+local.min+9018.sub_tick	Date:1-1-1 0:0:0|delta=0.9999
+local.min+9018.add_half	Date:1-1-1 0:0:1|delta=1.5
+local.min+9018.add_half_equal	Boolean:0
+local.min+9018.add1_reverse	Boolean:1
+local.min+9018.week_equal	Boolean:0
+local.min+9018.format_ru	String:1/1/0001 12:00:01 AM
+local.min+9018.format_en	String:1/1/0001 12:00:01 AM
+local.min+9018.repeat	1|1
+utc.min+86400.value	Date:1-1-1 23:59:59|delta=86399.8384
+utc.min+86400.gt_max	Boolean:0
+utc.min+86400.add0_equal	Boolean:1
+utc.min+86400.add1	Date:1-1-2 0:0:0|delta=86400.8384
+utc.min+86400.sub1	Date:1-1-1 23:59:58|delta=86398.8384
+utc.min+86400.add_tick	Date:1-1-1 23:59:59|delta=86399.8385
+utc.min+86400.sub_tick	Date:1-1-1 23:59:59|delta=86399.8383
+utc.min+86400.add_half	Date:1-1-2 0:0:0|delta=86400.3384
+utc.min+86400.add_half_equal	Boolean:0
+utc.min+86400.add1_reverse	Boolean:1
+utc.min+86400.week_equal	Boolean:0
+utc.min+86400.format_ru	String:1/1/0001 11:59:59 PM
+utc.min+86400.format_en	String:1/1/0001 11:59:59 PM
+utc.min+86400.repeat	1|1
+local.min+86400.value	Date:1-1-1 21:29:43|delta=77383
+local.min+86400.gt_max	Boolean:0
+local.min+86400.add0_equal	Boolean:1
+local.min+86400.add1	Date:1-1-1 21:29:44|delta=77384
+local.min+86400.sub1	Date:1-1-1 21:29:42|delta=77382
+local.min+86400.add_tick	Date:1-1-1 21:29:43|delta=77383.0001
+local.min+86400.sub_tick	Date:1-1-1 21:29:42|delta=77382.9999
+local.min+86400.add_half	Date:1-1-1 21:29:43|delta=77383.5
+local.min+86400.add_half_equal	Boolean:0
+local.min+86400.add1_reverse	Boolean:1
+local.min+86400.week_equal	Boolean:0
+local.min+86400.format_ru	String:1/1/0001 9:29:43 PM
+local.min+86400.format_en	String:1/1/0001 9:29:43 PM
+local.min+86400.repeat	1|1
+utc.epoch-1.value	Date:1969-12-31 23:59:58|delta=62135596798.8384
+utc.epoch-1.gt_max	Boolean:0
+utc.epoch-1.add0_equal	Boolean:1
+utc.epoch-1.add1	Date:1969-12-31 23:59:59|delta=62135596799.8384
+utc.epoch-1.sub1	Date:1969-12-31 23:59:57|delta=62135596797.8384
+utc.epoch-1.add_tick	Date:1969-12-31 23:59:58|delta=62135596798.8385
+utc.epoch-1.sub_tick	Date:1969-12-31 23:59:58|delta=62135596798.8383
+utc.epoch-1.add_half	Date:1969-12-31 23:59:59|delta=62135596799.3384
+utc.epoch-1.add_half_equal	Boolean:0
+utc.epoch-1.add1_reverse	Boolean:1
+utc.epoch-1.week_equal	Boolean:0
+utc.epoch-1.format_ru	String:12/31/1969 11:59:58 PM
+utc.epoch-1.format_en	String:12/31/1969 11:59:58 PM
+utc.epoch-1.repeat	1|1
+utc.epoch.value	Date:1970-1-1 0:0:0|delta=62135596800
+utc.epoch.gt_max	Boolean:0
+utc.epoch.add0_equal	Boolean:1
+utc.epoch.add1	Date:1970-1-1 0:0:1|delta=62135596801
+utc.epoch.sub1	Date:1969-12-31 23:59:59|delta=62135596799
+utc.epoch.add_tick	Date:1970-1-1 0:0:0|delta=62135596800.0001
+utc.epoch.sub_tick	Date:1969-12-31 23:59:59|delta=62135596799.9999
+utc.epoch.add_half	Date:1970-1-1 0:0:0|delta=62135596800.5
+utc.epoch.add_half_equal	Boolean:0
+utc.epoch.add1_reverse	Boolean:1
+utc.epoch.week_equal	Boolean:0
+utc.epoch.format_ru	String:1/1/1970 12:00:00 AM
+utc.epoch.format_en	String:1/1/1970 12:00:00 AM
+utc.epoch.repeat	1|1
+utc.ordinary.value	Date:2020-1-15 12:34:56|delta=63714688496
+utc.ordinary.gt_max	Boolean:0
+utc.ordinary.add0_equal	Boolean:1
+utc.ordinary.add1	Date:2020-1-15 12:34:57|delta=63714688497
+utc.ordinary.sub1	Date:2020-1-15 12:34:55|delta=63714688495
+utc.ordinary.add_tick	Date:2020-1-15 12:34:56|delta=63714688496.0001
+utc.ordinary.sub_tick	Date:2020-1-15 12:34:55|delta=63714688495.9999
+utc.ordinary.add_half	Date:2020-1-15 12:34:56|delta=63714688496.5
+utc.ordinary.add_half_equal	Boolean:0
+utc.ordinary.add1_reverse	Boolean:1
+utc.ordinary.week_equal	Boolean:0
+utc.ordinary.format_ru	String:1/15/2020 12:34:56 PM
+utc.ordinary.format_en	String:1/15/2020 12:34:56 PM
+utc.ordinary.repeat	1|1
+utc.max.value	Date:9999-12-31 23:59:59|delta=315537897599
+utc.max.gt_max	Boolean:0
+utc.max.add0_equal	Boolean:1
+utc.max.add1	Date:9999-12-31 23:59:59|delta=315537897599.9999
+utc.max.sub1	Date:9999-12-31 23:59:58|delta=315537897598
+utc.max.add_tick	Date:9999-12-31 23:59:59|delta=315537897599.0001
+utc.max.sub_tick	Date:9999-12-31 23:59:58|delta=315537897598.9999
+utc.max.add_half	Date:9999-12-31 23:59:59|delta=315537897599.5
+utc.max.add_half_equal	Boolean:0
+utc.max.add1_reverse	Boolean:0
+utc.max.week_equal	Boolean:0
+utc.max.format_ru	String:12/31/9999 11:59:59 PM
+utc.max.format_en	String:12/31/9999 11:59:59 PM
+utc.max.repeat	1|1
+file.end	file-date-neighbors-1

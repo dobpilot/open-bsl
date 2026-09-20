@@ -13,23 +13,29 @@ mod state;
 
 pub use bsl_rt::BslValue as Value;
 pub use bsl_rt::{
-    Arity, BslDate, BslNumber, BslObject, BslString, ByteStreamProtocol, CallContext, Capability,
-    Clock, ComponentError, ConstructorCode, ConstructorDescriptor, ContextKind, DirEntry, EnumKind,
-    EnumValue, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem, FixedTimeZone,
+    ApplicationCompletionSink, ApplicationErrorMapper, ApplicationExit, ApplicationLauncher,
+    ApplicationRequest, ApplicationResponseMapper, ApplicationResult, ApplicationTarget, Arity,
+    BslDate, BslNumber, BslObject, BslString, ByteStreamProtocol, CallContext, Capability, Clock,
+    ComponentError, ConstructorCode, ConstructorDescriptor, ContextKind, DirEntry, EnumKind,
+    EnumValue, FileCreate, FileHandle, FileMetadata, FileMetadataQuery, FileMetadataUpdate,
+    FileOpenOptions, FileOperationRequest, FileSearchRequest, FileSystem, FixedTimeZone,
     FunctionCode, FunctionDescriptor, FunctionKind, GlobalStagingBudget, GraphLimits, HostEnv,
     HostError, HostErrorCode, JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto,
     LibraryDependency, LibraryDescriptor, LibraryRequirement, MethodCall, MethodDescriptor,
     NetworkError, NetworkErrorKind, ObjectMembersDescriptor, ObjectProtocol, ObjectRef,
-    PropertyDescriptor, PropertyGet, PropertySet, ProxyConfig, ProxyMode, RandomHandle,
-    RandomSource, RegistryError, RequestHandle, RtError, RtResult, RuntimeRegistry, RuntimeShapes,
-    SecretString, SerializedValueGraph, StagingBudget, SystemClock, SystemRandom, SystemTimeZone,
-    TimeZone, TlsConfig, TypeDescriptor, TypeRef, UserMessageDto, UserMessageSink,
-    call_method_from_table, folded_eq, get_property_from_table, set_property_from_table,
+    OpenedTemporaryFile, PropertyDescriptor, PropertyGet, PropertySet, ProxyConfig, ProxyMode,
+    RandomHandle, RandomSource, RegistryError, RequestHandle, RtError, RtResult, RuntimeRegistry,
+    RuntimeShapes, SecretString, SerializedValueGraph, StagingBudget, SystemApplicationLauncher,
+    SystemClock, SystemRandom, SystemTimeZone, TimeZone, TlsConfig, TransferableTemporaryFile,
+    TypeDescriptor, TypeRef, UserMessageDto, UserMessageSink, call_method_from_table, folded_eq,
+    get_property_from_table, set_property_from_table,
 };
 pub use bsl_rt::{
-    HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink, HttpErrorMapper,
-    HttpPromiseSpawner, HttpResponseMapper, HttpWireRequest, HttpWireResponse,
+    FileNotificationOperation, HostPromiseSpawner, HttpClient, HttpClientConfig, HttpClientFactory,
+    HttpCompletionSink, HttpErrorMapper, HttpPromiseSpawner, HttpResponseMapper, HttpWireRequest,
+    HttpWireResponse, NotificationDescription,
 };
+pub use bsl_rt::{TemporaryFileCleanup, TemporaryFileRegistry, TemporaryFileResource};
 pub use bsl_vm::{DebugAction, DebugHook, DebugPosition, DebugValues, ROOT_MODULE};
 
 // Замыкание поверхности: типы, до которых достаёт публичная сигнатура

@@ -75,7 +75,7 @@ fn render(registry: &RuntimeRegistry) -> String {
                     "| {} | {} | {} |",
                     names(function.names),
                     function_kind(function.kind),
-                    arity(function.arity.min() as usize, function.arity.max() as usize),
+                    function.arity,
                 )
                 .unwrap();
             }
@@ -93,10 +93,7 @@ fn render(registry: &RuntimeRegistry) -> String {
                     out,
                     "| {} | {} |",
                     names(constructor.names),
-                    arity(
-                        constructor.arity.min() as usize,
-                        constructor.arity.max() as usize,
-                    ),
+                    constructor.arity,
                 )
                 .unwrap();
             }
@@ -181,13 +178,7 @@ fn write_object_members(out: &mut String, library: &LibraryDescriptor) {
             out.push_str("| Метод | Аргументы |\n");
             out.push_str("|---|---:|\n");
             for method in members.methods() {
-                writeln!(
-                    out,
-                    "| {} | {} |",
-                    names(method.names()),
-                    arity(method.arity().min() as usize, method.arity().max() as usize),
-                )
-                .unwrap();
+                writeln!(out, "| {} | {} |", names(method.names()), method.arity(),).unwrap();
             }
             out.push('\n');
         }
@@ -296,6 +287,53 @@ mod tests {
     fn arity_formats_exact_and_ranged_counts() {
         assert_eq!(arity(2, 2), "2");
         assert_eq!(arity(1, 3), "1…3");
+    }
+
+    #[test]
+    fn disjoint_arities_are_rendered_for_all_component_members() {
+        use bsl_rt::*;
+        fn call(_: &mut CallContext<'_>, _: &[BslValue]) -> RtResult<BslValue> {
+            Ok(BslValue::Undefined)
+        }
+        fn method(
+            _: &dyn ObjectProtocol,
+            _: &[BslValue],
+            _: &mut CallContext<'_>,
+        ) -> RtResult<BslValue> {
+            Ok(BslValue::Undefined)
+        }
+        static TYPE: TypeDescriptor = TypeDescriptor {
+            package: "arity-test",
+            name: "Раздельный",
+            type_display: "Раздельный",
+            type_names: &[],
+        };
+        const COUNTS: Arity = Arity::one_of(&[0, 2, 3, 5]);
+        static METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(&["Метод"], COUNTS, method)];
+        static MEMBERS: &[ObjectMembersDescriptor] =
+            &[ObjectMembersDescriptor::new(&TYPE).with_methods(METHODS)];
+        static LIBRARY: LibraryDescriptor = LibraryDescriptor::new("arity-test", "0.0.0")
+            .with_constructors(&[ConstructorDescriptor {
+                code: ConstructorCode::new(1),
+                names: &["Раздельный"],
+                arity: COUNTS,
+                call,
+            }])
+            .with_functions(&[FunctionDescriptor {
+                code: FunctionCode::new(1),
+                names: &["Раздельная"],
+                arity: COUNTS,
+                kind: FunctionKind::Function,
+                call,
+            }])
+            .with_types(&[&TYPE])
+            .with_object_member_groups(&[MEMBERS]);
+        let mut builder = RuntimeBuilder::new();
+        builder.register(core_library()).register(LIBRARY);
+        let text = render(&builder.build().unwrap());
+        assert!(text.contains("| `Раздельный` | 0, 2, 3, 5 |"));
+        assert!(text.contains("| `Раздельная` | функция | 0, 2, 3, 5 |"));
+        assert!(text.contains("| `Метод` | 0, 2, 3, 5 |"));
     }
 
     #[test]

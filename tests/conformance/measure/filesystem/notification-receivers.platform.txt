@@ -1,0 +1,28 @@
+﻿file.begin	notification-receivers-1
+receiver.form.1	ok|same=1
+receiver.form.2	ok|same=1
+receiver.array.add.1	ok|same=1
+receiver.array.add.2	ok|same=1
+receiver.array.count.1	ok|same=1
+receiver.array.count.2	ok|same=1
+receiver.array.en.1	ok|same=1
+receiver.array.en.2	ok|same=1
+receiver.array.missing.1	error:The export method is not found: НетМетода
+receiver.array.missing.2	error:The export method is not found: НетМетода
+receiver.structure.insert.1	ok|same=1
+receiver.structure.insert.2	ok|same=1
+receiver.structure.property.1	error:The export method is not found: ОбработчикПолучателя
+receiver.structure.property.2	error:The export method is not found: ОбработчикПолучателя
+receiver.map.insert.1	ok|same=1
+receiver.map.insert.2	ok|same=1
+receiver.file.exists.1	ok|same=1
+receiver.file.exists.2	ok|same=1
+receiver.file.name.1	error:The export method is not found: Имя
+receiver.file.name.2	error:The export method is not found: Имя
+receiver.string.1	error:Type mismatch (parameter number '2')
+receiver.string.2	error:Type mismatch (parameter number '5')
+receiver.number.1	error:Type mismatch (parameter number '2')
+receiver.number.2	error:Type mismatch (parameter number '5')
+receiver.undefined.1	error:Type mismatch (parameter number '2')
+receiver.undefined.2	error:Type mismatch (parameter number '5')
+file.end	notification-receivers-1

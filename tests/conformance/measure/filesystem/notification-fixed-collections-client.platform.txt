@@ -1,0 +1,22 @@
+file.begin	notification-fixed-collections-client-1
+fixed_structure.basic	Fixed structure|count=2|property=Yes|missing=No|field=1|alias=1
+fixed_structure.snapshot	1|nested=2
+fixed_structure.out	Yes|value=1
+fixed_map.basic	Fixed map|count=2|get=1|missing=|alias=1
+fixed_map.snapshot	1|nested=2
+fixed_structure.none	ok:Fixed structure
+fixed_structure.extra	error
+fixed_structure.bad	error
+fixed_structure.fixed	error
+fixed_map.none	error
+fixed_map.extra	error
+fixed_map.bad	error
+fixed_map.fixed	error
+fixed_structure.count.extra	error
+fixed_structure.property.none	error
+fixed_structure.property.extra	error
+fixed_map.count.extra	error
+fixed_map.get.none	error
+fixed_map.get.extra	error
+immutable	error|error|structure=1|map=1
+file.end	notification-fixed-collections-client-1

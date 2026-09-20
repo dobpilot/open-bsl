@@ -1,0 +1,9 @@
+init.structure	immediate=1|result_path=1|same=1
+init.map	immediate=1|result_path=1|same=1
+init.file	immediate=1|result_path=1|same=1
+init.type	immediate=1|result_path=1|same=1
+init.enum	immediate=1|result_path=1|same=1
+init.binary	immediate=1|result_path=1|same=1
+init.buffer	immediate=1|result_path=1|same=1
+init.uuid	immediate=1|result_path=1|same=1
+init.type_description	immediate=1|result_path=1|same=1

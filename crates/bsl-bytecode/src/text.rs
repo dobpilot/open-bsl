@@ -35,7 +35,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 30;
+pub const FORMAT_VERSION: u32 = 35;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -91,7 +91,8 @@ opcodes! {
     GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
     CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod,
-    RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp,
+    RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp, CallObjectProcedure,
+    CallLinkedObjectMethod, CallLinkedObjectProcedure,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -276,6 +277,16 @@ fn write_program_body(out: &mut String, program: &Program) -> Result<()> {
         writeln!(out, "  {i} {}{export}  ; .chunk {}", quote(name), i + 1).unwrap();
     }
 
+    writeln!(out, "\n.imports {}", program.imports.len()).unwrap();
+    for (i, import) in program.imports.iter().enumerate() {
+        writeln!(
+            out,
+            "  {i} module={} {}",
+            import.module.index(),
+            quote(&import.alias)
+        )
+        .unwrap();
+    }
     writeln!(out, "\n.links {}", program.links.len()).unwrap();
     for (i, link) in program.links.iter().enumerate() {
         match link {
@@ -285,6 +296,15 @@ fn write_program_body(out: &mut String, program: &Program) -> Result<()> {
             LinkEntry::Variable { module, slot } => {
                 writeln!(out, "  {i} var module={} slot={slot}", module.index()).unwrap();
             }
+            LinkEntry::ObjectMethod {
+                library,
+                type_name,
+                method,
+            } => writeln!(
+                out,
+                "  {i} method lib={library} type={type_name} method={method}"
+            )
+            .unwrap(),
         }
     }
 
@@ -356,6 +376,9 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
                 ArgMode::ByRefLocal(slot) => format!("byref:{slot}"),
                 ArgMode::ByRefModuleVar(slot) => format!("bymodvar:{slot}"),
                 ArgMode::ByRefImportedVar(slot) => format!("byimport:{slot}"),
+                ArgMode::ByRefIndex { object, index } => {
+                    format!("byindex:{object}:{index}")
+                }
                 ArgMode::Default => "default".to_string(),
             })
             .collect();
@@ -416,6 +439,7 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
         let link_kind_ok = |slot: u16, want_function: bool| match program.links.get(slot as usize) {
             Some(LinkEntry::Function { .. }) => want_function,
             Some(LinkEntry::Variable { .. }) => !want_function,
+            Some(LinkEntry::ObjectMethod { .. }) => false,
             None => false,
         };
         match instr {
@@ -428,6 +452,19 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
             }
             Instr::GetImportedVar { link_slot, .. } | Instr::SetImportedVar { link_slot, .. }
                 if !link_kind_ok(*link_slot, false) =>
+            {
+                return Err(TextError::BadLinkTarget {
+                    chunk: index,
+                    pc,
+                    link_slot: *link_slot,
+                });
+            }
+            Instr::CallLinkedObjectMethod { link_slot, .. }
+            | Instr::CallLinkedObjectProcedure { link_slot, .. }
+                if !matches!(
+                    program.links.get(*link_slot as usize),
+                    Some(LinkEntry::ObjectMethod { .. })
+                ) =>
             {
                 return Err(TextError::BadLinkTarget {
                     chunk: index,
@@ -468,9 +505,20 @@ fn instr_comment(instr: &Instr, chunk: &Chunk, program: &Program) -> Option<Stri
         Instr::GetProp { name, .. } | Instr::SetProp { name, .. } => {
             program.names.get(name.index()).map(|n| format!(".{n}"))
         }
-        Instr::CallObjectMethod { method, .. } => program
-            .names
-            .get(*method as usize)
+        Instr::CallObjectMethod { method, .. } | Instr::CallObjectProcedure { method, .. } => {
+            program
+                .names
+                .get(*method as usize)
+                .map(|name| format!(".{name}"))
+        }
+        Instr::CallLinkedObjectMethod { link_slot, .. }
+        | Instr::CallLinkedObjectProcedure { link_slot, .. } => program
+            .links
+            .get(*link_slot as usize)
+            .and_then(|link| match link {
+                LinkEntry::ObjectMethod { method, .. } => program.names.get(*method as usize),
+                _ => None,
+            })
             .map(|name| format!(".{name}")),
         Instr::GetObjectProp { name, .. } | Instr::SetObjectProp { name, .. } => program
             .names
@@ -585,7 +633,7 @@ fn write_const(v: &BslValue) -> Result<String> {
         // Секундами от эпохи, а не `дд.ММ.гггг`: представление даты по
         // умолчанию — само по себе открытый вопрос (FMT.DATE.DEFAULT), и
         // байт-код не должен от него зависеть.
-        ConstKind::Date(d) => format!("Дата {}", d.seconds()),
+        ConstKind::Date(d) => format!("Дата {}", d.ticks()),
         ConstKind::Enum(e) => format!("Перечисление {}.{}", e.enum_name(), e.member_name()),
         // Отдельный тег, а не «Перечисление» без точки: `Перечисление X.Y`
         // уже занят членом, и без точки текст разбирался бы неоднозначно.
@@ -723,16 +771,33 @@ fn write_instr(instr: &Instr) -> String {
             builtin_method_name(*method)
         ),
         Instr::CallObjectMethod {
-            result_required,
             dst,
             obj,
             method,
             base,
-            count,
-        } => format!(
-            "{op} dst={dst} obj={obj} method={} base={base} count={count} result_required={result_required}",
-            method
-        ),
+            arg_modes,
+        }
+        | Instr::CallObjectProcedure {
+            dst,
+            obj,
+            method,
+            base,
+            arg_modes,
+        } => format!("{op} dst={dst} obj={obj} method={method} base={base} arg_modes={arg_modes}"),
+        Instr::CallLinkedObjectMethod {
+            dst,
+            obj,
+            link_slot,
+            base,
+            arg_modes,
+        }
+        | Instr::CallLinkedObjectProcedure {
+            dst,
+            obj,
+            link_slot,
+            base,
+            arg_modes,
+        } => format!("{op} dst={dst} obj={obj} link={link_slot} base={base} arg_modes={arg_modes}"),
         Instr::GetObjectProp { dst, obj, name } => {
             format!("{op} dst={dst} obj={obj} name={name}")
         }
@@ -1166,6 +1231,31 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         exported_functions.push(parse_export_flag(no, &tail)?);
     }
 
+    let n = r.directive(".imports")?;
+    let mut imports = Vec::with_capacity(n);
+    for i in 0..n {
+        let (no, text) = r.expect("объявленный импорт")?;
+        let (idx, rest) = text
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидался номер импорта и module=".into()))?;
+        parse_index(no, idx, i)?;
+        let (field, quoted) = rest
+            .trim_start()
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидался module= и псевдоним".into()))?;
+        let module = field
+            .strip_prefix("module=")
+            .and_then(|part| part.parse::<u32>().ok())
+            .ok_or_else(|| TextError::At(no, "ожидалось поле module=число".into()))?;
+        let (alias, tail) = unquote(no, quoted.trim())?;
+        if !tail.trim().is_empty() {
+            return Err(TextError::At(no, "лишние поля объявленного импорта".into()));
+        }
+        imports.push(crate::ModuleImport {
+            alias,
+            module: ModuleId::new(module),
+        });
+    }
     let n = r.directive(".links")?;
     let mut links = Vec::with_capacity(n);
     for i in 0..n {
@@ -1177,7 +1267,7 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         parse_index(no, idx, i)?;
         let kind = parts
             .next()
-            .ok_or_else(|| TextError::At(no, "ожидался вид связи fn|var".to_string()))?;
+            .ok_or_else(|| TextError::At(no, "ожидался вид связи fn|var|method".to_string()))?;
         let fields: Vec<&str> = parts.collect();
         let field = |name: &str| -> Result<u32> {
             fields
@@ -1187,18 +1277,23 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
                 .parse::<u32>()
                 .map_err(|_| TextError::At(no, format!("поле {name} не число")))
         };
-        let module = ModuleId::new(field("module")?);
         let narrow = |value: u32, what: &str| -> Result<u16> {
             u16::try_from(value).map_err(|_| TextError::At(no, format!("{what} шире u16")))
         };
         links.push(match kind {
             "fn" => LinkEntry::Function {
-                module,
+                module: ModuleId::new(field("module")?),
                 func: narrow(field("func")?, "func")?,
             },
             "var" => LinkEntry::Variable {
-                module,
+                module: ModuleId::new(field("module")?),
                 slot: narrow(field("slot")?, "slot")?,
+            },
+            "method" => LinkEntry::ObjectMethod {
+                library: u8::try_from(field("lib")?)
+                    .map_err(|_| TextError::At(no, "lib шире u8".to_string()))?,
+                type_name: narrow(field("type")?, "type")?,
+                method: narrow(field("method")?, "method")?,
             },
             other => {
                 return Err(TextError::At(
@@ -1275,6 +1370,7 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         exported_functions,
         module_vars,
         exported_module_vars,
+        imports,
         links,
         // Пустые записи у ВСЕХ чанков означают образ без сведений об
         // отладке, и таблица тогда пуста целиком — как её и собирает
@@ -1525,6 +1621,22 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<(Chunk, Vec<u32>
                         .parse()
                         .map_err(|_| TextError::At(no, format!("«{t}» не номер связи")))?,
                 ),
+                t if t.starts_with("byindex:") => {
+                    let Some((object, index)) = t["byindex:".len()..].split_once(':') else {
+                        return Err(TextError::At(
+                            no,
+                            format!("«{t}» не пара регистров индексной цели"),
+                        ));
+                    };
+                    ArgMode::ByRefIndex {
+                        object: object.parse().map_err(|_| {
+                            TextError::At(no, format!("«{object}» не регистр объекта"))
+                        })?,
+                        index: index.parse().map_err(|_| {
+                            TextError::At(no, format!("«{index}» не регистр индекса"))
+                        })?,
+                    }
+                }
                 t => match t.strip_prefix("byref:") {
                     Some(slot) => ArgMode::ByRefLocal(
                         slot.parse()
@@ -1648,12 +1760,12 @@ fn parse_const(no: usize, text: &str) -> Result<BslValue> {
         ),
         "Строка" => BslValue::Str(BslString::from_str(&unquote(no, rest)?.0)),
         "Дата" => {
-            let secs: i64 = rest
+            let ticks: u64 = rest
                 .parse()
-                .map_err(|_| TextError::At(no, format!("«{rest}» не секунды")))?;
+                .map_err(|_| TextError::At(no, format!("«{rest}» не такты даты")))?;
             BslValue::Date(
-                BslDate::from_seconds(secs)
-                    .ok_or_else(|| TextError::At(no, format!("дата вне диапазона: {secs}")))?,
+                BslDate::from_ticks(ticks)
+                    .ok_or_else(|| TextError::At(no, format!("дата вне диапазона: {ticks}")))?,
             )
         }
         "Перечисление" => {
@@ -1997,12 +2109,32 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             }
         }
         "CallObjectMethod" => Instr::CallObjectMethod {
-            result_required: field_bool(&f, no, "result_required")?,
             dst: dst(&f)?,
             obj: obj(&f)?,
             method: field_u16(&f, no, "method")?,
             base: base(&f)?,
-            count: count(&f)?,
+            arg_modes: field_u16(&f, no, "arg_modes")?,
+        },
+        "CallObjectProcedure" => Instr::CallObjectProcedure {
+            dst: dst(&f)?,
+            obj: obj(&f)?,
+            method: field_u16(&f, no, "method")?,
+            base: base(&f)?,
+            arg_modes: field_u16(&f, no, "arg_modes")?,
+        },
+        "CallLinkedObjectMethod" => Instr::CallLinkedObjectMethod {
+            dst: dst(&f)?,
+            obj: obj(&f)?,
+            link_slot: field_u16(&f, no, "link")?,
+            base: base(&f)?,
+            arg_modes: field_u16(&f, no, "arg_modes")?,
+        },
+        "CallLinkedObjectProcedure" => Instr::CallLinkedObjectProcedure {
+            dst: dst(&f)?,
+            obj: obj(&f)?,
+            link_slot: field_u16(&f, no, "link")?,
+            base: base(&f)?,
+            arg_modes: field_u16(&f, no, "arg_modes")?,
         },
         "GetObjectProp" => Instr::GetObjectProp {
             dst: dst(&f)?,

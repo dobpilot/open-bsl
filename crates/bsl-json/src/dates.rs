@@ -80,6 +80,9 @@ pub(crate) fn format_json_date(
     variant: JsonDateWritingVariant,
     zone: &dyn bsl_rt::TimeZone,
 ) -> RtResult<String> {
+    // Две измеренные файловые даты с нулевыми календарными полями остаются
+    // разными значениями в VM, но JSON платформы пишет обе как пустую дату.
+    let date = date.calendar_or_empty();
     if format != JsonDateFormat::Iso && variant != JsonDateWritingVariant::Universal {
         return Err(RtError::Json(
             "формат даты, отличный от ISO, поддержан только для варианта записи \

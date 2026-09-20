@@ -1,0 +1,4 @@
+file.begin	search-directory-cycle-1
+context.effective	НеИспользовать
+find.cycle.result	ok:42
+file.end	search-directory-cycle-1

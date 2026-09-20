@@ -238,7 +238,8 @@ fn value_to_writer(
         BslValue::Number(n) => {
             w.open();
             w.quoted("N");
-            w.bare(n.to_canonical());
+            w.begin_item(false);
+            n.append_canonical(&mut w.out);
             w.close();
         }
         BslValue::Str(s) => {
@@ -248,7 +249,7 @@ fn value_to_writer(
             w.close();
         }
         BslValue::Date(d) => {
-            let c = d.to_civil();
+            let c = d.calendar_or_empty().to_civil();
             w.open();
             w.quoted("D");
             w.bare(format_args!(
@@ -655,27 +656,34 @@ pub fn value_to_file(
     files: &dyn crate::FileSystem,
 ) -> RtResult<()> {
     let text = value_to_string_internal(v, rt)?;
-    // Файл собирается ЦЕЛИКОМ, а не течёт через `BufWriter`: текст всё
-    // равно уже материализован целиком строкой выше, так что потоковая
-    // запись экономила бы не память, а только одну копию — зато требовала
-    // бы от файловой системы прогона дескрипторов, то есть третьей волны
-    // возможностей (см. `crate::FileSystem`).
-    let mut out = Vec::with_capacity(text.len() + 3);
-    out.extend_from_slice("\u{feff}".as_bytes());
-    // Перевод LF в CRLF — кусками между переводами строк, без
-    // посимвольного декодирования: байт `\n` не встречается внутри
-    // многобайтовых последовательностей UTF-8.
-    let mut first = true;
-    for chunk in text.split('\n') {
-        if !first {
-            out.extend_from_slice(b"\r\n");
-        }
-        first = false;
-        out.extend_from_slice(chunk.as_bytes());
-    }
+    let out = file_bytes(text);
     files
         .write(path, &out)
         .map_err(|e| RtError::IoError(format!("ЗначениеВФайл: {e}")))
+}
+
+fn file_bytes(text: String) -> Vec<u8> {
+    // Забираем буфер строки вместо второй полной копии. Расширяем LF
+    // справа налево: уже перенесённый хвост не затирает непрочитанные
+    // байты. Одиночный CR сохраняется, существующий CRLF становится
+    // CRCRLF, как при прежнем преобразовании через `split('\n')`.
+    let mut out = text.into_bytes();
+    let mut read = out.len();
+    let extra = 3 + out.iter().filter(|&&byte| byte == b'\n').count();
+    out.resize(read + extra, 0);
+    let mut write = out.len();
+    while let Some(pos) = out[..read].iter().rposition(|&byte| byte == b'\n') {
+        let count = read - pos - 1;
+        write -= count;
+        out.copy_within(pos + 1..read, write);
+        write -= 2;
+        out[write..write + 2].copy_from_slice(b"\r\n");
+        read = pos;
+    }
+    debug_assert_eq!(write, read + 3);
+    out.copy_within(..read, 3);
+    out[..3].copy_from_slice("\u{feff}".as_bytes());
+    out
 }
 
 /// `ЗначениеИзФайла(ИмяФайла)`.
@@ -2177,6 +2185,8 @@ mod tests {
         assert_eq!(write(&BslValue::Date(d)), r#"{"D",20240506070809}"#);
         let empty = BslDate::from_civil(1, 1, 1, 0, 0, 0).unwrap();
         assert_eq!(write(&BslValue::Date(empty)), r#"{"D",00010101000000}"#);
+        let wrapped = BslDate::from_raw_ticks(u64::MAX - 1_615);
+        assert_eq!(write(&BslValue::Date(wrapped)), r#"{"D",00010101000000}"#);
     }
 
     #[test]
@@ -2551,6 +2561,26 @@ mod tests {
         assert_transit(title);
         let qualifiers = "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"Ч\",\n{\"Pattern\",\n{\"N\",10,2,0}\n},\"\",0}\n},\n{2,1,0,0,\n{1,0},0,-1},\n{0,0}\n}\n}";
         assert_transit(qualifiers);
+    }
+
+    #[test]
+    fn file_bytes_preserves_the_existing_bom_and_lf_expansion() {
+        for input in [
+            "",
+            "abc",
+            "\n",
+            "\n\n",
+            "\nа🦀\n",
+            "a\r\nb\rc\n",
+            "\u{feff}x",
+        ] {
+            let expected = format!("\u{feff}{}", input.replace('\n', "\r\n"));
+            for spare in [0, 128] {
+                let mut text = String::with_capacity(input.len() + spare);
+                text.push_str(input);
+                assert_eq!(file_bytes(text), expected.as_bytes());
+            }
+        }
     }
 
     #[test]

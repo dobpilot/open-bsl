@@ -42,12 +42,12 @@ for line in text.splitlines():
     declaration = start.match(line) if depth == 0 else None
     if declaration:
         depth = 1
-        if async_mode:
-            annotation = "&НаКлиенте"
-        elif any(declaration.group(1).endswith(s) for s in contextless_suffixes):
+        if any(declaration.group(1).endswith(s) for s in contextless_suffixes):
             # Составной benchmark может включать код общего модуля. Без
             # контекста его локальные имена не сталкиваются с полями формы.
             annotation = "&НаСервереБезКонтекста"
+        elif async_mode:
+            annotation = "&НаКлиенте"
         else:
             annotation = "&НаСервере"
         decls += [annotation, line]
@@ -57,6 +57,10 @@ for line in text.splitlines():
             depth = 0
             decls.append("")
     elif var_decl.match(line):
+        # В клиентской пробе состояние оповещений должно быть доступно
+        # клиентским обработчикам, а не оставаться серверной переменной формы.
+        if async_mode:
+            module_vars.append("&НаКлиенте")
         module_vars.append(line)
     else:
         body.append(line)

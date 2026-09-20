@@ -54,8 +54,8 @@ pub enum RExpr {
     /// `Variable` в `ResolvedProgram::links`.
     ImportedVar(u32),
     /// Вызов встроенной функции по голому имени (`Sqrt(x)`, `Pow(x,y)`,
-    /// `Message(x)`, ...). Всегда по значению — ни у одной встроенной
-    /// функции параметров без `Знач` нет.
+    /// `Message(x)`, ...). Здесь аргументы уже по значению; выход RunApp
+    /// представлен окружающим присваиванием, видимым анализу SSA.
     CallBuiltinFn {
         builtin: BuiltinFn,
         args: Vec<RExpr>,
@@ -78,16 +78,17 @@ pub enum RExpr {
         /// Исходное имя метода. Применимость определяется фактическим
         /// типом получателя, поэтому закрытое перечисление здесь не нужно.
         method: String,
-        /// Компиляция идёт с реестром компонентов: получатель может быть
-        /// внешним, поэтому даже знакомое ядру имя нельзя специализировать.
-        ///
-        /// Булев сознательно, как и `ResolvedParam::by_val`: состояния
-        /// ровно два, оба живут в генерируемом IR (без реестра вызов
-        /// закрытый, с реестром — открытый, кроме доказанно ядровых
-        /// приёмников), и назвать их типом значило бы добавить имя, а не
-        /// убрать неоднозначность.
+        /// Получатель не доказан ядровым либо требуется контекст результата
+        /// открытого вызова. BSL-модуль возможен и без реестра компонентов;
+        /// знакомое ядру имя само по себе не разрешает специализацию.
         open: bool,
-        args: Vec<RExpr>,
+        /// Конкретный компонентный тип, доказанный для всех присваиваний
+        /// приёмника. `None` оставляет ядровой или открытой диспетчеризации
+        /// прежний смысл поля `open`.
+        component_type: Option<&'static bsl_rt::TypeDescriptor>,
+        /// Номер сериализуемой связи конкретного компонентного метода.
+        component_link: Option<u32>,
+        args: Vec<ResolvedArg>,
     },
     Str(String),
     Index {
@@ -179,12 +180,19 @@ pub enum ResolvedArg {
 /// Разрешённая связь с экспортным символом ЧУЖОГО модуля конфигурации.
 /// Номер записи в `ResolvedProgram::links` — будущий `LinkSlot` таблицы
 /// `Program::links`; вид символа фиксируется на этапе резолвинга.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolvedLink {
     /// `func` — индекс ЧАНКА целевой программы (позиция функции + 1).
     Function { module: u32, func: u16 },
     /// `slot` — номер в `module_vars` целевого модуля.
     Variable { module: u32, slot: u16 },
+    /// Метод конкретного компонентного типа. Позиции дескрипторов в
+    /// статических Rust-срезах намеренно не входят в образ.
+    ObjectMethod {
+        library: LibraryKey,
+        type_name: &'static str,
+        method: String,
+    },
 }
 
 /// Номер метки внутри одного тела модуля, процедуры или функции.
@@ -373,6 +381,8 @@ pub struct ResolvedProgram {
     /// Использованные связи с чужими модулями, в порядке появления и без
     /// повторов; номер записи — операнд `CallImported`/`ImportedVar`.
     pub links: Vec<ResolvedLink>,
+    /// Объявленные пары «псевдоним, модуль», в исходном порядке.
+    pub imports: Vec<(String, u32)>,
 }
 
 /// Есть ли в теле `Выполнить`/`Вычислить` — обход по разрешённому дереву,
@@ -457,7 +467,11 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
             args.iter().any(expr_uses_dynamic)
         }
         RExpr::CallMethod { obj, args, .. } => {
-            expr_uses_dynamic(obj) || args.iter().any(expr_uses_dynamic)
+            expr_uses_dynamic(obj)
+                || args.iter().any(|arg| match arg {
+                    ResolvedArg::Value(expr) => expr_uses_dynamic(expr),
+                    ResolvedArg::Default => false,
+                })
         }
         RExpr::Index { obj, index } => expr_uses_dynamic(obj) || expr_uses_dynamic(index),
         RExpr::Field { obj, .. } => expr_uses_dynamic(obj),

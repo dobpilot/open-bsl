@@ -158,10 +158,12 @@ fn debug_info_with_a_non_removing_pass_is_allowed() {
 #[test]
 fn a_fragment_counts_lines_from_its_own_text() {
     let request = bsl_bytecode::DynamicRequest {
+        imports: &[],
         source: "б = 1;\nв = 2;",
         debug_info: true,
         kind: bsl_bytecode::DynamicKind::Execute,
         scope: bsl_bytecode::DynamicScope {
+            module: None,
             program: bsl_bytecode::DynamicScope::ROOT,
             chunk: 0,
         },
@@ -190,10 +192,12 @@ fn a_fragment_counts_lines_from_its_own_text() {
 #[test]
 fn a_fragment_without_debug_info_carries_no_lines() {
     let request = bsl_bytecode::DynamicRequest {
+        imports: &[],
         source: "б = 1;",
         debug_info: false,
         kind: bsl_bytecode::DynamicKind::Execute,
         scope: bsl_bytecode::DynamicScope {
+            module: None,
             program: bsl_bytecode::DynamicScope::ROOT,
             chunk: 0,
         },

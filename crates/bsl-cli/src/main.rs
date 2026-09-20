@@ -16,6 +16,7 @@ mod dap;
 mod highlight;
 mod ingest;
 mod repl;
+mod session;
 mod usemod;
 
 use bsl_rt::BslValue;
@@ -403,8 +404,7 @@ fn run_file(path: &str, arguments: Vec<String>) {
         }
     }
 
-    let mut state = host
-        .state_builder()
+    let mut state = session::builder(&host)
         .arguments(arguments)
         .message_sink(match debug.as_ref() {
             None => std::rc::Rc::new(StdoutMessageSink) as std::rc::Rc<dyn bsl_rt::UserMessageSink>,
@@ -456,17 +456,8 @@ fn run_file(path: &str, arguments: Vec<String>) {
         conn.event("terminated", serde_json::json!({}));
         conn.flush();
     }
-    match outcome {
-        Ok(BslValue::Undefined) => {}
-        Ok(v) => print_value(&v),
-        Err(open_bsl::Error::Runtime(e)) => {
-            eprintln!("ошибка выполнения: {e}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("ошибка выполнения: {e}");
-            std::process::exit(1);
-        }
+    if session::finish(state, outcome) != 0 {
+        std::process::exit(1);
     }
 }
 

@@ -1,0 +1,78 @@
+file.begin	temp-parameters-1
+temp.params.ru.default	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.explicit	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.extra	error|call
+temp.params.ru.1.zero	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.2.zero	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.1.one	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.2.one	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.1.eight	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.2.eight	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.1.buffer	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.2.buffer	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.1.limit	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.2.limit	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.1.above	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.2.above	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.1.undefined	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.2.undefined	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.ru.1.null	error|call
+temp.params.ru.2.null	error|call
+temp.params.ru.1.negative	error|call
+temp.params.ru.2.negative	error|call
+temp.params.ru.1.fraction	error|call
+temp.params.ru.2.fraction	error|call
+temp.params.ru.1.string	error|call
+temp.params.ru.2.string	error|call
+temp.params.ru.1.false	error|call
+temp.params.ru.2.false	error|call
+temp.params.ru.1.true	error|call
+temp.params.ru.2.true	error|call
+temp.params.ru.1.date	error|call
+temp.params.ru.2.date	error|call
+temp.params.ru.1.array	error|call
+temp.params.ru.2.array	error|call
+temp.params.ru.1.struct	error|call
+temp.params.ru.2.struct	error|call
+temp.params.en.default	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.explicit	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.extra	error|call
+temp.params.en.1.zero	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.2.zero	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.1.one	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.2.one	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.1.eight	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.2.eight	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.1.buffer	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.2.buffer	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.1.limit	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.2.limit	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.1.above	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.2.above	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.1.undefined	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.2.undefined	ok|File stream|0|0|rws|exists=1|closed_name=same|closed_exists=1
+temp.params.en.1.null	error|call
+temp.params.en.2.null	error|call
+temp.params.en.1.negative	error|call
+temp.params.en.2.negative	error|call
+temp.params.en.1.fraction	error|call
+temp.params.en.2.fraction	error|call
+temp.params.en.1.string	error|call
+temp.params.en.2.string	error|call
+temp.params.en.1.false	error|call
+temp.params.en.2.false	error|call
+temp.params.en.1.true	error|call
+temp.params.en.2.true	error|call
+temp.params.en.1.date	error|call
+temp.params.en.2.date	error|call
+temp.params.en.1.array	error|call
+temp.params.en.2.array	error|call
+temp.params.en.1.struct	error|call
+temp.params.en.2.struct	error|call
+temp.visibility.default	error|Error calling constructor (ДвоичныеДанные)
+temp.visibility.explicit	error|Error calling constructor (ДвоичныеДанные)
+temp.visibility.zero	error|Error calling constructor (ДвоичныеДанные)
+temp.visibility.one	error|Error calling constructor (ДвоичныеДанные)
+temp.visibility.eight	error|Error calling constructor (ДвоичныеДанные)
+temp.visibility.large	error|Error calling constructor (ДвоичныеДанные)
+file.end	temp-parameters-1

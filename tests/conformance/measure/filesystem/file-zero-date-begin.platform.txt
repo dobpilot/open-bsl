@@ -1,0 +1,6 @@
+file.begin	file-zero-date-begin-1
+begin.return	0
+begin.local	0-0-0 0:0:0|delta=-9017|sync=1
+begin.utc	0-0-0 0:0:0|delta=-0.1616|sync=1
+begin.order	1
+file.end	file-zero-date-begin-1

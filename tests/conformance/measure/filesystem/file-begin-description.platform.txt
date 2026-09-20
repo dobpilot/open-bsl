@@ -1,0 +1,16 @@
+file.begin	file-begin-description-1
+begin.description.undefined.ru	error|call|changed=0
+begin.description.undefined.en	error|call|changed=0
+begin.description.null	error|call|changed=0
+begin.description.false	error|call|changed=0
+begin.description.zero	error|call|changed=0
+begin.description.empty_string	error|call|changed=0
+begin.description.string	error|call|changed=0
+begin.description.array	error|call|changed=0
+begin.description.struct	error|call|changed=0
+begin.description.empty.ru	returned|changed=1
+begin.description.empty.en	returned|changed=1
+begin.description.returned	0
+begin.description.control	1
+begin.description.identity	same
+file.end	file-begin-description-1

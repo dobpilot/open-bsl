@@ -345,9 +345,11 @@ impl ObjectProtocol for FileRootsObject {
 
 pub fn new_file_roots(arguments: &[BslValue], context: &mut CallContext<'_>) -> RtResult<BslValue> {
     let path = required_string(arguments, 0, "Новый СертификатыУдостоверяющихЦентровФайл")?;
-    let bytes = context
-        .files_rc()?
-        .read(&path)
+    let files = context.files_rc()?;
+    let operation_path = bsl_rt::prepare_file_operation_path(&path, files.as_ref())
+        .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
+    let bytes = files
+        .read(&operation_path)
         .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
     Ok(BslValue::new_object(FileRootsObject { bytes }))
 }
@@ -378,9 +380,11 @@ pub fn new_file_client_certificate(
     let path = required_string(arguments, 0, "Новый СертификатКлиентаФайл")?;
     let password = optional_string(arguments, 1, "Новый СертификатКлиентаФайл")?
         .map_or_else(SecretString::default, SecretString::new);
-    let bytes = context
-        .files_rc()?
-        .read(&path)
+    let files = context.files_rc()?;
+    let operation_path = bsl_rt::prepare_file_operation_path(&path, files.as_ref())
+        .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
+    let bytes = files
+        .read(&operation_path)
         .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
     Ok(BslValue::new_object(FileClientCertificateObject {
         identity: ClientIdentity {

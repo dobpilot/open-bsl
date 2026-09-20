@@ -1,0 +1,50 @@
+﻿file.begin	file-async-read-1
+read.ordinary.exists.ru	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.ordinary.exists.en	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.ordinary.isfile.ru	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.ordinary.isfile.en	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.ordinary.isdir.ru	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.ordinary.isdir.en	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.ordinary.size.ru	promise=Promise|ok|Number|value=3|sync_equal=1
+read.ordinary.size.en	promise=Promise|ok|Number|value=3|sync_equal=1
+read.ordinary.readonly.ru	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.ordinary.readonly.en	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.ordinary.hidden.ru	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.ordinary.hidden.en	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.ordinary.time.ru	promise=Promise|ok|Date|value=20200102060405|sync_equal=1
+read.ordinary.time.en	promise=Promise|ok|Date|value=20200102060405|sync_equal=1
+read.ordinary.timeutc.ru	promise=Promise|ok|Date|value=20200102030405|sync_equal=1
+read.ordinary.timeutc.en	promise=Promise|ok|Date|value=20200102030405|sync_equal=1
+read.directory.exists.ru	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.directory.exists.en	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.directory.isfile.ru	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.directory.isfile.en	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.directory.isdir.ru	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.directory.isdir.en	promise=Promise|ok|Boolean|value=1|sync_equal=1
+read.directory.size.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/directory
+read.directory.size.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/directory
+read.directory.readonly.ru	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.directory.readonly.en	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.directory.hidden.ru	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.directory.hidden.en	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.directory.time.ru	promise=Promise|ok|Date|value=20200102060405|sync_equal=1
+read.directory.time.en	promise=Promise|ok|Date|value=20200102060405|sync_equal=1
+read.directory.timeutc.ru	promise=Promise|ok|Date|value=20200102030405|sync_equal=1
+read.directory.timeutc.en	promise=Promise|ok|Date|value=20200102030405|sync_equal=1
+read.missing.exists.ru	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.missing.exists.en	promise=Promise|ok|Boolean|value=0|sync_equal=1
+read.missing.isfile.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.isfile.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.isdir.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.isdir.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.size.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.size.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.readonly.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.readonly.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.hidden.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.hidden.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.time.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.time.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.timeutc.ru	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+read.missing.timeutc.en	promise=Promise|error|stage=await|Error calling context method|cause=Error accessing file: /tmp/v8_FPoR1E_5.async-read/missing
+file.end	file-async-read-1

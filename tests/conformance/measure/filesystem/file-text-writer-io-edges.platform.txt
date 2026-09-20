@@ -1,0 +1,13 @@
+file.begin	file-text-writer-io-edges-1
+text.suffix.0	ok:EFBBBF
+text.prefix.0	error:414243
+text.suffix.9	ok:EFBBBF
+text.suffix.10	ok:EFBBBF
+text.suffix.13	ok:EFBBBF
+text.suffix.32	ok:EFBBBF
+text.suffix.127	ok:414243
+text.suffix.133	ok:EFBBBF
+text.suffix.160	ok:EFBBBF
+text.suffix.8203	ok:414243
+text.suffix.65279	ok:414243
+file.end	file-text-writer-io-edges-1

@@ -1,0 +1,16 @@
+﻿file.begin	file-async-globals-1
+mkdir.async.new	promise=Promise|ok|String|value=<root>/new
+mkdir.async.existing	promise=Promise|ok|String|value=<root>/new
+mkdir.async.slash	promise=Promise|ok|String|value=<root>/slash/
+mkdir.async.dot	promise=Promise|ok|String|value=<root>/new/../dot
+mkdir.async.parentfile	promise=Promise|error|stage=await|Error calling context method|cause=Error creating directory
+mkdir.async.undefined	promise=Promise|error|stage=await|Error calling context method|cause=Error creating directory
+delete.async.mask	promise=Promise|ok|Undefined|value=
+delete.async.remaining	1
+delete.async.direct	promise=Promise|ok|Undefined|value=
+delete.async.direct.exists	0
+delete.async.missing	promise=Promise|ok|Undefined|value=
+delete.async.undefined	promise=Promise|error|stage=await|Error calling context method|cause=Error deleting files
+tempdir.async.ru	promise=Promise|ok|String|value=/tmp/
+tempdir.async.en	promise=Promise|ok|String|value=/tmp/
+file.end	file-async-globals-1

@@ -278,7 +278,7 @@ pub(crate) fn lexical_of_value(value: &BslValue, target: Option<BuiltinBsl>) -> 
         BslValue::Number(n) => n.to_canonical(),
         BslValue::Boolean(b) => (if *b { "true" } else { "false" }).to_string(),
         BslValue::Date(d) => {
-            let c = d.to_civil();
+            let c = d.calendar_or_empty().to_civil();
             match target {
                 // У приёмника-даты и приёмника-времени формы свои, у всех
                 // остальных (в том числе у `xs:string`) — полная запись

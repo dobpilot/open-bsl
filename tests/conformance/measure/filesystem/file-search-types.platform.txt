@@ -1,0 +1,19 @@
+﻿file.begin	search-types-1
+find.mask.number	1|17
+find.mask.zero	1|0
+find.mask.true	0
+find.mask.false	0
+find.mask.null	1|.
+find.mask.array	1|Массив
+find.mask.undefined	1|.
+find.mask.string17	1|17
+find.recursive.hole	1|a.txt
+find.mask.hole	1|.
+find.both.holes	1|.
+find.recursive.undefined	error:Error calling context method (НайтиФайлы)
+find.recursive.null	error:Error calling context method (НайтиФайлы)
+find.recursive.negative	2|a.txt|deep.txt
+find.recursive.stringtrue	2|a.txt|deep.txt
+find.recursive.empty	error:Error calling context method (НайтиФайлы)
+find.path.fileobject	0
+file.end	search-types-1

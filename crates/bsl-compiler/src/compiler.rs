@@ -486,6 +486,51 @@ fn assemble_program(
     program
 }
 
+pub(crate) fn compile_links(
+    links: &[bsl_sema::ResolvedLink],
+    requirements: &[bsl_rt::LibraryRequirement],
+    names: &[String],
+) -> Vec<bsl_bytecode::LinkEntry> {
+    links
+        .iter()
+        .map(|link| match link {
+            bsl_sema::ResolvedLink::Function { module, func } => {
+                bsl_bytecode::LinkEntry::Function {
+                    module: bsl_bytecode::ModuleId::new(*module),
+                    func: *func,
+                }
+            }
+            bsl_sema::ResolvedLink::Variable { module, slot } => {
+                bsl_bytecode::LinkEntry::Variable {
+                    module: bsl_bytecode::ModuleId::new(*module),
+                    slot: *slot,
+                }
+            }
+            bsl_sema::ResolvedLink::ObjectMethod {
+                library,
+                type_name,
+                method,
+            } => bsl_bytecode::LinkEntry::ObjectMethod {
+                library: requirements
+                    .iter()
+                    .position(|requirement| requirement.package == library.as_str())
+                    .and_then(|index| u8::try_from(index).ok())
+                    .expect("компонент метода входит в requirements"),
+                type_name: names
+                    .iter()
+                    .position(|name| name == type_name)
+                    .and_then(|index| u16::try_from(index).ok())
+                    .expect("имя типа метода интернировано"),
+                method: names
+                    .iter()
+                    .position(|name| name == method)
+                    .and_then(|index| u16::try_from(index).ok())
+                    .expect("имя метода интернировано"),
+            },
+        })
+        .collect()
+}
+
 fn assemble_raw(
     resolved: &ResolvedProgram,
     chunks: Vec<Chunk>,
@@ -493,6 +538,7 @@ fn assemble_raw(
     names: Vec<String>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
 ) -> Program {
+    let links = compile_links(&resolved.links, &resolved.requirements, &names);
     Program {
         requirements: resolved.requirements.clone(),
         chunks,
@@ -503,24 +549,15 @@ fn assemble_raw(
         exported_functions: resolved.functions.iter().map(|f| f.export).collect(),
         module_vars: resolved.module_vars.clone(),
         exported_module_vars: resolved.module_var_exports.clone(),
-        links: resolved
-            .links
+        imports: resolved
+            .imports
             .iter()
-            .map(|link| match *link {
-                bsl_sema::ResolvedLink::Function { module, func } => {
-                    bsl_bytecode::LinkEntry::Function {
-                        module: bsl_bytecode::ModuleId::new(module),
-                        func,
-                    }
-                }
-                bsl_sema::ResolvedLink::Variable { module, slot } => {
-                    bsl_bytecode::LinkEntry::Variable {
-                        module: bsl_bytecode::ModuleId::new(module),
-                        slot,
-                    }
-                }
+            .map(|(alias, module)| bsl_bytecode::ModuleImport {
+                alias: alias.clone(),
+                module: bsl_bytecode::ModuleId::new(*module),
             })
             .collect(),
+        links,
         lines,
     }
 }
@@ -1484,35 +1521,120 @@ impl<'a> Compiler<'a> {
                 obj,
                 method,
                 open,
+                component_type,
+                component_link,
                 args,
             } => {
+                if let Some(ty) = component_type {
+                    self.names.intern(ty.name);
+                    self.names.intern(method);
+                }
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let base = self.next_reg;
-                for a in args {
+                let mut modes = Vec::with_capacity(args.len());
+                let builtin = bsl_rt::BuiltinMethod::lookup(method);
+                let property_output =
+                    builtin == Some(bsl_rt::BuiltinMethod::Property) && args.len() == 2;
+                let mut retained_target_registers = 0_u8;
+                for (position, a) in args.iter().enumerate() {
+                    if property_output
+                        && position == 1
+                        && let ResolvedArg::Value(RExpr::Index { obj: target, index }) = a
+                    {
+                        let argument = self.alloc_temp()?;
+                        let target_register = self.alloc_temp()?;
+                        self.compile_expr(target, target_register)?;
+                        let index_register = self.alloc_temp()?;
+                        self.compile_expr(index, index_register)?;
+                        self.emit(Instr::GetIndex {
+                            dst: argument,
+                            obj: target_register,
+                            idx: index_register,
+                        });
+                        modes.push(ArgMode::ByRefIndex {
+                            object: target_register,
+                            index: index_register,
+                        });
+                        retained_target_registers = 2;
+                        continue;
+                    }
+                    let (expr, mode) = match a {
+                        ResolvedArg::Default => (&RExpr::Undefined, ArgMode::Default),
+                        ResolvedArg::Value(expr) => (
+                            expr,
+                            match expr {
+                                RExpr::Local(slot) => ArgMode::ByRefLocal(self.reg_of(*slot)),
+                                RExpr::ModuleVar(slot) => ArgMode::ByRefModuleVar(
+                                    u16::try_from(*slot)
+                                        .map_err(|_| CompileError::TooManyModuleVars)?,
+                                ),
+                                RExpr::ImportedVar(link) => ArgMode::ByRefImportedVar(
+                                    u16::try_from(*link)
+                                        .map_err(|_| CompileError::TooManyModuleVars)?,
+                                ),
+                                _ => ArgMode::Value,
+                            },
+                        ),
+                    };
                     let r = self.alloc_temp()?;
-                    self.compile_expr(a, r)?;
+                    self.compile_expr(expr, r)?;
+                    modes.push(mode);
                 }
                 let count: u8 = args
                     .len()
                     .try_into()
                     .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(retained_target_registers);
                 self.free_temp(count);
-                let builtin = bsl_rt::BuiltinMethod::lookup(method);
-                if *open {
+                if let Some(link) = component_link {
+                    let arg_modes = self.add_arg_modes(modes)?;
+                    let link_slot =
+                        u16::try_from(*link).map_err(|_| CompileError::TooManyModuleVars)?;
+                    self.emit(if result_required {
+                        Instr::CallLinkedObjectMethod {
+                            dst,
+                            obj: o,
+                            link_slot,
+                            base,
+                            arg_modes,
+                        }
+                    } else {
+                        Instr::CallLinkedObjectProcedure {
+                            dst,
+                            obj: o,
+                            link_slot,
+                            base,
+                            arg_modes,
+                        }
+                    });
+                } else if *open
+                    || builtin.is_none()
+                    || builtin == Some(bsl_rt::BuiltinMethod::Property)
+                {
+                    let arg_modes = self.add_arg_modes(modes)?;
                     let method: u16 = self
                         .names
                         .intern(method)
                         .index()
                         .try_into()
                         .map_err(|_| CompileError::TooManyNames)?;
-                    self.emit(Instr::CallObjectMethod {
-                        result_required,
-                        dst,
-                        obj: o,
-                        method,
-                        base,
-                        count,
+                    self.emit(if result_required {
+                        Instr::CallObjectMethod {
+                            dst,
+                            obj: o,
+                            method,
+                            base,
+                            arg_modes,
+                        }
+                    } else {
+                        Instr::CallObjectProcedure {
+                            dst,
+                            obj: o,
+                            method,
+                            base,
+                            arg_modes,
+                        }
                     });
                 } else {
                     match (builtin, args.len()) {
@@ -1525,22 +1647,7 @@ impl<'a> Compiler<'a> {
                                 count,
                             });
                         }
-                        (None, _) => {
-                            let method: u16 = self
-                                .names
-                                .intern(method)
-                                .index()
-                                .try_into()
-                                .map_err(|_| CompileError::TooManyNames)?;
-                            self.emit(Instr::CallObjectMethod {
-                                result_required,
-                                dst,
-                                obj: o,
-                                method,
-                                base,
-                                count,
-                            });
-                        }
+                        (None, _) => unreachable!("открытый метод обработан выше"),
                     }
                 }
                 self.free_temp(1);
@@ -1774,6 +1881,12 @@ impl<'a> Compiler<'a> {
                 modes.push(ArgMode::ByRefModuleVar(slot));
                 continue;
             }
+            if !by_val && let RExpr::ImportedVar(link) = arg {
+                self.alloc_temp()?;
+                let link = u16::try_from(*link).map_err(|_| CompileError::TooManyModuleVars)?;
+                modes.push(ArgMode::ByRefImportedVar(link));
+                continue;
+            }
             let r = self.alloc_temp()?;
             self.compile_expr(arg, r)?;
             modes.push(ArgMode::Value);
@@ -1880,6 +1993,27 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    /// Первые три аргумента `RunApp` вычисляются до адреса выходной
+    /// цели. Четвёртый регистр зарезервирован рядом с ними, но заполняется
+    /// после однократного вычисления адреса.
+    fn compile_run_app_output_arguments(
+        &mut self,
+        args: &[RExpr],
+    ) -> Result<(u8, [u8; 4]), CompileError> {
+        debug_assert_eq!(args.len(), 4);
+        let base = self.next_reg;
+        let registers = [
+            self.alloc_temp()?,
+            self.alloc_temp()?,
+            self.alloc_temp()?,
+            self.alloc_temp()?,
+        ];
+        for (argument, register) in args[..3].iter().zip(registers) {
+            self.compile_expr(argument, register)?;
+        }
+        Ok((base, registers))
+    }
+
     fn compile_stmt(&mut self, s: &RStmt) -> Result<(), CompileError> {
         // Состояние слотов берётся у ЭТОГО узла дерева: решётка считала
         // его тем же обходом и тем же ключом-адресом.
@@ -1922,6 +2056,33 @@ impl<'a> Compiler<'a> {
                 self.free_temp(1);
             }
             RStmtKind::AssignIndex { obj, index, value } => {
+                if let RExpr::CallBuiltinFn {
+                    builtin: bsl_rt::BuiltinFn::RunApp,
+                    args,
+                } = value
+                    && args.len() == 4
+                {
+                    let (base, argument_registers) = self.compile_run_app_output_arguments(args)?;
+                    let o = self.alloc_temp()?;
+                    self.compile_expr(obj, o)?;
+                    let i = self.alloc_temp()?;
+                    self.compile_expr(index, i)?;
+                    self.compile_expr(&RExpr::Undefined, argument_registers[3])?;
+                    let v = self.alloc_temp()?;
+                    self.emit(Instr::CallBuiltin {
+                        dst: v,
+                        builtin: bsl_rt::BuiltinFn::RunApp,
+                        base,
+                        count: 4,
+                    });
+                    self.emit(Instr::SetIndex {
+                        obj: o,
+                        idx: i,
+                        src: v,
+                    });
+                    self.free_temp(7);
+                    return Ok(());
+                }
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let i = self.alloc_temp()?;
@@ -1936,6 +2097,32 @@ impl<'a> Compiler<'a> {
                 self.free_temp(3);
             }
             RStmtKind::AssignField { obj, name, value } => {
+                if let RExpr::CallBuiltinFn {
+                    builtin: bsl_rt::BuiltinFn::RunApp,
+                    args,
+                } = value
+                    && args.len() == 4
+                {
+                    let (base, argument_registers) = self.compile_run_app_output_arguments(args)?;
+                    let o = self.alloc_temp()?;
+                    self.compile_expr(obj, o)?;
+                    self.compile_expr(&RExpr::Undefined, argument_registers[3])?;
+                    let v = self.alloc_temp()?;
+                    self.emit(Instr::CallBuiltin {
+                        dst: v,
+                        builtin: bsl_rt::BuiltinFn::RunApp,
+                        base,
+                        count: 4,
+                    });
+                    let name = self.names.intern(name);
+                    self.emit(Instr::SetProp {
+                        obj: o,
+                        name,
+                        src: v,
+                    });
+                    self.free_temp(6);
+                    return Ok(());
+                }
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let v = self.alloc_temp()?;

@@ -386,6 +386,25 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::xml::WRITER_TYPE,
 ];
 
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (ConstructorCode::new(1), &crate::xdto::objects::FACTORY_TYPE),
+    (
+        ConstructorCode::new(2),
+        &crate::xdto::objects::SERIALIZER_TYPE,
+    ),
+    (ConstructorCode::new(3), &crate::xsd::BUILDER_TYPE),
+    (ConstructorCode::new(4), &crate::xsd::SCHEMA_TYPE),
+    (ConstructorCode::new(5), &crate::xsd::SCHEMA_SET_TYPE),
+    (ConstructorCode::new(6), &crate::xsd::EXPANDED_NAME_TYPE),
+    (ConstructorCode::new(7), &crate::dom::DOM_BUILDER_TYPE),
+    (ConstructorCode::new(8), &crate::dom::DOM_DOCUMENT_TYPE),
+    (ConstructorCode::new(9), &crate::dom::DOM_WRITER_TYPE),
+    (ConstructorCode::new(10), &crate::xpath::RESOLVER_TYPE),
+    (ConstructorCode::new(11), &crate::xml::READER_TYPE),
+    (ConstructorCode::new(12), &crate::xml::WRITER_TYPE),
+    (ConstructorCode::new(13), &crate::xml::SETTINGS_TYPE),
+];
+
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[
     crate::xml::API_MEMBERS,
     crate::xpath::API_MEMBERS,
@@ -399,6 +418,7 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
         .with_functions(FUNCTIONS)
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }

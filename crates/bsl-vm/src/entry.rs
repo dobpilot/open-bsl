@@ -98,6 +98,8 @@ pub(super) fn run_program_with_host<'a>(
         env: Some(host_env),
         dynamic,
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     let mut module_state = ModuleState::new(program);
     let (value, _) = drive_linked(
@@ -148,6 +150,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
+        imports: Vec::new(),
         links: Vec::new(),
         // Чанк REPL собирается без сведений об отладке, поэтому строк у
         // него нет; форма таблицы всё равно соблюдается — запись на чанк.
@@ -176,6 +179,8 @@ pub fn run_repl_chunk_with_registry<'a>(
         env: Some(host_env),
         dynamic: Some(dynamic),
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     let mut module_state = ModuleState::new(&program);
     drive_linked(
@@ -261,6 +266,8 @@ pub fn call_module_function(
         env: Some(&mut env),
         dynamic: None,
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -303,6 +310,8 @@ pub fn call_module_function_with_registry_and_io<'a>(
         env: Some(host_env),
         dynamic: Some(dynamic),
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -319,11 +328,10 @@ pub(super) fn call_module_function_with_host(
     // Смещения здесь нет и быть не может: у фрагмента `Выполнить` стек
     // СВОЙ, и его блок начинается с нуля так же, как у верхнего уровня
     // в своём.
-    let mut module_state = ModuleState {
-        slots: (0..program.module_vars.len())
-            .map(|i| reg_load(stack, i))
-            .collect::<Result<_, _>>()?,
-    };
+    let mut module_state = ModuleState::new(program);
+    module_state.slots = (0..program.module_vars.len())
+        .map(|i| reg_load(stack, i))
+        .collect::<Result<_, _>>()?;
     let result =
         call_module_function_in_execution(program, name, args, linked, host, &mut module_state);
     for (i, value) in module_state.slots.into_iter().enumerate() {

@@ -1,0 +1,23 @@
+file.begin	create-directory-types-server-1
+context.effective	НеИспользовать
+create.server.string	repr=open-bsl-create-directory-type-string-20260918|result=ok|exists=1
+create.server.number	repr=17|result=ok|exists=1
+create.server.true	repr=Yes|result=ok|exists=1
+create.server.false	repr=No|result=ok|exists=1
+create.server.date	repr=1/15/2020 12:34:56 PM|result=ok|exists=1
+create.server.array	repr=Массив|result=ok|exists=1
+create.server.structure	repr=Структура|result=ok|exists=1
+create.server.map	repr=Соответствие|result=ok|exists=1
+create.server.fixed_array	repr=ФиксированныйМассив|result=ok|exists=1
+create.server.fixed_structure	repr=ФиксированнаяСтруктура|result=ok|exists=1
+create.server.fixed_map	repr=ФиксированноеСоответствие|result=ok|exists=1
+create.server.value_table	repr=ТаблицаЗначений|result=ok|exists=1
+create.server.value_list	repr=|result=error|exists=0
+create.server.uuid	repr=00112233-4455-6677-8899-aabbccddeeff|result=ok|exists=1
+create.server.file	repr=Файл|result=ok|exists=1
+create.server.binary	repr=41 42|result=ok|exists=1
+create.server.enum	repr=UTF8|result=ok|exists=1
+create.server.type	repr=String|result=ok|exists=1
+create.server.undefined	repr=|result=error|exists=0
+create.server.null	repr=|result=error|exists=0
+file.end	create-directory-types-server-1

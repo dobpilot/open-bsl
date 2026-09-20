@@ -362,6 +362,7 @@ impl fmt::Display for RtError {
                     crate::component::Capability::Random => "источник случайности",
                     crate::component::Capability::Network => "сеть",
                     crate::component::Capability::HostPromises => "host-обещания",
+                    crate::component::Capability::TemporaryFiles => "учёт временных файлов",
                     crate::component::Capability::BackgroundJobs => "фоновые задания",
                     crate::component::Capability::TempStorage => "временное хранилище",
                 };

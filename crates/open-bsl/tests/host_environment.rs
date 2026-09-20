@@ -404,7 +404,416 @@ mod files {
     /// которой возможность и заводилась: до неё проверить чтение и запись
     /// можно было только через настоящий диск и временный каталог.
     #[derive(Debug, Default, Clone)]
-    struct MemoryFiles(Rc<RefCell<HashMap<String, Vec<u8>>>>);
+    struct MemoryFiles(
+        Rc<RefCell<HashMap<String, Vec<u8>>>>,
+        Rc<RefCell<HashMap<String, i64>>>,
+        Rc<RefCell<HashMap<String, bool>>>,
+        Rc<RefCell<HashMap<String, bool>>>,
+    );
+
+    #[test]
+    fn file_hidden_is_a_host_attribute_not_a_filename_convention() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        files
+            .0
+            .borrow_mut()
+            .insert("visible-name".into(), b"ABC".to_vec());
+        let mut state = engine.state_builder().files(files.clone()).build();
+        assert_eq!(
+            text(
+                &state
+                    .exec(
+                        r#"
+            Ф = Новый Файл("visible-name");
+            Попытка А = Ф.GetHidden(); Исключение Возврат "unknown"; КонецПопытки;
+        "#
+                    )
+                    .unwrap()
+            ),
+            "unknown"
+        );
+        assert_eq!(text(&state.exec(r#"
+            Ф = Новый Файл("visible-name");
+            Ф.УстановитьНевидимость(Истина);
+            Если Не Ф.GetHidden() Тогда ВызватьИсключение; КонецЕсли;
+            Ф.SetHidden(Ложь);
+            Если Ф.ПолучитьНевидимость() Тогда ВызватьИсключение; КонецЕсли;
+            Попытка Ф.SetHidden(Неопределено); Исключение Возврат Строка(Не Ф.GetHidden()); КонецПопытки;
+            Возврат "not rejected";
+        "#).unwrap()), "Да");
+        assert_eq!(files.3.borrow().get("visible-name"), Some(&false));
+        assert_eq!(files.0.borrow().get("visible-name").unwrap(), b"ABC");
+        assert_eq!(files.0.borrow().len(), 1);
+        assert!(
+            state
+                .exec(r#"Ф = Новый Файл("visible-name"); Возврат Ф.SetHidden(Истина);"#)
+                .is_err()
+        );
+        assert_eq!(files.3.borrow().get("visible-name"), Some(&false));
+        assert!(
+            state
+                .exec(r#"Ф = Новый Файл("missing"); Ф.SetHidden(Истина);"#)
+                .is_err()
+        );
+        assert!(!files.0.borrow().contains_key("missing"));
+    }
+
+    #[test]
+    fn file_read_only_uses_current_host_attributes_and_measured_arguments() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        files
+            .0
+            .borrow_mut()
+            .insert("attribute".into(), b"ABC".to_vec());
+        let mut state = engine.state_builder().files(files.clone()).build();
+        assert_eq!(
+            text(
+                &state
+                    .exec(
+                        r#"
+            Ф = Новый Файл("attribute");
+            Попытка А = Ф.GetReadOnly(); Исключение Возврат "unknown"; КонецПопытки;
+        "#
+                    )
+                    .unwrap()
+            ),
+            "unknown"
+        );
+        assert_eq!(text(&state.exec(r#"
+            Ф = Новый Файл("attribute");
+            Ф.УстановитьТолькоЧтение(1);
+            Если Не Ф.GetReadOnly() Тогда ВызватьИсключение; КонецЕсли;
+            Ф.SetReadOnly("Ложь");
+            Если Ф.ПолучитьТолькоЧтение() Тогда ВызватьИсключение; КонецЕсли;
+            Ф.SetReadOnly(Истина);
+            Попытка Ф.SetReadOnly(Неопределено); Исключение Возврат Строка(Ф.GetReadOnly()); КонецПопытки;
+            Возврат "not rejected";
+        "#).unwrap()), "Да");
+        assert_eq!(files.2.borrow().get("attribute"), Some(&true));
+        assert_eq!(files.0.borrow().get("attribute").unwrap(), b"ABC");
+        assert!(
+            state
+                .exec(r#"Ф = Новый Файл("attribute"); Возврат Ф.SetReadOnly(Ложь);"#)
+                .is_err()
+        );
+        assert_eq!(files.2.borrow().get("attribute"), Some(&true));
+        assert!(
+            state
+                .exec(r#"Ф = Новый Файл("missing"); Ф.SetReadOnly(Ложь);"#)
+                .is_err()
+        );
+        assert!(!files.0.borrow().contains_key("missing"));
+    }
+
+    #[test]
+    fn file_times_use_host_metadata_and_the_session_zone() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        files.0.borrow_mut().insert("time".into(), b"ABC".to_vec());
+        let mut state = engine
+            .state_builder()
+            .files(files.clone())
+            .zone(open_bsl::FixedTimeZone::new(10800).unwrap())
+            .build();
+        assert_eq!(text(&state.exec(r#"
+            Ф = Новый Файл("time");
+            Ф.УстановитьВремяИзменения(Дата(2020, 1, 15, 12, 34, 56));
+            Если Ф.GetModificationUniversalTime() <> Дата(2020, 1, 15, 9, 34, 56) Тогда ВызватьИсключение; КонецЕсли;
+            Если Ф.GetModificationTime() <> Дата(2020, 1, 15, 12, 34, 56) Тогда ВызватьИсключение; КонецЕсли;
+            Ф.SetModificationUniversalTime("20210314151617");
+            Если Ф.ПолучитьУниверсальноеВремяИзменения() <> Дата(2021, 3, 14, 15, 16, 17) Тогда ВызватьИсключение; КонецЕсли;
+            Если Ф.ПолучитьВремяИзменения() <> Дата(2021, 3, 14, 18, 16, 17) Тогда ВызватьИсключение; КонецЕсли;
+            Ф.SetModificationTime("20210314151617");
+            Возврат Строка(Ф.ПолучитьУниверсальноеВремяИзменения() = Дата(2021, 3, 14, 12, 16, 17));
+        "#).unwrap()), "Да");
+        assert_eq!(files.1.borrow().get("time"), Some(&1_615_724_177));
+        assert_eq!(files.0.borrow().get("time").unwrap(), b"ABC");
+        for method in [
+            "УстановитьВремяИзменения",
+            "SetModificationTime",
+            "УстановитьУниверсальноеВремяИзменения",
+            "SetModificationUniversalTime",
+        ] {
+            for argument in ["17", "Неопределено"] {
+                let script = format!(
+                    "Ф = Новый Файл(\"time\"); Попытка Ф.{method}({argument}); Исключение Возврат \"caught\"; КонецПопытки;"
+                );
+                assert_eq!(text(&state.exec(&script).unwrap()), "caught");
+                assert_eq!(files.1.borrow().get("time"), Some(&1_615_724_177));
+            }
+        }
+        files.1.borrow_mut().clear();
+        for method in ["GetModificationTime", "GetModificationUniversalTime"] {
+            let script = format!(
+                "Ф = Новый Файл(\"time\"); Попытка Д = Ф.{method}(); Исключение Возврат \"unknown\"; КонецПопытки;"
+            );
+            assert_eq!(text(&state.exec(&script).unwrap()), "unknown");
+        }
+        // Число mtime и сдвиг getter взяты из file-time-edges.host/platform.txt.
+        assert_eq!(
+            text(
+                &state
+                    .exec(
+                        r#"
+            Ф = Новый Файл("time");
+            Ф.SetModificationUniversalTime(Дата(1969, 12, 31, 23, 59, 59));
+            Если Ф.GetModificationTime() <> Дата(1, 1, 1) Тогда ВызватьИсключение; КонецЕсли;
+            Возврат Строка(Ф.GetModificationUniversalTime() - Дата(1969, 12, 31, 23, 59, 58) = 0.8384);
+        "#
+                    )
+                    .unwrap()
+            ),
+            "Да"
+        );
+        assert_eq!(files.1.borrow().get("time"), Some(&1_844_674_407_370_954));
+        assert!(
+            state
+                .exec(r#"Ф = Новый Файл("time"); Возврат Ф.SetModificationTime(Дата(2020, 1, 1));"#)
+                .is_err()
+        );
+        assert_eq!(files.1.borrow().get("time"), Some(&1_844_674_407_370_954));
+    }
+
+    #[test]
+    fn explicit_undefined_recursion_differs_from_an_omitted_argument() {
+        let engine = Engine::builder().build().unwrap();
+        let mut state = engine.state_builder().files(MemoryFiles::default()).build();
+        for name in ["НайтиФайлы", "FindFiles"] {
+            assert_eq!(
+                text(
+                    &state
+                        .exec(&format!(
+                            "Возврат Строка({name}(\"missing\", , ).Количество());"
+                        ))
+                        .unwrap()
+                ),
+                "0"
+            );
+            assert_eq!(
+                text(
+                    &state
+                        .exec(&format!(
+                            "Возврат Строка({name}(\"missing\").Количество());"
+                        ))
+                        .unwrap()
+                ),
+                "0"
+            );
+            assert_eq!(text(&state.exec(&format!(
+                "Попытка Р = {name}(\"missing\", Неопределено, Неопределено); Исключение Возврат \"error\"; КонецПопытки; Возврат \"accepted\";"
+            )).unwrap()), "error");
+        }
+    }
+
+    #[test]
+    fn find_files_returns_objects_bound_to_the_session() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        files.0.borrow_mut().insert("probe".into(), b"ABC".to_vec());
+        let mut state = engine.state_builder().files(files.clone()).build();
+        let result = state
+            .exec(
+                r#"
+            Р = НайтиФайлы("probe");
+            Ф = Р[0];
+            Д = ПолучитьДвоичныеДанныеИзСтроки("ABCDE", КодировкаТекста.UTF8, Ложь);
+            Д.Записать("probe");
+            Возврат Ф.FullName + "|" + Строка(Ф.Size()) + "|"
+                + Строка(FindFiles("missing", Неопределено, Ложь).Count());
+        "#,
+            )
+            .unwrap();
+        assert_eq!(text(&result), "probe|5|0");
+        for source in [
+            "Возврат НайтиФайлы();",
+            "Возврат FindFiles(\"x\", \"*\", Истина, 1);",
+        ] {
+            assert!(state.exec(source).is_err());
+        }
+    }
+
+    #[test]
+    fn file_object_observes_updates_in_its_host_filesystem() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        let mut state = engine.state_builder().files(files.clone()).build();
+        let result = state
+            .exec(
+                "Ф = Новый Файл(\"probe\");\n\
+             Р = Строка(Ф.Существует());\n\
+             Д = ПолучитьДвоичныеДанныеИзСтроки(\"ABC\", КодировкаТекста.UTF8, Ложь);\n\
+             Д.Записать(\"probe\");\n\
+             Р = Р + \"|\" + Строка(Ф.Существует()) + \"|\" + Строка(Ф.Размер());\n\
+             Р = Р + \"|\" + Строка(Ф.ЭтоФайл()) + \"|\" + Строка(Ф.ЭтоКаталог());\n\
+             Д = ПолучитьДвоичныеДанныеИзСтроки(\"ABCDE\", КодировкаТекста.UTF8, Ложь);\n\
+             Д.Записать(\"probe\"); Р = Р + \"|\" + Строка(Ф.Size());\n\
+             УдалитьФайлы(\"probe\");\n\
+             Р = Р + \"|\" + Строка(Ф.Существует());\n\
+             Попытка Ф.Размер(); Исключение Р = Р + \"|missing\"; КонецПопытки;\n\
+             Возврат Р;",
+            )
+            .unwrap();
+        assert_eq!(text(&result), "Нет|Да|3|Да|Нет|5|Нет|missing");
+        assert!(files.0.borrow().is_empty());
+    }
+
+    #[test]
+    fn file_io_paths_are_normalized_before_the_session_host() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        let mut state = engine.state_builder().files(files.clone()).build();
+        let result = state
+            .exec(
+                r#"
+                Д = ПолучитьДвоичныеДанныеИзСтроки("ABC", КодировкаТекста.UTF8, Ложь);
+                ПутьНуль = "leaf" + Символ(0) + "tail";
+                Д.Записать(ПутьНуль);
+                ФайлНуль = Новый Файл(ПутьНуль);
+                ПутьТаб = "tab" + Символ(9);
+                Д.Записать(ПутьТаб);
+                ФайлТаб = Новый Файл(ПутьТаб);
+                ПрочитаноНуль = Новый ДвоичныеДанные(ПутьНуль);
+                ПрочитаноТаб = Новый ДвоичныеДанные(ПутьТаб);
+                Возврат Строка(СтрДлина(ФайлНуль.ПолноеИмя)) + "|"
+                    + Строка(ФайлНуль.Существует()) + "|" + Строка(ФайлНуль.Размер()) + "|"
+                    + Строка(ФайлТаб.ПолноеИмя = "tab") + "|"
+                    + Строка(ФайлТаб.Существует()) + "|" + Строка(ФайлТаб.Размер()) + "|"
+                    + Строка(ПрочитаноНуль.Размер()) + "|" + Строка(ПрочитаноТаб.Размер());
+            "#,
+            )
+            .unwrap();
+        assert_eq!(text(&result), "9|Да|3|Да|Да|3|3|3");
+        assert_eq!(
+            *files.0.borrow(),
+            HashMap::from([
+                ("leaf".to_owned(), b"ABC".to_vec()),
+                ("tab".to_owned(), b"ABC".to_vec()),
+            ])
+        );
+    }
+
+    #[test]
+    fn file_object_has_the_measured_path_properties_and_english_aliases() {
+        let engine = Engine::builder().build().unwrap();
+        let mut state = engine.state_builder().files(MemoryFiles::default()).build();
+        let result = state.exec(
+            "Ф = Новый File(\"каталог/имя.tar.gz\");\n\
+             Возврат Ф.Name + \"|\" + Ф.BaseName + \"|\" + Ф.Extension + \"|\" + Ф.Path + \"|\" + Ф.FullName;",
+        ).unwrap();
+        assert_eq!(
+            text(&result),
+            "имя.tar.gz|имя.tar|.gz|каталог/|каталог/имя.tar.gz"
+        );
+        for (path, expression, expected) in [
+            ("", "Ф.FullName", ""),
+            (".hidden", "Ф.BaseName + \"|\" + Ф.Extension", "|.hidden"),
+            ("каталог/", "Ф.Name + \"|\" + Ф.Path", "каталог|"),
+            ("каталог/../имя.txt", "Ф.FullName", "имя.txt"),
+            (
+                "каталог\\имя.txt",
+                "Ф.Name + \"|\" + Ф.Path",
+                "имя.txt|каталог/",
+            ),
+        ] {
+            let script = format!("Ф = Новый Файл(\"{path}\"); Возврат {expression};");
+            assert_eq!(text(&state.exec(&script).unwrap()), expected);
+        }
+        for property in ["Имя", "ИмяБезРасширения", "Расширение", "Путь", "ПолноеИмя"]
+        {
+            let script = format!(
+                "Ф = Новый Файл(\"x\"); Попытка Ф.{property} = \"y\"; Исключение Возврат \"readonly\"; КонецПопытки; Возврат \"writable\";"
+            );
+            assert_eq!(text(&state.exec(&script).unwrap()), "readonly");
+        }
+    }
+
+    #[test]
+    fn file_constructor_accepts_omitted_and_formatted_arguments() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        let mut state = engine.state_builder().files(files.clone()).build();
+        for (constructor, expected) in [
+            ("Новый Файл()", ""),
+            ("New File()", ""),
+            ("Новый Файл(Неопределено)", ""),
+            ("Новый File(Null)", ""),
+            ("Новый Файл(123)", "123"),
+            ("Новый Файл(\"a/../../b\")", "b"),
+            ("Новый Файл(\"///\")", "///"),
+        ] {
+            let result = state
+                .exec(&format!("Ф = {constructor}; Возврат Ф.FullName;"))
+                .unwrap();
+            assert_eq!(text(&result), expected);
+        }
+        assert!(files.0.borrow().is_empty());
+    }
+
+    #[test]
+    fn temporary_directory_comes_from_the_session_host() {
+        let engine = Engine::builder().build().unwrap();
+        let mut state = engine.state_builder().files(MemoryFiles::default()).build();
+        for name in ["КаталогВременныхФайлов", "TempFilesDir"] {
+            assert_eq!(
+                text(&state.exec(&format!("Возврат {name}();")).unwrap()),
+                "виртуальный-temp/"
+            );
+            assert!(engine.compile(&format!("Возврат {name}(1);")).is_err());
+        }
+    }
+
+    #[test]
+    fn temporary_name_extensions_are_normalized_before_the_host_call() {
+        let engine = Engine::builder().build().unwrap();
+        let files = MemoryFiles::default();
+        let mut state = engine.state_builder().files(files.clone()).build();
+        for (argument, suffix) in [
+            ("", ".tmp"),
+            ("Неопределено", ".tmp"),
+            ("\"\"", ""),
+            ("\"xml\"", ".xml"),
+            ("\".xml\"", ".xml"),
+            ("\"..tar.gz\"", "..tar.gz"),
+            ("\"a/b\"", ".a/b"),
+            ("\"a\\b\"", ".a\\b"),
+        ] {
+            for name in ["ПолучитьИмяВременногоФайла", "GetTempFileName"]
+            {
+                let value = state.exec(&format!("Возврат {name}({argument});")).unwrap();
+                let result = text(&value);
+                assert!(result.starts_with("виртуальный-"));
+                let tail = result.strip_prefix("виртуальный-").unwrap();
+                assert_eq!(&tail[2..], suffix, "{name}({argument})");
+            }
+        }
+        assert!(files.0.borrow().is_empty());
+        assert!(state.exec("Возврат GetTempFileName(17);").is_err());
+    }
+
+    #[test]
+    fn create_directory_uses_the_session_host_and_remains_a_procedure() {
+        let engine = Engine::builder().build().unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "open-bsl-virtual-directory-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path_bsl = path.to_string_lossy().replace('"', "\"\"");
+        let mut state = engine.state_builder().files(MemoryFiles::default()).build();
+        for name in ["СоздатьКаталог", "CreateDirectory"] {
+            state.exec(&format!("{name}(\"{path_bsl}\");")).unwrap();
+            assert!(
+                !path.exists(),
+                "виртуальная ФС не должна создавать каталог ОС"
+            );
+            assert!(engine.compile(&format!("Возврат {name}(\"x\");")).is_err());
+        }
+    }
 
     impl open_bsl::FileSystem for MemoryFiles {
         fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
@@ -418,10 +827,58 @@ mod files {
             Ok(())
         }
 
-        // Эти тесты работают только с «файлом целиком»; операции с
-        // метаданными и дескрипторами не задействованы.
+        fn set_modified(&self, path: &str, seconds: i64) -> std::io::Result<()> {
+            if !self.0.borrow().contains_key(path) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "нет файла",
+                ));
+            }
+            self.1.borrow_mut().insert(path.into(), seconds);
+            Ok(())
+        }
+
+        fn set_read_only(&self, path: &str, value: bool) -> std::io::Result<()> {
+            if !self.0.borrow().contains_key(path) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "нет файла",
+                ));
+            }
+            self.2.borrow_mut().insert(path.into(), value);
+            Ok(())
+        }
+
+        fn set_hidden(&self, path: &str, value: bool) -> std::io::Result<()> {
+            if !self.0.borrow().contains_key(path) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "нет файла",
+                ));
+            }
+            self.3.borrow_mut().insert(path.into(), value);
+            Ok(())
+        }
+
+        // Размер известен из содержимого виртуального файла; дескриптор
+        // потока для запроса метаданных не нужен.
         fn metadata(&self, path: &str) -> std::io::Result<open_bsl::FileMetadata> {
-            unsupported(path)
+            self.0
+                .borrow()
+                .get(path)
+                .map(|data| {
+                    let metadata = open_bsl::FileMetadata::file(self.1.borrow().get(path).copied())
+                        .with_size(data.len() as u64);
+                    let metadata = match self.2.borrow().get(path) {
+                        Some(value) => metadata.with_read_only(*value),
+                        None => metadata,
+                    };
+                    match self.3.borrow().get(path) {
+                        Some(value) => metadata.with_hidden(*value),
+                        None => metadata,
+                    }
+                })
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "нет файла"))
         }
 
         fn read_dir<'fs>(
@@ -442,6 +899,10 @@ mod files {
             _options: open_bsl::FileOpenOptions,
         ) -> std::io::Result<Box<dyn open_bsl::FileHandle>> {
             unsupported(path)
+        }
+
+        fn temporary_directory(&self) -> std::io::Result<String> {
+            Ok("виртуальный-temp".to_owned())
         }
 
         fn temporary_path(&self, suffix: &str, entropy: &[u8; 16]) -> std::io::Result<String> {
@@ -593,6 +1054,26 @@ mod files {
             )
             .unwrap();
         assert_eq!(text(&read), "1");
+
+        state
+            .exec(
+                "З = Новый ЗаписьJSON;\n\
+                 З.ОткрытьФайл(\"край.json \" );\n\
+                 ЗаписатьJSON(З, Новый Структура(\"а\", 2));\n\
+                 З.Закрыть();",
+            )
+            .unwrap();
+        assert!(disk.0.borrow().contains_key("край.json"));
+        assert!(!disk.0.borrow().contains_key("край.json "));
+        let read = state
+            .exec(
+                "Ч = Новый ЧтениеJSON;\n\
+                 Ч.ОткрытьФайл(\"край.json\" + Символ(0) + \"ignored\");\n\
+                 Стр = ПрочитатьJSON(Ч);\n\
+                 Возврат Формат(Стр.а, \"ЧГ=0\");",
+            )
+            .unwrap();
+        assert_eq!(text(&read), "2");
     }
 
     /// Ошибка файловой системы — ловимое `Попыткой` исключение, а не
@@ -661,6 +1142,8 @@ mod files {
             )
         };
         for probe in [
+            "п = КаталогВременныхФайлов();",
+            "СоздатьКаталог(\"куда-нибудь\");",
             "з = ЗначениеИзФайла(\"нет-такого\");",
             "ЗначениеВФайл(\"куда-нибудь\", \"текст\");",
             "д = Новый ДвоичныеДанные(\"нет-такого\");",

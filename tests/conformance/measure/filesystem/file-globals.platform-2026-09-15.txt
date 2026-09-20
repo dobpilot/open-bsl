@@ -1,0 +1,30 @@
+﻿file.begin	globals-1
+temp.directory	String:/tmp/
+temp.default	String:/tmp/v8_XhnCfx_5.tmp
+temp.undefined	String:/tmp/v8_XhnCfx_6.tmp
+temp.empty	String:/tmp/v8_XhnCfx_7
+temp.plain	String:/tmp/v8_XhnCfx_8.xml
+temp.dot	String:/tmp/v8_XhnCfx_9.xml
+temp.dots	String:/tmp/v8_XhnCfx_a..tar.gz
+temp.slash	String:/tmp/v8_XhnCfx_b.a/b
+temp.backslash	String:/tmp/v8_XhnCfx_c.a\b
+temp.number	error:Error calling context method (ПолучитьИмяВременногоФайла)
+file.scratch	/tmp/v8_XhnCfx_d.globals
+create.existing	ok
+create.parents	ok
+create.file	error:Error calling context method (СоздатьКаталог)
+find.direct.directory	Array:1|File:.
+find.direct.file	Array:1|File:a.txt
+find.direct.missing	Array:0
+find.empty	Array:1|File:.
+find.undefined	Array:1|File:.
+find.star	Array:6|File:я.txt|File:.hidden|File:plain|File:b.TXT|File:a.txt|File:branch
+find.star.dot.star	Array:4|File:я.txt|File:.hidden|File:b.TXT|File:a.txt
+find.question	Array:1|File:a.txt
+find.class	Array:2|File:b.TXT|File:a.txt
+find.recursive	Array:3|File:я.txt|File:a.txt|File:branch/leaf/deep.txt
+delete.mask	ok
+delete.survivors	Array:6|File:.hidden|File:plain|File:b.TXT|File:branch|File:branch/leaf|File:branch/leaf/deep.txt
+delete.root	Array:1|File:.
+file.cleanup	ok
+file.end	globals-1

@@ -1,0 +1,12 @@
+file.begin	file-mobile-methods-client-1
+mobile.presentation.ru	error|Error calling context method (ПолучитьПредставлениеФайлаБиблиотекиМобильногоУстройства)
+mobile.presentation.en	error|Error calling context method (ПолучитьПредставлениеФайлаБиблиотекиМобильногоУстройства)
+mobile.thumbnail.ru	error|Error calling context method (ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройства)
+mobile.thumbnail.en	error|Error calling context method (ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройства)
+mobile.thumbnail_async.ru	promise=none|error|stage=call|Error calling context method (ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройстваАсинх)
+mobile.thumbnail_async.en	promise=none|error|stage=call|Error calling context method (ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройстваАсинх)
+mobile.thumbnail_begin.ru	error|Not enough actual parameters
+mobile.thumbnail_begin.en	error|Not enough actual parameters
+mobile.thumbnail_begin.undefined	error|Error calling context method (НачатьПолучениеКартинкиПредставленияФайлаБиблиотекиМобильногоУстройства)
+mobile.thumbnail_begin.two	error|Too many actual parameters
+file.end	file-mobile-methods-client-1

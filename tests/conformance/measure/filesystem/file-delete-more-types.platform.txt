@@ -1,0 +1,13 @@
+file.begin	delete-more-types-1
+context.effective	НеИспользовать
+delete.more.date	ok|root=1|keep=1
+delete.more.map	ok|root=1|keep=1
+delete.more.fixed_array	ok|root=1|keep=1
+delete.more.fixed_structure	ok|root=1|keep=1
+delete.more.value_table	ok|root=1|keep=1
+delete.more.uuid	ok|root=1|keep=1
+delete.more.file	ok|root=1|keep=1
+delete.more.binary	ok|root=1|keep=1
+delete.more.enum	ok|root=1|keep=1
+delete.more.type	ok|root=1|keep=1
+file.end	delete-more-types-1

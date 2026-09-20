@@ -1,0 +1,78 @@
+﻿file.begin	1
+file.scratch	/tmp/open-bsl-attributes-approved-JvEOqw/scratch
+clear0440.readonly.before	Yes
+clear0440.hidden.before	No
+clear0440.set	ok
+clear0440.readonly.after	No
+clear0440.hidden.after	No
+set0660.readonly.before	No
+set0660.hidden.before	No
+set0660.set	ok
+set0660.readonly.after	Yes
+set0660.hidden.after	No
+clear0550.readonly.before	Yes
+clear0550.hidden.before	No
+clear0550.set	ok
+clear0550.readonly.after	No
+clear0550.hidden.after	No
+set0777.readonly.before	No
+set0777.hidden.before	No
+set0777.set	ok
+set0777.readonly.after	Yes
+set0777.hidden.after	No
+clear0000.readonly.before	Yes
+clear0000.hidden.before	No
+clear0000.set	ok
+clear0000.readonly.after	No
+clear0000.hidden.after	No
+link.readonly.before	Yes
+link.hidden.before	No
+link.set	ok
+link.readonly.after	No
+link.hidden.after	No
+directory.readonly.before	Yes
+directory.hidden.before	No
+directory.set	ok
+directory.readonly.after	No
+directory.hidden.after	No
+.hidden.readonly.before	No
+.hidden.hidden.before	No
+.hidden.set	ok
+.hidden.readonly.after	No
+.hidden.hidden.after	No
+plain.readonly.before	No
+plain.hidden.before	No
+plain.set	ok
+plain.readonly.after	No
+plain.hidden.after	No
+undefined.readonly.before	No
+undefined.hidden.before	No
+undefined.set	error:Error calling context method (УстановитьТолькоЧтение)
+undefined.readonly.after	No
+undefined.hidden.after	No
+number.readonly.before	No
+number.hidden.before	No
+number.set	ok
+number.readonly.after	Yes
+number.hidden.after	No
+string.readonly.before	No
+string.hidden.before	No
+string.set	ok
+string.readonly.after	No
+string.hidden.after	No
+hidden_bad.readonly.before	No
+hidden_bad.hidden.before	No
+hidden_bad.set	error:Error calling context method (УстановитьНевидимость)
+hidden_bad.readonly.after	No
+hidden_bad.hidden.after	No
+missing.readonly.before	error:Error calling context method (ПолучитьТолькоЧтение)
+missing.hidden.before	error:Error calling context method (ПолучитьНевидимость)
+missing.set	error:Error calling context method (УстановитьНевидимость)
+missing.readonly.after	error:Error calling context method (ПолучитьТолькоЧтение)
+missing.hidden.after	error:Error calling context method (ПолучитьНевидимость)
+missing_readonly.readonly.before	error:Error calling context method (ПолучитьТолькоЧтение)
+missing_readonly.hidden.before	error:Error calling context method (ПолучитьНевидимость)
+missing_readonly.set	error:Error calling context method (УстановитьТолькоЧтение)
+missing_readonly.readonly.after	error:Error calling context method (ПолучитьТолькоЧтение)
+missing_readonly.hidden.after	error:Error calling context method (ПолучитьНевидимость)
+file.end	1

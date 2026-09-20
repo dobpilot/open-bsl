@@ -47,6 +47,9 @@ pub struct ValueTableData {
     /// `row_ids[pos]` — стабильный id строки, сейчас стоящей на позиции
     /// `pos`.
     pub row_ids: Vec<u64>,
+    /// Описания индексов принадлежат таблице и переживают повторное чтение
+    /// свойства `Индексы`. Ускоряющей структуры строк здесь намеренно нет.
+    pub(crate) indexes: Vec<crate::value_table_indexes::ValueTableIndexData>,
     /// Обратный индекс выбирает плотное или разреженное представление в
     /// зависимости от заполненности пространства `row_id`.
     row_positions: RowPositions,
@@ -246,10 +249,16 @@ fn convert_to(value: &BslValue, target: crate::TypeId) -> Option<BslValue> {
 /// колонке с единственным типом (измерено: `ADJ.B.STR` — `Ложь`,
 /// `ADJ.N.UNDEF` — `0`).
 fn default_of(id: crate::TypeId) -> BslValue {
+    // Значение строки неизменяемо: пустые ячейки могут разделять его,
+    // не создавая отдельный объект при каждом приведении типа. `Rc`
+    // не пересекает границу потока; дописывание отделяет общую строку.
+    thread_local! {
+        static EMPTY_STRING: BslString = BslString::from_str("");
+    }
     match id {
         crate::TypeId::Boolean => BslValue::Boolean(false),
         crate::TypeId::Number => BslValue::Number(BslNumber::from_i64(0)),
-        crate::TypeId::String => BslValue::Str(BslString::from_str("")),
+        crate::TypeId::String => BslValue::Str(EMPTY_STRING.with(Clone::clone)),
         crate::TypeId::Date => crate::date::BslDate::from_civil(1, 1, 1, 0, 0, 0)
             .map(BslValue::Date)
             .unwrap_or(BslValue::Undefined),
@@ -418,6 +427,7 @@ impl ValueTableData {
             vstr_tail_x: None,
             columns: Vec::new(),
             row_ids: Vec::new(),
+            indexes: Vec::new(),
             row_positions: RowPositions::identity(),
             next_id: 0,
             schema_revision: 0,
@@ -864,7 +874,7 @@ impl ValueTableData {
     /// Строки копии получают СВОИ `row_id`, начиная с нуля: копия — другая
     /// таблица, и живой объект строки оригинала обязан продолжать указывать
     /// в оригинал, а не начать резолвиться ещё и в копии.
-    pub fn copy_of(&self, rows: &[usize], cols: &[usize]) -> ValueTableData {
+    pub fn copy_of(&self, rows: &[usize], cols: &[usize], copy_indexes: bool) -> ValueTableData {
         let mut out = ValueTableData {
             folded_names: RefCell::new(None),
             column_names: cols
@@ -885,6 +895,14 @@ impl ValueTableData {
             vstr_tail_x: None,
             columns: Vec::with_capacity(cols.len()),
             row_ids: Vec::with_capacity(rows.len()),
+            indexes: if copy_indexes {
+                self.indexes
+                    .iter()
+                    .map(crate::value_table_indexes::ValueTableIndexData::independent_copy)
+                    .collect()
+            } else {
+                Vec::new()
+            },
             row_positions: RowPositions::identity(),
             next_id: 0,
             schema_revision: 0,
@@ -1348,6 +1366,20 @@ pub fn parse_sort_spec(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn appending_to_a_string_default_does_not_change_other_defaults() {
+        let BslValue::Str(first) = default_of(crate::TypeId::String) else {
+            panic!("ожидалась строка");
+        };
+        let second = default_of(crate::TypeId::String);
+        assert_eq!(
+            first.append(&BslString::from_str("текст")).to_string(),
+            "текст"
+        );
+        assert_eq!(second, BslValue::Str(BslString::from_str("")));
+        assert_eq!(default_of(crate::TypeId::String), second);
+    }
 
     /// `set_row_ids` берёт вход из недостоверного внутреннего формата,
     /// поэтому длина, переполнение `max + 1` и уникальность номеров —

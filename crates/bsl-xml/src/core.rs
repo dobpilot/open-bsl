@@ -326,8 +326,25 @@ pub struct XmlParser {
 
 impl XmlParser {
     pub fn new(text: &str) -> Self {
+        // Нижняя оценка `Chars::size_hint` приводит к росту большого
+        // буфера. Отдельный подсчёт позволяет выделить его ровно один раз.
+        let mut src = Vec::with_capacity(text.chars().count());
+        src.extend(text.chars());
+        Self::with_source(src)
+    }
+
+    /// Вход BSL без промежуточного UTF-8. Непарные суррогаты заменяются
+    /// так же, как при прежнем преобразовании через `Display` строки.
+    pub(crate) fn from_utf16(units: &[u16]) -> Self {
+        let chars = char::decode_utf16(units.iter().copied());
+        let mut src = Vec::with_capacity(chars.clone().count());
+        src.extend(chars.map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER)));
+        Self::with_source(src)
+    }
+
+    fn with_source(src: Vec<char>) -> Self {
         XmlParser {
-            src: text.chars().collect(),
+            src,
             pos: 0,
             open: Vec::new(),
             root_done: false,
@@ -400,17 +417,30 @@ impl XmlParser {
     /// Имя элемента или атрибута. XML разрешает в именах куда больше, чем
     /// ASCII, поэтому имя — это всё до пробела и до разделителя разметки.
     fn read_name(&mut self) -> RtResult<String> {
+        let (range, bytes) = self.read_name_range()?;
+        // Размер известен из сканирования: collect резервирует по числу
+        // char и затем перевыделяет буфер для многобайтовых имён.
+        let mut name = String::with_capacity(bytes);
+        name.extend(self.src[range].iter());
+        Ok(name)
+    }
+
+    /// Границы имени и его размер UTF-8. Закрывающему тегу достаточно
+    /// сравнения с именем в стеке, без создания второй строки.
+    fn read_name_range(&mut self) -> RtResult<(std::ops::Range<usize>, usize)> {
         let start = self.pos;
+        let mut bytes = 0;
         while let Some(c) = self.peek() {
             if c.is_whitespace() || matches!(c, '=' | '/' | '>' | '<' | '?') {
                 break;
             }
+            bytes += c.len_utf8();
             self.pos += 1;
         }
         if self.pos == start {
             return Err(bad("ожидалось имя"));
         }
-        Ok(self.src[start..self.pos].iter().collect())
+        Ok((start..self.pos, bytes))
     }
 
     /// Имя ссылки после уже проглоченного `&`, вместе с закрывающей `;`.
@@ -586,6 +616,23 @@ impl XmlParser {
         Ok(())
     }
 
+    /// Дописать обычный участок текста или атрибута до сущности либо
+    /// разделителя. Размер UTF-8 считается при сканировании, чтобы
+    /// посимвольное добавление не увеличивало буфер несколько раз.
+    fn append_plain_run(&mut self, out: &mut String, delimiter: char) {
+        let start = self.pos;
+        let mut bytes = 0;
+        while let Some(c) = self.peek() {
+            if c == delimiter || c == '&' {
+                break;
+            }
+            bytes += c.len_utf8();
+            self.pos += 1;
+        }
+        out.reserve(bytes);
+        out.extend(self.src[start..self.pos].iter());
+    }
+
     /// Текстовый прогон до следующей разметки. `None` — прогон выброшен как
     /// целиком пробельный (измерено: такой узел платформа не отдаёт).
     ///
@@ -616,8 +663,7 @@ impl XmlParser {
                         }
                     }
                 } else {
-                    out.push(c);
-                    self.pos += 1;
+                    self.append_plain_run(&mut out, '<');
                 }
             }
             if self.starts_with("<![CDATA[") {
@@ -734,9 +780,8 @@ impl XmlParser {
                             }
                         }
                     }
-                    Some(c) => {
-                        value.push(c);
-                        self.pos += 1;
+                    Some(_) => {
+                        self.append_plain_run(&mut value, quote);
                     }
                 }
             }
@@ -1128,17 +1173,23 @@ impl XmlParser {
             }
             if self.starts_with("</") {
                 self.pos += 2;
-                let name = self.read_name()?;
+                let (range, _) = self.read_name_range()?;
                 self.skip_ws();
                 if self.peek() != Some('>') {
+                    let name: String = self.src[range].iter().collect();
                     return Err(bad(format!("закрывающий тег «{name}» не закрыт")));
                 }
                 self.pos += 1;
-                let open = self
-                    .open
-                    .pop()
-                    .ok_or_else(|| bad(format!("закрывающий тег «{name}» без открывающего")))?;
-                if open.name != name {
+                let Some(open) = self.open.pop() else {
+                    let name: String = self.src[range].iter().collect();
+                    return Err(bad(format!("закрывающий тег «{name}» без открывающего")));
+                };
+                if !open
+                    .name
+                    .chars()
+                    .eq(self.src[range.clone()].iter().copied())
+                {
+                    let name: String = self.src[range].iter().collect();
                     return Err(bad(format!(
                         "закрывающий тег «{name}» не совпадает с открытым «{}»",
                         open.name
@@ -1148,7 +1199,7 @@ impl XmlParser {
                     self.root_done = true;
                 }
                 return Ok(Some(XmlEvent::ElementEnd {
-                    name,
+                    name: open.name,
                     uri: open.uri,
                 }));
             }
@@ -1737,6 +1788,27 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn parser_source_preserves_all_unicode_characters() {
+        for text in ["", "ascii", "кириллица", "节点", "𐐀", "a\0б𐐀\n"] {
+            let parser = XmlParser::new(text);
+            assert_eq!(parser.src.iter().collect::<String>(), text);
+            assert_eq!(parser.pos, 0);
+        }
+    }
+
+    #[test]
+    fn name_scanning_preserves_multibyte_names_and_delimiters() {
+        for name in ["ascii", "узел", "节点", "имя𐐀"] {
+            for delimiter in [' ', '=', '/', '>', '<', '?'] {
+                let mut parser = XmlParser::new(&format!("{name}{delimiter}"));
+                assert_eq!(parser.read_name().unwrap(), name);
+                assert_eq!(parser.peek(), Some(delimiter));
+            }
+        }
+        assert!(XmlParser::new(">").read_name().is_err());
+    }
+
     fn events(text: &str) -> Vec<XmlEvent> {
         let mut p = XmlParser::new(text);
         let mut out = Vec::new();
@@ -1786,6 +1858,45 @@ mod tests {
                 end("а"),
             ]
         );
+    }
+
+    #[test]
+    fn attribute_runs_preserve_unicode_quotes_and_entities() {
+        for quote in ['\'', '"'] {
+            for text in ["", "ascii", "кириллица", "节点𐐀", " длинный текст "]
+            {
+                let mut parser = XmlParser::new(&format!("<а х={quote}{text}&amp;{text}{quote}/>"));
+                let Some(XmlEvent::ElementStart { attrs, .. }) = parser.read().unwrap() else {
+                    panic!("ожидался начальный элемент");
+                };
+                assert_eq!(attrs.len(), 1);
+                assert_eq!(attrs[0].value, format!("{text}&{text}"));
+            }
+            assert!(
+                XmlParser::new(&format!("<а х={quote}текст"))
+                    .read()
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn text_runs_preserve_unicode_and_boundaries() {
+        for text in ["ascii", "кириллица", "节点𐐀", " длинный текст "] {
+            assert_eq!(
+                events(&format!(
+                    "<а>{text}&amp;<![CDATA[{text}]]>{text}<б/>{text}</а>"
+                )),
+                vec![
+                    start("а"),
+                    XmlEvent::Text(format!("{text}&{text}{text}")),
+                    start("б"),
+                    end("б"),
+                    XmlEvent::Text(text.into()),
+                    end("а"),
+                ]
+            );
+        }
     }
 
     #[test]
@@ -1845,6 +1956,43 @@ mod tests {
         assert_eq!(attrs[1].name, "х");
         assert_eq!(local_of(name), "а");
         assert_eq!(prefix_of(name), "п");
+    }
+
+    #[test]
+    fn closing_names_preserve_unicode_and_diagnostics() {
+        for name in ["ascii", "узел", "节点", "имя𐐀"] {
+            assert_eq!(
+                events(&format!("<{name}></{name} \t>")),
+                vec![start(name), end(name)]
+            );
+        }
+        for (text, expected) in [
+            ("<а></>", "ожидалось имя"),
+            ("<а></а/>", "закрывающий тег «а» не закрыт"),
+            ("<а></б", "закрывающий тег «б» не закрыт"),
+            ("</б>", "закрывающий тег «б» без открывающего"),
+            ("<а></б>", "закрывающий тег «б» не совпадает с открытым «а»"),
+            (
+                "<а></аа>",
+                "закрывающий тег «аа» не совпадает с открытым «а»",
+            ),
+            (
+                "<аа></а>",
+                "закрывающий тег «а» не совпадает с открытым «аа»",
+            ),
+        ] {
+            let mut parser = XmlParser::new(text);
+            loop {
+                match parser.read() {
+                    Ok(Some(_)) => continue,
+                    Err(RtError::Xml(message)) => {
+                        assert_eq!(message, expected);
+                        break;
+                    }
+                    result => panic!("ожидалась ошибка XML: {result:?}"),
+                }
+            }
+        }
     }
 
     #[test]

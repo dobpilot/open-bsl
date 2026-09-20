@@ -1,0 +1,31 @@
+﻿file.begin	create-layout-1
+file.scratch	/tmp/v8_aHlaIe_5.create-layout-tree
+plain	ok
+lexical.plain	<root>/plain/leaf
+parent	ok
+lexical.parent	<root>/parent/leaf
+file-parent	ok
+lexical.file-parent	<root>/file-parent/leaf
+backslash	ok
+lexical.backslash	<root>/backslash/branch/leaf
+spaces	ok
+lexical.spaces	<root>/spaces/ spaced /leaf
+space-leaf	ok
+lexical.space-leaf	<root>/space-leaf/leaf
+space-parent	ok
+lexical.space-parent	<root>/space-parent/branch /leaf
+space-leading	ok
+lexical.space-leading	<root>/space-leading/ leaf
+nul	ok
+lexical.nul	<root>/nul/nul<NUL>tail
+nul-child	ok
+lexical.nul-child	<root>/nul-child/nul<NUL>/tail
+star	error
+lexical.star	sfile://sfile://<root>/star/star*
+star-parent	error
+lexical.star-parent	sfile://sfile://<root>/star-parent/star*/leaf
+question	ok
+lexical.question	<root>/question/question?
+colon	ok
+lexical.colon	<root>/colon/C:leaf
+file.end	create-layout-1

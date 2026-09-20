@@ -1,0 +1,17 @@
+file.begin	file-initialize-identity-1
+init.before_await	gamma/c.bin
+init.first_result	gamma/c.bin
+init.second_result	gamma/c.bin
+init.first_equals_receiver	1
+init.second_equals_receiver	1
+init.independent_same_path	0
+init.receiver_after_result_call	delta/d.dat
+init.alias_after_result_call	delta/d.dat
+init.third_equals_receiver	1
+init.repeated_first	delta/d.dat
+init.parts	delta/|d.dat|d|.dat
+init.type.boolean	ok|string_equal=1|receiver_equal=1
+init.type.null	ok|string_equal=1|receiver_equal=1
+init.type.date	ok|string_equal=1|receiver_equal=1
+init.type.array	ok|string_equal=1|receiver_equal=1
+file.end	file-initialize-identity-1

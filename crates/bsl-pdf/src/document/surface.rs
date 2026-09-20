@@ -208,9 +208,11 @@ pub fn read(document: &DocumentObject, args: &[BslValue]) -> RtResult<()> {
         )));
     };
     let name = name.to_string();
+    let path = bsl_rt::prepare_file_operation_path(&name, document.files.as_ref())
+        .map_err(|e| pdf_err(format!("не удалось подготовить имя файла «{name}»: {e}")))?;
     let bytes = document
         .files
-        .read(&name)
+        .read(&path)
         .map_err(|e| pdf_err(format!("не удалось прочитать файл «{name}»: {e}")))?;
     let file = PdfFile::parse(&bytes)?;
     {
@@ -271,9 +273,18 @@ pub fn write(document: &DocumentObject, args: &[BslValue]) -> RtResult<()> {
     })?;
     let bytes = file.write_with_attachments(&state.attachments.borrow())?;
     let name = name.to_string();
+    // У `ДокументPDF.Записать` NUL измеренно не завершает имя:
+    // host должен отказать. Остальные измеренные хвостовые пробелы
+    // обрабатываются общим операционным путём.
+    let path = if name.contains('\0') {
+        name.clone()
+    } else {
+        bsl_rt::prepare_file_operation_path(&name, document.files.as_ref())
+            .map_err(|e| pdf_err(format!("не удалось подготовить имя файла «{name}»: {e}")))?
+    };
     document
         .files
-        .write(&name, &bytes)
+        .write(&path, &bytes)
         .map_err(|e| pdf_err(format!("не удалось записать файл «{name}»: {e}")))?;
     Ok(())
 }

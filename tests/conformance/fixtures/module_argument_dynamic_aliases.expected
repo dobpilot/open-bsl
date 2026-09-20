@@ -1,0 +1,9 @@
+file.begin	module-reference-dynamic-aliases-1
+dynamic.module.inside	11
+dynamic.parameter.inside	12
+dynamic.parameter.after	12
+nested.parameter.after	12
+dynamic.parameter.error	31
+dynamic.module.error	31
+dynamic.module.after	31
+file.end	module-reference-dynamic-aliases-1

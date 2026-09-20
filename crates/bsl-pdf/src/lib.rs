@@ -62,6 +62,16 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::document::surface::PAGES_TYPE,
     &crate::document::surface::PAGE_TYPE,
 ];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (
+        ConstructorCode::new(1),
+        &crate::document::surface::DOCUMENT_TYPE,
+    ),
+    (
+        ConstructorCode::new(2),
+        &crate::document::surface::ATTACHMENTS_TYPE,
+    ),
+];
 
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] =
     &[document::objects::API_MEMBERS];
@@ -70,6 +80,7 @@ const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] =
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }

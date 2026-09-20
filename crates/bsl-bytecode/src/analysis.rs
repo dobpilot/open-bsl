@@ -391,6 +391,10 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
                             // состояние — куча, heap-флаги вызова ниже
                             // упорядочивают его сами.
                             ArgMode::ByRefImportedVar(_) => {}
+                            ArgMode::ByRefIndex { object, index } => {
+                                read_fixed!(*object);
+                                read_fixed!(*index);
+                            }
                             // Пропущенная позиция: вызывающий в этот
                             // регистр ничего не клал и вызванный оттуда
                             // ничего не читает — но пролог умолчаний
@@ -442,6 +446,10 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
                             // Чужое состояние модулей — куча: heap-флаги
                             // ниже уже упорядочивают такие обращения.
                             ArgMode::ByRefImportedVar(_) => {}
+                            ArgMode::ByRefIndex { object, index } => {
+                                read_fixed!(*object);
+                                read_fixed!(*index);
+                            }
                             ArgMode::Default => {
                                 let r = (base as usize + i).min(255) as u8;
                                 write!(r);
@@ -605,22 +613,60 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             e.heap_write = true;
             e.io = true;
         }
-        // Открытый двойник `CallMethod`: эффекты — как у закрытого, тот
-        // обслуживает тех же получателей (включая компонентные объекты) и
-        // барьера не несёт.
+        // Получатель может оказаться BSL-модулем: вызов завершает бандл
+        // и может менять модульные переменные и переданные ссылочные цели.
         Instr::CallObjectMethod {
             dst,
             obj,
             base,
-            count,
+            arg_modes,
+            ..
+        }
+        | Instr::CallObjectProcedure {
+            dst,
+            obj,
+            base,
+            arg_modes,
+            ..
+        }
+        | Instr::CallLinkedObjectMethod {
+            dst,
+            obj,
+            base,
+            arg_modes,
+            ..
+        }
+        | Instr::CallLinkedObjectProcedure {
+            dst,
+            obj,
+            base,
+            arg_modes,
             ..
         } => {
             read!(obj);
-            read_range!(base, count);
+            if let Some(modes) = chunk.call_arg_modes.get(arg_modes as usize) {
+                read_range!(base, modes.len());
+                for mode in modes {
+                    if let ArgMode::ByRefLocal(slot) = mode {
+                        read_fixed!(*slot);
+                        write!(*slot);
+                    }
+                    if let ArgMode::ByRefIndex { object, index } = mode {
+                        read_fixed!(*object);
+                        read_fixed!(*index);
+                    }
+                }
+            } else {
+                e.ctl = Ctl::Barrier;
+            }
             write!(dst);
+            mod_all(&mut e);
             e.heap_read = true;
             e.heap_write = true;
             e.io = true;
+            if e.ctl == Ctl::None {
+                e.ctl = Ctl::Trailing;
+            }
         }
         // Фрагмент читает и пишет все именованные локали кадра по именам
         // и исполняет произвольный код — всегда одиночный.
@@ -1079,7 +1125,7 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
 ///
 /// Неизвестный опкод даёт `None` и оптимизацию отключает — направление
 /// отказа безопасное, поэтому catch-all здесь допустим.
-fn readonly_call_window(instr: &Instr) -> Option<(u8, u8, Option<u8>)> {
+fn readonly_call_window(instr: &Instr, chunk: &Chunk) -> Option<(u8, u8, Option<u8>)> {
     match instr {
         Instr::CallBuiltin { base, count, .. }
         | Instr::CallComponent { base, count, .. }
@@ -1090,10 +1136,22 @@ fn readonly_call_window(instr: &Instr) -> Option<(u8, u8, Option<u8>)> {
         // который после удаления копии никто не заполняет.
         Instr::CallMethod {
             obj, base, count, ..
-        }
-        | Instr::CallObjectMethod {
-            obj, base, count, ..
         } => Some((*base, *count, Some(*obj))),
+        Instr::CallObjectMethod {
+            obj,
+            base,
+            arg_modes,
+            ..
+        }
+        | Instr::CallObjectProcedure {
+            obj,
+            base,
+            arg_modes,
+            ..
+        } => {
+            let count = u8::try_from(chunk.call_arg_modes.get(*arg_modes as usize)?.len()).ok()?;
+            Some((*base, count, Some(*obj)))
+        }
         _ => None,
     }
 }
@@ -1104,6 +1162,7 @@ fn set_call_base(instr: &mut Instr, b: u8) {
         Instr::CallBuiltin { base, .. }
         | Instr::CallMethod { base, .. }
         | Instr::CallObjectMethod { base, .. }
+        | Instr::CallObjectProcedure { base, .. }
         | Instr::CallComponent { base, .. }
         | Instr::CreateObject { base, .. } => *base = b,
         _ => {}
@@ -1192,7 +1251,8 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
             if !exact_reg(chunk, overlap, dst) {
                 return false;
             }
-            let Some((base, count, recv)) = readonly_call_window(&chunk.instrs[i + 1]) else {
+            let Some((base, count, recv)) = readonly_call_window(&chunk.instrs[i + 1], chunk)
+            else {
                 return false;
             };
             if base != dst || count != 1 {
@@ -1221,6 +1281,57 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
             !live[b].contains(dst as usize)
         };
 
+        // Копия получателя открытого вызова. Сам вызов объявляет
+        // изменения heap/модулей, поэтому общий анализ копий
+        // намеренно останавливается перед ним. Но точный локальный
+        // регистр-получатель вызов только читает: если до вызова его не
+        // трогали и после границы он мёртв, чтение можно направить прямо
+        // на источник. Позиционное окно сюда не относится.
+        let direct_receiver_stop = |i: usize, dst: u8, src: u8| {
+            if protected(i) || !exact_reg(chunk, overlap, dst) {
+                return None;
+            }
+            let b = cfg.block_of[i];
+            let (_, hi) = cfg.blocks[b];
+            if live[b].contains(dst as usize) {
+                return None;
+            }
+            for pc in (i + 1)..hi {
+                let instr = &chunk.instrs[pc];
+                let e = effects(instr, chunk, overlap);
+                if e.writes.contains(src as usize)
+                    || e.writes.contains(dst as usize)
+                    || e.reads_positional.contains(dst as usize)
+                {
+                    return None;
+                }
+                if e.reads.contains(dst as usize) {
+                    let receiver_call = matches!(instr,
+                        Instr::CallObjectMethod { obj, .. }
+                        | Instr::CallObjectProcedure { obj, .. }
+                            if *obj == dst
+                    );
+                    if !receiver_call {
+                        return None;
+                    }
+                    for tail in (pc + 1)..hi {
+                        let tail_effects = effects(&chunk.instrs[tail], chunk, overlap);
+                        if tail_effects.reads.contains(dst as usize) {
+                            return None;
+                        }
+                        if tail_effects.writes.contains(dst as usize) {
+                            return Some(pc + 1);
+                        }
+                    }
+                    return (!live[b].contains(dst as usize)).then_some(pc + 1);
+                }
+                if e.writes_alias || e.mod_writes.is_some() {
+                    return None;
+                }
+            }
+            None
+        };
+
         // Отбор раунда: участок [копия, конец переименования] не должен
         // пересекаться с уже принятым.
         let mut picked: Vec<(usize, u8, u8, usize, CopyFix)> = Vec::new();
@@ -1233,6 +1344,13 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 continue;
             };
             if !removable {
+                if dst != src
+                    && let Some(stop) = direct_receiver_stop(i, dst, src)
+                {
+                    picked.push((i, dst, src, stop, CopyFix::Rename));
+                    busy_until = stop;
+                    continue;
+                }
                 // Переименованием такую копию не снять — её приёмник
                 // читают позиционно. Но если окно ровно однорегистровое и
                 // вызов его только читает, базу можно поставить прямо на
@@ -1444,6 +1562,28 @@ fn intern_const(chunk: &mut Chunk, v: bsl_rt::BslValue) -> Option<u16> {
 mod tests {
     use super::*;
     use crate::instr::Instr;
+
+    #[test]
+    fn open_call_effects_include_reference_targets_and_finish_the_bundle() {
+        let instr = Instr::CallObjectMethod {
+            dst: 3,
+            obj: 0,
+            method: 0,
+            base: 2,
+            arg_modes: 0,
+        };
+        let mut c = chunk(vec![instr]);
+        c.call_arg_modes = vec![vec![ArgMode::ByRefLocal(1)]];
+        let e = effects(&instr, &c, None);
+        assert!(e.reads.contains(1));
+        assert!(e.reads_positional.contains(1));
+        assert!(e.writes.contains(1));
+        assert!(e.addressed_regs.contains(1));
+        assert!(matches!(e.mod_reads, ModSet::All));
+        assert!(matches!(e.mod_writes, ModSet::All));
+        assert!(matches!(e.ctl, Ctl::Trailing));
+    }
+
     fn chunk(instrs: Vec<Instr>) -> Chunk {
         let bundle_len = vec![0; instrs.len()];
         Chunk {
@@ -1547,6 +1687,32 @@ mod tests {
             Instr::Return { src: Some(2) },
         ]);
         assert!(!removable_copies(&c, None)[1]);
+    }
+
+    #[test]
+    fn a_receiver_copy_dying_at_an_open_procedure_is_removable() {
+        let mut c = chunk(vec![
+            Instr::Move { dst: 1, src: 0 },
+            Instr::LoadConst { dst: 2, k: 0 },
+            Instr::CallObjectProcedure {
+                dst: 3,
+                obj: 1,
+                method: 0,
+                base: 2,
+                arg_modes: 0,
+            },
+            Instr::Return { src: None },
+        ]);
+        c.call_arg_modes = vec![vec![ArgMode::Value]];
+
+        // Общая оценка остаётся консервативной на открытом вызове;
+        // проход узнаёт только узкий случай мёртвой копии приёмника.
+        assert!(!removable_copies(&c, None)[0]);
+        assert_eq!(copy_propagate(&mut c, None), 1);
+        assert!(matches!(
+            c.instrs[1],
+            Instr::CallObjectProcedure { obj: 0, .. }
+        ));
     }
 
     #[test]

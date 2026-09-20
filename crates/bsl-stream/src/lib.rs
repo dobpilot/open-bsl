@@ -77,7 +77,7 @@ fn construct_file_streams_manager(
     context: &mut CallContext<'_>,
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    Ok(new_file_streams_manager(context.files_rc()?))
+    stream::new_file_streams_manager_in_context(context)
 }
 
 fn construct_text_reader(
@@ -137,6 +137,20 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::stream::MEMORY_STREAM_TYPE,
     &crate::textreader::TEXT_READER_TYPE,
 ];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (ConstructorCode::new(1), &crate::stream::MEMORY_STREAM_TYPE),
+    (ConstructorCode::new(2), &crate::stream::FILE_STREAM_TYPE),
+    (ConstructorCode::new(3), &crate::datarw::DATA_READER_TYPE),
+    (ConstructorCode::new(4), &crate::datarw::DATA_WRITER_TYPE),
+    (
+        ConstructorCode::new(5),
+        &crate::stream::FILE_STREAMS_MANAGER_TYPE,
+    ),
+    (
+        ConstructorCode::new(6),
+        &crate::textreader::TEXT_READER_TYPE,
+    ),
+];
 
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[
     datarw::API_MEMBERS,
@@ -153,6 +167,7 @@ pub const fn library() -> LibraryDescriptor {
         }])
         .with_byte_stream_factory(binary_data_stream_factory)
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
         .with_type_aliases(TYPE_ALIASES)

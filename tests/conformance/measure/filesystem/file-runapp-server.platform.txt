@@ -1,0 +1,7 @@
+﻿file.begin	runapp-server-1
+runapp.ru.wait	ok|code=0
+runapp.en.wait	ok|code=0
+runapp.ru.nowait	ok|code=
+runapp.ru.missing	ok|code=127
+runapp.ru.async	error|Error calling context method (ЗапуститьПриложениеАсинх)|code=12345
+file.end	runapp-server-1

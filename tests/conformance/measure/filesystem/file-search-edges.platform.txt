@@ -1,0 +1,15 @@
+﻿file.begin	search-edges-1
+find.missing.mask	0
+find.missing.recursive	0
+find.file.mask	0
+find.file.recursive	0
+find.trailing	1|a.txt
+find.recursive.undefined	error:Error calling context method (НайтиФайлы)
+find.recursive.zero	1|a.txt
+find.recursive.one	2|a.txt|deep.txt
+find.recursive.string	1|a.txt
+find.mask.number	0
+find.path.number	0
+find.path.undefined	0
+find.direct.recursive	1|.
+file.end	search-edges-1

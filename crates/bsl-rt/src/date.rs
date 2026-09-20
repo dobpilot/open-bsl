@@ -1,11 +1,13 @@
-//! Дата BSL: момент времени с разрешением 1 секунда.
+//! Дата BSL: момент времени с разрешением 1/10000 секунды.
 //!
 //! # Эпоха
 //!
-//! Отсчёт — СЕКУНДЫ ОТ `0001-01-01 00:00:00`, не от Unix-эпохи. Это не
+//! Отсчёт — от `0001-01-01 00:00:00`, не от Unix-эпохи. Это не
 //! вкусовщина, а требование семантики: в 1С диапазон дат — с `0001-01-01`
 //! по `9999-12-31`, а пустая дата — это литерал `'00010101'`, то есть начало
-//! диапазона. От Unix-эпохи пустая дата оказалась бы отрицательным числом
+//! диапазона. Хранятся такты 1/10000 секунды; календарные поля целые,
+//! но арифметика сохраняет доли (file-date-precision.platform.txt).
+//! От Unix-эпохи пустая дата оказалась бы отрицательным числом
 //! (-62135596800), и всё, что естественно пишется как «ноль значит пусто»
 //! — `ЗначениеЗаполнено`, сравнение с пустой датой, инициализация регистра
 //! кадра — потребовало бы отдельной константы и ломалось бы при каждом
@@ -80,11 +82,15 @@ const DAYS_9999_12_31: i64 = 3_652_058;
 /// Последняя допустимая секунда: `9999-12-31 23:59:59`.
 pub const MAX_SECONDS: i64 = DAYS_9999_12_31 * SECONDS_PER_DAY + SECONDS_PER_DAY - 1;
 
-/// Дата как значение: секунды от `0001-01-01 00:00:00`. `Copy` и один
-/// `i64` — `BslValue::Date` не увеличивает размер значения (там уже есть
+const TICKS_PER_SECOND: u64 = 10_000;
+const TICKS_PER_DAY: u64 = SECONDS_PER_DAY as u64 * TICKS_PER_SECOND;
+const MAX_TICKS: u64 = (MAX_SECONDS as u64 + 1) * TICKS_PER_SECOND - 1;
+
+/// Дата как значение: такты 1/10000 секунды от `0001-01-01 00:00:00`.
+/// `Copy` и один `u64` — `BslValue::Date` не увеличивает размер значения (там уже есть
 /// варианты пошире).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BslDate(i64);
+pub struct BslDate(u64);
 
 /// Какую компоненту даты вернуть — селектор вместо шести почти одинаковых
 /// функций (`Год`, `Месяц`, ... `ДеньНедели`): все они читают одно и то же
@@ -158,15 +164,51 @@ impl BslDate {
     /// Пустая дата — `'00010101'`, она же ноль отсчёта (см. модульный
     /// комментарий про выбор эпохи).
     pub const fn empty() -> Self {
-        BslDate(EMPTY)
+        BslDate(0)
     }
 
+    /// Целые секунды от эпохи, без дробной части.
     pub const fn seconds(self) -> i64 {
+        (self.0 / TICKS_PER_SECOND) as i64
+    }
+
+    /// Точное значение в тактах 1/10000 секунды от эпохи.
+    pub const fn ticks(self) -> u64 {
         self.0
     }
 
+    /// Такты от эпохи, включая доли последней секунды 9999 года.
+    /// `None` — вне календарного диапазона.
+    pub fn from_ticks(ticks: u64) -> Option<Self> {
+        (ticks <= MAX_TICKS).then_some(Self(ticks))
+    }
+
+    /// Сырое 64-битное значение файлового getter. Значения за пределами
+    /// календаря наблюдаемы как Date с нулевыми полями.
+    pub(crate) const fn from_raw_ticks(ticks: u64) -> Self {
+        Self(ticks)
+    }
+
+    const fn is_calendar_value(self) -> bool {
+        self.0 <= MAX_TICKS
+    }
+
+    /// Возвращает дату календарного диапазона либо обычную пустую дату.
+    ///
+    /// Файловые getter'ы Linux могут вернуть наблюдаемое значение за
+    /// диапазоном календаря. Оно сохраняется при копировании и сравнении,
+    /// но стандартные сериализаторы 1С записывают его как пустую дату.
+    #[must_use]
+    pub const fn calendar_or_empty(self) -> Self {
+        if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        }
+    }
+
     pub fn is_empty(self) -> bool {
-        self.0 == EMPTY
+        self.0 == 0
     }
 
     /// Секунды от эпохи — с проверкой диапазона. `None` — вне
@@ -174,7 +216,7 @@ impl BslDate {
     pub fn from_seconds(secs: i64) -> Option<Self> {
         (EMPTY..=MAX_SECONDS)
             .contains(&secs)
-            .then_some(BslDate(secs))
+            .then(|| BslDate(secs as u64 * TICKS_PER_SECOND))
     }
 
     /// `Дата(Год, Месяц, День[, Час, Минута, Секунда])`. `None` — любая
@@ -203,11 +245,21 @@ impl BslDate {
     }
 
     pub fn to_civil(self) -> CivilDateTime {
+        if !self.is_calendar_value() {
+            return CivilDateTime {
+                year: 0,
+                month: 0,
+                day: 0,
+                hour: 0,
+                minute: 0,
+                second: 0,
+            };
+        }
         // `div_euclid`/`rem_euclid`, а не `/` и `%`: отрицательных секунд
         // тут быть не может по конструкции, но правило "остаток всегда
         // неотрицательный" делает разложение верным без оговорок.
-        let days = self.0.div_euclid(SECONDS_PER_DAY) - DAYS_FROM_0001_TO_1970;
-        let rest = self.0.rem_euclid(SECONDS_PER_DAY);
+        let days = self.seconds().div_euclid(SECONDS_PER_DAY) - DAYS_FROM_0001_TO_1970;
+        let rest = self.seconds().rem_euclid(SECONDS_PER_DAY);
         let (year, month, day) = civil_from_days(days);
         CivilDateTime {
             year,
@@ -227,50 +279,73 @@ impl BslDate {
     /// (`воскресенье = 1`, как в некоторых СУБД) сдвинула бы обе функции
     /// разом.
     pub fn weekday(self) -> u32 {
-        let days = self.0.div_euclid(SECONDS_PER_DAY);
+        let days = (self.0 / TICKS_PER_DAY) as i64;
         // `0001-01-01` — понедельник по пролептическому григорианскому
         // календарю, поэтому день 0 это уже 1.
         (days.rem_euclid(7) + 1) as u32
     }
 
     pub fn start_of_day(self) -> Self {
-        BslDate(self.0 - self.0.rem_euclid(SECONDS_PER_DAY))
+        if !self.is_calendar_value() {
+            return Self::empty();
+        }
+        BslDate(self.0 - self.0 % TICKS_PER_DAY)
     }
 
     pub fn end_of_day(self) -> Self {
-        BslDate(self.start_of_day().0 + SECONDS_PER_DAY - 1)
+        BslDate(self.start_of_day().0 + TICKS_PER_DAY - TICKS_PER_SECOND)
     }
 
     pub fn start_of_month(self) -> Self {
-        let c = self.to_civil();
+        let c = if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        }
+        .to_civil();
         BslDate::from_civil(c.year, c.month, 1, 0, 0, 0).unwrap_or(BslDate::empty())
     }
 
     pub fn end_of_month(self) -> Self {
-        let c = self.to_civil();
+        let c = if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        }
+        .to_civil();
         let last = days_in_month(c.year, c.month);
         BslDate::from_civil(c.year, c.month, last, 23, 59, 59).unwrap_or(BslDate::empty())
     }
 
     pub fn start_of_year(self) -> Self {
-        let c = self.to_civil();
+        let c = if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        }
+        .to_civil();
         BslDate::from_civil(c.year, 1, 1, 0, 0, 0).unwrap_or(BslDate::empty())
     }
 
     pub fn end_of_year(self) -> Self {
-        let c = self.to_civil();
+        let c = if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        }
+        .to_civil();
         BslDate::from_civil(c.year, 12, 31, 23, 59, 59).unwrap_or(BslDate::empty())
     }
 
     /// `НачалоНедели` — понедельник этой недели, 00:00:00 (см. `weekday`
     /// про то, что первым днём считается понедельник).
     pub fn start_of_week(self) -> Self {
-        let back = (self.weekday() - 1) as i64;
-        BslDate(self.start_of_day().0 - back * SECONDS_PER_DAY)
+        let back = u64::from(self.weekday() - 1);
+        BslDate(self.0 - self.0 % TICKS_PER_DAY - back * TICKS_PER_DAY)
     }
 
     /// `ДобавитьМесяц(Дата, Количество)` — сдвиг на целые месяцы; время
-    /// суток сохраняется.
+    /// суток сохраняется до целой секунды, дробь отбрасывается.
     ///
     /// `НЕ ИЗМЕРЕНО(DATE.ADD_MONTH_CLAMP)`: что происходит с днём, которого в
     /// целевом месяце нет. Взято ЗАЖАТИЕ в последний день месяца
@@ -281,7 +356,12 @@ impl BslDate {
     ///
     /// `None` — результат вышел за границы диапазона дат.
     pub fn add_months(self, months: i64) -> Option<Self> {
-        let c = self.to_civil();
+        let source = if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        };
+        let c = source.to_civil();
         let total = (c.year * 12 + (c.month as i64 - 1)).checked_add(months)?;
         let year = total.div_euclid(12);
         let month = (total.rem_euclid(12) + 1) as u32;
@@ -292,15 +372,37 @@ impl BslDate {
         BslDate::from_civil(year, month, day, c.hour, c.minute, c.second)
     }
 
-    /// `Дата + Число` / `Дата - Число` — сдвиг на секунды. `None` — вышли
-    /// за границы диапазона.
+    /// Проверяемый Rust-сдвиг на целые секунды с сохранением дроби.
+    /// `None` — вышли за диапазон; BSL-операторы отдельно применяют насыщение.
     pub fn shift_seconds(self, secs: i64) -> Option<Self> {
-        BslDate::from_seconds(self.0.checked_add(secs)?)
+        let ticks = i128::from(self.0) + i128::from(secs) * i128::from(TICKS_PER_SECOND);
+        Self::from_ticks(u64::try_from(ticks).ok()?)
     }
 
-    /// `Дата - Дата` — разница В СЕКУНДАХ.
+    /// Целая часть разницы в секундах, с усечением к нулю.
+    /// BSL-вычитание отдельно сохраняет точную дробную разность.
     pub fn diff_seconds(self, other: Self) -> i64 {
-        self.0 - other.0
+        self.0.wrapping_sub(other.0) as i64 / TICKS_PER_SECOND as i64
+    }
+
+    pub(crate) fn difference(self, other: Self) -> crate::BslNumber {
+        crate::BslNumber::from_parts(i128::from(self.0.wrapping_sub(other.0) as i64), 4)
+            .expect("масштаб даты равен четырём")
+    }
+
+    /// Насыщение — измеренная BSL-арифметика, не контракт checked shift_seconds.
+    pub(crate) fn shift_ticks_saturating(self, ticks: i64) -> Self {
+        if ticks == 0 {
+            return self;
+        }
+        let result = self.0.wrapping_add(ticks as u64);
+        if ticks > 0 && result > MAX_TICKS {
+            Self(MAX_TICKS)
+        } else if ticks < 0 && self.is_calendar_value() && result > MAX_TICKS {
+            Self::empty()
+        } else {
+            Self(result)
+        }
     }
 
     /// Разбор литерала `'ГГГГММДД'` / `'ГГГГММДДЧЧММСС'` (лексер уже снял
@@ -313,6 +415,12 @@ impl BslDate {
         }
         if !digits.bytes().all(|b| b.is_ascii_digit()) {
             return None;
+        }
+        // Измерено на серверной 1С: четырнадцать нулей в строковой форме
+        // `Дата` и в литерале означают обычную пустую дату. Числовая форма
+        // `Дата(0, 0, 0)` проходит другим путём и остаётся ошибкой.
+        if digits == "00000000000000" {
+            return Some(Self::empty());
         }
         let part = |from: usize, len: usize| digits[from..from + len].parse::<u32>().ok();
         let year = part(0, 4)? as i64;
@@ -884,6 +992,10 @@ mod tests {
         );
         assert_eq!(BslDate::parse_digits("2024011"), None);
         assert_eq!(BslDate::parse_digits("20240230"), None);
+        assert_eq!(
+            BslDate::parse_digits("00000000000000"),
+            Some(BslDate::empty())
+        );
     }
 
     #[test]
@@ -918,5 +1030,96 @@ mod tests {
         let dt = BslDate::from_civil(2024, 1, 15, 10, 30, 0).unwrap();
         assert_eq!(dt.to_string(), "15.01.2024 10:30:00");
         assert_eq!(BslDate::empty().to_string(), "01.01.0001 0:00:00");
+    }
+
+    #[test]
+    fn subsecond_storage_preserves_seconds_api_and_checked_shifts() {
+        let base = BslDate::from_civil(2020, 1, 15, 12, 34, 56).unwrap();
+        let fractional = BslDate::from_ticks(base.ticks() + 1234).unwrap();
+        assert_eq!(fractional.seconds(), base.seconds());
+        assert_eq!(fractional.to_civil(), base.to_civil());
+        assert_ne!(fractional, base);
+        assert!(fractional > base);
+        assert_eq!(fractional.diff_seconds(base), 0);
+        assert_eq!(base.diff_seconds(fractional), 0);
+        assert_eq!(fractional.difference(base).to_canonical(), "0.1234");
+        assert_eq!(base.difference(fractional).to_canonical(), "-0.1234");
+        assert_eq!(
+            fractional.shift_seconds(1).unwrap().ticks(),
+            fractional.ticks() + 10_000
+        );
+        assert_eq!(
+            BslDate::from_ticks(MAX_TICKS).unwrap().seconds(),
+            MAX_SECONDS
+        );
+        assert_eq!(BslDate::from_ticks(MAX_TICKS + 1), None);
+        assert_eq!(BslDate::empty().shift_seconds(-1), None);
+        assert_eq!(fractional.shift_seconds(i64::MIN), None);
+        assert_eq!(fractional.shift_seconds(i64::MAX), None);
+        let keys = std::collections::HashSet::from([base, fractional]);
+        assert_eq!(keys.len(), 2);
+    }
+
+    #[test]
+    fn wrapped_file_dates_keep_zero_fields_unsigned_order_and_cyclic_differences() {
+        let utc_min = BslDate::from_raw_ticks(u64::MAX - 1_615);
+        let local_min = BslDate::from_raw_ticks(u64::MAX - 90_169_999);
+        let empty = BslDate::empty();
+        let zero = CivilDateTime {
+            year: 0,
+            month: 0,
+            day: 0,
+            hour: 0,
+            minute: 0,
+            second: 0,
+        };
+        assert_eq!(utc_min.to_civil(), zero);
+        assert_eq!(local_min.to_civil(), zero);
+        assert!(utc_min > empty && local_min > empty && utc_min != local_min);
+        assert_eq!(utc_min.difference(empty).to_canonical(), "-0.1616");
+        assert_eq!(empty.difference(utc_min).to_canonical(), "0.1616");
+        assert_eq!(local_min.difference(empty).to_canonical(), "-9017");
+        assert_eq!(local_min.difference(utc_min).to_canonical(), "-9016.8384");
+        assert_eq!(utc_min.weekday(), 4);
+        assert_eq!(local_min.weekday(), 4);
+        assert_eq!(utc_min.start_of_day(), empty);
+        assert_eq!(
+            utc_min.end_of_day().difference(empty).to_canonical(),
+            "86399"
+        );
+        assert_eq!(
+            utc_min.start_of_week().difference(empty).to_canonical(),
+            "-298955.1616"
+        );
+        assert_eq!(local_min.start_of_week(), utc_min.start_of_week());
+        assert_eq!(
+            utc_min.end_of_month().to_civil(),
+            d(1, 1, 31).end_of_day().to_civil()
+        );
+        assert_eq!(
+            utc_min.end_of_year().to_civil(),
+            d(1, 12, 31).end_of_day().to_civil()
+        );
+        assert_eq!(utc_min.add_months(0), Some(empty));
+        assert_eq!(utc_min.add_months(1), Some(d(1, 2, 1)));
+        assert_eq!(utc_min.calendar_or_empty(), empty);
+
+        assert_eq!(utc_min.shift_ticks_saturating(0), utc_min);
+        assert_eq!(utc_min.shift_ticks_saturating(1).ticks(), MAX_TICKS);
+        assert_eq!(
+            utc_min
+                .shift_ticks_saturating(-1)
+                .difference(empty)
+                .to_canonical(),
+            "-0.1617"
+        );
+        assert_eq!(
+            utc_min
+                .shift_ticks_saturating(10_000)
+                .difference(empty)
+                .to_canonical(),
+            "0.8384"
+        );
+        assert_eq!(local_min.shift_ticks_saturating(10_000).ticks(), MAX_TICKS);
     }
 }

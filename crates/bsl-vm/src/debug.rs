@@ -87,6 +87,23 @@ pub(super) struct FrameValues<'a, 'h, 'd> {
     pub(super) linked: &'a LinkedComponents<'a>,
     pub(super) host: &'a mut HostIo<'h, 'd>,
     pub(super) module_state: &'a mut ModuleState,
+    pub(super) async_state: &'a mut super::AsyncState,
+    pub(super) catalog: Option<&'a super::CatalogContext<'a>>,
+    pub(super) session_modules: &'a mut super::SessionModules,
+    pub(super) runtime_shapes: &'a mut bsl_rt::RuntimeShapes,
+}
+
+impl FrameValues<'_, '_, '_> {
+    fn frame_program(&self, index: usize) -> Option<&Program> {
+        let frame = self.task.frames.get(index)?;
+        if let Some(code) = &frame.code {
+            Some(&code.program)
+        } else if frame.module == super::ROOT_MODULE {
+            Some(self.program)
+        } else {
+            self.catalog?.program(frame.module).ok()
+        }
+    }
 }
 
 impl DebugValues for FrameValues<'_, '_, '_> {
@@ -94,10 +111,10 @@ impl DebugValues for FrameValues<'_, '_, '_> {
         let Some(frame) = self.task.frames.get(index) else {
             return Vec::new();
         };
-        // Программа берётся ТЕКУЩАЯ: кадры чужих модулей каталога сюда
-        // попадут с чужими именами, и это честнее решать отдельной
-        // операцией, чем угадывать здесь.
-        let Some(chunk) = self.program.chunks.get(frame.func_id) else {
+        let Some(chunk) = self
+            .frame_program(index)
+            .and_then(|p| p.chunks.get(frame.func_id))
+        else {
             return Vec::new();
         };
         chunk
@@ -107,7 +124,7 @@ impl DebugValues for FrameValues<'_, '_, '_> {
             .filter_map(|(slot, name)| {
                 self.task
                     .stack
-                    .get(frame.own_base + slot)
+                    .get(frame.reg_index(slot as u8))
                     .map(|v| (name.clone(), v.clone()))
             })
             .collect()
@@ -122,12 +139,17 @@ impl DebugValues for FrameValues<'_, '_, '_> {
         // строки не нашлось бы вовсе. Приостановленному кадру нужна
         // строка самого вызова, то есть предыдущая инструкция.
         let top = self.task.frames.len().saturating_sub(1);
-        let pc = if index == top {
+        // Ленивая инициализация не продвигает инструкцию владельца:
+        // после тела модуля она должна повториться.
+        let initializing = self.task.frames.get(index + 1).is_some_and(|next| {
+            next.module != super::ROOT_MODULE && next.func_id == 0 && next.code.is_none()
+        });
+        let pc = if index == top || initializing {
             frame.pc
         } else {
             frame.pc.saturating_sub(1)
         };
-        self.program
+        self.frame_program(index)?
             .lines
             .get(frame.func_id)
             .and_then(|rows| rows.get(pc))
@@ -139,16 +161,40 @@ impl DebugValues for FrameValues<'_, '_, '_> {
             return Err(format!("кадра {index} нет в стеке"));
         };
         let func_id = frame.func_id;
-        let chunk = self
-            .program
+        let code = frame.code.clone();
+        let program = if let Some(code) = &code {
+            &code.program
+        } else if frame.module == super::ROOT_MODULE {
+            self.program
+        } else {
+            self.catalog
+                .ok_or("кадр модуля без каталога")?
+                .program(frame.module)
+                .map_err(|error| error.to_string())?
+        };
+        let dynamic_linked;
+        let linked = if let Some(code) = &code {
+            dynamic_linked = LinkedComponents {
+                registry: self.linked.registry,
+                tables: code.tables.clone(),
+            };
+            &dynamic_linked
+        } else if frame.module == super::ROOT_MODULE {
+            self.linked
+        } else {
+            self.catalog
+                .ok_or("кадр модуля без каталога")?
+                .linked(frame.module)
+                .map_err(|error| error.to_string())?
+        };
+        let chunk = program
             .chunks
             .get(func_id)
             .ok_or_else(|| format!("чанка {func_id} нет в программе"))?;
-        // Область видимости — имена ЭТОГО кадра. Со сведениями об отладке
-        // они материализованы у всех чанков; без них таблица пуста, и
-        // фрагмент не увидит локальных — тогда честнее сказать, чем
-        // молча вычислить не то.
-        if chunk.local_names.is_empty() && !chunk.instrs.is_empty() {
+        // Область видимости — имена этого кадра. Наличие отладочной
+        // информации определяется таблицей строк: у корректного кадра
+        // без локальных таблица имён также пуста.
+        if program.lines.is_empty() && !chunk.instrs.is_empty() {
             return Err(
                 "у кадра нет таблицы имён: образ собран без сведений об отладке".to_string(),
             );
@@ -161,17 +207,28 @@ impl DebugValues for FrameValues<'_, '_, '_> {
         // `Frame` и не `Clone`.
         let Task { frames, stack, .. } = &mut *self.task;
         let frame = &frames[index];
+        let module_aliases: Vec<_> = frames
+            .iter()
+            .flat_map(|frame| frame.module_copybacks.iter().copied())
+            .collect();
         run_dynamic_snippet(
             source,
             true,
-            self.program,
+            program,
             &scope_locals,
             func_id,
             stack,
             frame,
-            self.linked,
+            &module_aliases,
+            linked,
             self.host,
             self.module_state,
+            self.async_state,
+            self.program,
+            self.linked,
+            self.catalog,
+            self.session_modules,
+            self.runtime_shapes,
         )
         .map_err(|e| format!("{e}"))
     }

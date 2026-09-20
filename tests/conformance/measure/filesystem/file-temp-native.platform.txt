@@ -1,0 +1,23 @@
+﻿file.begin	temp-native-1
+native.phase	a0
+native.phase	a1
+native.phase	a2
+native.phase	a3
+native.name	a	/tmp/v8_wtsHqO_5.tmp
+native.phase	a4
+native.phase	a5
+native.phase	b0
+native.phase	b1
+native.phase	b2
+native.phase	b3
+native.name	b	/tmp/v8_wtsHqO_6.tmp
+native.phase	b4
+native.phase	b5
+native.phase	c0
+native.phase	c1
+native.phase	c2
+native.phase	c3
+native.name	c	/tmp/v8_wtsHqO_7.tmp
+native.phase	c4
+native.phase	c5
+file.end	temp-native-1

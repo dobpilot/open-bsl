@@ -1,0 +1,9 @@
+file.begin	temp-sharing-1
+temp.sharing.initial	error
+temp.sharing.alias	error
+temp.sharing.moved	error
+temp.sharing.replacement	read=0
+temp.sharing.name	original
+temp.sharing.closed_alias	read=2
+temp.sharing.closed_moved	read=2
+file.end	temp-sharing-1

@@ -1,0 +1,27 @@
+file.begin	file-search-metadata-errors-1
+context.compatibility	НеИспользовать
+metadata.permission.*.flat.ru	ok|count=3|<root>/permission/after.txt|<root>/permission/before.txt|<root>/permission/denied dir
+metadata.permission.*.flat.en	ok|count=3|<root>/permission/after.txt|<root>/permission/before.txt|<root>/permission/denied dir
+metadata.permission.*.recursive.ru	ok|count=3|<root>/permission/after.txt|<root>/permission/before.txt|<root>/permission/denied dir
+metadata.permission.*.recursive.en	ok|count=3|<root>/permission/after.txt|<root>/permission/before.txt|<root>/permission/denied dir
+metadata.permission.*.txt.flat.ru	ok|count=2|<root>/permission/after.txt|<root>/permission/before.txt
+metadata.permission.*.txt.flat.en	ok|count=2|<root>/permission/after.txt|<root>/permission/before.txt
+metadata.permission.*.txt.recursive.ru	ok|count=2|<root>/permission/after.txt|<root>/permission/before.txt
+metadata.permission.*.txt.recursive.en	ok|count=2|<root>/permission/after.txt|<root>/permission/before.txt
+metadata.permission.error*.flat.ru	ok|count=0
+metadata.permission.error*.flat.en	ok|count=0
+metadata.permission.error*.recursive.ru	ok|count=0
+metadata.permission.error*.recursive.en	ok|count=0
+metadata.loop.*.flat.ru	ok|count=0
+metadata.loop.*.flat.en	ok|count=0
+metadata.loop.*.recursive.ru	ok|count=0
+metadata.loop.*.recursive.en	ok|count=0
+metadata.loop.*.txt.flat.ru	ok|count=2|<root>/loop/after.txt|<root>/loop/before.txt
+metadata.loop.*.txt.flat.en	ok|count=2|<root>/loop/after.txt|<root>/loop/before.txt
+metadata.loop.*.txt.recursive.ru	ok|count=2|<root>/loop/after.txt|<root>/loop/before.txt
+metadata.loop.*.txt.recursive.en	ok|count=2|<root>/loop/after.txt|<root>/loop/before.txt
+metadata.loop.error*.flat.ru	ok|count=1|<root>/loop/error loop
+metadata.loop.error*.flat.en	ok|count=1|<root>/loop/error loop
+metadata.loop.error*.recursive.ru	ok|count=1|<root>/loop/error loop
+metadata.loop.error*.recursive.en	ok|count=1|<root>/loop/error loop
+file.end	file-search-metadata-errors-1

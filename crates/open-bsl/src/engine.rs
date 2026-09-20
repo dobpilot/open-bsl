@@ -824,7 +824,7 @@ fn compile_catalog(
 /// Экспортная поверхность модуля, снятая с его ПРОГРАММЫ, — для движка,
 /// собранного из образа: `ResolvedProgram` у него нет, а всё нужное
 /// (имена, экспортность, сигнатуры чанков) байт-код уже несёт.
-fn imported_module_from_program(
+pub(crate) fn imported_module_from_program(
     alias: &str,
     module: u32,
     program: &bsl_bytecode::Program,
@@ -880,10 +880,14 @@ fn image_init_order(catalog: &bsl_bytecode::ConfigurationProgram) -> Vec<u32> {
             return;
         }
         state[current] = 1;
+        for import in &catalog.modules[current].program.imports {
+            visit(catalog, state, order, import.module.index());
+        }
         for link in &catalog.modules[current].program.links {
             let target = match link {
                 bsl_bytecode::LinkEntry::Function { module, .. }
                 | bsl_bytecode::LinkEntry::Variable { module, .. } => module.index(),
+                bsl_bytecode::LinkEntry::ObjectMethod { .. } => continue,
             };
             visit(catalog, state, order, target);
         }

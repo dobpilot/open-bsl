@@ -1,0 +1,15 @@
+file.begin	file-runapp-sync-client-1
+runsync.true	ok|type=Number|value=0
+runsync.false	ok|type=Number|value=1
+runsync.no_wait	ok|type=Undefined|value=
+runsync.omitted_wait	ok|type=Undefined|value=
+runsync.empty	ok|type=Number|value=0
+runsync.missing	ok|type=Undefined|value=
+runsync.cwd_missing	ok|type=Number|value=0
+runsync.command_undefined	error|type=Number|value=12345|Error calling context method (ЗапуститьПриложение)
+runsync.cwd_undefined	error|type=Number|value=12345|Error calling context method (ЗапуститьПриложение)
+runsync.wait_zero	error|type=Number|value=12345|Error calling context method (ЗапуститьПриложение)
+runsync.quoted	ok|type=Number|value=1
+runsync.shell_exit	ok|type=Undefined|value=
+runsync.shell_sequence	ok|type=Number|value=1
+file.end	file-runapp-sync-client-1

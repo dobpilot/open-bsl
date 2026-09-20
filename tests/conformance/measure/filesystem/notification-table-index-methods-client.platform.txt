@@ -1,0 +1,38 @@
+file.begin	notification-table-index-methods-client-1
+collection.type	Value table index collection
+collection.identity	Yes
+collection.empty	0
+add.ru	Value table index|alias=Yes|count=1
+add.en	Value table index|alias=Yes|count=2
+add.none	ok:Value table index|count=1
+add.extra	error|count=0
+add.bad_column	error|count=0
+add.empty	ok:Value table index|count=1
+add.multiple	ok:Value table index|count=1
+add.duplicate	ok:Value table index|count=1
+delete.ru	1|remaining=Yes
+delete.en	0
+delete.none	error|count=0
+delete.extra	error|count=1
+delete.expression	error|count=1
+clear.ru	0
+clear.en	0
+clear.extra	error|count=0
+clear.expression	error|count=0
+copy.indexes	2|same=No
+copy.independent	2|copy=1
+copy.selected_column	0
+copy.explicit_columns	0|empty=2
+copy_columns.indexes	0|selected=0
+notify.collection.Количество	ok
+notify.collection.Count	ok
+notify.collection.Добавить	ok
+notify.collection.Add	ok
+notify.collection.Удалить	ok
+notify.collection.Delete	ok
+notify.collection.Очистить	ok
+notify.collection.Clear	ok
+notify.index.Количество	receiver
+notify.index.Count	receiver
+notify.index.НетМетода	receiver
+file.end	notification-table-index-methods-client-1

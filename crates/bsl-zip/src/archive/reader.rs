@@ -487,6 +487,8 @@ pub(crate) fn read_source(
     match source {
         BslValue::Str(s) => {
             let path = s.to_string();
+            let path = bsl_rt::prepare_file_operation_path(&path, files)
+                .map_err(|e| zip_err(&format!("не удалось прочитать файл «{path}»: {e}")))?;
             let bytes = files
                 .read(&path)
                 .map_err(|e| zip_err(&format!("не удалось прочитать файл «{path}»: {e}")))?;
@@ -806,7 +808,7 @@ pub fn extract(
     };
 
     let restore = restore_paths(mode, "Извлечь")?;
-    let dir = destination(dir, "Извлечь")?;
+    let dir = destination(dir, files, "Извлечь")?;
     let state = state.borrow();
     let open = state.opened("Извлечь")?;
     extract_item(
@@ -842,7 +844,7 @@ pub fn extract_all(
         }
     };
     let restore = restore_paths(mode, "ИзвлечьВсе")?;
-    let dir = destination(dir, "ИзвлечьВсе")?;
+    let dir = destination(dir, files, "ИзвлечьВсе")?;
     let state = state.borrow();
     let open = state.opened("ИзвлечьВсе")?;
     for item in &open.items {
@@ -876,11 +878,17 @@ pub(crate) fn restore_paths(mode: Option<&BslValue>, op: &'static str) -> RtResu
 
 /// Каталог назначения. Пустая строка — ошибка (измерено: «Некорректный путь
 /// для распаковки»), а несуществующий каталог создаётся (тоже измерено).
-pub(crate) fn destination(dir: &BslValue, op: &'static str) -> RtResult<std::path::PathBuf> {
+pub(crate) fn destination(
+    dir: &BslValue,
+    files: &dyn FileSystem,
+    op: &'static str,
+) -> RtResult<std::path::PathBuf> {
     let dir = text_of(dir, op)?.to_string();
     if dir.is_empty() {
         return Err(zip_err("некорректный путь для распаковки"));
     }
+    let dir = bsl_rt::prepare_file_operation_path(&dir, files)
+        .map_err(|e| zip_err(&format!("некорректный путь для распаковки «{dir}»: {e}")))?;
     Ok(std::path::PathBuf::from(dir))
 }
 

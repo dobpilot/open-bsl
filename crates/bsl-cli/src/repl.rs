@@ -49,6 +49,18 @@ pub struct Session {
     dynamic: open_bsl::DynamicCode,
 }
 
+impl Drop for Session {
+    fn drop(&mut self) {
+        // Носители значений закрываются до очистки, а не после неё вместе
+        // с полями Session. Окончание отдельной строки сюда не попадает.
+        self.values.clear();
+        let resources = self.env.temporary_files().close();
+        if let Err(error) = crate::session::cleanup(resources) {
+            eprintln!("Ошибка очистки временных файлов: {:?}", error.kind());
+        }
+    }
+}
+
 impl Session {
     fn new() -> Self {
         let engine = crate::engine().unwrap_or_else(|e| {
@@ -61,7 +73,8 @@ impl Session {
             locals: Vec::new(),
             names: Vec::new(),
             values: Vec::new(),
-            env: bsl_rt::HostEnv::process(),
+            env: bsl_rt::HostEnv::process()
+                .with_application_launcher(bsl_rt::SystemApplicationLauncher),
         }
     }
 
@@ -371,6 +384,54 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temporary_resources_survive_lines_and_are_cleaned_at_session_end() {
+        #[derive(Debug)]
+        struct TrackedValue(std::rc::Rc<std::cell::RefCell<Vec<usize>>>);
+        impl bsl_rt::ObjectProtocol for TrackedValue {
+            fn type_descriptor(&self) -> &'static bsl_rt::TypeDescriptor {
+                static TYPE: bsl_rt::TypeDescriptor =
+                    bsl_rt::TypeDescriptor::new("test", "ЗначениеПередОчисткой");
+                &TYPE
+            }
+        }
+        impl Drop for TrackedValue {
+            fn drop(&mut self) {
+                self.0.borrow_mut().push(100);
+            }
+        }
+        let removed = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut session = Session::new();
+        let registry = session.env.temporary_files();
+        for id in 0..3 {
+            registry
+                .register(Box::new(crate::session::tests::Resource {
+                    removed: removed.clone(),
+                    id,
+                    failure: id == 0,
+                }))
+                .unwrap();
+        }
+        eval_repl_line("х = 2;", &mut session).unwrap();
+        assert!(eval_repl_line("х = х / 0;", &mut session).is_err());
+        eval_repl_line("х = х + 1;", &mut session).unwrap();
+        assert!(removed.borrow().is_empty());
+        session
+            .values
+            .push(BslValue::new_object(TrackedValue(removed.clone())));
+        drop(session);
+        assert_eq!(*removed.borrow(), [100, 0, 1, 2]);
+        assert!(registry.take_pending().is_empty());
+        let late = registry.register(Box::new(crate::session::tests::Resource {
+            removed: removed.clone(),
+            id: 3,
+            failure: false,
+        }));
+        assert!(late.is_err());
+        drop(late);
+        assert_eq!(*removed.borrow(), [100, 0, 1, 2]);
+    }
 
     /// Дополнение обязано видеть переменные, объявленные в этой же сессии,
     /// — иначе от него в REPL толку мало. Проверяем через настоящий прогон

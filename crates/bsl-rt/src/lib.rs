@@ -4,6 +4,7 @@
 //! модуль `date`) и типы как значения (`Type`/`TypeId`). `BslValue` растёт
 //! по мере готовности остальных слоёв, а не заранее под все типы из брифа.
 
+mod application;
 pub mod background_jobs;
 mod bindata;
 mod builtin;
@@ -14,8 +15,12 @@ mod enums;
 mod env;
 mod error;
 mod error_info;
+mod file;
+mod file_async;
+mod file_search;
 mod fill;
 mod fixed_array;
+mod fixed_collections;
 pub mod fold;
 mod host_error;
 mod http;
@@ -23,7 +28,10 @@ mod interner;
 mod job_dto;
 mod locale;
 mod map;
+mod mask;
 mod metadata;
+mod module_reference;
+mod notification;
 mod object;
 mod object_protocol;
 pub mod open_questions;
@@ -33,6 +41,9 @@ mod shape;
 mod string;
 mod table;
 mod temp_storage;
+#[cfg(target_os = "linux")]
+mod temporary_file_access;
+mod temporary_files;
 mod type_description;
 mod types;
 mod tz;
@@ -41,6 +52,7 @@ pub mod uuid;
 mod value;
 mod value_graph;
 mod value_list;
+mod value_table_indexes;
 mod vstr;
 pub use background_jobs::{BackgroundJobService, JobWaitOutcome};
 pub use error::{ComponentError, RtError, RtResult};
@@ -61,6 +73,11 @@ pub use bsl_number::BslNumber;
 pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+pub use application::{
+    ApplicationCompletionSink, ApplicationErrorMapper, ApplicationExit, ApplicationLauncher,
+    ApplicationRequest, ApplicationResponseMapper, ApplicationResult, ApplicationTarget,
+    SystemApplicationLauncher, call_run_app, call_run_app_async,
+};
 pub use builtin::{
     BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, HostEffect, call_builtin_env,
     call_builtin_files, call_builtin_fn, call_builtin_fn_ctx, call_builtin_method,
@@ -72,8 +89,8 @@ pub use component::{
     FunctionKind, InterpreterServices, LibraryDependency, LibraryDescriptor, LibraryKey,
     LibraryRequirement, MethodCall, MethodDescriptor, ObjectMembersDescriptor, PendingHostCall,
     PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
-    SuspendingMethodCall, call_method_from_table, core_library, get_property_from_table,
-    set_property_from_table,
+    SuspendingMethodCall, call_method_from_table, core_library, find_method_from_table,
+    get_property_from_table, set_property_from_table,
 };
 pub use date::{
     BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,
@@ -83,28 +100,49 @@ pub use date::{
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use env::{
     Clock, DirEntry, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem,
-    FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomHandle,
-    RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone, UserMessageSink,
+    FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, OpenedTemporaryFile,
+    RandomHandle, RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
+    TransferableTemporaryFile, UserMessageSink,
 };
 pub use error_info::{detailed_error_description, new_error_info};
+pub use file::{
+    FileMetadataQuery, FileMetadataUpdate, prepare_create_directory_noop,
+    prepare_file_operation_path,
+};
+pub use file_async::{
+    FileOperationRequest, FileOperationResult, call_builtin_create_directory_formatted,
+    perform_file_operation, prepare_file_operation,
+};
+pub use file_search::{
+    FileOperationError, FileSearchError, FileSearchPaths, FileSearchRequest,
+    call_builtin_delete_files, call_builtin_delete_files_formatted, call_builtin_find_files,
+    find_files, prepare_file_search, search_file_paths,
+};
 pub use fold::folded_eq;
 pub use http::{
     ClientIdentity, HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink,
-    HttpErrorMapper, HttpPromiseSpawner, HttpResponseMapper, HttpWireRequest, HttpWireResponse,
-    NetworkError, NetworkErrorKind, ProxyConfig, ProxyMode, RequestHandle, SecretBytes,
-    SecretString, TlsConfig,
+    HttpErrorMapper, HttpResponseMapper, HttpWireRequest, HttpWireResponse, NetworkError,
+    NetworkErrorKind, ProxyConfig, ProxyMode, RequestHandle, SecretBytes, SecretString, TlsConfig,
 };
 pub use interner::{NameId, NameInterner, first_folded_duplicate};
 pub use locale::{Locale, NBSP};
+pub use mask::{file_mask_matches, simple_mask_matches};
+pub use module_reference::BSL_MODULE_TYPE;
+pub use notification::NotificationDescription;
 pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{
     ByteStreamProtocol, ObjectDowncast, ObjectProtocol, ObjectRef, TypeDescriptor, receiver_of,
 };
-pub use promise::{ExecutionToken, PROMISE_TYPE, PromiseId, PromiseValue};
+pub use promise::HostPromiseSpawner as HttpPromiseSpawner;
+pub use promise::{
+    ExecutionToken, FileNotificationOperation, HostPromiseSpawner, PROMISE_TYPE, PromiseId,
+    PromiseValue, TemporaryFileValueMapper,
+};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::BslString;
 pub use table::ValueTableData;
+pub use temporary_files::{TemporaryFileCleanup, TemporaryFileRegistry, TemporaryFileResource};
 pub use types::{TypeId, TypeRef};
 pub use tz::SystemTimeZone;
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,

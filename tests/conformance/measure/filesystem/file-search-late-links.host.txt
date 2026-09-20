@@ -1,0 +1,42 @@
+	d	
+first	d	
+first/broken0.txt	l	absent-zero
+first/after.txt	f	
+first/latedir	d	
+first/latedir/late.txt	f	
+first/middle.txt	f	
+first/broken.bin	l	absent-first
+first/earlydir	d	
+first/earlydir/early.txt	f	
+first/first.txt	l	absent-first
+first/before.txt	f	
+double	d	
+double/after.txt	f	
+double/latedir	d	
+double/latedir/late.txt	f	
+double/last.bin	l	absent-third
+double/broken.txt	l	absent-second
+double/middle.txt	f	
+double/broken.bin	l	absent-first
+double/earlydir	d	
+double/earlydir/early.txt	f	
+double/before.txt	f	
+between	d	
+between/after.txt	f	
+between/latedir	d	
+between/latedir/late.txt	f	
+between/broken.txt	l	absent-second
+between/middle.txt	f	
+between/broken.bin	l	absent-first
+between/earlydir	d	
+between/earlydir/early.txt	f	
+between/before.txt	f	
+late	d	
+late/after.txt	f	
+late/latedir	d	
+late/latedir/late.txt	f	
+late/middle.txt	f	
+late/broken.bin	l	absent-first
+late/earlydir	d	
+late/earlydir/early.txt	f	
+late/before.txt	f	

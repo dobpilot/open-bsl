@@ -1,0 +1,15 @@
+﻿file.begin	file-async-server-1
+find.async.ru	error|Error calling context method (НайтиФайлыАсинх)|cause=Asynchronous methods are available only on the client
+find.async.en	error|Error calling context method (НайтиФайлыАсинх)|cause=Asynchronous methods are available only on the client
+find.async.missing	error|Error calling context method (НайтиФайлыАсинх)|cause=Asynchronous methods are available only on the client
+find.async.recursive.undefined	error|Error calling context method (НайтиФайлыАсинх)|cause=Asynchronous methods are available only on the client
+file.exists.async	error|Error calling context method (СуществуетАсинх)|cause=Asynchronous methods are available only on the client
+file.isfile.async	error|Error calling context method (ЭтоФайлАсинх)|cause=Asynchronous methods are available only on the client
+file.isdir.async	error|Error calling context method (ЭтоКаталогАсинх)|cause=Asynchronous methods are available only on the client
+file.size.async	error|Error calling context method (РазмерАсинх)|cause=Asynchronous methods are available only on the client
+file.readonly.async	error|Error calling context method (ПолучитьТолькоЧтениеАсинх)|cause=Asynchronous methods are available only on the client
+file.hidden.async	error|Error calling context method (ПолучитьНевидимостьАсинх)|cause=Asynchronous methods are available only on the client
+file.time.async	error|Error calling context method (ПолучитьВремяИзмененияАсинх)|cause=Asynchronous methods are available only on the client
+file.timeutc.async	error|Error calling context method (ПолучитьУниверсальноеВремяИзмененияАсинх)|cause=Asynchronous methods are available only on the client
+file.tempdir.async	error|Error calling context method (КаталогВременныхФайловАсинх)|cause=Asynchronous methods are available only on the client
+file.end	file-async-server-1

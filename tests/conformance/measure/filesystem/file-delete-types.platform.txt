@@ -1,0 +1,11 @@
+﻿file.begin	delete-types-1
+delete.type.number	ok|root=1|keep=1|target=0
+delete.type.zero	ok|root=1|keep=1|target=0
+delete.type.true	ok|root=1|keep=1|target=0
+delete.type.false	ok|root=1|keep=1|target=0
+delete.type.null	ok|root=0|keep=0|target=0
+delete.type.undefined	ok|root=0|keep=0|target=0
+delete.type.empty	ok|root=0|keep=0|target=0
+delete.type.array	ok|root=1|keep=1|target=0
+delete.type.structure	ok|root=1|keep=1|target=0
+file.end	delete-types-1

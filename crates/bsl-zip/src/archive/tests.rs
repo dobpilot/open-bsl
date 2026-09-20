@@ -1465,6 +1465,33 @@ fn the_three_path_modes_name_one_file_the_measured_way() {
     assert!(names[0].ends_with("/f0.txt"), "имя: {}", names[0]);
 }
 
+/// Характеризация прежнего алгоритма перед переносом, не новые замеры 1С.
+#[test]
+fn simple_mask_transfer_preserves_empty_unicode_and_literal_brackets() {
+    for (mask, name, expected) in [
+        ("", "", true),
+        ("", "а", false),
+        ("*", "", true),
+        ("**", "", true),
+        ("?", "", false),
+        ("?", "я", true),
+        ("?", "😀", true),
+        ("?", "е\u{301}", false),
+        ("??", "е\u{301}", true),
+        ("*.txt", "файл.txt", true),
+        ("*.txt", "файл.TXT", false),
+        ("*.*", "безрасширения", false),
+        ("*", ".hidden", true),
+        ("[ab]", "a", false),
+        ("[ab]", "[ab]", true),
+        ("[!a]", "b", false),
+        ("*a?b", "xxa12ba3b", true),
+        ("*a?b", "xxa12ba3c", false),
+    ] {
+        assert_eq!(mask_matches(mask, name), expected, "{mask:?} / {name:?}");
+    }
+}
+
 /// Маска берёт только последнюю компоненту пути, `?` — ровно один знак,
 /// регистр значим.
 #[test]
@@ -2001,6 +2028,10 @@ fn the_archive_goes_through_the_session_file_system() {
                 path.to_string(),
             ))
         }
+
+        fn path_separator(&self) -> std::io::Result<String> {
+            Ok("/".to_string())
+        }
     }
 
     let mem = MemFs::default();
@@ -2015,7 +2046,7 @@ fn the_archive_goes_through_the_session_file_system() {
     let sv = |s: &str| BslValue::Str(BslString::from_str(s));
 
     // Записать архив из каталога в памяти: metadata + read_dir + read + write.
-    let writer = new_archive_writer(true, &[sv("/архив.zip")]).unwrap();
+    let writer = new_archive_writer(true, &[sv("/архив.zip ")]).unwrap();
     super::writer_add(writer_of(&writer), &mem, &[sv("/т/*")]).unwrap();
     super::writer_write(writer_of(&writer), &mem).unwrap();
 
@@ -2039,7 +2070,7 @@ fn the_archive_goes_through_the_session_file_system() {
         &BslValue::Undefined,
     )
     .unwrap();
-    super::open(reader_of(&reader), &mem, &[sv("/архив.zip")]).unwrap();
+    super::open(reader_of(&reader), &mem, &[sv("/архив.zip\t")]).unwrap();
     super::extract_all(
         &reader_of(&reader).state,
         &mem,

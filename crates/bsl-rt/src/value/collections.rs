@@ -10,6 +10,79 @@ use crate::{TypeRef, bindata};
 use std::rc::Rc;
 
 impl BslValue {
+    fn method_index_number(index: &Self) -> RtResult<crate::BslNumber> {
+        match index {
+            Self::Number(number) => Ok(number.clone()),
+            Self::Boolean(value) => Ok(crate::BslNumber::from_i64(i64::from(*value))),
+            Self::Str(value) => Ok(crate::BslNumber::parse_canonical(&value.to_string())?),
+            _ => Err(RtError::BadIndex),
+        }
+    }
+
+    // НЕ ИЗМЕРЕНО(ARRAY.METHOD_INDEX): предел размера и точные ошибки.
+    // Дополнительный oracle подтвердил общий канонический разбор для
+    // пробелов, знака, ведущего нуля и дроби с точкой, а также отказ
+    // запятой, экспоненте и пустой строке. Для Insert отдельно измерены
+    // -0.9, " 1 ", "1.9" и Ложь.
+    pub(crate) fn array_method_index(index: &Self) -> RtResult<Self> {
+        let number = Self::method_index_number(index)?;
+        Ok(Self::Number(number.trunc_to_scale(0)))
+    }
+
+    pub(crate) fn table_method_index(index: &Self) -> RtResult<Self> {
+        // `НЕ ИЗМЕРЕНО(TABLE.METHOD_INDEX)`: границы диапазона и точные ошибки.
+        // Дополнительный oracle подтвердил общий канонический разбор пробелов,
+        // знака, ведущего нуля и дроби с точкой, а также отказ запятой,
+        // экспоненте и пустой строке. -0.9 отвергается до усечения, в отличие
+        // от вставки массива, поэтому проверки знака остаются раздельными.
+        let number = Self::method_index_number(index)?;
+        if number.is_negative() {
+            return Err(RtError::BadIndex);
+        }
+        Ok(Self::Number(number.trunc_to_scale(0)))
+    }
+
+    pub(crate) fn get_array_index(&self, index: &Self) -> RtResult<Self> {
+        let Self::Object(object) = self else {
+            return Err(RtError::BadIndex);
+        };
+        let BslObject::Array(values) = &**object else {
+            return Err(RtError::BadIndex);
+        };
+        let values = values.borrow();
+        let index = Self::index_as_usize(index)?;
+        values.get(index).cloned().ok_or(RtError::IndexOutOfBounds {
+            index: index as i64,
+            len: values.len(),
+        })
+    }
+
+    pub(crate) fn insert_array_element(&self, index: &Self, value: Self) -> RtResult<()> {
+        let index = Self::index_as_usize(&Self::array_method_index(index)?)?;
+        let Self::Object(object) = self else {
+            return Err(RtError::NotAnObject);
+        };
+        let BslObject::Array(values) = &**object else {
+            return Err(RtError::NotAnObject);
+        };
+        let mut values = values.borrow_mut();
+        let old_len = values.len();
+        let new_len = old_len.max(index).checked_add(1).ok_or_else(|| {
+            RtError::ResourceLimit("размер массива при вставке не представим".into())
+        })?;
+        // Сначала выделяется весь требуемый объём: ошибка не оставляет
+        // частично заполненный промежуток. Предел выделения — защита host,
+        // а не измеренный максимальный размер массива 1С.
+        values.try_reserve(new_len - old_len).map_err(|_| {
+            RtError::ResourceLimit("не удалось выделить память для вставки в массив".into())
+        })?;
+        if index > old_len {
+            values.resize(index, Self::Undefined);
+        }
+        values.insert(index, value);
+        Ok(())
+    }
+
     // --- Коллекции ----------------------------------------------------
 
     pub fn new_array(items: Vec<BslValue>) -> Self {
@@ -37,14 +110,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Extension(object) => object.get_index(idx),
-                BslObject::Array(v) => {
-                    let v = v.borrow();
-                    let i = Self::index_as_usize(idx)?;
-                    v.get(i).cloned().ok_or(RtError::IndexOutOfBounds {
-                        index: i as i64,
-                        len: v.len(),
-                    })
-                }
+                BslObject::Array(_) => self.get_array_index(idx),
                 BslObject::ValueTable(data) => {
                     let i = Self::index_as_usize(idx)?;
                     let row_id = {
@@ -253,9 +319,10 @@ impl BslValue {
 
     // --- Рантайм-мутация формы структуры ---------------------------------
     //
-    // `Вставить`/`Удалить`/`Свойство` (двухаргументная форма) — в отличие
-    // от `get_field`/`set_field` выше, которые лишь ЧИТАЮТ уже готовую
-    // форму, эти три меняют её: `ShapeTable` здесь больше не голая таблица
+    // `Вставить`/`Удалить` — в отличие от `get_field`/`set_field` выше,
+    // которые лишь ЧИТАЮТ уже готовую форму, меняют её. `Свойство` форму
+    // не меняет, но интернирует ключ через тот же рантайм-контекст.
+    // `ShapeTable` здесь больше не голая таблица
     // компиляции, а рантайм-контекст (`RuntimeShapes`, см. одноимённый
     // модуль), поэтому и подписи ниже берут `&mut ShapeTable`, а не
     // работают в изоляции. Инлайн-кэш `GetProp`/`SetProp` (`Rc::ptr_eq` на
@@ -299,27 +366,17 @@ impl BslValue {
         }
     }
 
-    /// `Структура.Свойство(Ключ)` / `Структура.Свойство(Ключ,
-    /// ЗначениеПоУмолчанию)`.
+    /// Ищет значение для `Структура.Свойство(Ключ[, Выход])`.
     ///
-    /// Одноместная форма возвращает `Булево` наличия поля, как платформа.
-    /// ОТКЛОНЕНИЕ остаётся только у двухместной формы: настоящий второй
-    /// параметр — выходной ПО ССЫЛКЕ, но `CallMethod` пока не несёт
-    /// `ArgMode::ByRefLocal`. До появления такого ABI он трактуется как
-    /// значение по умолчанию безопасного геттера.
-    pub fn structure_property(
-        &self,
-        field: NameId,
-        default: Option<BslValue>,
-    ) -> RtResult<BslValue> {
+    /// Значение отсутствующего поля представлено `Неопределено`: VM пишет
+    /// его в ссылочную цель двухаргументной формы, а путь без цели просто
+    /// отбрасывает.
+    pub fn structure_property(&self, field: NameId) -> RtResult<(bool, BslValue)> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
                     let value = s.borrow().get(field);
-                    match default {
-                        None => Ok(BslValue::Boolean(value.is_some())),
-                        Some(default) => Ok(value.unwrap_or(default)),
-                    }
+                    Ok((value.is_some(), value.unwrap_or(BslValue::Undefined)))
                 }
                 _ => Err(RtError::NotAnObject),
             },
@@ -506,6 +563,8 @@ impl BslValue {
                         Ok(BslValue::Object(Rc::new(BslObject::TableColumns(
                             data.clone(),
                         ))))
+                    } else if folded_eq(name, "Индексы") || folded_eq(name, "Indexes") {
+                        Ok(crate::value_table_indexes::new_indexes(data.clone()))
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }

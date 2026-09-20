@@ -232,6 +232,7 @@ pub(super) fn prepare_job(
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
+        imports: Vec::new(),
         links: vec![bsl_bytecode::LinkEntry::Function {
             module: bsl_bytecode::ModuleId::new(target.0),
             func: target.1,

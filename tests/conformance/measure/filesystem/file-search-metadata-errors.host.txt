@@ -1,0 +1,10 @@
+d	<root>	0755	
+d	<root>/permission	0755	
+f	<root>/permission/after.txt	0644	
+f	<root>/permission/before.txt	0644	
+d	<root>/permission/denied dir	0000	
+f	<root>/permission/denied dir/inside.txt	0644	
+d	<root>/loop	0755	
+l	<root>/loop/error loop	0777	error loop
+f	<root>/loop/after.txt	0644	
+f	<root>/loop/before.txt	0644	

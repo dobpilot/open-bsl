@@ -1,0 +1,10 @@
+file.begin	dynamic-local-exceptions-1
+dynamic.local.direct.error	11
+dynamic.local.nested.error	21
+dynamic.local.alias.inside	31
+dynamic.local.parameter.error	31
+dynamic.local.alias.error	31
+dynamic.local.caller.error	31
+dynamic.local.byvalue.inside	41
+dynamic.local.byvalue.caller	31
+file.end	dynamic-local-exceptions-1

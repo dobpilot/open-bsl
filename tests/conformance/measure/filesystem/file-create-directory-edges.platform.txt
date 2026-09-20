@@ -1,0 +1,14 @@
+file.begin	create-directory-edges-1
+context.effective	НеИспользовать
+create.suffix.0	create=ok|delete=ok|remaining=0
+create.suffix.1	create=ok|delete=ok|remaining=1
+create.suffix.9	create=ok|delete=ok|remaining=0
+create.suffix.10	create=ok|delete=ok|remaining=0
+create.suffix.13	create=ok|delete=ok|remaining=0
+create.suffix.32	create=ok|delete=ok|remaining=0
+create.suffix.127	create=ok|delete=ok|remaining=1
+create.suffix.133	create=ok|delete=ok|remaining=0
+create.suffix.160	create=ok|delete=ok|remaining=0
+create.suffix.8203	create=ok|delete=ok|remaining=1
+create.suffix.65279	create=ok|delete=ok|remaining=1
+file.end	create-directory-edges-1

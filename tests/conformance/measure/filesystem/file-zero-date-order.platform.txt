@@ -1,0 +1,8 @@
+file.begin	file-zero-date-order-1
+local.lt.utc	1
+local.gt.utc	0
+utc.lt.local	0
+utc.gt.local	1
+local.add0.eq	1
+utc.add0.eq	1
+file.end	file-zero-date-order-1

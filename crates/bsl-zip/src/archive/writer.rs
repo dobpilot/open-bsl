@@ -1,6 +1,7 @@
 //! Поверхность записи: `ЗаписьZipФайла` и сборка контейнера.
 
 use super::*;
+pub(crate) use bsl_rt::simple_mask_matches as mask_matches;
 
 // --------------------------------------------------------------------------
 // Писатель встроенного языка
@@ -379,6 +380,15 @@ pub fn writer_add(
         }
     };
     let path = add_path(path)?;
+    // Завершающий разделитель у `Добавить` — сигнал маски `*`,
+    // поэтому его нельзя потерять при общей нормализации. Сочетания
+    // разделителя с краевыми пробелами отдельно не измерены.
+    let path = if path.ends_with(['/', '\\']) {
+        path
+    } else {
+        bsl_rt::prepare_file_operation_path(&path, files)
+            .map_err(|e| zip_err(&format!("некорректное имя файла «{path}»: {e}")))?
+    };
     let mode = path_mode(mode)?;
     let subdirs = subdir_mode(subdirs)?;
     let mut state = state.borrow_mut();
@@ -449,40 +459,6 @@ pub(crate) fn split_pattern(path: &str) -> (String, String) {
         ),
         None => (String::new(), normalized),
     }
-}
-
-/// Совпадение имени с маской `*`/`?`.
-///
-/// Сравнение с учётом регистра: на этой платформе имена файлов
-/// регистрозависимы, и маска `*.txt` файла `ВЕРХ.TXT` не находит
-/// (измерено).
-pub(crate) fn mask_matches(mask: &str, name: &str) -> bool {
-    let mask: Vec<char> = mask.chars().collect();
-    let name: Vec<char> = name.chars().collect();
-    // Классический двухуказательный разбор со звёздочкой-точкой возврата:
-    // рекурсия по маске из чужого ввода могла бы уйти сколь угодно глубоко.
-    let (mut m, mut n) = (0usize, 0usize);
-    let (mut star, mut back) = (usize::MAX, 0usize);
-    while n < name.len() {
-        if m < mask.len() && (mask[m] == '?' || mask[m] == name[n]) {
-            m += 1;
-            n += 1;
-        } else if m < mask.len() && mask[m] == '*' {
-            star = m;
-            back = n;
-            m += 1;
-        } else if star != usize::MAX {
-            back += 1;
-            m = star + 1;
-            n = back;
-        } else {
-            return false;
-        }
-    }
-    while m < mask.len() && mask[m] == '*' {
-        m += 1;
-    }
-    m == mask.len()
 }
 
 /// Разложить `Добавить` на записи и сложить их в состояние.
@@ -791,9 +767,14 @@ pub fn writer_write(writer: &WriterObject, files: &dyn FileSystem) -> RtResult<(
     state.entries.clear();
     state.used.clear();
     match target {
-        WriteTarget::File(path) => files
-            .write(&path.to_string_lossy(), &bytes)
-            .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", path.display()))),
+        WriteTarget::File(path) => {
+            let source = path.to_string_lossy();
+            let path = bsl_rt::prepare_file_operation_path(&source, files)
+                .map_err(|e| zip_err(&format!("не удалось записать «{source}»: {e}")))?;
+            files
+                .write(&path, &bytes)
+                .map_err(|e| zip_err(&format!("не удалось записать «{path}»: {e}")))
+        }
         // Приёмник проверен при `Открыть`, но объект живёт между вызовами:
         // повторная проверка с типизированной ошибкой вместо `expect`. По
         // контракту `ObjectProtocol::byte_stream` (отвечает одинаково всю

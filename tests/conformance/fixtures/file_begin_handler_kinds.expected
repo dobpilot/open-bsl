@@ -1,0 +1,9 @@
+file.begin	file-begin-handler-kinds-1
+kind.return	0
+kind.function	same|returned=1
+kind.async.function.before	same|returned=1
+kind.async.function.after	await=0
+kind.async.procedure.before	same|returned=1
+kind.async.procedure.after	await=0
+kind.error.function	Error information|standard=1|returned=1
+file.end	file-begin-handler-kinds-1

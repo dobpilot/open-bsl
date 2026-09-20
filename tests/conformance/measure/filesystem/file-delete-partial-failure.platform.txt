@@ -1,0 +1,4 @@
+file.begin	delete-partial-failure-1
+context.effective	НеИспользовать
+delete.partial.result	error|before=0|denied=1|after=0
+file.end	delete-partial-failure-1

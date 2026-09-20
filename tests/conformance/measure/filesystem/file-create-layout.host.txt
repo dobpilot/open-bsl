@@ -1,0 +1,44 @@
+d	
+d	backslash
+d	backslash/branch
+d	backslash/branch/leaf
+d	colon
+d	colon/C:leaf
+d	file-parent
+d	file-parent/leaf
+d	nul
+d	nul-child
+d	nul-child/nul
+d	nul/nul
+d	parent
+d	parent/leaf
+d	plain
+d	plain/leaf
+d	question
+d	question/question?
+d	space-leading
+d	space-leading/ leaf
+d	space-leaf
+d	space-leaf/leaf
+d	space-parent
+d	space-parent/branch 
+d	space-parent/branch /leaf
+d	spaces
+d	spaces/ spaced 
+d	spaces/ spaced /leaf
+d	star
+d	star-parent
+f	backslash/block
+f	colon/block
+f	file-parent/block
+f	nul-child/block
+f	nul/block
+f	parent/block
+f	plain/block
+f	question/block
+f	space-leading/block
+f	space-leaf/block
+f	space-parent/block
+f	spaces/block
+f	star-parent/block
+f	star/block

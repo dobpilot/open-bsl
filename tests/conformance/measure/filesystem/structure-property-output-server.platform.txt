@@ -1,0 +1,13 @@
+file.begin	structure-property-output-1
+structure.ru.found	Yes|value=1
+structure.ru.missing	No|value=
+structure.en.found	Yes|value=1
+structure.en.missing	No|value=
+fixed.ru.found	Yes|value=1
+fixed.ru.missing	No|value=
+fixed.en.found	Yes|value=1
+fixed.en.missing	No|value=
+structure.literal	ok:Yes
+structure.index	ok:Yes
+structure.index.value	1
+file.end	structure-property-output-1

@@ -1,0 +1,14 @@
+file.begin	file-search-access-order-1
+order.sync.ru.valid	ok|count=0
+order.sync.ru.invalid	error
+order.sync.ru.invalid.detail	Type mismatch (parameter number '3')
+order.async.ru.valid	ok|count=0
+order.async.ru.invalid	error|stage=await
+order.async.ru.invalid.detail	Type mismatch (parameter number '3')
+order.sync.en.valid	ok|count=0
+order.sync.en.invalid	error
+order.sync.en.invalid.detail	Type mismatch (parameter number '3')
+order.async.en.valid	ok|count=0
+order.async.en.invalid	error|stage=await
+order.async.en.invalid.detail	Type mismatch (parameter number '3')
+file.end	file-search-access-order-1

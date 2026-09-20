@@ -288,6 +288,9 @@ pub struct Program {
     /// `GetImportedVar`/`SetImportedVar` и `ArgMode::ByRefImportedVar`
     /// своим `LinkSlot`. У одиночной программы пуста.
     pub links: Vec<crate::configuration::LinkEntry>,
+    /// Точное окружение разрешённых импортов для динамических фрагментов.
+    /// Сохраняется независимо от фактически использованных `links`.
+    pub imports: Vec<crate::configuration::ModuleImport>,
     /// Таблица строк исходника: `lines[i][pc]` — номер строки, с которой
     /// начинается оператор, породивший инструкцию `pc` чанка `i`.
     ///

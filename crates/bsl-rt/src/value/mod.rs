@@ -23,7 +23,7 @@ pub enum BslValue {
     Boolean(bool),
     Number(BslNumber),
     Str(BslString),
-    /// Момент времени с разрешением 1 секунда. Отсчёт — от `0001-01-01`,
+    /// Момент времени с разрешением 1/10000 секунды. Отсчёт — от `0001-01-01`,
     /// НЕ от Unix-эпохи: пустая дата (`'00010101'`) обязана быть нулём, а
     /// не отрицательным числом, иначе `ЗначениеЗаполнено` и сравнения с
     /// пустой датой пришлось бы писать через отдельную константу. Подробно
@@ -173,11 +173,10 @@ impl BslValue {
         if let (BslValue::Str(a), BslValue::Str(b)) = (self, other) {
             return Ok(BslValue::Str(a.concat(b)));
         }
-        // `Дата + Число` — сдвиг на N СЕКУНД (не дней: разрешение типа —
-        // секунда, и `Дата - Дата` симметрично отдаёт секунды).
+        // Аргумент задаётся в секундах, включая измеренные доли 1/10000.
         if let BslValue::Date(d) = self {
-            let secs = Self::whole_seconds(other, "+")?;
-            return Self::shifted(*d, secs, "+");
+            let ticks = Self::date_shift_ticks(other, "+")?;
+            return Ok(BslValue::Date(d.shift_ticks_saturating(ticks)));
         }
         Ok(BslValue::Number(
             self.as_number("+")?.add(other.as_number("+")?)?,
@@ -202,11 +201,12 @@ impl BslValue {
         if let BslValue::Date(a) = self {
             return match other {
                 // `Дата - Дата` -> Число секунд между ними.
-                BslValue::Date(b) => Ok(BslValue::Number(BslNumber::from_i64(a.diff_seconds(*b)))),
+                BslValue::Date(b) => Ok(BslValue::Number(a.difference(*b))),
                 // `Дата - Число` -> Дата.
                 _ => {
-                    let secs = Self::whole_seconds(other, "-")?;
-                    Self::shifted(*a, -secs, "-")
+                    let ticks = Self::date_shift_ticks(other, "-")?;
+                    let ticks = ticks.wrapping_neg();
+                    Ok(BslValue::Date(a.shift_ticks_saturating(ticks)))
                 }
             };
         }
@@ -215,22 +215,25 @@ impl BslValue {
         ))
     }
 
-    /// Слагаемое к дате обязано быть ЦЕЛЫМ числом секунд: у типа нет
-    /// разрешения мельче секунды, и тихо отбрасывать дробную часть значит
-    /// делать `Дата + 0.4` неотличимым от `Дата + 0`.
-    fn whole_seconds(v: &Self, op: &'static str) -> RtResult<i64> {
-        v.as_number(op)?.to_i64_exact().ok_or(RtError::TypeError {
-            expected: "Число (целое количество секунд)",
-            op,
-        })
-    }
-
-    /// Выход за границы `0001-01-01 .. 9999-12-31` — ошибка, а не тихое
-    /// заворачивание в другой конец диапазона.
-    fn shifted(d: BslDate, secs: i64, op: &'static str) -> RtResult<Self> {
-        d.shift_seconds(secs)
-            .map(BslValue::Date)
-            .ok_or(RtError::DateOutOfRange { op })
+    /// Округление аргумента, а не результата, до измеренного шага даты.
+    fn date_shift_ticks(v: &Self, op: &'static str) -> RtResult<i64> {
+        // Платформа берёт младшие 64 бита числа тактов: граница
+        // `2^63` меняет направление сдвига, а `10^22` тактов снова даёт
+        // положительный остаток. Округление до модуля тоже измерено.
+        let modulus = BslNumber::from_i128(1i128 << 64);
+        let mut ticks = v
+            .as_number(op)?
+            .round_to_scale(4)
+            .mul(&BslNumber::from_i64(10_000))?
+            .rem(&modulus)?;
+        let max = BslNumber::from_i64(i64::MAX);
+        let min = BslNumber::from_i64(i64::MIN);
+        if ticks > max {
+            ticks = ticks.sub(&modulus)?;
+        } else if ticks < min {
+            ticks = ticks.add(&modulus)?;
+        }
+        ticks.to_i64_exact().ok_or(RtError::DateOutOfRange { op })
     }
 
     pub fn mul(&self, other: &Self) -> RtResult<Self> {

@@ -158,10 +158,11 @@ impl BslValue {
     pub fn add_month(&self, count: &Self) -> RtResult<Self> {
         let d = self.as_date("ДобавитьМесяц")?;
         let n = Self::date_part(count, "ДобавитьМесяц")?;
-        d.add_months(n)
-            .map(BslValue::Date)
-            .ok_or(RtError::DateOutOfRange {
-                op: "ДобавитьМесяц",
-            })
+        // file-date-components: переход из декабря 9999 даёт пустую дату.
+        // `НЕ ИЗМЕРЕНО(DATE.ADD_MONTH_CLAMP)`: прочие выходы за диапазон
+        // пока используют тот же результат; Rust add_months сохраняет Option.
+        Ok(BslValue::Date(
+            d.add_months(n).unwrap_or_else(BslDate::empty),
+        ))
     }
 }

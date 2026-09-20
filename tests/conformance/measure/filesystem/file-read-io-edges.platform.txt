@@ -1,0 +1,14 @@
+file.begin	file-read-io-edges-1
+context.effective	НеИспользовать
+read.suffix.0	binary=3|stream=3|manager=3
+read.prefix.0	binary=error|stream=error|manager=error
+read.suffix.9	binary=3|stream=3|manager=3
+read.suffix.10	binary=3|stream=3|manager=3
+read.suffix.13	binary=3|stream=3|manager=3
+read.suffix.32	binary=3|stream=3|manager=3
+read.suffix.127	binary=error|stream=error|manager=error
+read.suffix.133	binary=3|stream=3|manager=3
+read.suffix.160	binary=3|stream=3|manager=3
+read.suffix.8203	binary=error|stream=error|manager=error
+read.suffix.65279	binary=error|stream=error|manager=error
+file.end	file-read-io-edges-1

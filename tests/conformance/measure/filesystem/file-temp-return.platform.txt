@@ -1,0 +1,13 @@
+﻿file.begin	temp-return-1
+context.effective	НеИспользовать
+lifetime.path.closed	/tmp/v8_crRAaI_5.tmp
+lifetime.after_close	Yes
+lifetime.path.released	/tmp/v8_crRAaI_6.tmp
+lifetime.after_release	Yes
+lifetime.path.open	/tmp/v8_crRAaI_7.tmp
+lifetime.path.name	/tmp/v8_crRAaI_8.lifetime
+lifetime.before_return	1:3|1:0|1:0|1:0|1:3
+lifetime.after_return	1:3|1:0|1:0|1:0|1:3
+lifetime.next_call	1:3|1:0|1:0|1:0|1:3
+lifetime.before_exit	1:3|1:0|1:0|1:0|1:3
+file.end	temp-return-1

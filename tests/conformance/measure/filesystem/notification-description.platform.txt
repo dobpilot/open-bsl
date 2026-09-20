@@ -1,0 +1,42 @@
+﻿file.begin	notification-description-1
+ctor.invalid_handler	error:Error calling constructor (ОписаниеОповещения)|cause=The export method is not found: НеСуществующаяПроцедура
+ctor.zero	ok|string:|undefined|undefined|string:|undefined
+ctor.one	error:Error compiling or calculating expression or executing fragment of code|cause={<Unknown module>(1,7)}: Constructor not found
+ctor.two	ok|string:Проба|type:Client application form|undefined|string:|undefined
+ctor.three	ok|string:Проба|type:Client application form|type:Structure|string:|undefined
+ctor.four	error:Error compiling or calculating expression or executing fragment of code|cause={<Unknown module>(1,7)}: Constructor not found
+ctor.five	ok|string:Проба|type:Client application form|number:7|string:Ошибка|type:Client application form
+ctor.six	error:Error compiling or calculating expression or executing fragment of code|cause={<Unknown module>(1,7)}: Constructor not found
+ctor.en.notify	ok|string:Проба|type:Client application form|number:7|string:Ошибка|type:Client application form
+ctor.en	error:Error compiling or calculating expression or executing fragment of code|cause={<Unknown module>(1,5)}: Type is not defined (NotificationDescription)
+ctor.empty	error:Error calling constructor (ОписаниеОповещения)|cause=Type mismatch (parameter number '1')
+ctor.name.undefined	error:Error calling constructor (ОписаниеОповещения)|cause=Type mismatch (parameter number '1')
+ctor.name.number	error:Error calling constructor (ОписаниеОповещения)|cause=The export method is not found: 123
+ctor.module.undefined	error:Error calling constructor (ОписаниеОповещения)|cause=Type mismatch (parameter number '2')
+ctor.module.number	error:Error calling constructor (ОписаниеОповещения)|cause=Type mismatch (parameter number '2')
+ctor.module.structure	error:Error calling constructor (ОписаниеОповещения)|cause=The export method is not found: Проба
+ctor.error.number	error:Error compiling or calculating expression or executing fragment of code|cause={<Unknown module>(1,7)}: Constructor not found
+ctor.error.module.number	error:Error calling constructor (ОписаниеОповещения)|cause=Type mismatch (parameter number '5')
+ctor.omitted	error:Error compiling or calculating expression or executing fragment of code|cause={<Unknown module>(1,7)}: Constructor not found
+property.ИмяПроцедуры.read	string:Проба
+property.ИмяПроцедуры.write	error:Object field is not writable (ИмяПроцедуры)
+property.ProcedureName.read	string:Проба
+property.ProcedureName.write	error:Object field is not writable (ИмяПроцедуры)
+property.Модуль.read	type:Client application form
+property.Модуль.write	error:Object field is not writable (Модуль)
+property.Module.read	type:Client application form
+property.Module.write	error:Object field is not writable (Модуль)
+property.ДополнительныеПараметры.read	number:7
+property.ДополнительныеПараметры.write	error:Object field is not writable (ДополнительныеПараметры)
+property.AdditionalParameters.read	number:7
+property.AdditionalParameters.write	error:Object field is not writable (ДополнительныеПараметры)
+property.ИмяПроцедурыОбработкиОшибки.read	string:Ошибка
+property.ИмяПроцедурыОбработкиОшибки.write	error:Object field is not writable (ИмяПроцедурыОбработкиОшибки)
+property.ErrorHandlerProcedureName.read	string:Ошибка
+property.ErrorHandlerProcedureName.write	error:Object field is not writable (ИмяПроцедурыОбработкиОшибки)
+property.МодульОбработкиОшибки.read	type:Client application form
+property.МодульОбработкиОшибки.write	error:Object field is not writable (МодульОбработкиОшибки)
+property.ErrorHandlerModule.read	type:Client application form
+property.ErrorHandlerModule.write	error:Object field is not writable (МодульОбработкиОшибки)
+identity	alias=1|independent=0|data=2|module=1
+file.end	notification-description-1

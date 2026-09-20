@@ -1,0 +1,9 @@
+<root>	d	755		180
+<root>/dangling	l	777	<root>/missing	44
+<root>/denied	d	000		40
+<root>/directory	d	755		40
+<root>/loop	l	777	<root>/loop	41
+<root>/parent-file	f	644		0
+<root>/pipe	p	644		0
+<root>/regular.txt	f	644		0
+<root>/socket	s	755		0

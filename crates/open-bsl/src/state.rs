@@ -102,6 +102,30 @@ impl StateBuilder {
         self
     }
 
+    /// Получатель собственных временных ресурсов при явной очистке и Drop
+    /// сеанса. Без callback фасад файлы не удаляет. Ошибка пишется в stderr
+    /// и не меняет результат BSL; callback не должен паниковать.
+    #[must_use]
+    pub fn temporary_file_cleanup(
+        mut self,
+        cleanup: impl FnMut(Vec<Box<dyn bsl_rt::TemporaryFileResource>>) -> std::io::Result<()>
+        + 'static,
+    ) -> Self {
+        self.host.temporary_file_cleanup = Some(Box::new(cleanup));
+        self
+    }
+
+    /// Предоставляет явную возможность запуска программ и документов.
+    /// Файловая система сеанса сама по себе такого разрешения не даёт.
+    #[must_use]
+    pub fn application_launcher(
+        mut self,
+        launcher: impl bsl_rt::ApplicationLauncher + 'static,
+    ) -> Self {
+        self.host.env = self.host.env.with_application_launcher(launcher);
+        self
+    }
+
     /// HTTP-транспорт сессии. Фабрика получает чистую конфигурацию
     /// `HTTPСоединение`; Tokio и конкретный клиент в этот интерфейс не входят.
     #[must_use]
@@ -203,6 +227,7 @@ pub(crate) struct HostServices {
     pub(crate) stdout: Box<dyn Write>,
     pub(crate) stderr: Box<dyn Write>,
     pub(crate) env: HostEnv,
+    temporary_file_cleanup: Option<Box<bsl_rt::TemporaryFileCleanup>>,
 }
 
 impl HostServices {
@@ -214,6 +239,24 @@ impl HostServices {
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
             env,
+            temporary_file_cleanup: None,
+        }
+    }
+
+    fn clean_temporary_files(&mut self, resources: Vec<Box<dyn bsl_rt::TemporaryFileResource>>) {
+        if resources.is_empty() {
+            return;
+        }
+        if let Some(cleanup) = &mut self.temporary_file_cleanup
+            && let Err(error) = cleanup(resources)
+        {
+            // Host-текст может содержать секретные пути. Код причины достаточен
+            // для диагностики; подробности отдельных файлов остаются у callback.
+            let _ = writeln!(
+                self.stderr,
+                "Ошибка очистки временных файлов: {:?}",
+                error.kind()
+            );
         }
     }
 }
@@ -228,6 +271,13 @@ pub struct State {
     /// каждой сессии, поэтому и кэш фрагментов у сессий раздельный.
     pub(crate) dynamic: DynamicCode,
     pub(crate) scheduler: bsl_vm::SchedulerConfig,
+}
+
+impl Drop for State {
+    fn drop(&mut self) {
+        let resources = self.host.env.temporary_files().close();
+        self.host.clean_temporary_files(resources);
+    }
 }
 
 /// Результат одного шага pollable-исполнения.
@@ -308,6 +358,21 @@ impl Execution<'_, '_> {
 }
 
 impl State {
+    /// Учёт собственных временных ресурсов сеанса. После Drop State
+    /// сохранённый дескриптор отклоняет новые регистрации с возвратом ресурса.
+    #[must_use]
+    pub fn temporary_files(&self) -> bsl_rt::TemporaryFileRegistry {
+        self.host.env.temporary_files()
+    }
+
+    /// Передаёт текущий непустой пакет host без завершения сеанса.
+    /// Ошибки callback диагностируются в stderr, не меняя результат BSL.
+    /// Без callback пакет освобождается без удаления файлов.
+    pub fn cleanup_temporary_files(&mut self) {
+        let resources = self.host.env.temporary_files().take_pending();
+        self.host.clean_temporary_files(resources);
+    }
+
     /// Создаёт состояние с базовым рантаймом и потоками процесса.
     ///
     /// # Errors

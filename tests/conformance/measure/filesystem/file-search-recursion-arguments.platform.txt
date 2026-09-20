@@ -1,0 +1,83 @@
+﻿file.begin	file-search-recursion-arguments-1
+context.compatibility	НеИспользовать
+recursion.true.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.true.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.false.ru	ok|count=1|<root>/top.txt
+recursion.false.en	ok|count=1|<root>/top.txt
+recursion.zero.ru	ok|count=1|<root>/top.txt
+recursion.zero.en	ok|count=1|<root>/top.txt
+recursion.one.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.one.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.negative.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.negative.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.two.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.two.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.fraction.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.fraction.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.negative_fraction.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.negative_fraction.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.ru_true.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.ru_true.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.ru_false.ru	ok|count=1|<root>/top.txt
+recursion.ru_false.en	ok|count=1|<root>/top.txt
+recursion.en_true.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.en_true.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.en_false.ru	ok|count=1|<root>/top.txt
+recursion.en_false.en	ok|count=1|<root>/top.txt
+recursion.mixed.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.mixed.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.space.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.space.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.tab.ru	ok|count=1|<root>/top.txt
+recursion.tab.en	ok|count=1|<root>/top.txt
+recursion.nbsp.ru	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.nbsp.en	ok|count=2|<root>/top.txt|<root>/branch/deep.txt
+recursion.one_text.ru	error|stage=call
+recursion.one_text.ru.detail	Type mismatch (parameter number '3')
+recursion.one_text.en	error|stage=call
+recursion.one_text.en.detail	Type mismatch (parameter number '3')
+recursion.zero_text.ru	error|stage=call
+recursion.zero_text.ru.detail	Type mismatch (parameter number '3')
+recursion.zero_text.en	error|stage=call
+recursion.zero_text.en.detail	Type mismatch (parameter number '3')
+recursion.empty.ru	error|stage=call
+recursion.empty.ru.detail	Type mismatch (parameter number '3')
+recursion.empty.en	error|stage=call
+recursion.empty.en.detail	Type mismatch (parameter number '3')
+recursion.blank.ru	error|stage=call
+recursion.blank.ru.detail	Type mismatch (parameter number '3')
+recursion.blank.en	error|stage=call
+recursion.blank.en.detail	Type mismatch (parameter number '3')
+recursion.yes.ru	error|stage=call
+recursion.yes.ru.detail	Type mismatch (parameter number '3')
+recursion.yes.en	error|stage=call
+recursion.yes.en.detail	Type mismatch (parameter number '3')
+recursion.no.ru	error|stage=call
+recursion.no.ru.detail	Type mismatch (parameter number '3')
+recursion.no.en	error|stage=call
+recursion.no.en.detail	Type mismatch (parameter number '3')
+recursion.nul.ru	error|stage=call
+recursion.nul.ru.detail	Type mismatch (parameter number '3')
+recursion.nul.en	error|stage=call
+recursion.nul.en.detail	Type mismatch (parameter number '3')
+recursion.undefined.ru	error|stage=call
+recursion.undefined.ru.detail	Type mismatch (parameter number '3')
+recursion.undefined.en	error|stage=call
+recursion.undefined.en.detail	Type mismatch (parameter number '3')
+recursion.null.ru	error|stage=call
+recursion.null.ru.detail	Type mismatch (parameter number '3')
+recursion.null.en	error|stage=call
+recursion.null.en.detail	Type mismatch (parameter number '3')
+recursion.array.ru	error|stage=call
+recursion.array.ru.detail	Type mismatch (parameter number '3')
+recursion.array.en	error|stage=call
+recursion.array.en.detail	Type mismatch (parameter number '3')
+recursion.structure.ru	error|stage=call
+recursion.structure.ru.detail	Type mismatch (parameter number '3')
+recursion.structure.en	error|stage=call
+recursion.structure.en.detail	Type mismatch (parameter number '3')
+recursion.date.ru	error|stage=call
+recursion.date.ru.detail	Type mismatch (parameter number '3')
+recursion.date.en	error|stage=call
+recursion.date.en.detail	Type mismatch (parameter number '3')
+file.end	file-search-recursion-arguments-1

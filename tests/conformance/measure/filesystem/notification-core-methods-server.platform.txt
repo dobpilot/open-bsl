@@ -1,0 +1,2 @@
+﻿file.begin	notification-core-methods-server-1
+file.setup_error	{<Unknown module>(1,7)}: Type is not defined (ОписаниеОповещения)

@@ -5,6 +5,57 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 #[test]
+fn legacy_http_spawner_keeps_its_implementation_and_rejects_file_requests() {
+    struct Legacy;
+    impl bsl_rt::HttpPromiseSpawner for Legacy {
+        fn spawn_http(
+            &mut self,
+            _: std::sync::Arc<dyn bsl_rt::HttpClient>,
+            _: bsl_rt::HttpWireRequest,
+            _: bsl_rt::HttpResponseMapper,
+            _: bsl_rt::HttpErrorMapper,
+        ) -> RtResult<BslValue> {
+            panic!("файловый запрос не должен обращаться к HTTP")
+        }
+    }
+    let mut legacy = Legacy;
+    let spawner: &mut dyn bsl_rt::HostPromiseSpawner = &mut legacy;
+    assert!(matches!(
+        spawner.ready_file_promise(Ok(BslValue::Undefined)),
+        Err(RtError::IoError(_))
+    ));
+    let files = std::rc::Rc::new(bsl_rt::SystemFileSystem);
+    let zone = std::rc::Rc::new(bsl_rt::FixedTimeZone::new(0).unwrap());
+    assert!(matches!(
+        spawner.spawn_file_operation(
+            Ok(bsl_rt::FileOperationRequest::TemporaryDirectory), files, zone,
+        ),
+        Err(RtError::IoError(message)) if message.contains("файловые обещания")
+    ));
+}
+
+#[test]
+fn simple_mask_is_available_through_the_runtime_facade() {
+    let matches: fn(&str, &str) -> bool = bsl_rt::simple_mask_matches;
+    assert!(matches("?.txt", "я.txt"));
+    assert!(!matches("[ab]", "a"));
+}
+
+#[test]
+fn directory_noop_preparation_is_available_through_the_runtime_facade() {
+    let prepare: fn(&[BslValue]) -> Option<BslValue> = bsl_rt::prepare_create_directory_noop;
+    for path in [
+        ".", "./", "..", "../", "./.", "././", ".//", "../.", ".././", "..//", "./..", "./../",
+        "./../.", "../../", "/./", "/../",
+    ] {
+        let value = BslValue::Str(bsl_rt::BslString::from_str(path));
+        assert_eq!(prepare(std::slice::from_ref(&value)), Some(value), "{path}");
+    }
+    let path = BslValue::Str(bsl_rt::BslString::from_str("private/leaf"));
+    assert_eq!(prepare(&[path]), None);
+}
+
+#[test]
 fn value_and_error_keep_their_root_paths_and_traits() {
     fn value_traits<T: Clone + Debug + Display + Eq + Hash>() {}
     fn error_traits<T: Clone + Debug + Display + PartialEq + std::error::Error>() {}

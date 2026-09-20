@@ -125,6 +125,19 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::objects::WRITER_TYPE,
 ];
 
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (ConstructorCode::new(1), &crate::objects::READER_TYPE),
+    (ConstructorCode::new(2), &crate::objects::WRITER_TYPE),
+    (
+        ConstructorCode::new(3),
+        &crate::objects::WRITER_SETTINGS_TYPE,
+    ),
+    (
+        ConstructorCode::new(4),
+        &crate::objects::SERIALIZER_SETTINGS_TYPE,
+    ),
+];
+
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[objects::API_MEMBERS];
 
 /// Дескриптор статически подключаемого JSON-компонента.
@@ -132,6 +145,7 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
         .with_functions(FUNCTIONS)
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }

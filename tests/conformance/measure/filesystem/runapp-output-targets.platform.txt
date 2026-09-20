@@ -1,0 +1,12 @@
+file.begin	runapp-output-targets-1
+target.local	ok
+target.local.value	1
+target.field	ok
+target.field.value	1
+target.index	ok
+target.index.value	1
+target.field.evaluations	1|1
+target.index.evaluations	1|1
+target.evaluation_order	CT|1
+target.new	error
+file.end	runapp-output-targets-1

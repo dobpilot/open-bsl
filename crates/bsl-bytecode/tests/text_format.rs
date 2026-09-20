@@ -24,11 +24,35 @@ fn one_const() -> bsl_bytecode::Program {
 }
 
 #[test]
-fn format_without_method_result_context_is_rejected() {
+fn format_without_open_method_argument_modes_is_rejected() {
     let text = write_program(&one_const(), None).unwrap();
-    let old = text.replacen("bslc 30", "bslc 29", 1);
+    let old = text.replacen("bslc 35", "bslc 34", 1);
     assert_ne!(old, text);
     assert!(matches!(parse_program(&old), Err(TextError::BadHeader(_))));
+}
+
+#[test]
+fn date_constants_round_trip_ticks_and_refuse_the_seconds_format() {
+    let mut program = one_const();
+    for ticks in [0, 1, 1234, 637_146_884_961_234, 3_155_378_975_999_999] {
+        program.chunks[0].consts = vec![support::konst(BslValue::Date(
+            bsl_rt::BslDate::from_ticks(ticks).unwrap(),
+        ))];
+        bsl_bytecode::image::finalize(&mut program);
+        let text = write_program(&program, None).unwrap();
+        assert!(text.contains(&format!("Дата {ticks}")));
+        let parsed = parse_program(&text).unwrap();
+        assert_eq!(parsed.chunks[0].consts, program.chunks[0].consts);
+        assert_eq!(write_program(&parsed, None).unwrap(), text);
+        assert!(matches!(
+            parse_program(&text.replacen("bslc 35", "bslc 34", 1)),
+            Err(TextError::BadHeader(_))
+        ));
+        for invalid in ["-1", "3155378976000000", "18446744073709551615", "1.5"] {
+            let invalid_text = text.replace(&format!("Дата {ticks}"), &format!("Дата {invalid}"));
+            assert!(parse_program(&invalid_text).is_err(), "{invalid}");
+        }
+    }
 }
 
 #[test]

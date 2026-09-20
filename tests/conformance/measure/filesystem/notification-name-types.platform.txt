@@ -1,0 +1,46 @@
+file.begin	notification-name-types-1
+name.boolean.true.успех	error|string=Yes
+name.boolean.true.ошибка	error|string=Yes
+name.boolean.false.успех	error|string=No
+name.boolean.false.ошибка	error|string=No
+name.date.успех	error|string=9/18/2026 12:34:56 PM
+name.date.ошибка	error|string=9/18/2026 12:34:56 PM
+name.null.успех	error|string=
+name.null.ошибка	error|string=
+name.type.успех	error|string=Array
+name.type.ошибка	error|string=Array
+name.uuid.успех	error|string=00112233-4455-6677-8899-aabbccddeeff
+name.uuid.ошибка	error|string=00112233-4455-6677-8899-aabbccddeeff
+name.file.ru.успех	error|string=Файл
+name.file.ru.ошибка	error|string=Файл
+name.file.en.успех	error|string=Файл
+name.file.en.ошибка	error|string=Файл
+name.array.успех	error|string=Массив
+name.array.ошибка	error|string=Массив
+name.structure.успех	error|string=Структура
+name.structure.ошибка	error|string=Структура
+name.value_list.успех	error|string=
+name.value_list.ошибка	error|string=
+name.enum.успех	error|string=UTF8
+name.enum.ошибка	ok|string=UTF8|stored=Добавить
+name.enum.encoding.успех	error|string=UTF16
+name.enum.encoding.ошибка	ok|string=UTF16|stored=Добавить
+name.enum.encoding_ansi.успех	error|string=ANSI
+name.enum.encoding_ansi.ошибка	ok|string=ANSI|stored=Добавить
+name.enum.encoding_oem.успех	error|string=OEM
+name.enum.encoding_oem.ошибка	ok|string=OEM|stored=Добавить
+name.enum.encoding_system.успех	error|string=Системная
+name.enum.encoding_system.ошибка	ok|string=Системная|stored=Добавить
+name.enum.sort.успех	error|string=Ascending
+name.enum.sort.ошибка	error|string=Ascending
+name.enum.byte_order.успех	error|string=Little-endian
+name.enum.byte_order.ошибка	error|string=Little-endian
+name.enum.file_mode.успех	error|string=Open
+name.enum.file_mode.ошибка	error|string=Open
+name.binary.успех	error|string=41 42
+name.binary.ошибка	error|string=41 42
+direct.enum	ok|success=string:Добавить|error=string:Добавить|success_receiver=error|error_receiver=error
+direct.enum.distinct	error
+direct.enum.two_arrays	error
+direct.string	error
+file.end	notification-name-types-1

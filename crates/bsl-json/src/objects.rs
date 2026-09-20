@@ -281,6 +281,8 @@ pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     // Файл читается/пишется файловой системой СЕССИИ (ABI-G): она пришла к
     // объекту при построении и хранится на нём.
     if let Some(reader) = obj.downcast_ref::<JsonReaderObject>() {
+        let path = bsl_rt::prepare_file_operation_path(&path, reader.files.as_ref())
+            .map_err(|error| RtError::IoError(error.to_string()))?;
         let bytes = reader
             .files
             .read(&path)
@@ -298,6 +300,8 @@ pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let writer = obj
         .downcast_ref::<JsonWriterObject>()
         .ok_or_else(|| not_applicable(obj, "ЗаписьJSON"))?;
+    let path = bsl_rt::prepare_file_operation_path(&path, writer.files.as_ref())
+        .map_err(|error| RtError::IoError(error.to_string()))?;
     *writer.writer.borrow_mut() = Some(JsonWriter::to_file(
         std::path::PathBuf::from(path),
         settings_from(args.get(1))?,
@@ -878,8 +882,10 @@ fn writer_open_file(
     let writer = receiver
         .downcast_ref::<JsonWriterObject>()
         .ok_or_else(|| not_applicable(receiver, "ЗаписьJSON"))?;
+    let path = bsl_rt::prepare_file_operation_path(&path.to_string(), writer.files.as_ref())
+        .map_err(|error| RtError::IoError(error.to_string()))?;
     *writer.writer.borrow_mut() = Some(JsonWriter::to_file(
-        std::path::PathBuf::from(path.to_string()),
+        std::path::PathBuf::from(path),
         settings_from(arguments.get(1))?,
         writer.files.clone(),
     ));

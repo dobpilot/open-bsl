@@ -1,0 +1,16 @@
+file.begin	date-shift-limits-1
+plus.huge	9999-12-31 23:59:59
+minus.huge	1-1-1 0:0:0
+plus.i64max	9999-12-31 23:59:59
+plus.i64overflow	1-1-1 0:0:0
+minus.i64max	1-1-1 0:0:0
+minus.i64overflow	1-1-1 0:0:0
+plus.negative.i64min	1-1-1 0:0:0
+plus.maxdate.huge	9999-12-31 23:59:59
+minus.empty.huge	1-1-1 0:0:0
+plus.string	2020-1-1 0:0:1
+plus.boolean	2020-1-1 0:0:1
+plus.undefined	error
+plus.null	error
+reverse.number	error
+file.end	date-shift-limits-1

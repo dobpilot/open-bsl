@@ -65,8 +65,8 @@ use std::rc::Rc;
 
 use bsl_rt::{
     Arity, BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, FileCreate, FileHandle,
-    FileOpenOptions, FileSystem, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
-    RtResult, TypeDescriptor,
+    FileMetadata, FileOpenOptions, FileSystem, MethodDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, prepare_file_operation_path,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -216,6 +216,51 @@ impl StreamData {
                 .len()
                 .map_err(|e| RtError::IoError(format!("Размер: {e}"))),
         }
+    }
+
+    fn set_size(&mut self, size: u64) -> RtResult<()> {
+        const OP: &str = "УстановитьРазмер";
+        if !self.can_write {
+            return Err(RtError::IoError(
+                "поток открыт без доступа на запись".into(),
+            ));
+        }
+        let position = self.pos;
+        match self.open_mut(OP)? {
+            Backing::Owned(bytes) => {
+                let size = usize::try_from(size).map_err(|_| RtError::BadIndex)?;
+                if size > bytes.len() {
+                    bytes
+                        .try_reserve(size - bytes.len())
+                        .map_err(|_| RtError::TypeError {
+                            expected: "Размер, который удаётся разместить в памяти",
+                            op: OP,
+                        })?;
+                }
+                bytes.resize(size, 0);
+            }
+            Backing::Buffer(buffer) => {
+                // Срез сохраняет общие байты и сужает только диапазон этого
+                // потока. Ноль означает остаток, как в нативном SetSize.
+                let view = bsl_rt::call_builtin_method(
+                    bsl_rt::BuiltinMethod::BufSlice,
+                    buffer,
+                    &[from_u64(0), from_u64(size)],
+                )?;
+                let size = view.binary_buffer_len().expect("срез возвращает буфер") as u64;
+                *buffer = view;
+                if position > size {
+                    self.pos = size;
+                    return Err(RtError::IoError(
+                        "позиция за новым концом буферного потока".into(),
+                    ));
+                }
+            }
+            Backing::File(file) => file
+                .set_len(size)
+                .map_err(|error| RtError::IoError(format!("{OP}: {error}")))?,
+        }
+        Ok(())
     }
 
     /// Текущая позиция. Нужна снаружи модуля читателю и писателю
@@ -385,6 +430,7 @@ pub(crate) static FILE_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
 struct StreamObject {
     kind: StreamKind,
     data: Rc<RefCell<StreamData>>,
+    file_name: Option<String>,
 }
 
 impl ByteStreamProtocol for StreamObject {
@@ -413,6 +459,13 @@ impl ByteStreamProtocol for StreamObject {
             .try_borrow()
             .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?
             .len(op)
+    }
+
+    fn set_len(&self, size: u64, op: &'static str) -> RtResult<()> {
+        self.data
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?
+            .set_size(size)
     }
 
     fn read_bytes(&self, count: usize, op: &'static str) -> RtResult<Vec<u8>> {
@@ -467,6 +520,34 @@ fn stream_size(
     size(receiver)
 }
 
+fn stream_set_size(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    const OP: &str = "УстановитьРазмер";
+    let [value] = arguments else {
+        return Err(RtError::MethodNotApplicable {
+            method: OP,
+            receiver: receiver.type_descriptor().name,
+        });
+    };
+    // НЕ ИЗМЕРЕНО(STREAM.RESIZE_EDGES): предельные размеры и точные
+    // диагностические тексты требуют отдельных проб.
+    let BslValue::Number(value) = value else {
+        return Err(RtError::TypeError {
+            expected: "Целое неотрицательное число",
+            op: OP,
+        });
+    };
+    let size = to_u64(value).ok_or(RtError::TypeError {
+        expected: "Целое неотрицательное число",
+        op: OP,
+    })?;
+    protocol(receiver, OP)?.set_len(size, OP)?;
+    Ok(BslValue::Undefined)
+}
+
 fn stream_current_position(
     receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
@@ -501,6 +582,12 @@ fn stream_close_and_get_binary_data(
 }
 
 pub(crate) const STREAM_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["УстановитьРазмер", "SetSize"],
+        Arity::exact(1),
+        stream_set_size,
+    )
+    .as_procedure(),
     MethodDescriptor::new(&["Записать", "Write"], Arity::exact(3), stream_write),
     MethodDescriptor::new(&["Прочитать", "Read"], Arity::exact(3), stream_read),
     MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), stream_close),
@@ -533,7 +620,11 @@ impl ObjectProtocol for StreamObject {
     }
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
-        STREAM_PROPERTIES
+        if matches!(self.kind, StreamKind::File) {
+            FILE_STREAM_PROPERTIES
+        } else {
+            STREAM_PROPERTIES
+        }
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -808,14 +899,24 @@ fn open_file_stream(
     access: FileAccess,
     files: &dyn FileSystem,
 ) -> RtResult<BslValue> {
-    Ok(stream_value(
-        StreamKind::File,
-        open_file_data(path, mode, access, files)?,
-    ))
+    let operation_path = prepare_file_operation_path(path, files)
+        .map_err(|error| RtError::IoError(error.to_string()))?;
+    Ok(BslValue::new_object(StreamObject {
+        kind: StreamKind::File,
+        data: open_file_data(&operation_path, mode, access, files)?,
+        // file-stream-name: лексические сегменты и пробелы сохраняются.
+        // `НЕ ИЗМЕРЕНО(STREAM.TEMP_EDGES)`: прочие формы пути и предельные
+        // параметры временного потока требуют отдельных проб.
+        file_name: Some(path.to_owned()),
+    }))
 }
 
 fn stream_value(kind: StreamKind, data: Rc<RefCell<StreamData>>) -> BslValue {
-    BslValue::new_object(StreamObject { kind, data })
+    BslValue::new_object(StreamObject {
+        kind,
+        data,
+        file_name: None,
+    })
 }
 
 /// Открытие файла и построение состояния потока — через файловую систему
@@ -831,7 +932,13 @@ fn open_file_data(
     // совместимость режима с доступом (`ОткрытьИлиСоздать` + `Чтение`), и
     // правило создания: с одним лишь `read` создание не запрашивается вовсе,
     // а платформа в этом случае просто открывает уже существующий файл.
-    let exists = files.metadata(path).is_ok();
+    let metadata = files.metadata(path);
+    let exists = metadata.is_ok();
+    if metadata.as_ref().is_ok_and(FileMetadata::is_dir) {
+        return Err(RtError::IoError(format!(
+            "{path}: файловый поток нельзя открыть для каталога"
+        )));
+    }
     if mode.needs_write(exists) && !access.can_write() {
         return Err(RtError::IoError(format!(
             "{path}: режим открытия требует доступа на запись"
@@ -894,7 +1001,19 @@ fn open_file_data(
 /// быть константой в таблице чанка, как голое имя перечисления, — его
 /// строит отдельная инструкция.
 pub fn new_file_streams_manager(files: Rc<dyn FileSystem>) -> BslValue {
-    BslValue::new_object(FileStreamsManager { files })
+    BslValue::new_object(FileStreamsManager {
+        files,
+        temporary_files: None,
+        random: None,
+    })
+}
+
+pub(crate) fn new_file_streams_manager_in_context(context: &CallContext<'_>) -> RtResult<BslValue> {
+    Ok(BslValue::new_object(FileStreamsManager {
+        files: context.files_rc()?,
+        temporary_files: context.temporary_files().ok(),
+        random: context.random().ok().cloned(),
+    }))
 }
 
 pub(crate) static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
@@ -904,11 +1023,135 @@ pub(crate) static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["FileStreamsManager"],
 };
 
-#[derive(Debug)]
 struct FileStreamsManager {
     /// Файловая система сессии: менеджер открывает файлы в СВОИХ методах,
     /// поэтому владеет `Rc` и не зависит от времени жизни контекста вызова.
     files: Rc<dyn FileSystem>,
+    temporary_files: Option<bsl_rt::TemporaryFileRegistry>,
+    random: Option<bsl_rt::RandomHandle>,
+}
+
+impl std::fmt::Debug for FileStreamsManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileStreamsManager")
+            .field("files", &self.files)
+            .field("temporary_files", &self.temporary_files)
+            .finish_non_exhaustive()
+    }
+}
+
+fn temporary_parameter(value: Option<&BslValue>, default: u64) -> RtResult<u64> {
+    let value = match value {
+        None | Some(BslValue::Undefined) => Some(default),
+        Some(BslValue::Number(value)) => to_u64(value),
+        _ => None,
+    };
+    value.ok_or(RtError::TypeError {
+        expected: "целое неотрицательное число",
+        op: "СоздатьВременныйФайл",
+    })
+}
+
+fn manager_create_temporary(
+    receiver: &dyn ObjectProtocol,
+    args: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let manager = manager_of(receiver, "СоздатьВременныйФайл")?;
+    // `НЕ ИЗМЕРЕНО(STREAM.TEMP_EDGES)`: строгий u64 за пределами
+    // file-temp-parameters пока не объявляется контрактом 1С.
+    let _memory_limit = temporary_parameter(args.first(), 65_535)?;
+    let _buffer_size = temporary_parameter(args.get(1), 8_192)?;
+    // Измеренная видимость записи не допускает удержания новых байтов
+    // только в буфере компонента. Буферизацией самого I/O управляет host.
+    let registry = manager.temporary_files.as_ref().ok_or(RtError::IoError(
+        "исходный менеджер не имеет учёта временных файлов".into(),
+    ))?;
+    if registry.is_closed() {
+        return Err(RtError::IoError(
+            "исходный сеанс временных файлов завершён".into(),
+        ));
+    }
+    if !manager.files.supports_temporary_file_ownership() {
+        return Err(RtError::IoError(
+            "host не предоставляет право очистки временного файла".into(),
+        ));
+    }
+    let random = manager.random.as_ref().ok_or(RtError::IoError(
+        "исходный менеджер не имеет источника имени".into(),
+    ))?;
+    let mut entropy = [0; 16];
+    random.fill(&mut entropy);
+    let opened = manager
+        .files
+        .create_temporary_file(&entropy)
+        .map_err(|error| RtError::IoError(format!("СоздатьВременныйФайл: {error}")))?;
+    temporary_stream_from_opened(opened, registry)
+}
+
+fn temporary_stream_from_opened(
+    opened: bsl_rt::OpenedTemporaryFile,
+    registry: &bsl_rt::TemporaryFileRegistry,
+) -> RtResult<BslValue> {
+    let (path, handle) = opened.into_registered_parts(registry).map_err(|_| {
+        RtError::IoError("host не передал право очистки либо закрыл учёт во время создания".into())
+    })?;
+    Ok(BslValue::new_object(StreamObject {
+        kind: StreamKind::File,
+        file_name: Some(path),
+        data: Rc::new(RefCell::new(StreamData {
+            backing: Some(Backing::File(handle)),
+            closed_data: None,
+            pos: 0,
+            can_read: true,
+            can_write: true,
+            can_seek: true,
+        })),
+    }))
+}
+
+fn manager_create_temporary_async(
+    receiver: &dyn ObjectProtocol,
+    args: &[BslValue],
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let manager = manager_of(receiver, "СоздатьВременныйФайлАсинх")?;
+    if let Err(error) = temporary_parameter(args.first(), 65_535)
+        .and_then(|_| temporary_parameter(args.get(1), 8_192))
+    {
+        return context.ready_file_promise(Err(error));
+    }
+    let registry = match manager.temporary_files.as_ref() {
+        Some(registry) if !registry.is_closed() => registry.clone(),
+        Some(_) => {
+            return context.ready_file_promise(Err(RtError::IoError(
+                "исходный сеанс временных файлов завершён".into(),
+            )));
+        }
+        None => {
+            return context.ready_file_promise(Err(RtError::IoError(
+                "исходный менеджер не имеет учёта временных файлов".into(),
+            )));
+        }
+    };
+    if !manager.files.supports_temporary_file_ownership() {
+        return context.ready_file_promise(Err(RtError::IoError(
+            "host не предоставляет право очистки временного файла".into(),
+        )));
+    }
+    let Some(random) = manager.random.as_ref() else {
+        return context.ready_file_promise(Err(RtError::IoError(
+            "исходный менеджер не имеет источника имени".into(),
+        )));
+    };
+    let mut entropy = [0; 16];
+    random.fill(&mut entropy);
+    context.spawn_temporary_file_operation(
+        entropy,
+        manager.files.clone(),
+        registry,
+        temporary_stream_from_opened,
+    )
 }
 
 // --- методы менеджера -------------------------------------------------------------
@@ -1054,6 +1297,16 @@ fn manager_method_create(
 
 const FILE_STREAMS_MANAGER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(
+        &["СоздатьВременныйФайлАсинх", "CreateTempFileAsync"],
+        Arity::range(0, 2),
+        manager_create_temporary_async,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьВременныйФайл", "CreateTempFile"],
+        Arity::range(0, 2),
+        manager_create_temporary,
+    ),
+    MethodDescriptor::new(
         &["Открыть", "Open"],
         Arity::range(2, 3),
         manager_method_open,
@@ -1095,7 +1348,7 @@ pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
         .with_properties(STREAM_PROPERTIES)
         .with_methods(STREAM_METHODS),
     bsl_rt::ObjectMembersDescriptor::new(&FILE_STREAM_TYPE)
-        .with_properties(STREAM_PROPERTIES)
+        .with_properties(FILE_STREAM_PROPERTIES)
         .with_methods(STREAM_METHODS),
     bsl_rt::ObjectMembersDescriptor::new(&FILE_STREAMS_MANAGER_TYPE)
         .with_methods(FILE_STREAMS_MANAGER_METHODS),
@@ -1127,7 +1380,7 @@ fn stream_can_seek(
     flag(receiver, StreamFlag::Seekable)
 }
 
-static STREAM_PROPERTIES: &[PropertyDescriptor] = &[
+const STREAM_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
         names: &["ДоступнаЗапись", "CanWrite"],
         get: stream_can_write,
@@ -1141,6 +1394,24 @@ static STREAM_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
         names: &["ДоступноИзменениеПозиции", "CanSeek"],
         get: stream_can_seek,
+        set: None,
+    },
+];
+
+static FILE_STREAM_PROPERTIES: &[PropertyDescriptor] = &[
+    STREAM_PROPERTIES[0],
+    STREAM_PROPERTIES[1],
+    STREAM_PROPERTIES[2],
+    PropertyDescriptor {
+        names: &["ИмяФайла", "FileName"],
+        get: |receiver, _| {
+            let stream = bsl_rt::receiver_of::<StreamObject>(receiver, "ИмяФайла")?;
+            let name = stream
+                .file_name
+                .as_ref()
+                .ok_or(RtError::InvalidBytecode("файловый поток без имени"))?;
+            Ok(BslValue::Str(name.as_str().into()))
+        },
         set: None,
     },
 ];
@@ -1571,6 +1842,50 @@ mod tests {
 
     fn memory() -> BslValue {
         new_memory_stream(&BslValue::Undefined).unwrap()
+    }
+
+    #[test]
+    fn resize_allocation_failure_preserves_owned_bytes_and_position() {
+        let stream = memory();
+        let state = data(st(&stream), "тест").unwrap();
+        let mut state = state.borrow_mut();
+        state.write_bytes(&[1, 2, 3], "тест").unwrap();
+        state.set_position(9);
+        assert!(state.set_size(u64::MAX).is_err());
+        assert_eq!(state.position(), 9);
+        assert_eq!(state.len("тест").unwrap(), 3);
+        state.set_position(0);
+        assert_eq!(state.read_bytes(3, "тест").unwrap(), [1, 2, 3]);
+    }
+
+    #[test]
+    fn shrinking_buffer_window_keeps_aliases_and_rejects_later_growth() {
+        let bytes = buffer(&[1, 2, 3, 4, 5, 6]);
+        let stream = new_memory_stream(&bytes).unwrap();
+        let other = new_memory_stream(&bytes).unwrap();
+        let state = data(st(&stream), "тест").unwrap();
+        let mut state = state.borrow_mut();
+        state.set_position(5);
+        assert!(state.set_size(2).is_err());
+        assert_eq!(state.position(), 2);
+        assert_eq!(state.len("тест").unwrap(), 2);
+        assert!(state.set_size(4).is_err());
+        state.set_size(0).unwrap();
+        assert_eq!(state.len("тест").unwrap(), 2);
+        assert_eq!(bytes.binary_buffer_len(), Some(6));
+        assert_eq!(
+            data(st(&other), "тест")
+                .unwrap()
+                .borrow()
+                .len("тест")
+                .unwrap(),
+            6
+        );
+        state.set_position(1);
+        state.write_bytes(&[99], "тест").unwrap();
+        assert_eq!(bytes_of(&bytes), [1, 99, 3, 4, 5, 6]);
+        assert!(state.write_bytes(&[8], "тест").is_err());
+        assert_eq!(bytes_of(&bytes), [1, 99, 3, 4, 5, 6]);
     }
 
     fn tmp(name: &str) -> String {
@@ -2258,6 +2573,7 @@ mod tests {
         let value = BslValue::new_object(StreamObject {
             kind: StreamKind::File,
             data: data.clone(),
+            file_name: Some("test".into()),
         });
         let obj = value.object_ref().expect("поток").as_dyn();
 
@@ -2395,16 +2711,28 @@ mod tests {
                     cursor: Cursor::new(bytes),
                 }))
             }
+
+            fn path_separator(&self) -> std::io::Result<String> {
+                Ok("/".to_owned())
+            }
         }
 
         let mem = MemFs::default();
-        let data = open_file_data(
-            "/поток.bin",
+        let original_path = "/поток.bin\t\0tail";
+        let value = open_file_stream(
+            original_path,
             FileOpenMode::Create,
             FileAccess::ReadWrite,
             &mem,
         )
         .unwrap();
+        let stream = bsl_rt::receiver_of::<StreamObject>(
+            value.object_ref().expect("поток").as_dyn(),
+            "тест",
+        )
+        .unwrap();
+        assert_eq!(stream.file_name.as_deref(), Some(original_path));
+        let data = Rc::clone(&stream.data);
 
         // Запись идёт через дескриптор in-memory ФС.
         data.borrow_mut().write_bytes(b"hello", "Записать").unwrap();
@@ -2420,7 +2748,6 @@ mod tests {
         assert_eq!(got, b"hello");
 
         // Закрытие через объект — по закону `close`.
-        let value = stream_value(StreamKind::File, data);
         close(value.object_ref().expect("поток").as_dyn()).unwrap();
         assert!(
             !std::path::Path::new("/поток.bin").exists(),

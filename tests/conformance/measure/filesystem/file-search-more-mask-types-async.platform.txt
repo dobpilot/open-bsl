@@ -1,0 +1,13 @@
+file.begin	search-more-mask-types-async-1
+context.effective	НеИспользовать
+find.more.date	safe=0|sync=ok:0|async=ok:0
+find.more.map	safe=1|sync=ok:1|async=ok:1
+find.more.fixed_array	safe=1|sync=ok:1|async=ok:1
+find.more.fixed_structure	safe=1|sync=ok:1|async=ok:1
+find.more.value_table	safe=1|sync=ok:1|async=ok:1
+find.more.uuid	safe=1|sync=ok:1|async=ok:1
+find.more.file	safe=1|sync=ok:1|async=ok:1
+find.more.binary	safe=1|sync=ok:1|async=ok:1
+find.more.enum	safe=1|sync=ok:1|async=ok:1
+find.more.type	safe=1|sync=ok:1|async=ok:1
+file.end	search-more-mask-types-async-1

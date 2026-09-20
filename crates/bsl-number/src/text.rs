@@ -127,13 +127,25 @@ impl BslNumber {
     }
 
     pub fn to_canonical(&self) -> String {
+        let mut out = String::with_capacity(self.canonical_len_bound());
+        self.append_canonical_digits(&mut out);
+        out
+    }
+
+    /// Дописывает каноническую форму числа, сохраняя прежнее содержимое
+    /// буфера. Формат совпадает с [`Self::to_canonical`].
+    pub fn append_canonical(&self, out: &mut String) {
+        out.reserve(self.canonical_len_bound());
+        self.append_canonical_digits(out);
+    }
+
+    fn append_canonical_digits(&self, out: &mut String) {
         use std::fmt::Write as _;
 
         // Цифры пишутся СРАЗУ в результат: промежуточная строка цифр
         // держала бы вторую копию числа, а у `Big` мантисса произвольной
         // величины — на ней пик памяти удваивался бы против учтённого.
         // Ёмкость берётся из той же оценки, которой пользуется бюджет.
-        let mut out = String::with_capacity(self.canonical_len_bound());
         let (neg, scale) = match &self.0 {
             Repr::Small { m, scale } => (m.get() < 0, *scale),
             Repr::Big(b) => (b.m.is_negative(), b.scale),
@@ -156,7 +168,7 @@ impl BslNumber {
             for _ in 0..(-scale) {
                 out.push('0');
             }
-            return out;
+            return;
         }
 
         let scale = scale as usize;
@@ -177,7 +189,6 @@ impl BslNumber {
             }
             out.insert_str(digits_at, &prefix);
         }
-        out
     }
 
     /// Разбор канонической формы. Экспоненты нет — в BSL числовых литералов
@@ -236,6 +247,31 @@ impl std::fmt::Display for BslNumber {
 #[cfg(test)]
 mod length_tests {
     use crate::number::BslNumber;
+
+    #[test]
+    fn canonical_output_covers_integer_fraction_and_big_mantissas() {
+        for text in [
+            "0",
+            "42",
+            "-42",
+            "1000000",
+            "0.5",
+            "-0.005",
+            "123.456",
+            "170141183460469231731687303715884105727",
+            "-170141183460469231731687303715884105728",
+            "12345678901234567890123456789012345678901234567890.123",
+            "-0.000000000000000000000000000000000000000001",
+        ] {
+            let number = BslNumber::parse_canonical(text).unwrap();
+            assert_eq!(number.to_canonical(), text);
+            let mut out = String::from("префикс🦀:");
+            number.append_canonical(&mut out);
+            assert_eq!(out, format!("префикс🦀:{text}"));
+            number.append_canonical(&mut out);
+            assert_eq!(out, format!("префикс🦀:{text}{text}"));
+        }
+    }
 
     /// Расчёт длины без материализации совпадает с фактической записью
     /// для `Small` и не занижает её для `Big`: на этом равенстве держится

@@ -12,6 +12,281 @@ fn scheduler_quantum_defaults_to_the_confirmed_value() {
 }
 
 #[test]
+fn module_argument_cells_are_released_on_return_and_exception() {
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().unwrap();
+    for raises in [false, true] {
+        let body = format!(
+            "Аргумент = Аргумент + 1; {}",
+            if raises {
+                "ВызватьИсключение \"ошибка\";"
+            } else {
+                ""
+            }
+        );
+        let service_source = format!(
+            "Перем Счетчик Экспорт; Процедура Изменить(Аргумент) Экспорт {body} КонецПроцедуры
+             Функция Ссылка() Экспорт Возврат ЭтотОбъект; КонецФункции Счетчик = 0;"
+        );
+        let service = bsl_sema::resolve_program_with_registry(
+            &parse(&service_source).unwrap().items,
+            &registry,
+        )
+        .unwrap();
+        let imports = [bsl_sema::ImportedModule::from_resolved(
+            "Служебный",
+            0,
+            &service,
+        )];
+        for call in [
+            "Изменить(Собственная)",
+            "Изменить(Служебный.Счетчик)",
+            "Служебный.Изменить(Служебный.Счетчик)",
+            "Получатель.Изменить(Служебный.Счетчик)",
+        ] {
+            let source = format!(
+                "Перем Собственная;
+                 Процедура Изменить(Аргумент) {body} КонецПроцедуры
+                 Собственная = 0; Получатель = Служебный.Ссылка();
+                 Для НомерПробы = 1 По 20 Цикл
+                     Попытка {call}; Исключение КонецПопытки;
+                 КонецЦикла;
+                 Возврат Собственная + Служебный.Счетчик;"
+            );
+            let entry = bsl_sema::resolve_program_with_imports(
+                &parse(&source).unwrap().items,
+                &registry,
+                &imports,
+            )
+            .unwrap();
+            for optimizations in [
+                bsl_compiler::Optimizations::default(),
+                bsl_compiler::Optimizations::all(),
+            ] {
+                let (catalog, entry) = bsl_compiler::compile_configuration(
+                    &[("Служебный".into(), &service)],
+                    Some(&entry),
+                    optimizations,
+                )
+                .unwrap();
+                let entry = entry.unwrap();
+                let mut env = bsl_rt::HostEnv::process();
+                let mut execution =
+                    ProgramExecution::start_with_registry(&entry, &registry, &env).unwrap();
+                execution.attach_catalog(&catalog);
+                loop {
+                    if let ProgramPoll::Complete(value, stack) = execution
+                        .poll_configuration_with_registry_and_io(
+                            &entry,
+                            &catalog,
+                            &registry,
+                            &mut Vec::new(),
+                            &mut Vec::new(),
+                            &mut TestDynamic::bare(),
+                            &mut env,
+                            usize::MAX,
+                        )
+                        .unwrap()
+                    {
+                        assert_eq!(value, BslValue::number_from_i64(20));
+                        assert_eq!(stack.len(), entry.chunks[0].n_regs as usize, "{call}");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn dynamic_structure_indices_are_checked_before_and_after_relocation() {
+    struct ShapesCompiler {
+        remove_shapes: bool,
+    }
+    impl bsl_bytecode::DynamicCompiler for ShapesCompiler {
+        fn compile(
+            &mut self,
+            request: &bsl_bytecode::DynamicRequest<'_>,
+        ) -> Result<std::rc::Rc<bsl_bytecode::DynamicUnit>, String> {
+            let mut unit = bsl_compiler::compile_dynamic_snippet(
+                request,
+                None,
+                &bsl_syntax::PreprocSymbols::new(),
+                std::num::NonZeroU64::new(1).unwrap(),
+            )?;
+            assert_eq!(unit.shapes.len(), 1);
+            if self.remove_shapes {
+                unit.shapes.clear();
+            }
+            Ok(std::rc::Rc::new(unit))
+        }
+    }
+
+    for (static_count, remove_shapes, expected_error) in [
+        (
+            1,
+            true,
+            Some("номер формы структуры вне таблицы форм фрагмента"),
+        ),
+        (65_535, false, None),
+        (
+            65_536,
+            false,
+            Some("объединённый номер формы структуры не помещается в u16"),
+        ),
+    ] {
+        let mut program = compile_module(
+            r#"
+Функция СтатическаяФорма()
+    Возврат Новый Структура;
+КонецФункции
+РезультатФрагмента = Вычислить("Новый Структура");
+Возврат 42;
+"#,
+        );
+        assert_eq!(program.shapes.len(), 1);
+        program
+            .shapes
+            .resize(static_count, program.shapes[0].clone());
+        let mut dynamic = ShapesCompiler { remove_shapes };
+        let mut env = bsl_rt::HostEnv::process();
+        let result = run_program_with_host(
+            &program,
+            None,
+            &mut Vec::new(),
+            &mut Vec::new(),
+            Some(&mut dynamic),
+            &mut env,
+        );
+        if let Some(expected) = expected_error {
+            assert!(matches!(result, Err(RtError::InvalidBytecode(actual)) if actual == expected));
+        } else {
+            assert_eq!(result.unwrap(), num("42"));
+        }
+    }
+}
+
+#[test]
+fn dynamic_fragments_preserve_static_and_fragment_structure_shapes() {
+    let program = compile_module(
+        r#"
+Функция СтатическаяСтруктура()
+    Возврат Новый Структура("СтатическоеПоле", 17);
+КонецФункции
+а = Вычислить("СтатическаяСтруктура()");
+б = Вычислить("Новый Структура(""ДинамическоеПоле"", 25)");
+в = Вычислить("Вычислить(""СтатическаяСтруктура()"")");
+Возврат а.СтатическоеПоле + б.ДинамическоеПоле + в.СтатическоеПоле;
+"#,
+    );
+    assert_eq!(
+        run_with_dynamic(&program).unwrap(),
+        BslValue::Number(BslNumber::from_i64(59))
+    );
+}
+
+#[test]
+fn legacy_single_argument_delete_bytecode_still_runs() {
+    let mut program = compile_module(
+        "ПутьУдаления = ПолучитьИмяВременногоФайла(); УдалитьФайлы(ПутьУдаления); Возврат 42;",
+    );
+    let mut changed = 0;
+    for chunk in &mut program.chunks {
+        for instruction in &mut chunk.instrs {
+            if let Instr::CallBuiltin {
+                builtin: bsl_rt::BuiltinFn::DeleteFiles,
+                count,
+                ..
+            } = instruction
+            {
+                assert_eq!(*count, 2);
+                *count = 1;
+                changed += 1;
+            }
+        }
+    }
+    assert_eq!(changed, 1);
+    bsl_bytecode::image::finalize(&mut program);
+    let value = run_with_dynamic(&program).unwrap();
+    assert_eq!(value, BslValue::Number(BslNumber::from_i64(42)));
+}
+
+#[test]
+fn file_search_observes_execution_cancellation_inside_the_host_iterator() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    #[derive(Debug)]
+    struct CancelingFiles(Arc<AtomicBool>);
+    impl bsl_rt::FileSystem for CancelingFiles {
+        fn metadata(&self, _: &str) -> std::io::Result<bsl_rt::FileMetadata> {
+            unreachable!()
+        }
+        fn read(&self, _: &str) -> std::io::Result<Vec<u8>> {
+            unreachable!()
+        }
+        fn write(&self, _: &str, _: &[u8]) -> std::io::Result<()> {
+            unreachable!()
+        }
+        fn create_dir_all(&self, _: &str) -> std::io::Result<()> {
+            unreachable!()
+        }
+        fn open(
+            &self,
+            _: &str,
+            _: bsl_rt::FileOpenOptions,
+        ) -> std::io::Result<Box<dyn bsl_rt::FileHandle>> {
+            unreachable!()
+        }
+        fn path_separator(&self) -> std::io::Result<String> {
+            Ok("/".into())
+        }
+        fn read_dir<'a>(
+            &'a self,
+            _: &str,
+        ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<bsl_rt::DirEntry>> + 'a>>
+        {
+            Ok(Box::new(std::iter::once_with(|| {
+                self.0.store(true, Ordering::Relaxed);
+                Ok(bsl_rt::DirEntry::new("found", false))
+            })))
+        }
+    }
+
+    let program = compile_module(
+        r#"
+        Попытка
+            Результат = НайтиФайлы("root", "*", Истина);
+        Исключение
+            Возврат "отмена перехвачена";
+        КонецПопытки;
+        Возврат "отмена пропущена";
+    "#,
+    );
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().unwrap();
+    let flag = Arc::new(AtomicBool::new(false));
+    let mut env = bsl_rt::HostEnv::process().with_files(CancelingFiles(flag.clone()));
+    let mut execution = ProgramExecution::start_with_registry(&program, &registry, &env).unwrap();
+    execution.set_cancel_flag(flag.clone());
+    let result = execution.poll_with_registry_and_io(
+        &program,
+        &registry,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        &mut TestDynamic::bare(),
+        &mut env,
+        usize::MAX,
+    );
+    assert!(flag.load(Ordering::Relaxed));
+    assert!(matches!(result, Err(RtError::Canceled)));
+}
+
+#[test]
 fn a_run_allocates_both_cache_slots_for_every_instruction() {
     let program = compile_module("Функция Ф(х)\nВозврат х;\nКонецФункции\nРезультат = Ф(1);");
     let mut builder = bsl_rt::RuntimeBuilder::new();
@@ -22,14 +297,19 @@ fn a_run_allocates_both_cache_slots_for_every_instruction() {
         .expect("программа связывается");
 
     assert_eq!(execution.caches.prop.len(), program.chunks.len());
-    assert_eq!(execution.caches.method.len(), program.chunks.len());
-    for (chunk, (props, methods)) in program
-        .chunks
-        .iter()
-        .zip(execution.caches.prop.iter().zip(&execution.caches.method))
-    {
+    assert_eq!(execution.caches.open_call.len(), program.chunks.len());
+    assert_eq!(execution.caches.import.len(), program.chunks.len());
+    for (chunk, ((props, open_calls), imports)) in program.chunks.iter().zip(
+        execution
+            .caches
+            .prop
+            .iter()
+            .zip(&execution.caches.open_call)
+            .zip(&execution.caches.import),
+    ) {
         assert_eq!(props.len(), chunk.instrs.len());
-        assert_eq!(methods.len(), chunk.instrs.len());
+        assert_eq!(open_calls.len(), chunk.instrs.len());
+        assert_eq!(imports.len(), chunk.instrs.len());
     }
 
     let catalog = service_catalog();
@@ -39,22 +319,46 @@ fn a_run_allocates_both_cache_slots_for_every_instruction() {
         // Длины утверждаются явно: zip молча обрезается по короткому, и
         // без них модуль с пустыми кэшами прошёл бы проверку зелёным.
         assert_eq!(caches.prop.len(), module.program.chunks.len());
-        assert_eq!(caches.method.len(), module.program.chunks.len());
-        for (chunk, (props, methods)) in module
-            .program
-            .chunks
-            .iter()
-            .zip(caches.prop.iter().zip(&caches.method))
-        {
+        assert_eq!(caches.open_call.len(), module.program.chunks.len());
+        assert_eq!(caches.import.len(), module.program.chunks.len());
+        for (chunk, ((props, open_calls), imports)) in module.program.chunks.iter().zip(
+            caches
+                .prop
+                .iter()
+                .zip(&caches.open_call)
+                .zip(&caches.import),
+        ) {
             assert_eq!(props.len(), chunk.instrs.len());
-            assert_eq!(methods.len(), chunk.instrs.len());
+            assert_eq!(open_calls.len(), chunk.instrs.len());
+            assert_eq!(imports.len(), chunk.instrs.len());
         }
     }
 }
 
 #[test]
+fn open_call_metadata_is_prepared_before_the_first_instruction() {
+    let program = compile_module(
+        "Процедура П(о, х)\nо.Свойство(\"к\", х);\nКонецПроцедуры\nс = Новый Структура(\"к\", 42); х = 0; П(с, х);",
+    );
+    let caches = RunCaches::for_program(&program);
+    let site = caches
+        .open_call
+        .iter()
+        .flatten()
+        .filter_map(Option::as_ref)
+        .next()
+        .expect("компилятор выпустил открытый вызов");
+
+    assert_eq!(site.count, 2);
+    assert_eq!(site.builtin, Some(bsl_rt::BuiltinMethod::Property));
+    assert!(site.property_output);
+}
+
+#[test]
 fn a_second_run_of_the_same_program_starts_with_cold_caches() {
-    let program = compile_module("Результат = 1;");
+    let program = compile_module(
+        "Функция Число(о)\nВозврат о.Количество();\nКонецФункции\nРезультат = Число(Новый Структура);",
+    );
     let mut builder = bsl_rt::RuntimeBuilder::new();
     builder.register(bsl_rt::core_library());
     let registry = builder.build().expect("ядро реестра собирается");
@@ -62,19 +366,38 @@ fn a_second_run_of_the_same_program_starts_with_cold_caches() {
     let first = ProgramExecution::start_with_registry(&program, &registry, &env)
         .expect("первый прогон связывается");
     *first.caches.prop[0][0].borrow_mut() = Some((bsl_rt::ShapeTable::new().empty(), 0));
-    *first.caches.method[0][0].borrow_mut() = Some((0, None));
+    first
+        .caches
+        .open_call
+        .iter()
+        .flatten()
+        .find_map(Option::as_ref)
+        .expect("в программе есть открытый вызов")
+        .cache
+        .set(Some((0, ObjectMethodPlan::DynamicFallback)));
 
     let second = ProgramExecution::start_with_registry(&program, &registry, &env)
         .expect("второй прогон связывается");
     assert!(second.caches.prop[0][0].borrow().is_none());
-    assert!(second.caches.method[0][0].borrow().is_none());
+    assert!(
+        second
+            .caches
+            .open_call
+            .iter()
+            .flatten()
+            .find_map(Option::as_ref)
+            .expect("в программе есть открытый вызов")
+            .cache
+            .get()
+            .is_none()
+    );
 }
 
 /// Кэш открытого метода хранит адрес таблицы и разрешённый дескриптор;
 /// рост этой ячейки умножается на каждую инструкцию каждого чанка.
 #[test]
-fn method_cache_slot_did_not_grow() {
-    assert_eq!(std::mem::size_of::<MethodCacheSlot>(), 32);
+fn open_call_site_did_not_grow() {
+    assert_eq!(std::mem::size_of::<OpenCallSite>(), 40);
 }
 
 /// Компилятор фрагментов `Выполнить`/`Вычислить` для тестов VM.
@@ -161,6 +484,8 @@ fn run_unverified(program: &Program) -> Result<BslValue, RtError> {
         env: Some(&mut env),
         dynamic: Some(&mut dynamic),
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     let mut module_state = crate::ModuleState::new(program);
     let (value, _) = crate::drive_linked(
@@ -222,6 +547,8 @@ fn run_source_with_hook(src: &str, hook: Box<dyn crate::DebugHook>) -> Result<Bs
         env: Some(&mut env),
         dynamic: Some(&mut dynamic),
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     let mut module_state = crate::ModuleState::new(&program);
     crate::drive_linked(
@@ -391,6 +718,58 @@ fn a_configuration_call_reads_and_writes_the_service_module() {
     );
     let value = run_configuration(&entry, &catalog).unwrap();
     assert_eq!(value, BslValue::number_from_i64(200));
+}
+
+#[test]
+fn import_sites_are_typed_before_the_first_instruction() {
+    let entry = entry_over_service(
+        vec![
+            Instr::GetImportedVar {
+                dst: 0,
+                link_slot: 1,
+            },
+            Instr::CallImported {
+                link_slot: 0,
+                base: 0,
+                arg_modes: 0,
+                ret: 1,
+            },
+            Instr::SetImportedVar {
+                link_slot: 1,
+                src: 1,
+            },
+            Instr::Return { src: None },
+        ],
+        vec![vec![ArgMode::Value]],
+    );
+    bsl_bytecode::image::verify(&entry).expect("образец согласован");
+    let caches = RunCaches::for_program(&entry);
+
+    assert_eq!(
+        caches.import[0][0],
+        Some(ImportSite {
+            owner: 0,
+            target: 0,
+            arg_modes: 0,
+        })
+    );
+    assert_eq!(
+        caches.import[0][1],
+        Some(ImportSite {
+            owner: 0,
+            target: 1,
+            arg_modes: 0,
+        })
+    );
+    assert_eq!(
+        caches.import[0][2],
+        Some(ImportSite {
+            owner: 0,
+            target: 0,
+            arg_modes: 0,
+        })
+    );
+    assert_eq!(caches.import[0][3], None);
 }
 
 /// Передача по ссылке через границу модулей: модульная переменная entry и
@@ -648,12 +1027,14 @@ fn await_of_an_ordinary_value_yields_and_returns_that_value() {
 }
 
 #[test]
-fn dynamic_await_is_allowed_only_from_an_async_frame() {
+fn dynamic_await_is_rejected_even_from_an_async_frame() {
     let value = run_src(
         "Асинх Функция Ответ() Возврат 42; КонецФункции\n\
          Асинх Процедура Проверить()\n\
-             Результат = Вычислить(\"Ждать Ответ()\");\n\
-             Если Результат <> 42 Тогда ВызватьИсключение; КонецЕсли;\n\
+             ОшибкаБыла = Ложь;\n\
+             Попытка Результат = Вычислить(\"Ждать Ответ()\");\n\
+             Исключение ОшибкаБыла = Истина; КонецПопытки;\n\
+             Если Не ОшибкаБыла Тогда ВызватьИсключение; КонецЕсли;\n\
          КонецПроцедуры\n\
          Проверить(); Возврат 1;",
     );
@@ -822,6 +1203,25 @@ fn component_counter(
     ))))
 }
 
+fn host_counter_add(
+    receiver: &dyn bsl_rt::ObjectProtocol,
+    arguments: &[BslValue],
+    context: &mut bsl_rt::CallContext<'_>,
+) -> bsl_rt::RtResult<BslValue> {
+    receiver.call_method("Прибавить", arguments, context)
+}
+
+const HOST_COUNTER_METHODS: &[bsl_rt::MethodDescriptor] = &[bsl_rt::MethodDescriptor::new(
+    &["Прибавить", "Add", "Добавить"],
+    bsl_rt::Arity::exact(1),
+    host_counter_add,
+)];
+const HOST_COUNTER_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] =
+    &[bsl_rt::ObjectMembersDescriptor::new(&HOST_COUNTER_TYPE).with_methods(HOST_COUNTER_METHODS)];
+const TEST_COMPONENT_TYPES: &[&bsl_rt::TypeDescriptor] = &[&HOST_COUNTER_TYPE];
+const TEST_CONSTRUCTOR_TYPES: &[(bsl_rt::ConstructorCode, &bsl_rt::TypeDescriptor)] =
+    &[(bsl_rt::ConstructorCode::new(10), &HOST_COUNTER_TYPE)];
+
 fn component_message(
     context: &mut bsl_rt::CallContext<'_>,
     _args: &[BslValue],
@@ -876,7 +1276,10 @@ fn test_component_registry() -> bsl_rt::RuntimeRegistry {
                     version: bsl_rt::PACKAGE_VERSION,
                 }])
                 .with_functions(TEST_COMPONENT_FUNCTIONS)
-                .with_constructors(TEST_COMPONENT_CONSTRUCTORS),
+                .with_constructors(TEST_COMPONENT_CONSTRUCTORS)
+                .with_constructor_types(TEST_CONSTRUCTOR_TYPES)
+                .with_types(TEST_COMPONENT_TYPES)
+                .with_object_member_groups(&[HOST_COUNTER_MEMBERS]),
         );
     builder.build().unwrap()
 }
@@ -910,6 +1313,98 @@ fn component_function_resolves_compiles_links_and_runs() {
         run_with_dynamic_and_registry(&program, &registry).unwrap(),
         num("42")
     );
+}
+
+#[test]
+fn component_linking_rejects_gaps_even_in_precompiled_calls() {
+    fn call(_: &mut bsl_rt::CallContext<'_>, _: &[BslValue]) -> bsl_rt::RtResult<BslValue> {
+        Ok(BslValue::Undefined)
+    }
+    const FUNCTION: bsl_rt::FunctionDescriptor = bsl_rt::FunctionDescriptor {
+        code: bsl_rt::FunctionCode::new(1),
+        names: &["Раздельная"],
+        arity: bsl_rt::Arity::one_of(&[0, 2, 3, 5]),
+        kind: bsl_rt::FunctionKind::Function,
+        call,
+    };
+    const CONSTRUCTOR: bsl_rt::ConstructorDescriptor = bsl_rt::ConstructorDescriptor {
+        code: bsl_rt::ConstructorCode::new(1),
+        names: &["Раздельный"],
+        arity: bsl_rt::Arity::one_of(&[0, 2, 3, 5]),
+        call,
+    };
+    const NARROW: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor::new("arity-test", "0.0.0")
+        .with_functions(&[FUNCTION])
+        .with_constructors(&[CONSTRUCTOR]);
+    const WIDE: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor::new("arity-test", "0.0.0")
+        .with_functions(&[bsl_rt::FunctionDescriptor {
+            arity: bsl_rt::Arity::range(0, 6),
+            ..FUNCTION
+        }])
+        .with_constructors(&[bsl_rt::ConstructorDescriptor {
+            arity: bsl_rt::Arity::range(0, 6),
+            ..CONSTRUCTOR
+        }]);
+    let registry = |library| {
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder.register(bsl_rt::core_library()).register(library);
+        builder.build().unwrap()
+    };
+    let wide = registry(WIDE);
+    let narrow = registry(NARROW);
+    for count in 0..=6 {
+        let arguments = vec!["1"; count].join(", ");
+        for prefix in ["Новый Раздельный", "Раздельная"] {
+            let source = format!("Возврат {prefix}({arguments});");
+            let program = compile_with_registry(&source, &wide);
+            let result = run_with_dynamic_and_registry(&program, &narrow);
+            if [0, 2, 3, 5].contains(&count) {
+                assert_eq!(result.unwrap(), BslValue::Undefined);
+            } else {
+                let expected = if prefix.starts_with("Новый") {
+                    "арность CreateObject не совпадает с дескриптором"
+                } else {
+                    "арность CallComponent не совпадает с дескриптором"
+                };
+                assert!(
+                    matches!(result, Err(RtError::InvalidBytecode(message)) if message == expected),
+                    "{source}: {result:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn array_set_keeps_result_use_on_the_open_path() {
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().unwrap();
+    for name in ["Установить", "Set"] {
+        let source = format!(
+            "а = Новый Массив; а.Добавить(10);\n\
+             Попытка результат = а.{name}(0, 99); Исключение КонецПопытки;\n\
+             Возврат а.Получить(0);"
+        );
+        let program = compile_with_registry(&source, &registry);
+        assert!(
+            program.chunks[0]
+                .instrs
+                .iter()
+                .any(|instruction| matches!(instruction, Instr::CallObjectMethod { .. }))
+        );
+        assert_eq!(
+            run_with_dynamic_and_registry(&program, &registry).unwrap(),
+            num("10")
+        );
+        let source =
+            format!("а = Новый Массив; а.Добавить(10); а.{name}(0, 99); Возврат а.Get(0);");
+        let program = compile_with_registry(&source, &registry);
+        assert_eq!(
+            run_with_dynamic_and_registry(&program, &registry).unwrap(),
+            num("99")
+        );
+    }
 }
 
 #[test]
@@ -1043,7 +1538,10 @@ fn a_proven_core_receiver_compiles_closed_even_with_a_registry() {
     )));
     assert!(!instructions.iter().any(|instruction| matches!(
         instruction,
-        Instr::CallObjectMethod { .. } | Instr::GetObjectProp { .. } | Instr::SetObjectProp { .. }
+        Instr::CallObjectMethod { .. }
+            | Instr::CallObjectProcedure { .. }
+            | Instr::GetObjectProp { .. }
+            | Instr::SetObjectProp { .. }
     )));
 }
 
@@ -1062,8 +1560,8 @@ fn component_object_owns_properties_methods_and_indexes() {
     // Свойства компилируются в закрытые `GetProp`/`SetProp` даже для
     // компонентного получателя (резолвер больше не выпускает открытые
     // двойники — их тела совпадают, см. комментарий у `RExpr::Field`),
-    // а вот метод вне ядровой таблицы обязан идти открытым
-    // `CallObjectMethod`.
+    // а метод доказанного компонентного типа идёт через заранее связанную
+    // запись `MethodDescriptor`.
     let instructions = &program.chunks[0].instrs;
     assert!(
         instructions
@@ -1075,11 +1573,10 @@ fn component_object_owns_properties_methods_and_indexes() {
             .iter()
             .any(|instruction| matches!(instruction, Instr::SetProp { .. }))
     );
-    assert!(
-        instructions
-            .iter()
-            .any(|instruction| matches!(instruction, Instr::CallObjectMethod { .. }))
-    );
+    assert!(instructions.iter().any(|instruction| matches!(
+        instruction,
+        Instr::CallLinkedObjectMethod { .. } | Instr::CallLinkedObjectProcedure { .. }
+    )));
 
     assert_eq!(
         run_with_dynamic_and_registry(&program, &registry).unwrap(),
@@ -1892,17 +2389,21 @@ fn structure_delete_missing_field_is_a_no_op() {
 }
 
 #[test]
-fn structure_property_reports_presence_and_keeps_the_two_argument_fallback() {
+fn structure_property_reports_presence_and_writes_the_output_argument() {
     let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"x\");");
     assert_eq!(v, BslValue::Boolean(true));
     let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"y\");");
     assert_eq!(v, BslValue::Boolean(false));
-    // Вторая позиция платформы — выходной параметр. Пока `CallMethod` не
-    // несёт by-ref ABI, runtime сохраняет прежний getter-fallback.
+    let v = run_src(
+        "s = Новый Структура(\"x\", 5);\nВыход = 42;\nНайдено = s.Свойство(\"x\", Выход);\nВозврат Найдено И Выход = 5;",
+    );
+    assert_eq!(v, BslValue::Boolean(true));
+    let v = run_src(
+        "s = Новый Структура(\"x\", 5);\nВыход = 42;\nНайдено = s.Свойство(\"y\", Выход);\nВозврат Не Найдено И Выход = Неопределено;",
+    );
+    assert_eq!(v, BslValue::Boolean(true));
     let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"x\", 42);");
-    assert_eq!(v, num("5"));
-    let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"y\", 42);");
-    assert_eq!(v, num("42"));
+    assert_eq!(v, BslValue::Boolean(true));
 }
 
 #[test]
@@ -1954,6 +2455,7 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
+        imports: Vec::new(),
         links: Vec::new(),
         lines: Vec::new(),
         chunks: vec![{
@@ -2136,9 +2638,12 @@ fn dictionary_structure_still_answers_field_access_and_delete_from_script() {
          КонецЦикла;\n\
          с.Удалить(\"Поле1\");\n\
          с.Вставить(\"Поле2\", 200);\n\
-         Возврат с.Количество() * 1000 + с.Поле2 + с.Свойство(\"Поле1\", 7);"
+         Выход = 7;\n\
+         Если с.Свойство(\"Поле1\", Выход) Или Выход <> Неопределено Тогда ВызватьИсключение \"missing\"; КонецЕсли;\n\
+         Если Не с.Свойство(\"Поле2\", Выход) Или Выход <> 200 Тогда ВызватьИсключение \"found\"; КонецЕсли;\n\
+         Возврат с.Количество() * 1000 + с.Поле2 + Выход;"
     );
-    let expected = (n as i64 - 1) * 1000 + 200 + 7;
+    let expected = (n as i64 - 1) * 1000 + 400;
     assert_eq!(run_src(&src), num(&expected.to_string()));
 }
 
@@ -2960,13 +3465,18 @@ fn add_month_clamps_the_day_rather_than_failing() {
 }
 
 #[test]
-fn out_of_range_dates_are_errors_not_silent_wraparound() {
+fn invalid_calendar_dates_fail_but_arithmetic_saturates_at_the_measured_limits() {
     let err = run_src_err("Возврат Дата(2024, 2, 30);");
     assert!(matches!(err, RtError::DateOutOfRange { .. }));
-    let err = run_src_err("Возврат Дата(9999, 12, 31, 23, 59, 59) + 1;");
-    assert!(matches!(err, RtError::DateOutOfRange { .. }));
-    let err = run_src_err("Возврат Дата(1, 1, 1) - 1;");
-    assert!(matches!(err, RtError::DateOutOfRange { .. }));
+    // file-date-precision: верхняя граница содержит ещё 0.9999 секунды.
+    assert_eq!(
+        run_src("Возврат (Дата(9999, 12, 31, 23, 59, 59) + 1) - Дата(9999, 12, 31, 23, 59, 59);"),
+        BslValue::Number(bsl_rt::BslNumber::from_parts(9999, 4).unwrap())
+    );
+    assert_eq!(
+        run_src("Возврат Дата(1, 1, 1) - 1;"),
+        BslValue::Date(bsl_rt::BslDate::empty())
+    );
 }
 
 #[test]
@@ -3835,6 +4345,7 @@ fn a_dynamic_fragment_comes_from_the_host_not_from_the_vm() {
                 functions: request.functions,
                 names: request.names,
                 requirements: request.requirements,
+                imports: request.imports,
             };
             bsl_compiler::compile_dynamic_snippet(
                 &substitute,
@@ -4272,6 +4783,8 @@ fn call_module_function_with_dynamic_eval_inside() {
         env: Some(&mut env),
         dynamic: Some(&mut dynamic),
         dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
     };
     let (value, params) = call_module_function_with_host(
         &program,
@@ -4455,6 +4968,73 @@ fn json_callback_raise_propagates_to_the_caller() {
 /// умеет прекратить прогон.
 mod debug_hook {
     use super::*;
+
+    #[test]
+    fn dynamic_frames_keep_the_existing_step_over_contract() {
+        struct OuterOnly;
+        impl crate::DebugHook for OuterOnly {
+            fn before_instruction(
+                &mut self,
+                at: &mut crate::DebugPosition<'_>,
+            ) -> crate::DebugAction {
+                assert_eq!(at.frames.len(), 1, "отладчик вошёл в динамический вызов");
+                assert_eq!(at.frames[0].1, 0);
+                crate::DebugAction::Continue
+            }
+        }
+        let result = run_source_with_hook(
+            "Функция Удвоить(ЧислоПробы) Возврат ЧислоПробы * 2; КонецФункции
+             Возврат Вычислить(\"Вычислить(\"\"Удвоить(21)\"\")\");",
+            Box::new(OuterOnly),
+        )
+        .unwrap();
+        assert_eq!(result, BslValue::number_from_i64(42));
+    }
+
+    #[test]
+    fn failed_debug_evaluation_keeps_local_and_module_argument_writes() {
+        struct Evaluate {
+            evaluated: std::rc::Rc<std::cell::Cell<bool>>,
+        }
+        impl crate::DebugHook for Evaluate {
+            fn before_instruction(
+                &mut self,
+                at: &mut crate::DebugPosition<'_>,
+            ) -> crate::DebugAction {
+                let index = at.frames.len() - 1;
+                if at.frames[index].1 == 1 && !self.evaluated.replace(true) {
+                    assert!(at.values.evaluate(index, "Сбой(АргументПробы)").is_err());
+                    assert_eq!(
+                        at.values.evaluate(index, "АргументПробы").unwrap(),
+                        BslValue::number_from_i64(31)
+                    );
+                }
+                crate::DebugAction::Continue
+            }
+        }
+        for call in [
+            "ОбщаяПробы = 1; Возврат Проверить(ОбщаяПробы);",
+            "Возврат ИзЛокальной();",
+        ] {
+            let source = format!(
+                "Перем ОбщаяПробы;
+                 Функция Проверить(АргументПробы) Возврат АргументПробы; КонецФункции
+                 Функция Сбой(Аргумент) Аргумент = 31; ВызватьИсключение \"ошибка\"; КонецФункции
+                 Функция ИзЛокальной() ЛокальнаяПробы = 1; Возврат Проверить(ЛокальнаяПробы); КонецФункции
+                 {call}"
+            );
+            let evaluated = std::rc::Rc::new(std::cell::Cell::new(false));
+            let result = run_source_with_hook(
+                &source,
+                Box::new(Evaluate {
+                    evaluated: evaluated.clone(),
+                }),
+            )
+            .unwrap();
+            assert!(evaluated.get());
+            assert_eq!(result, BslValue::number_from_i64(31));
+        }
+    }
 
     struct Counting {
         seen: std::rc::Rc<std::cell::RefCell<Vec<(usize, usize)>>>,

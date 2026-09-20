@@ -1,0 +1,13 @@
+file.begin	delete-more-types-async-1
+context.effective	НеИспользовать
+delete.async.date	safe=0|result=ok:undefined|root=1|file=1
+delete.async.map	safe=1|result=ok:undefined|root=1|file=0
+delete.async.fixed_array	safe=1|result=ok:undefined|root=1|file=0
+delete.async.fixed_structure	safe=1|result=ok:undefined|root=1|file=0
+delete.async.value_table	safe=1|result=ok:undefined|root=1|file=0
+delete.async.uuid	safe=1|result=ok:undefined|root=1|file=0
+delete.async.file	safe=1|result=ok:undefined|root=1|file=0
+delete.async.binary	safe=1|result=ok:undefined|root=1|file=0
+delete.async.enum	safe=1|result=ok:undefined|root=1|file=0
+delete.async.type	safe=1|result=ok:undefined|root=1|file=0
+file.end	delete-more-types-async-1

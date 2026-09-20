@@ -1,0 +1,12 @@
+file.begin	file-xdto-factory-io-edges-1
+xdto.suffix.0	ok
+xdto.suffix.9	ok
+xdto.suffix.10	ok
+xdto.suffix.13	ok
+xdto.suffix.32	ok
+xdto.suffix.127	error
+xdto.suffix.133	ok
+xdto.suffix.160	ok
+xdto.suffix.8203	error
+xdto.suffix.65279	error
+file.end	file-xdto-factory-io-edges-1

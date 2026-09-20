@@ -311,6 +311,8 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     };
     // Файл читается файловой системой СЕССИИ (ABI-G).
     let files = files_of(obj).ok_or_else(|| bad("Прочитать: не табличный документ"))?;
+    let path = bsl_rt::prepare_file_operation_path(&path, files.as_ref())
+        .map_err(|e| bad(format!("не читается {path}: {e}")))?;
     let bytes = files
         .read(&path)
         .map_err(|e| bad(format!("не читается {path}: {e}")))?;
@@ -473,6 +475,8 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     };
     // Файл пишется файловой системой СЕССИИ (ABI-G).
     let files = files_of(obj).ok_or_else(|| bad("Записать: не табличный документ"))?;
+    let path = bsl_rt::prepare_file_operation_path(&path, files.as_ref())
+        .map_err(|e| bad(format!("не записывается {path}: {e}")))?;
     let d = doc.borrow();
     write_file(&d, &path, kind, files.as_ref())
 }

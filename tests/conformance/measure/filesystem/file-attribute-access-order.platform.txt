@@ -1,0 +1,35 @@
+file.begin	file-attribute-access-order-1
+context.compatibility	НеИспользовать
+order.sync.readonly.ru.valid	error
+order.sync.readonly.ru.valid.detail	Error accessing file: <root>/missing-child
+order.sync.readonly.ru.invalid	error
+order.sync.readonly.ru.invalid.detail	Type mismatch (parameter number '1')
+order.async.readonly.ru.valid	error|stage=await
+order.async.readonly.ru.valid.detail	Error accessing file: <root>/missing-child
+order.async.readonly.ru.invalid	error|stage=await
+order.async.readonly.ru.invalid.detail	Type mismatch (parameter number '1')
+order.sync.readonly.en.valid	error
+order.sync.readonly.en.valid.detail	Error accessing file: <root>/missing-child
+order.sync.readonly.en.invalid	error
+order.sync.readonly.en.invalid.detail	Type mismatch (parameter number '1')
+order.async.readonly.en.valid	error|stage=await
+order.async.readonly.en.valid.detail	Error accessing file: <root>/missing-child
+order.async.readonly.en.invalid	error|stage=await
+order.async.readonly.en.invalid.detail	Type mismatch (parameter number '1')
+order.sync.hidden.ru.valid	error
+order.sync.hidden.ru.valid.detail	Error accessing file: <root>/missing-child
+order.sync.hidden.ru.invalid	error
+order.sync.hidden.ru.invalid.detail	Type mismatch (parameter number '1')
+order.async.hidden.ru.valid	error|stage=await
+order.async.hidden.ru.valid.detail	Error accessing file: <root>/missing-child
+order.async.hidden.ru.invalid	error|stage=await
+order.async.hidden.ru.invalid.detail	Type mismatch (parameter number '1')
+order.sync.hidden.en.valid	error
+order.sync.hidden.en.valid.detail	Error accessing file: <root>/missing-child
+order.sync.hidden.en.invalid	error
+order.sync.hidden.en.invalid.detail	Type mismatch (parameter number '1')
+order.async.hidden.en.valid	error|stage=await
+order.async.hidden.en.valid.detail	Error accessing file: <root>/missing-child
+order.async.hidden.en.invalid	error|stage=await
+order.async.hidden.en.invalid.detail	Type mismatch (parameter number '1')
+file.end	file-attribute-access-order-1

@@ -1,0 +1,13 @@
+file.begin	runapp-async-wait-1
+context.compatibility	НеИспользовать
+runasyncwait.true	promise=Promise|ok|type=Number|value=0|repeat=1
+runasyncwait.false	promise=Promise|ok|type=Number|value=1|repeat=1
+runasyncwait.empty	promise=Promise|ok|type=Number|value=0|repeat=1
+runasyncwait.missing	promise=Promise|ok|type=Undefined|value=|repeat=1
+runasyncwait.cwd_missing	promise=Promise|ok|type=Number|value=0|repeat=1
+runasyncwait.quoted	promise=Promise|ok|type=Number|value=1|repeat=1
+runasyncwait.shell_exit	promise=Promise|ok|type=Undefined|value=|repeat=1
+runasyncwait.shell_sequence	promise=Promise|ok|type=Number|value=1|repeat=1
+runasyncwait.omitted_wait	promise=Promise|ok|type=Undefined|value=|repeat=1
+runasyncwait.nul	promise=Promise|ok|type=Number|value=0|repeat=1
+file.end	runapp-async-wait-1

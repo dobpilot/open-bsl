@@ -1,0 +1,20 @@
+﻿file.begin	runapp-details-1
+runapp.wait.true	ok|type=Number|code=0
+runapp.wait.false	ok|type=Number|code=1
+runapp.nowait.type	ok|type=Undefined|code=
+runapp.wait.undefined	error|Error calling context method (ЗапуститьПриложение)|type=Number|code=12345
+runapp.wait.hole	ok|type=Undefined|code=
+runapp.wait.zero	error|Error calling context method (ЗапуститьПриложение)|type=Number|code=12345
+runapp.wait.one	error|Error calling context method (ЗапуститьПриложение)|type=Number|code=12345
+runapp.wait.null	error|Error calling context method (ЗапуститьПриложение)|type=Number|code=12345
+runapp.cwd.undefined	error|Error calling context method (ЗапуститьПриложение)|type=Number|code=12345
+runapp.cwd.missing	ok|type=Number|code=0
+runapp.command.empty	ok|type=Number|code=0
+runapp.command.undefined	error|Error calling context method (ЗапуститьПриложение)|type=Number|code=12345
+runapp.shell.semicolon	ok|type=Number|code=1
+runapp.shell.and	ok|type=Number|code=1
+runapp.shell.or	ok|type=Number|code=0
+runapp.shell.builtin	ok|type=Number|code=17
+runapp.command.quoted	ok|type=Number|code=1
+runapp.output.value	ok|type=Number|code=12345
+file.end	runapp-details-1

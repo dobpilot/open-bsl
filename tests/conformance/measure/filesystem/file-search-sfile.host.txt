@@ -1,0 +1,16 @@
+backslash	d	60
+backslash/a\b	f	0
+question	d	60
+question/a?	f	0
+star	d	60
+star-double	d	60
+star-double/a**	f	0
+star-extension	d	60
+star-extension/a*.txt	f	0
+star-middle	d	60
+star-middle/a*b	f	0
+star-only	d	60
+star-only/*	f	0
+star-prefix	d	60
+star-prefix/*a	f	0
+star/a*	f	0

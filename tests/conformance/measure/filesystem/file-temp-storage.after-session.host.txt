@@ -1,0 +1,6 @@
+Наблюдение после завершения ENTERPRISE и проверки восстановления конфигурации.
+/tmp/v8_ivxznD_5.tmp absent
+/tmp/v8_ivxznD_6.tmp absent
+/tmp/v8_ivxznD_7.tmp absent
+/tmp/v8_ivxznD_8.tmp absent
+/tmp/v8_ivxznD_9.tmp absent

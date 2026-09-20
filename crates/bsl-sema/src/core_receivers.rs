@@ -1,6 +1,6 @@
 //! Статически доказанные ядровые приёмники.
 //!
-//! С реестром компонентов каждый вызов метода компилируется в открытый
+//! Без доказанного ядрового приёмника вызов метода компилируется в открытый
 //! `CallObjectMethod`: получатель в динамически типизированном BSL может
 //! оказаться компонентным объектом, и закрытое перечисление
 //! `BuiltinMethod` для него не годится. Открытая операция дороже закрытой из-за перехода в
@@ -15,9 +15,9 @@
 //!
 //! Перепривязкой считаются: присваивание, роль переменной числового или
 //! итерационного цикла, передача голым именем в by-ref параметр
-//! пользовательской функции (встроенные и компонентные функции, методы и
-//! конструкторы получают аргументы по значению — см. `CallArgs::load` в
-//! `bsl-vm`). `Выполнить` и `Вычислить` исполняют произвольный текст,
+//! пользовательской функции или в метод с заранее неизвестным объявлением.
+//! Встроенные и компонентные функции и конструкторы получают аргументы
+//! по значению. `Выполнить` и `Вычислить` исполняют произвольный текст,
 //! который видит слоты кадра (а из функций — и модульные переменные) и
 //! может переприсвоить любой из них: динамика в области снимает
 //! отслеживание её локальных, динамика где угодно в модуле — отслеживание
@@ -35,10 +35,14 @@ use bsl_syntax::{Expr, LValue, Param, Stmt, StmtKind};
 
 use crate::resolver::NEW_TYPES;
 
-/// Статически доказанный ядровой приёмник. Конкретный тип не важен: все ядровые
-/// объекты обслуживает один закрытый `CallMethod`.
+/// Статически доказанный класс приёмника. Для компонента конкретный тип
+/// сохраняется до места вызова; ядровые объекты обслуживает общий закрытый
+/// `CallMethod`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CoreReceiver;
+pub(crate) enum CoreReceiver {
+    Core,
+    Component(&'static bsl_rt::TypeDescriptor),
+}
 
 /// Итог анализа: по карте на область. Ключ локальных карт — имя переменной
 /// в верхнем регистре (слоты локальных назначаются позже, при резолвинге),
@@ -150,18 +154,23 @@ impl Collector<'_> {
             return None;
         };
         if let Some(registry) = self.registry
-            && let Some((library, _)) = registry.lookup_constructor(type_name)
-            && registry
-                .library(library)
-                .is_some_and(|descriptor| descriptor.package() != bsl_rt::PACKAGE_NAME)
+            && let Some((library, constructor)) = registry.lookup_constructor(type_name)
         {
-            return None;
+            if registry
+                .library(library)
+                .is_some_and(|descriptor| descriptor.package() == bsl_rt::PACKAGE_NAME)
+            {
+                return Some(CoreReceiver::Core);
+            }
+            return registry
+                .constructor_type(library, constructor)
+                .map(CoreReceiver::Component);
         }
         let upper = type_name.to_uppercase();
         if !NEW_TYPES.iter().any(|known| known.to_uppercase() == upper) {
             return None;
         }
-        Some(CoreReceiver)
+        Some(CoreReceiver::Core)
     }
 
     fn walk_block(&mut self, stmts: &[Stmt]) {
@@ -297,6 +306,21 @@ impl Collector<'_> {
                             // статически текст не виден.
                             self.has_dynamic = true;
                         }
+                    }
+                    Expr::Field { obj, .. } => {
+                        // Открытый метод может принадлежать BSL-модулю и
+                        // перепривязать аргумент. Вердикт по переменной-
+                        // получателю здесь ещё не вычислен, поэтому не
+                        // используем частичные факты для доказательства.
+                        // Сам конструктор ядрового объекта однозначен.
+                        if self.classify_ctor(obj).is_none() {
+                            for arg in args.iter().flatten() {
+                                if let Expr::Ident(name) = arg {
+                                    self.kill(name);
+                                }
+                            }
+                        }
+                        self.walk_expr(obj);
                     }
                     other => self.walk_expr(other),
                 }

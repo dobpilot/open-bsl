@@ -1,0 +1,8 @@
+file.begin	file-search-order-1
+order.ru.star.flat	ok|count=6|m.bin|a.txt|z.txt|m-dir|a-dir|z-dir
+order.ru.star.recursive	ok|count=9|m.bin|a.txt|z.txt|m-dir|a-dir|z-dir|m-dir/d.bin|a-dir/c.txt|z-dir/b.txt
+order.ru.txt.recursive	ok|count=4|a.txt|z.txt|a-dir/c.txt|z-dir/b.txt
+order.en.star.flat	ok|count=6|m.bin|a.txt|z.txt|m-dir|a-dir|z-dir
+order.en.star.recursive	ok|count=9|m.bin|a.txt|z.txt|m-dir|a-dir|z-dir|m-dir/d.bin|a-dir/c.txt|z-dir/b.txt
+order.en.txt.recursive	ok|count=4|a.txt|z.txt|a-dir/c.txt|z-dir/b.txt
+file.end	file-search-order-1

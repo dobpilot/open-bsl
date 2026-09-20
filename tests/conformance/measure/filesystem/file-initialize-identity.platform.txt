@@ -1,0 +1,17 @@
+﻿file.begin	file-initialize-identity-1
+init.before_await	gamma/c.bin
+init.first_result	gamma/c.bin
+init.second_result	gamma/c.bin
+init.first_equals_receiver	1
+init.second_equals_receiver	1
+init.independent_same_path	0
+init.receiver_after_result_call	delta/d.dat
+init.alias_after_result_call	delta/d.dat
+init.third_equals_receiver	1
+init.repeated_first	delta/d.dat
+init.parts	delta/|d.dat|d|.dat
+init.type.boolean	promise=Promise|ok|path=Yes|receiver=Yes|input_string=Yes
+init.type.null	promise=Promise|ok|path=|receiver=|input_string=
+init.type.date	promise=Promise|ok|path=1/2/2020 3:04:05 AM|receiver=1/2/2020 3:04:05 AM|input_string=1/2/2020 3:04:05 AM
+init.type.array	promise=Promise|ok|path=Массив|receiver=Массив|input_string=Массив
+file.end	file-initialize-identity-1

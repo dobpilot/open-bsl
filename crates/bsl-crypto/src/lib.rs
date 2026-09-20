@@ -154,12 +154,15 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
 }];
 
 const TYPES: &[&TypeDescriptor] = &[&DATA_HASHING_TYPE];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] =
+    &[(ConstructorCode::new(1), &DATA_HASHING_TYPE)];
 
 /// Дескриптор компонента криптографии.
 #[must_use]
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
         .with_constructors(CONSTRUCTORS)
+        .with_constructor_types(CONSTRUCTOR_TYPES)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }

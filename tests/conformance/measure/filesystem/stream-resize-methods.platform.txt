@@ -1,0 +1,22 @@
+﻿file.begin	stream-resize-methods-1
+memory.УстановитьРазмер	ok|size=2|position=5
+memory.SetSize	ok|size=2|position=5
+memory.ИзменитьРазмер	error:Object method not found (ИзменитьРазмер)|size=6|position=5
+memory.Resize	error:Object method not found (Resize)|size=6|position=5
+memory.УстановитьДлину	error:Object method not found (УстановитьДлину)|size=6|position=5
+memory.SetLength	error:Object method not found (SetLength)|size=6|position=5
+memory.Обрезать	error:Object method not found (Обрезать)|size=6|position=5
+memory.Truncate	error:Object method not found (Truncate)|size=6|position=5
+memory.УстановитьКонецПотока	error:Object method not found (УстановитьКонецПотока)|size=6|position=5
+memory.SetEndOfStream	error:Object method not found (SetEndOfStream)|size=6|position=5
+file.УстановитьРазмер	ok|size=2|position=5
+file.SetSize	ok|size=2|position=5
+file.ИзменитьРазмер	error:Object method not found (ИзменитьРазмер)|size=6|position=5
+file.Resize	error:Object method not found (Resize)|size=6|position=5
+file.УстановитьДлину	error:Object method not found (УстановитьДлину)|size=6|position=5
+file.SetLength	error:Object method not found (SetLength)|size=6|position=5
+file.Обрезать	error:Object method not found (Обрезать)|size=6|position=5
+file.Truncate	error:Object method not found (Truncate)|size=6|position=5
+file.УстановитьКонецПотока	error:Object method not found (УстановитьКонецПотока)|size=6|position=5
+file.SetEndOfStream	error:Object method not found (SetEndOfStream)|size=6|position=5
+file.end	stream-resize-methods-1

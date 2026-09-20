@@ -1,0 +1,67 @@
+file.begin	file-zero-date-1
+local_min.fields	Date:0-0-0 0:0:0
+local_min.string	String:11/30/0002 12:00:00 AM
+local_min.format	String:11/30/0001 12:00:00 AM
+local_min.filled	Boolean:1
+local_min.eq_empty	Boolean:0
+local_min.lt_empty	Boolean:0
+local_min.gt_empty	Boolean:1
+local_min.eq_other	Boolean:0
+local_min.diff_empty	Number:-9017
+local_min.empty_diff	Number:9017
+local_min.diff_other	Number:-9016.8384
+local_min.add0	Date:0-0-0 0:0:0
+local_min.add1	Date:9999-12-31 23:59:59
+local_min.sub1	Date:0-0-0 0:0:0
+local_min.add_day	Date:1-1-1 21:29:43
+local_min.weekday	Number:4
+local_min.start_day	Date:1-1-1 0:0:0
+local_min.end_day	Date:1-1-1 23:59:59
+local_min.start_month	Date:1-1-1 0:0:0
+local_min.end_month	Date:1-1-31 23:59:59
+local_min.start_year	Date:1-1-1 0:0:0
+local_min.end_year	Date:1-12-31 23:59:59
+local_min.start_week	Date:0-0-0 0:0:0
+local_min.add_month0	Date:1-1-1 0:0:0
+local_min.add_month1	Date:1-2-1 0:0:0
+local_min.internal	String:{"D",00010101000000}
+local_min.internal_roundtrip	Date:1-1-1 0:0:0
+local_min.xml	String:0001-01-01T00:00:00
+local_min.json	String:"0001-01-01T00:00:00"
+local_min.map_empty	String:2|11|22
+local_min.map_other	String:2|11|22
+utc_min.fields	Date:0-0-0 0:0:0
+utc_min.string	String:11/30/0001 12:00:00 AM
+utc_min.format	String:11/30/0001 12:00:00 AM
+utc_min.filled	Boolean:1
+utc_min.eq_empty	Boolean:0
+utc_min.lt_empty	Boolean:0
+utc_min.gt_empty	Boolean:1
+utc_min.eq_other	Boolean:0
+utc_min.diff_empty	Number:-0.1616
+utc_min.empty_diff	Number:0.1616
+utc_min.diff_other	Number:9016.8384
+utc_min.add0	Date:0-0-0 0:0:0
+utc_min.add1	Date:1-1-1 0:0:0
+utc_min.sub1	Date:0-0-0 0:0:0
+utc_min.add_day	Date:1-1-1 23:59:59
+utc_min.weekday	Number:4
+utc_min.start_day	Date:1-1-1 0:0:0
+utc_min.end_day	Date:1-1-1 23:59:59
+utc_min.start_month	Date:1-1-1 0:0:0
+utc_min.end_month	Date:1-1-31 23:59:59
+utc_min.start_year	Date:1-1-1 0:0:0
+utc_min.end_year	Date:1-12-31 23:59:59
+utc_min.start_week	Date:0-0-0 0:0:0
+utc_min.add_month0	Date:1-1-1 0:0:0
+utc_min.add_month1	Date:1-2-1 0:0:0
+utc_min.internal	String:{"D",00010101000000}
+utc_min.internal_roundtrip	Date:1-1-1 0:0:0
+utc_min.xml	String:0001-01-01T00:00:00
+utc_min.json	String:"0001-01-01T00:00:00"
+utc_min.map_empty	String:2|11|22
+utc_min.map_other	String:2|11|22
+constructor.zero_fields	error:Cannot convert value to Date
+constructor.zero_string	Date:1-1-1 0:0:0
+constructor.zero_literal	Date:1-1-1 0:0:0
+file.end	file-zero-date-1

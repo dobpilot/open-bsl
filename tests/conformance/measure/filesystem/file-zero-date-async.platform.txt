@@ -1,0 +1,6 @@
+file.begin	file-zero-date-async-1
+async.local	0-0-0 0:0:0|delta=-9017|sync=1
+async.utc	0-0-0 0:0:0|delta=-0.1616|sync=1
+async.order	1
+async.repeat	1|1
+file.end	file-zero-date-async-1

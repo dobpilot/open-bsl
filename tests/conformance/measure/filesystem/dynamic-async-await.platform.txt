@@ -1,0 +1,6 @@
+file.begin	dynamic-async-await-1
+dynamic.await.execute	error|1
+dynamic.await.eval	error|1
+dynamic.await.execute.error	error|1
+dynamic.await.eval.error	error|11
+file.end	dynamic-async-await-1

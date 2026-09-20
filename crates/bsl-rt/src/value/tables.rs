@@ -5,6 +5,29 @@ use crate::{BslNumber, BslObject, NameInterner, RtError, RtResult, ValueTableDat
 use std::rc::Rc;
 
 impl BslValue {
+    pub(crate) fn set_table_method(&self, index: &Self, value: Self) -> RtResult<()> {
+        let index = Self::index_as_usize(&Self::table_method_index(index)?)?;
+        let name = match self {
+            Self::Object(object) => match &**object {
+                BslObject::TableRow(data, _) => {
+                    let data = data.borrow();
+                    data.column_names
+                        .get(index)
+                        .cloned()
+                        .ok_or(RtError::IndexOutOfBounds {
+                            index: index as i64,
+                            len: data.column_names.len(),
+                        })?
+                }
+                _ => return Err(RtError::NotAnObject),
+            },
+            _ => return Err(RtError::NotAnObject),
+        };
+        // Общий путь записи сохраняет приведение к типу колонки и
+        // инвалидацию табличных индексов; повторной реализации здесь нет.
+        self.set_field_by_name(&name, value)
+    }
+
     pub fn new_table() -> Self {
         BslValue::Object(Rc::new(BslObject::ValueTable(ValueTableData::new())))
     }
@@ -282,6 +305,10 @@ impl BslValue {
     pub fn table_copy(&self, rows: &BslValue, columns: &BslValue) -> RtResult<BslValue> {
         let data = self.as_table("Скопировать")?;
         let cols = Self::columns_or_all(&data.borrow(), columns, "Скопировать")?;
+        let copy_indexes = match columns {
+            BslValue::Undefined => true,
+            other => other.as_str("Скопировать")?.to_string().trim().is_empty(),
+        };
         let positions: Vec<usize> = match rows {
             BslValue::Undefined => (0..data.borrow().row_count()).collect(),
             BslValue::Object(o) => match &**o {
@@ -307,7 +334,7 @@ impl BslValue {
                 });
             }
         };
-        let copy = data.borrow().copy_of(&positions, &cols);
+        let copy = data.borrow().copy_of(&positions, &cols, copy_indexes);
         Ok(BslValue::Object(Rc::new(BslObject::ValueTable(Rc::new(
             std::cell::RefCell::new(copy),
         )))))
@@ -327,6 +354,10 @@ impl BslValue {
     ) -> RtResult<BslValue> {
         let data = self.as_table("Скопировать")?;
         let cols = Self::columns_or_all(&data.borrow(), columns, "Скопировать")?;
+        let copy_indexes = match columns {
+            BslValue::Undefined => true,
+            other => other.as_str("Скопировать")?.to_string().trim().is_empty(),
+        };
         let BslValue::Object(criteria_object) = criteria else {
             return Err(RtError::TypeError {
                 expected: "Структура",
@@ -362,7 +393,7 @@ impl BslValue {
                 .filter_map(|row_id| table_data.pos_of(row_id))
                 .collect()
         };
-        let copy = data.borrow().copy_of(&positions, &cols);
+        let copy = data.borrow().copy_of(&positions, &cols, copy_indexes);
         Ok(BslValue::Object(Rc::new(BslObject::ValueTable(Rc::new(
             std::cell::RefCell::new(copy),
         )))))
@@ -373,7 +404,7 @@ impl BslValue {
     pub fn table_copy_columns(&self, columns: &BslValue) -> RtResult<BslValue> {
         let data = self.as_table("СкопироватьКолонки")?;
         let cols = Self::columns_or_all(&data.borrow(), columns, "СкопироватьКолонки")?;
-        let copy = data.borrow().copy_of(&[], &cols);
+        let copy = data.borrow().copy_of(&[], &cols, false);
         Ok(BslValue::Object(Rc::new(BslObject::ValueTable(Rc::new(
             std::cell::RefCell::new(copy),
         )))))

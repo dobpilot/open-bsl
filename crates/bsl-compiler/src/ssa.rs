@@ -159,7 +159,9 @@ fn expr_reads(e: &RExpr, out: &mut Vec<u32>) {
         RExpr::CallMethod { obj, args, .. } => {
             expr_reads(obj, out);
             for a in args {
-                expr_reads(a, out);
+                if let ResolvedArg::Value(expr) = a {
+                    expr_reads(expr, out);
+                }
             }
         }
         RExpr::NewArray { dims: xs }
@@ -326,6 +328,27 @@ fn collect_byref_args(s: &RStmt, out: &mut Vec<u32>) {
     stmt_exprs(s, &mut exprs);
     while let Some(e) = exprs.pop() {
         match e {
+            RExpr::CallMethod {
+                obj,
+                method,
+                args,
+                open,
+                ..
+            } => {
+                exprs.push(obj);
+                let property_output =
+                    bsl_rt::BuiltinMethod::lookup(method) == Some(bsl_rt::BuiltinMethod::Property);
+                for (index, arg) in args.iter().enumerate() {
+                    if (*open || property_output && index == 1)
+                        && let ResolvedArg::Value(RExpr::Local(slot)) = arg
+                    {
+                        out.push(*slot);
+                    }
+                    if let ResolvedArg::Value(expr) = arg {
+                        exprs.push(expr);
+                    }
+                }
+            }
             RExpr::Call { args, .. } | RExpr::CallImported { args, .. } => {
                 for a in args {
                     if let ResolvedArg::Value(RExpr::Local(slot)) = a {
@@ -369,7 +392,10 @@ fn sub_exprs<'a>(e: &'a RExpr, out: &mut Vec<&'a RExpr>) {
         }
         RExpr::CallMethod { obj, args, .. } => {
             out.push(obj);
-            out.extend(args.iter());
+            out.extend(args.iter().filter_map(|arg| match arg {
+                ResolvedArg::Value(expr) => Some(expr),
+                ResolvedArg::Default => None,
+            }));
         }
         RExpr::NewArray { dims: xs }
         | RExpr::NewStructure { values: xs, .. }

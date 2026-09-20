@@ -1,7 +1,7 @@
 use crate::date::{DateBoundary, DatePart};
 use crate::env::HostEnv;
 use crate::runtime_shapes::RuntimeShapes;
-use crate::{BslObject, BslString, BslValue, NameId, RtError, RtResult};
+use crate::{BslObject, BslString, BslValue, NameId, NameInterner, RtError, RtResult};
 
 /// Возможность ПРОГОНА, за которой встроенная функция ходит помимо своих
 /// аргументов (см. [`BuiltinFn::host_effect`]).
@@ -15,6 +15,16 @@ pub enum HostEffect {
     Files,
     /// Выбирает временный путь внутри файловой системы из случайности прогона.
     TempFiles,
+    /// Возвращает объекты со своими сервисами и проверяет отмену обхода.
+    FileSearch,
+    /// Удаляет выбранные пути, проверяя отмену между операциями host.
+    FileDelete,
+    /// Создаёт каталог после форматирования пути в контексте BSL-сеанса.
+    FileCreate,
+    /// Создаёт файловое обещание через планировщик текущего исполнения.
+    FileAsync,
+    /// Запускает приложение через явный host-сервис и может парковать VM.
+    Application,
 }
 
 /// Встроенные функции, ответ которых берётся не из аргументов, а из
@@ -247,14 +257,29 @@ pub enum BuiltinFn {
     /// Глобальное свойство конфигурации. В standalone-среде коллекция
     /// общих модулей пуста.
     Metadata,
+    /// Ссылка на текущий экземпляр BSL-модуля open-bsl, предоставляемая VM.
+    ThisObject,
 
     /// `ПолучитьИмяВременногоФайла([Расширение])` — отсутствующий путь из
     /// пространства host-файловой системы.
     GetTempFileName,
+    /// Временный каталог host с завершающим разделителем.
+    TempFilesDir,
     /// Разделитель пути host-файловой системы.
     GetPathSeparator,
     /// `УдалитьФайлы(Путь)` — файл либо дерево; отсутствующий путь не ошибка.
     DeleteFiles,
+    /// `СоздатьКаталог(Путь)` — создание каталога с родителями через host.
+    CreateDirectory,
+    /// `НайтиФайлы(Путь, Маска, Рекурсивно)` — массив объектов Файл.
+    FindFiles,
+    FindFilesAsync,
+    CreateDirectoryAsync,
+    DeleteFilesAsync,
+    TempFilesDirAsync,
+    /// Процедурный запуск; внутренний результат используется для выходного аргумента.
+    RunApp,
+    RunAppAsync,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -458,12 +483,32 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("CommandLineArguments", BuiltinFn::CommandLineArguments),
     ("Метаданные", BuiltinFn::Metadata),
     ("Metadata", BuiltinFn::Metadata),
+    ("ЭтотОбъект", BuiltinFn::ThisObject),
+    ("ThisObject", BuiltinFn::ThisObject),
     ("ПолучитьИмяВременногоФайла", BuiltinFn::GetTempFileName),
     ("GetTempFileName", BuiltinFn::GetTempFileName),
+    ("КаталогВременныхФайлов", BuiltinFn::TempFilesDir),
+    ("TempFilesDir", BuiltinFn::TempFilesDir),
     ("ПолучитьРазделительПути", BuiltinFn::GetPathSeparator),
     ("GetPathSeparator", BuiltinFn::GetPathSeparator),
     ("УдалитьФайлы", BuiltinFn::DeleteFiles),
     ("DeleteFiles", BuiltinFn::DeleteFiles),
+    ("СоздатьКаталог", BuiltinFn::CreateDirectory),
+    ("CreateDirectory", BuiltinFn::CreateDirectory),
+    ("НайтиФайлы", BuiltinFn::FindFiles),
+    ("FindFiles", BuiltinFn::FindFiles),
+    ("НайтиФайлыАсинх", BuiltinFn::FindFilesAsync),
+    ("FindFilesAsync", BuiltinFn::FindFilesAsync),
+    ("ЗапуститьПриложение", BuiltinFn::RunApp),
+    ("RunApp", BuiltinFn::RunApp),
+    ("ЗапуститьПриложениеАсинх", BuiltinFn::RunAppAsync),
+    ("RunAppAsync", BuiltinFn::RunAppAsync),
+    ("СоздатьКаталогАсинх", BuiltinFn::CreateDirectoryAsync),
+    ("CreateDirectoryAsync", BuiltinFn::CreateDirectoryAsync),
+    ("УдалитьФайлыАсинх", BuiltinFn::DeleteFilesAsync),
+    ("DeleteFilesAsync", BuiltinFn::DeleteFilesAsync),
+    ("КаталогВременныхФайловАсинх", BuiltinFn::TempFilesDirAsync),
+    ("TempFilesDirAsync", BuiltinFn::TempFilesDirAsync),
     // Оба написания ИЗМЕРЕНЫ на файле схемы: и `СоздатьФабрикуXDTO`, и
     // `CreateXDTOFactory` отдают фабрику.
     // `ФабрикаXDTO` у платформы — СВОЙСТВО глобального контекста, а не
@@ -640,14 +685,22 @@ impl BuiltinFn {
     #[must_use]
     pub fn host_effect(self) -> Option<HostEffect> {
         match self {
+            BuiltinFn::RunApp | BuiltinFn::RunAppAsync => Some(HostEffect::Application),
             BuiltinFn::Message => Some(HostEffect::Output),
             BuiltinFn::CurrentDate
             | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments => Some(HostEffect::Env),
             BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Some(HostEffect::Files),
-            BuiltinFn::GetPathSeparator | BuiltinFn::DeleteFiles => Some(HostEffect::Files),
+            BuiltinFn::GetPathSeparator | BuiltinFn::TempFilesDir => Some(HostEffect::Files),
+            BuiltinFn::CreateDirectory => Some(HostEffect::FileCreate),
+            BuiltinFn::DeleteFiles => Some(HostEffect::FileDelete),
             BuiltinFn::GetTempFileName => Some(HostEffect::TempFiles),
+            BuiltinFn::FindFiles => Some(HostEffect::FileSearch),
+            BuiltinFn::FindFilesAsync
+            | BuiltinFn::CreateDirectoryAsync
+            | BuiltinFn::DeleteFilesAsync
+            | BuiltinFn::TempFilesDirAsync => Some(HostEffect::FileAsync),
             _ => None,
         }
     }
@@ -658,7 +711,11 @@ impl BuiltinFn {
     pub fn is_procedure(self) -> bool {
         matches!(
             self,
-            BuiltinFn::Message | BuiltinFn::FillPropertyValues | BuiltinFn::DeleteFiles
+            BuiltinFn::Message
+                | BuiltinFn::RunApp
+                | BuiltinFn::FillPropertyValues
+                | BuiltinFn::DeleteFiles
+                | BuiltinFn::CreateDirectory
         )
     }
 
@@ -676,9 +733,9 @@ impl BuiltinFn {
     /// Недостающие до МАКСИМУМА позиции дополняются `Неопределено` на
     /// этапе резолвинга (`bsl-sema::resolver::resolve_call`), так что в
     /// рантайме `call_builtin_fn` всегда видит ровно `max` аргументов и
-    /// сам решает, что значит `Неопределено` на этой позиции. Единственное
-    /// исключение — `Окр`, у которого резолвер подставляет литеральные
-    /// `0`, а не `Неопределено` (см. там же, почему).
+    /// сам решает, что значит `Неопределено` на этой позиции.
+    /// `Окр` обрабатывается отдельной веткой резолвера; `НайтиФайлы`
+    /// подставляет `Ложь` для отсутствующего аргумента рекурсии.
     pub fn arity_range(self) -> (usize, usize) {
         match self {
             BuiltinFn::Pow
@@ -724,10 +781,17 @@ impl BuiltinFn {
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments
             | BuiltinFn::Metadata
+            | BuiltinFn::ThisObject
             | BuiltinFn::ErrorInfo
-            | BuiltinFn::GetPathSeparator => (0, 0),
+            | BuiltinFn::GetPathSeparator
+            | BuiltinFn::TempFilesDir
+            | BuiltinFn::TempFilesDirAsync => (0, 0),
             BuiltinFn::GetTempFileName => (0, 1),
-            BuiltinFn::DeleteFiles => (1, 1),
+            BuiltinFn::RunApp => (1, 4),
+            BuiltinFn::RunAppAsync => (1, 3),
+            BuiltinFn::FindFiles | BuiltinFn::FindFilesAsync => (1, 3),
+            BuiltinFn::DeleteFiles | BuiltinFn::DeleteFilesAsync => (1, 2),
+            BuiltinFn::CreateDirectory | BuiltinFn::CreateDirectoryAsync => (1, 1),
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
@@ -765,7 +829,7 @@ pub enum BuiltinMethod {
     Add,
     Delete,
     Clear,
-    /// `Структура.Вставить(Ключ, Значение)` / `Соответствие.Вставить(Ключ, Значение)`.
+    /// `Массив.Вставить(Индекс, Значение)` и вставка пары в структуру/соответствие.
     Insert,
     /// `Соответствие.Получить(Ключ)` и `БуферДвоичныхДанных.Получить(Позиция)`.
     Get,
@@ -899,6 +963,78 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
 ];
 
 impl BuiltinMethod {
+    /// Измеренная принадлежность имени базовому объекту для оповещения.
+    ///
+    /// Имена разрешает только `lookup`; здесь нет второй таблицы псевдонимов.
+    /// Матрицы `notification-core-methods-client` и `notification-extra-receivers`
+    /// проверяют объявление, а не арность, исполнение или побочные эффекты.
+    pub(crate) fn declared_on(self, object: &BslObject) -> bool {
+        use BuiltinMethod::*;
+        match object {
+            BslObject::Array(_) => matches!(
+                self,
+                Count | UpperBound | Add | Delete | Clear | Insert | Get | Find | BufSet
+            ),
+            BslObject::Structure(_) => matches!(self, Count | Delete | Clear | Insert | Property),
+            BslObject::Map(_) => matches!(self, Count | Delete | Clear | Insert | Get),
+            BslObject::ValueTable(_) => matches!(
+                self,
+                Count
+                    | Add
+                    | Delete
+                    | Clear
+                    | Insert
+                    | Get
+                    | Find
+                    | FindRows
+                    | Sort
+                    | FillValues
+                    | Total
+                    | Copy
+                    | CopyColumns
+                    | UnloadColumn
+                    | LoadColumn
+                    | Move
+                    | IndexOf
+                    | Collapse
+            ),
+            BslObject::TableColumns(_) => matches!(
+                self,
+                Count | Add | Delete | Clear | Insert | Get | Find | Move | IndexOf
+            ),
+            BslObject::TableRow(..) => matches!(self, Get | BufSet),
+            BslObject::TypeDescription(_) => self == AdjustValue,
+            BslObject::TextWriter(_) => matches!(self, Write | Close),
+            BslObject::BinaryData(_) => matches!(self, Write | Size | OpenStreamForRead),
+            BslObject::BinaryBuffer(_) => matches!(
+                self,
+                Get | Copy
+                    | Write
+                    | BufSet
+                    | ReadInt16
+                    | ReadInt32
+                    | ReadInt64
+                    | WriteInt16
+                    | WriteInt32
+                    | WriteInt64
+                    | BufSplit
+                    | BufConcat
+                    | BufSlice
+                    | WriteBitwiseAnd
+                    | WriteBitwiseOr
+                    | WriteBitwiseXor
+                    | WriteBitwiseAndNot
+                    | Invert
+            ),
+            BslObject::TableColumn(..)
+            | BslObject::ValueComparison
+            | BslObject::KeyValuePair(..)
+            | BslObject::Uuid(_)
+            | BslObject::VstrOpaque(_)
+            | BslObject::Extension(_) => false,
+        }
+    }
+
     /// Регистронезависимый поиск по [`BUILTIN_METHOD_NAMES`].
     ///
     /// Ищет по хеш-карте, построенной один раз на процесс: линейный проход
@@ -1161,6 +1297,9 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
             "функция окружения вызвана без окружения прогона",
         )),
         BuiltinFn::Metadata => Ok(crate::metadata::new_metadata()),
+        BuiltinFn::ThisObject => Err(RtError::InvalidBytecode(
+            "ЭтотОбъект требует текущего экземпляра BSL-модуля VM",
+        )),
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
         BuiltinFn::AddMonth => args[0].add_month(&args[1]),
@@ -1262,11 +1401,24 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Err(RtError::InvalidBytecode(
             "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         )),
-        BuiltinFn::GetPathSeparator | BuiltinFn::DeleteFiles => Err(RtError::InvalidBytecode(
+        BuiltinFn::GetPathSeparator
+        | BuiltinFn::TempFilesDir
+        | BuiltinFn::DeleteFiles
+        | BuiltinFn::CreateDirectory => Err(RtError::InvalidBytecode(
             "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         )),
         BuiltinFn::GetTempFileName => Err(RtError::InvalidBytecode(
             "временный путь требует файловой системы и случайности прогона",
+        )),
+        BuiltinFn::RunApp | BuiltinFn::RunAppAsync => Err(RtError::InvalidBytecode(
+            "запуск приложения требует host-сервиса и планировщика",
+        )),
+        BuiltinFn::FindFiles
+        | BuiltinFn::FindFilesAsync
+        | BuiltinFn::CreateDirectoryAsync
+        | BuiltinFn::DeleteFilesAsync
+        | BuiltinFn::TempFilesDirAsync => Err(RtError::InvalidBytecode(
+            "поиск требует файловой системы, зоны и проверки отмены: вызывайте call_builtin_find_files",
         )),
         BuiltinFn::FillPropertyValues => Err(RtError::InvalidBytecode(
             "ЗаполнитьЗначенияСвойств требует контекста имён: вызывайте call_builtin_fn_ctx",
@@ -1372,7 +1524,14 @@ pub fn call_builtin_fn_ctx(
     }
     if matches!(
         f.host_effect(),
-        Some(HostEffect::Files | HostEffect::TempFiles)
+        Some(
+            HostEffect::Files
+                | HostEffect::TempFiles
+                | HostEffect::FileSearch
+                | HostEffect::FileDelete
+                | HostEffect::FileCreate
+                | HostEffect::FileAsync
+        )
     ) {
         return Err(RtError::InvalidBytecode(
             "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
@@ -1441,16 +1600,31 @@ pub fn call_builtin_files(
                 .map_err(|error| RtError::IoError(error.to_string()))?;
             Ok(BslValue::Str(BslString::from_utf8_string(separator)))
         }
-        BuiltinFn::DeleteFiles => {
+        BuiltinFn::TempFilesDir => {
+            let [] = args else {
+                return Err(bad_arity());
+            };
+            // Серверный замер file-globals.platform.txt возвращает /tmp/.
+            // Разделитель берётся у того же host, не у ОС процесса.
+            let directory =
+                crate::file_async::temporary_directory_path(files, &mut || Ok::<(), RtError>(()))?;
+            Ok(BslValue::Str(BslString::from_utf8_string(directory)))
+        }
+        BuiltinFn::CreateDirectory => {
             let [path] = args else {
                 return Err(bad_arity());
             };
-            let path = path.as_str("УдалитьФайлы")?.to_string();
-            files
-                .remove_path(&path)
-                .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
+            // Низкоуровневый вход сохраняет строковую сигнатуру. VM вызывает
+            // форматирующий вход после выбора BSL-контекста.
+            if crate::file::prepare_create_directory_noop(args).is_some() {
+                return Ok(BslValue::Undefined);
+            }
+            let path = path.as_str("СоздатьКаталог")?.to_string();
+            crate::file_async::create_directory_path(files, &path, &mut || false)
+                .map_err(RtError::from)?;
             Ok(BslValue::Undefined)
         }
+        BuiltinFn::DeleteFiles => crate::call_builtin_delete_files(args, files, &mut || Ok(())),
         _ => Err(RtError::InvalidBytecode(
             "call_builtin_files вызвана не на файловой функции",
         )),
@@ -1477,8 +1651,15 @@ pub fn call_builtin_temp_file(
         ));
     }
     let suffix = match args.first() {
-        None | Some(BslValue::Undefined) => String::new(),
+        None | Some(BslValue::Undefined) => ".tmp".to_owned(),
         Some(value) => value.as_str("ПолучитьИмяВременногоФайла")?.to_string(),
+    };
+    // Измерено на серверной 1С: xml и .xml равнозначны, пустая строка
+    // не добавляет расширение, разделители сохраняются дословно.
+    let suffix = if suffix.is_empty() || suffix.starts_with('.') {
+        suffix
+    } else {
+        format!(".{suffix}")
     };
     let path = files
         .temporary_path(&suffix, entropy)
@@ -1593,6 +1774,20 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Insert => match obj {
+            BslValue::Object(o) if matches!(&**o, BslObject::Array(_)) => {
+                let (index, value) = match args {
+                    [index] => (index, BslValue::Undefined),
+                    [index, value] => (index, value.clone()),
+                    _ => {
+                        return Err(RtError::MethodNotApplicable {
+                            method: "Вставить",
+                            receiver: obj.type_name(),
+                        });
+                    }
+                };
+                obj.insert_array_element(index, value)?;
+                Ok(BslValue::Undefined)
+            }
             BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => {
                 if args.is_empty() || args.len() > 2 {
                     return Err(RtError::MethodNotApplicable {
@@ -1619,6 +1814,31 @@ pub fn call_builtin_method(
         // аргументов обязано стать понятной ошибкой, а не паникой на
         // `args[0]`.
         BuiltinMethod::Get => match obj {
+            BslValue::Object(object)
+                if matches!(
+                    &**object,
+                    BslObject::ValueTable(_) | BslObject::TableColumns(_) | BslObject::TableRow(..)
+                ) =>
+            {
+                match args {
+                    [index] => {
+                        // Табличные ветки индексатора не используют интернер:
+                        // имена колонок хранятся в самой таблице, индекс уже числовой.
+                        obj.get_index(&BslValue::table_method_index(index)?, &NameInterner::new())
+                    }
+                    _ => Err(RtError::MethodNotApplicable {
+                        method: "Получить",
+                        receiver: obj.type_name(),
+                    }),
+                }
+            }
+            BslValue::Object(object) if matches!(&**object, BslObject::Array(_)) => match args {
+                [index] => obj.get_array_index(&BslValue::array_method_index(index)?),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
             BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => match args {
                 [key] => obj.map_get(key),
                 _ => Err(RtError::MethodNotApplicable {
@@ -1786,6 +2006,16 @@ pub fn call_builtin_method(
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
+            [pos, value] if matches!(obj, BslValue::Object(object) if matches!(&**object, BslObject::TableRow(..))) =>
+            {
+                obj.set_table_method(pos, value.clone())?;
+                Ok(BslValue::Undefined)
+            }
+            [pos, value] if matches!(obj, BslValue::Object(object) if matches!(&**object, BslObject::Array(_))) =>
+            {
+                obj.set_index(&BslValue::array_method_index(pos)?, value.clone())?;
+                Ok(BslValue::Undefined)
+            }
             [pos, value] => crate::bindata::set_byte(obj, pos, value).map(|()| BslValue::Undefined),
             _ => Err(RtError::MethodNotApplicable {
                 method: "Установить",
@@ -1922,8 +2152,8 @@ pub fn call_builtin_method_ctx(
                     });
                 }
                 let field = key_name(key_arg, rt)?;
-                let default = args.get(1).cloned();
-                return obj.structure_property(field, default);
+                let (found, _) = obj.structure_property(field)?;
+                return Ok(BslValue::Boolean(found));
             }
             BuiltinMethod::Clear => {
                 obj.structure_clear(&mut rt.shapes)?;
@@ -1985,6 +2215,8 @@ pub fn call_builtin_method_files(
             ));
         };
         let path = path.as_str("ДвоичныеДанные.Записать")?.to_string();
+        let path = crate::prepare_file_operation_path(&path, files)
+            .map_err(|error| RtError::IoError(error.to_string()))?;
         files
             .write(&path, bytes)
             .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
@@ -2154,7 +2386,10 @@ mod name_table_tests {
 
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let path = BslValue::Str(BslString::from_str("файл"));
-        let bad: [(BuiltinFn, Vec<BslValue>); 5] = [
+        let bad: [(BuiltinFn, Vec<BslValue>); 8] = [
+            (BuiltinFn::TempFilesDir, vec![path.clone()]),
+            (BuiltinFn::CreateDirectory, vec![]),
+            (BuiltinFn::CreateDirectory, vec![path.clone(), path.clone()]),
             (BuiltinFn::ValueFromFile, vec![]),
             (BuiltinFn::ValueFromFile, vec![path.clone(), path.clone()]),
             (BuiltinFn::ValueToFile, vec![]),

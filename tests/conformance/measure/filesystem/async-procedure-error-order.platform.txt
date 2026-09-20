@@ -1,0 +1,14 @@
+file.begin	async-procedure-error-order-1
+order.enter	first
+order.caller_after	first
+order.enter	delayed
+order.enter	second
+order.caller_after	second
+order.root_return	done
+order.notification	before
+client.error	async-order:first
+client.error	async-order:second
+order.notification	after
+order.after_await	0
+client.error	async-order:delayed
+file.end	async-procedure-error-order-1

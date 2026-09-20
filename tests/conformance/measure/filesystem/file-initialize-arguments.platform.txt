@@ -1,0 +1,11 @@
+file.begin	file-initialize-arguments-1
+init.structure	promise=Promise|immediate=1|result_path=1|same=1
+init.map	promise=Promise|immediate=1|result_path=1|same=1
+init.file	promise=Promise|immediate=1|result_path=1|same=1
+init.type	promise=Promise|immediate=1|result_path=1|same=1
+init.enum	promise=Promise|immediate=1|result_path=1|same=1
+init.binary	promise=Promise|immediate=1|result_path=1|same=1
+init.buffer	promise=Promise|immediate=1|result_path=1|same=1
+init.uuid	promise=Promise|immediate=1|result_path=1|same=1
+init.type_description	promise=Promise|immediate=1|result_path=1|same=1
+file.end	file-initialize-arguments-1

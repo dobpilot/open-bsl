@@ -1,0 +1,11 @@
+<root>	d		100
+<root>/broken	d		60
+<root>/broken/a*	l	<targets>/missing	48
+<root>/dir	d		60
+<root>/dir/a*	l	<targets>/actual-dir	51
+<root>/file	d		60
+<root>/file/a*	l	<targets>/actual.txt	51
+<targets>	d		80
+<targets>/actual-dir	d		60
+<targets>/actual-dir/deep.txt	f		0
+<targets>/actual.txt	f		0

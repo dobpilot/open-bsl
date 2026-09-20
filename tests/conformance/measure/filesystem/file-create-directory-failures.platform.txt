@@ -1,0 +1,5 @@
+file.begin	create-directory-failures-1
+context.effective	НеИспользовать
+create.failure.long_component	error|prefix=1
+create.failure.permission	error|child=0
+file.end	create-directory-failures-1
