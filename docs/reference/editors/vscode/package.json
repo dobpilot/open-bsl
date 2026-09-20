@@ -3,6 +3,7 @@
   "displayName": "open-bsl: отладка",
   "description": "Подключение VS Code к отладчику open-bsl по протоколу DAP",
   "publisher": "local",
+  "license": "MIT",
   "version": "0.1.0",
   "engines": { "vscode": "^1.66.0" },
   "categories": ["Debuggers"],

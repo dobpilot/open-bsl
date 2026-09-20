@@ -2,6 +2,7 @@
 name = "bsl-bytecode"
 version = "0.4.0"
 edition.workspace = true
+license.workspace = true
 
 # Ни `bsl-syntax`, ни `bsl-sema` — ни в обычных зависимостях, ни в
 # тестовых: здесь только представление байт-кода и его текстовый формат,
