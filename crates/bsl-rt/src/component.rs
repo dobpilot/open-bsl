@@ -204,6 +204,8 @@ pub enum Capability {
     Random,
     Network,
     HostPromises,
+    /// Данные хоста текущего сеанса.
+    HostData,
     TemporaryFiles,
 }
 
@@ -230,6 +232,7 @@ pub struct InterpreterServices<'a> {
     pub files: &'a Rc<dyn crate::FileSystem>,
     pub random: &'a crate::RandomHandle,
     pub network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
+    pub host_data: Option<&'a Rc<dyn std::any::Any>>,
     pub host_promises: Option<&'a mut dyn crate::HostPromiseSpawner>,
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
     pub background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
@@ -269,6 +272,7 @@ pub struct CallContext<'a> {
     files: Option<&'a Rc<dyn crate::FileSystem>>,
     random: Option<&'a crate::RandomHandle>,
     network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
+    host_data: Option<&'a Rc<dyn std::any::Any>>,
     host_promises: Option<&'a mut dyn crate::HostPromiseSpawner>,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
     background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
@@ -290,6 +294,7 @@ impl<'a> CallContext<'a> {
             files: Some(services.files),
             random: Some(services.random),
             network: services.network,
+            host_data: services.host_data,
             host_promises: services.host_promises,
             function_caller: services.function_caller,
             background_jobs: services.background_jobs,
@@ -315,6 +320,7 @@ impl<'a> CallContext<'a> {
             files: None,
             random: None,
             network: None,
+            host_data: None,
             host_promises: None,
             function_caller: None,
             background_jobs: None,
@@ -322,6 +328,18 @@ impl<'a> CallContext<'a> {
             message_sink: None,
             temporary_files: None,
         }
+    }
+
+    /// Данные хоста текущего сеанса. Объект вправе сохранить клон `Rc`;
+    /// проверка принадлежности такого объекта сеансу остаётся за библиотекой.
+    ///
+    /// # Errors
+    /// Возвращает [`RtError::CapabilityMissing`], если хост не передал данные.
+    pub fn host_data(&self) -> RtResult<&Rc<dyn std::any::Any>> {
+        self.host_data.ok_or(RtError::CapabilityMissing {
+            capability: Capability::HostData,
+            path: self.path,
+        })
     }
 
     /// Подключает учёт временных файлов исходного сеанса без изменения

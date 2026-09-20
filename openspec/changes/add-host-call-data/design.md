@@ -1,0 +1,3 @@
+# Design
+
+Add optional Rc<dyn Any> to HostEnv and propagate it into CallContext through InterpreterServices. StateBuilder::host_data supplies the value. Standard process environments and background worker environments start without it. Do not add thread-local storage or Send/Sync requirements to session values. Returning an Rc permits objects to retain it: checking ORM object ownership and destroying failed authentication sessions belongs to the consumer. Re-export capability and context types through the facade; Any and Rc remain std types. This is host injection policy, not platform compatibility semantics.

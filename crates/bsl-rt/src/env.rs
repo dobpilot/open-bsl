@@ -1266,6 +1266,7 @@ pub struct HostEnv {
     zone: std::rc::Rc<dyn TimeZone>,
     files: std::rc::Rc<dyn FileSystem>,
     network: Option<std::rc::Rc<dyn crate::HttpClientFactory>>,
+    host_data: Option<std::rc::Rc<dyn std::any::Any>>,
     application_launcher: Option<std::sync::Arc<dyn crate::ApplicationLauncher>>,
     background_jobs: Option<std::rc::Rc<dyn crate::BackgroundJobService>>,
     temp_storage: Option<std::rc::Rc<std::cell::RefCell<crate::TempStorageSession>>>,
@@ -1287,12 +1288,26 @@ impl HostEnv {
             // Базовый runtime не знает системного HTTP-адаптера: его
             // устанавливает верхний слой, подключивший `bsl-http`.
             network: None,
+            host_data: None,
             application_launcher: None,
             background_jobs: None,
             temp_storage: None,
             message_sink: None,
             temporary_files: crate::TemporaryFileRegistry::default(),
         }
+    }
+
+    /// Данные хоста этого сеанса. Новое окружение их не наследует.
+    #[must_use]
+    pub fn with_host_data(mut self, data: std::rc::Rc<dyn std::any::Any>) -> Self {
+        self.host_data = Some(data);
+        self
+    }
+
+    /// Возвращает данные хоста для контекста текущего вызова.
+    #[must_use]
+    pub fn host_data(&self) -> Option<std::rc::Rc<dyn std::any::Any>> {
+        self.host_data.clone()
     }
 
     /// Аргументы, которые скрипт увидит в `АргументыКоманднойСтроки`.

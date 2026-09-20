@@ -1234,6 +1234,7 @@ mod tests {
             files: &files,
             random: &random,
             network: None,
+            host_data: None,
             host_promises: Some(&mut legacy),
             function_caller: None,
             background_jobs: None,

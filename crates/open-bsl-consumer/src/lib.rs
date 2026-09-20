@@ -284,3 +284,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "host_data_tests.rs"]
+mod host_data_tests;

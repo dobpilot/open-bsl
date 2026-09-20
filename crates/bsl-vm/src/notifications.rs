@@ -108,6 +108,7 @@ fn prepare(
         linked.files.clone(),
         linked.random.clone(),
         linked.network.clone(),
+        linked.host_data.clone(),
         linked.background_jobs.clone(),
         linked.temp_storage.clone(),
         linked.message_sink.clone(),

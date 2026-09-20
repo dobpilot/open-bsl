@@ -309,6 +309,7 @@ mod tests {
                     env.files(),
                     env.random(),
                     env.network(),
+                    env.host_data(),
                     env.background_jobs(),
                     env.temp_storage(),
                     env.message_sink(),
