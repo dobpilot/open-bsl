@@ -1,0 +1,2 @@
+[ perf record: Woken up 4 times to write data ]
+[ perf record: Captured and wrote 1.321 MB /home/kan/Документы/develop/open-bsl/target/flamegraphs/after-allocations-2026-09-18/current-xml_parse.data (7717 samples) ]

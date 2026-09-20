@@ -1,0 +1,48 @@
+table_compare-plain-1-before 3004.0
+table_compare-plain-1-after 3071.0
+table_compare-plain-2-after 3063.0
+table_compare-plain-2-before 3055.0
+table_compare-plain-3-before 3122.0
+table_compare-plain-3-after 3184.0
+table_compare-optimize-1-before 2991.0
+table_compare-optimize-1-after 3070.0
+table_compare-optimize-2-after 3062.0
+table_compare-optimize-2-before 3051.0
+table_compare-optimize-3-before 2997.0
+table_compare-optimize-3-after 3047.0
+table_compare2-plain-1-before 786.0
+table_compare2-plain-1-after 800.0
+table_compare2-plain-2-after 788.0
+table_compare2-plain-2-before 794.0
+table_compare2-plain-3-before 780.0
+table_compare2-plain-3-after 772.0
+table_compare2-optimize-1-before 784.0
+table_compare2-optimize-1-after 791.0
+table_compare2-optimize-2-after 772.0
+table_compare2-optimize-2-before 780.0
+table_compare2-optimize-3-before 766.0
+table_compare2-optimize-3-after 771.0
+table_save_load-plain-1-before 1333.0
+table_save_load-plain-1-after 1319.0
+table_save_load-plain-2-after 1320.0
+table_save_load-plain-2-before 1325.0
+table_save_load-plain-3-before 1334.0
+table_save_load-plain-3-after 1341.0
+table_save_load-optimize-1-before 1358.0
+table_save_load-optimize-1-after 1341.0
+table_save_load-optimize-2-after 1331.0
+table_save_load-optimize-2-before 1337.0
+table_save_load-optimize-3-before 1340.0
+table_save_load-optimize-3-after 1341.0
+table_compare plain ms 1.492710594877078 0.2618657937806912 2.230359520639147
+table_compare plain instructions 0.05018907499863001 0.026002355765486485 0.09420739797354472
+table_compare optimize ms 1.5567098783315785 0.3605375286791279 2.6412571046472655
+table_compare optimize instructions 0.01429480424028536 -0.009266375145455807 0.03686808101601713
+table_compare2 plain ms -4.601615923120287e-05 -1.025641025641022 1.781170483460559
+table_compare2 plain instructions 0.09009504655734062 0.06292448473712575 0.12404293237073816
+table_compare2 optimize ms 0.17331921052547994 -1.025641025641022 0.8928571428571397
+table_compare2 optimize instructions 0.0767076402059678 0.05481926562969086 0.09151500155237802
+table_save_load plain ms -0.3009611416743459 -1.0502625656414133 0.5247376311844132
+table_save_load plain instructions -2.0589550905528866 -2.065501535327252 -2.0470066948052534
+table_save_load optimize ms -0.5419933235610075 -1.2518409425625876 0.07462686567163423
+table_save_load optimize instructions -2.0968223954204204 -2.111171868121886 -2.0850876675305052

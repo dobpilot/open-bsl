@@ -1,0 +1,7 @@
+scenario,side,sampled_cycles,step_cold_inclusive_pct,step_leaf_pct,unknown_leaf_pct,non_cli_pct
+json_write,main,8139368236,60.8474,10.4545,6.339,0.0031
+json_write,current,8439570293,59.1206,13.1906,4.9657,0.0176
+xml_parse,main,35081810700,44.0819,11.6659,2.5121,0.0009
+xml_parse,current,32163757908,36.7424,16.6012,2.0531,0.0043
+xml_write,main,11749252581,67.2583,8.5683,3.7716,0.0131
+xml_write,current,9556792952,60.0679,11.4159,5.7022,0.0124

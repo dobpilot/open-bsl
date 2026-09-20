@@ -1,0 +1,32 @@
+layout,BslValue,24,BslObject,88
+phase,requests,requested_bytes,reallocations,live_bytes,peak_live_bytes,le16,le32,le64,le128,le256,le512,gt512
+генерация: 1754 мс (564564 строк)
+prepare,24270115,1090013634,564708,401254036,401254569,15236784,1693742,1129162,6210257,31,25,114
+сохранение: 479 мс
+run,2270003,1467062180,154,691357009,884490887,1134206,26,831,570198,564578,12,152
+загрузка: 916 мс
+проверка: 1059 мс, тождественно, строк 564564, колонок 5
+1395
+	Command being timed: "target/release/examples/alloc-profile target/table-allocation-study/table_save_load.bsl"
+	User time (seconds): 3.56
+	System time (seconds): 0.88
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:04.46
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1163088
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 487388
+	Voluntary context switches: 1
+	Involuntary context switches: 222
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 257784
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

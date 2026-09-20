@@ -1,0 +1,96 @@
+bmp_rotate-plain-1-before 471.0
+bmp_rotate-plain-1-after 328.0
+bmp_rotate-plain-2-after 221.0
+bmp_rotate-plain-2-before 226.0
+bmp_rotate-plain-3-before 230.0
+bmp_rotate-plain-3-after 219.0
+bmp_rotate-plain-4-after 227.0
+bmp_rotate-plain-4-before 223.0
+bmp_rotate-plain-5-before 235.0
+bmp_rotate-plain-5-after 225.0
+bmp_rotate-optimize-1-before 178.0
+bmp_rotate-optimize-1-after 176.0
+bmp_rotate-optimize-2-after 187.0
+bmp_rotate-optimize-2-before 180.0
+bmp_rotate-optimize-3-before 180.0
+bmp_rotate-optimize-3-after 174.0
+bmp_rotate-optimize-4-after 172.0
+bmp_rotate-optimize-4-before 181.0
+bmp_rotate-optimize-5-before 179.0
+bmp_rotate-optimize-5-after 173.0
+json_write-plain-1-before 256.0
+json_write-plain-1-after 498.0
+json_write-plain-2-after 442.0
+json_write-plain-2-before 592.0
+json_write-plain-3-before 507.0
+json_write-plain-3-after 589.0
+json_write-plain-4-after 633.0
+json_write-plain-4-before 531.0
+json_write-plain-5-before 732.0
+json_write-plain-5-after 549.0
+json_write-optimize-1-before 979.0
+json_write-optimize-1-after 622.0
+json_write-optimize-2-after 599.0
+json_write-optimize-2-before 656.0
+json_write-optimize-3-before 610.0
+json_write-optimize-3-after 574.0
+json_write-optimize-4-after 859.0
+json_write-optimize-4-before 707.0
+json_write-optimize-5-before 1008.0
+json_write-optimize-5-after 821.0
+xml_parse-plain-1-before 2040.0
+xml_parse-plain-1-after 2115.0
+xml_parse-plain-2-after 1924.0
+xml_parse-plain-2-before 1746.0
+xml_parse-plain-3-before 1626.0
+xml_parse-plain-3-after 1725.0
+xml_parse-plain-4-after 1846.0
+xml_parse-plain-4-before 1824.0
+xml_parse-plain-5-before 1941.0
+xml_parse-plain-5-after 1862.0
+xml_parse-optimize-1-before 1800.0
+xml_parse-optimize-1-after 2109.0
+xml_parse-optimize-2-after 1714.0
+xml_parse-optimize-2-before 1080.0
+xml_parse-optimize-3-before 927.0
+xml_parse-optimize-3-after 836.0
+xml_parse-optimize-4-after 866.0
+xml_parse-optimize-4-before 846.0
+xml_parse-optimize-5-before 847.0
+xml_parse-optimize-5-after 852.0
+xml_write-plain-1-before 350.0
+xml_write-plain-1-after 305.0
+xml_write-plain-2-after 313.0
+xml_write-plain-2-before 307.0
+xml_write-plain-3-before 333.0
+xml_write-plain-3-after 312.0
+xml_write-plain-4-after 305.0
+xml_write-plain-4-before 308.0
+xml_write-plain-5-before 310.0
+xml_write-plain-5-after 327.0
+xml_write-optimize-1-before 307.0
+xml_write-optimize-1-after 304.0
+xml_write-optimize-2-after 312.0
+xml_write-optimize-2-before 338.0
+xml_write-optimize-3-before 315.0
+xml_write-optimize-3-after 306.0
+xml_write-optimize-4-after 325.0
+xml_write-optimize-4-before 328.0
+xml_write-optimize-5-before 308.0
+xml_write-optimize-5-after 309.0
+bmp_rotate plain ms -7.963505886923075 -30.36093418259024 1.7937219730941756
+bmp_rotate plain instructions -0.9070769988279959 -0.9076647118636316 -0.9066621298051358
+bmp_rotate optimize ms -1.778474189586543 -4.972375690607733 3.8888888888888973
+bmp_rotate optimize instructions -0.9964085830649738 -0.9970034520425108 -0.9956631500618873
+json_write plain ms 15.915204345981724 -25.33783783783784 94.53125
+json_write plain instructions -0.0013854755458120316 -0.004125309695413026 -0.0001943035556895012
+json_write optimize ms -9.621747931854728 -36.46578140960164 21.49929278642151
+json_write optimize instructions -0.0015857534301821907 -0.002858941848349339 -0.00022427574163375041
+xml_parse plain ms 3.419167132444636 -4.07006697578568 10.194730813287523
+xml_parse plain instructions 0.00094772967926815 -0.0004932122860457078 0.005641013177792864
+xml_parse optimize ms 13.801628521425332 -9.816612729234087 58.7037037037037
+xml_parse optimize instructions 0.0002120558822960028 -0.00045807539769127104 0.0006906055358468777
+xml_write plain ms -2.5398413551192767 -12.857142857142856 5.483870967741944
+xml_write plain instructions -0.029306232610235572 -0.05463111071151161 -0.01793663544314983
+xml_write optimize ms -2.4233216136370173 -7.692307692307687 0.32467532467532756
+xml_write optimize instructions 0.0042402022611987 -0.01580525881424988 0.036446948194068796

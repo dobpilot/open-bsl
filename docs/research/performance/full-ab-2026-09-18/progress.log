@@ -1,0 +1,1017 @@
+RUN background_jobs-plain-1-main
+DONE background_jobs-plain-1-main: failed - ms
+RUN background_jobs-plain-1-current
+DONE background_jobs-plain-1-current: failed - ms
+RUN background_jobs-optimize-1-main
+DONE background_jobs-optimize-1-main: failed - ms
+RUN background_jobs-optimize-1-current
+DONE background_jobs-optimize-1-current: failed - ms
+RUN bmp_rotate-plain-1-main
+DONE bmp_rotate-plain-1-main: ok 189.0 ms
+RUN bmp_rotate-plain-1-current
+DONE bmp_rotate-plain-1-current: ok 210.0 ms
+RUN bmp_rotate-plain-2-current
+DONE bmp_rotate-plain-2-current: ok 210.0 ms
+RUN bmp_rotate-plain-2-main
+DONE bmp_rotate-plain-2-main: ok 190.0 ms
+RUN bmp_rotate-plain-3-main
+DONE bmp_rotate-plain-3-main: ok 189.0 ms
+RUN bmp_rotate-plain-3-current
+DONE bmp_rotate-plain-3-current: ok 212.0 ms
+RUN bmp_rotate-plain-4-current
+DONE bmp_rotate-plain-4-current: ok 211.0 ms
+RUN bmp_rotate-plain-4-main
+DONE bmp_rotate-plain-4-main: ok 189.0 ms
+RUN bmp_rotate-plain-5-main
+DONE bmp_rotate-plain-5-main: ok 190.0 ms
+RUN bmp_rotate-plain-5-current
+DONE bmp_rotate-plain-5-current: ok 234.0 ms
+RUN bmp_rotate-optimize-1-main
+DONE bmp_rotate-optimize-1-main: ok 170.0 ms
+RUN bmp_rotate-optimize-1-current
+DONE bmp_rotate-optimize-1-current: ok 175.0 ms
+RUN bmp_rotate-optimize-2-current
+DONE bmp_rotate-optimize-2-current: ok 176.0 ms
+RUN bmp_rotate-optimize-2-main
+DONE bmp_rotate-optimize-2-main: ok 167.0 ms
+RUN bmp_rotate-optimize-3-main
+DONE bmp_rotate-optimize-3-main: ok 170.0 ms
+RUN bmp_rotate-optimize-3-current
+DONE bmp_rotate-optimize-3-current: ok 174.0 ms
+RUN bmp_rotate-optimize-4-current
+DONE bmp_rotate-optimize-4-current: ok 173.0 ms
+RUN bmp_rotate-optimize-4-main
+DONE bmp_rotate-optimize-4-main: ok 167.0 ms
+RUN bmp_rotate-optimize-5-main
+DONE bmp_rotate-optimize-5-main: ok 169.0 ms
+RUN bmp_rotate-optimize-5-current
+DONE bmp_rotate-optimize-5-current: ok 172.0 ms
+RUN call_overhead-plain-1-main
+DONE call_overhead-plain-1-main: ok 120.0 ms
+RUN call_overhead-plain-1-current
+DONE call_overhead-plain-1-current: ok 121.0 ms
+RUN call_overhead-plain-2-current
+DONE call_overhead-plain-2-current: ok 125.0 ms
+RUN call_overhead-plain-2-main
+DONE call_overhead-plain-2-main: ok 118.0 ms
+RUN call_overhead-plain-3-main
+DONE call_overhead-plain-3-main: ok 119.0 ms
+RUN call_overhead-plain-3-current
+DONE call_overhead-plain-3-current: ok 120.0 ms
+RUN call_overhead-plain-4-current
+DONE call_overhead-plain-4-current: ok 120.0 ms
+RUN call_overhead-plain-4-main
+DONE call_overhead-plain-4-main: ok 118.0 ms
+RUN call_overhead-plain-5-main
+DONE call_overhead-plain-5-main: ok 117.0 ms
+RUN call_overhead-plain-5-current
+DONE call_overhead-plain-5-current: ok 127.0 ms
+RUN call_overhead-optimize-1-main
+DONE call_overhead-optimize-1-main: ok 128.0 ms
+RUN call_overhead-optimize-1-current
+DONE call_overhead-optimize-1-current: ok 120.0 ms
+RUN call_overhead-optimize-2-current
+DONE call_overhead-optimize-2-current: ok 119.0 ms
+RUN call_overhead-optimize-2-main
+DONE call_overhead-optimize-2-main: ok 122.0 ms
+RUN call_overhead-optimize-3-main
+DONE call_overhead-optimize-3-main: ok 120.0 ms
+RUN call_overhead-optimize-3-current
+DONE call_overhead-optimize-3-current: ok 122.0 ms
+RUN call_overhead-optimize-4-current
+DONE call_overhead-optimize-4-current: ok 127.0 ms
+RUN call_overhead-optimize-4-main
+DONE call_overhead-optimize-4-main: ok 124.0 ms
+RUN call_overhead-optimize-5-main
+DONE call_overhead-optimize-5-main: ok 119.0 ms
+RUN call_overhead-optimize-5-current
+DONE call_overhead-optimize-5-current: ok 121.0 ms
+RUN cbr_rates-plain-1-main
+DONE cbr_rates-plain-1-main: failed - ms
+RUN cbr_rates-plain-1-current
+DONE cbr_rates-plain-1-current: failed - ms
+RUN cbr_rates-optimize-1-main
+DONE cbr_rates-optimize-1-main: failed - ms
+RUN cbr_rates-optimize-1-current
+DONE cbr_rates-optimize-1-current: failed - ms
+RUN csv_write-plain-1-main
+DONE csv_write-plain-1-main: ok 938.0 ms
+RUN csv_write-plain-1-current
+DONE csv_write-plain-1-current: ok 1073.0 ms
+RUN csv_write-plain-2-current
+DONE csv_write-plain-2-current: ok 1071.0 ms
+RUN csv_write-plain-2-main
+DONE csv_write-plain-2-main: ok 940.0 ms
+RUN csv_write-plain-3-main
+DONE csv_write-plain-3-main: ok 952.0 ms
+RUN csv_write-plain-3-current
+DONE csv_write-plain-3-current: ok 1073.0 ms
+RUN csv_write-optimize-1-main
+DONE csv_write-optimize-1-main: ok 671.0 ms
+RUN csv_write-optimize-1-current
+DONE csv_write-optimize-1-current: ok 671.0 ms
+RUN csv_write-optimize-2-current
+DONE csv_write-optimize-2-current: ok 675.0 ms
+RUN csv_write-optimize-2-main
+DONE csv_write-optimize-2-main: ok 1075.0 ms
+RUN csv_write-optimize-3-main
+DONE csv_write-optimize-3-main: ok 653.0 ms
+RUN csv_write-optimize-3-current
+DONE csv_write-optimize-3-current: ok 688.0 ms
+RUN csv_write_batched-plain-1-main
+DONE csv_write_batched-plain-1-main: ok 46.0 ms
+RUN csv_write_batched-plain-1-current
+DONE csv_write_batched-plain-1-current: ok 50.0 ms
+RUN csv_write_batched-plain-2-current
+DONE csv_write_batched-plain-2-current: ok 53.0 ms
+RUN csv_write_batched-plain-2-main
+DONE csv_write_batched-plain-2-main: ok 48.0 ms
+RUN csv_write_batched-plain-3-main
+DONE csv_write_batched-plain-3-main: ok 46.0 ms
+RUN csv_write_batched-plain-3-current
+DONE csv_write_batched-plain-3-current: ok 50.0 ms
+RUN csv_write_batched-optimize-1-main
+DONE csv_write_batched-optimize-1-main: ok 40.0 ms
+RUN csv_write_batched-optimize-1-current
+DONE csv_write_batched-optimize-1-current: ok 39.0 ms
+RUN csv_write_batched-optimize-2-current
+DONE csv_write_batched-optimize-2-current: ok 41.0 ms
+RUN csv_write_batched-optimize-2-main
+DONE csv_write_batched-optimize-2-main: ok 41.0 ms
+RUN csv_write_batched-optimize-3-main
+DONE csv_write_batched-optimize-3-main: ok 41.0 ms
+RUN csv_write_batched-optimize-3-current
+DONE csv_write_batched-optimize-3-current: ok 42.0 ms
+RUN edata_writer-plain-1-main
+DONE edata_writer-plain-1-main: ok 71.0 ms
+RUN edata_writer-plain-1-current
+DONE edata_writer-plain-1-current: ok 72.0 ms
+RUN edata_writer-plain-2-current
+DONE edata_writer-plain-2-current: ok 73.0 ms
+RUN edata_writer-plain-2-main
+DONE edata_writer-plain-2-main: ok 73.0 ms
+RUN edata_writer-plain-3-main
+DONE edata_writer-plain-3-main: ok 72.0 ms
+RUN edata_writer-plain-3-current
+DONE edata_writer-plain-3-current: ok 71.0 ms
+RUN edata_writer-plain-4-current
+DONE edata_writer-plain-4-current: ok 72.0 ms
+RUN edata_writer-plain-4-main
+DONE edata_writer-plain-4-main: ok 70.0 ms
+RUN edata_writer-plain-5-main
+DONE edata_writer-plain-5-main: ok 72.0 ms
+RUN edata_writer-plain-5-current
+DONE edata_writer-plain-5-current: ok 73.0 ms
+RUN edata_writer-optimize-1-main
+DONE edata_writer-optimize-1-main: ok 71.0 ms
+RUN edata_writer-optimize-1-current
+DONE edata_writer-optimize-1-current: ok 71.0 ms
+RUN edata_writer-optimize-2-current
+DONE edata_writer-optimize-2-current: ok 72.0 ms
+RUN edata_writer-optimize-2-main
+DONE edata_writer-optimize-2-main: ok 68.0 ms
+RUN edata_writer-optimize-3-main
+DONE edata_writer-optimize-3-main: ok 69.0 ms
+RUN edata_writer-optimize-3-current
+DONE edata_writer-optimize-3-current: ok 70.0 ms
+RUN edata_writer-optimize-4-current
+DONE edata_writer-optimize-4-current: ok 69.0 ms
+RUN edata_writer-optimize-4-main
+DONE edata_writer-optimize-4-main: ok 69.0 ms
+RUN edata_writer-optimize-5-main
+DONE edata_writer-optimize-5-main: ok 71.0 ms
+RUN edata_writer-optimize-5-current
+DONE edata_writer-optimize-5-current: ok 69.0 ms
+RUN empty_for-plain-1-main
+DONE empty_for-plain-1-main: ok 1.5 ms
+RUN empty_for-plain-1-current
+DONE empty_for-plain-1-current: ok 1.1 ms
+RUN empty_for-plain-2-current
+DONE empty_for-plain-2-current: ok 1.0 ms
+RUN empty_for-plain-2-main
+DONE empty_for-plain-2-main: ok 1.7 ms
+RUN empty_for-plain-3-main
+DONE empty_for-plain-3-main: ok 1.6 ms
+RUN empty_for-plain-3-current
+DONE empty_for-plain-3-current: ok 1.1 ms
+RUN empty_for-plain-4-current
+DONE empty_for-plain-4-current: ok 1.0 ms
+RUN empty_for-plain-4-main
+DONE empty_for-plain-4-main: ok 1.6 ms
+RUN empty_for-plain-5-main
+DONE empty_for-plain-5-main: ok 1.6 ms
+RUN empty_for-plain-5-current
+DONE empty_for-plain-5-current: ok 1.0 ms
+RUN empty_for-optimize-1-main
+DONE empty_for-optimize-1-main: ok 1.6 ms
+RUN empty_for-optimize-1-current
+DONE empty_for-optimize-1-current: ok 1.1 ms
+RUN empty_for-optimize-2-current
+DONE empty_for-optimize-2-current: ok 1.1 ms
+RUN empty_for-optimize-2-main
+DONE empty_for-optimize-2-main: ok 1.6 ms
+RUN empty_for-optimize-3-main
+DONE empty_for-optimize-3-main: ok 1.6 ms
+RUN empty_for-optimize-3-current
+DONE empty_for-optimize-3-current: ok 1.0 ms
+RUN empty_for-optimize-4-current
+DONE empty_for-optimize-4-current: ok 1.1 ms
+RUN empty_for-optimize-4-main
+DONE empty_for-optimize-4-main: ok 1.5 ms
+RUN empty_for-optimize-5-main
+DONE empty_for-optimize-5-main: ok 1.6 ms
+RUN empty_for-optimize-5-current
+DONE empty_for-optimize-5-current: ok 1.1 ms
+RUN goto_bench-plain-1-main
+DONE goto_bench-plain-1-main: ok 481.0 ms
+RUN goto_bench-plain-1-current
+DONE goto_bench-plain-1-current: ok 475.0 ms
+RUN goto_bench-plain-2-current
+DONE goto_bench-plain-2-current: ok 464.0 ms
+RUN goto_bench-plain-2-main
+DONE goto_bench-plain-2-main: ok 473.0 ms
+RUN goto_bench-plain-3-main
+DONE goto_bench-plain-3-main: ok 478.0 ms
+RUN goto_bench-plain-3-current
+DONE goto_bench-plain-3-current: ok 473.0 ms
+RUN goto_bench-plain-4-current
+DONE goto_bench-plain-4-current: ok 469.0 ms
+RUN goto_bench-plain-4-main
+DONE goto_bench-plain-4-main: ok 474.0 ms
+RUN goto_bench-plain-5-main
+DONE goto_bench-plain-5-main: ok 478.0 ms
+RUN goto_bench-plain-5-current
+DONE goto_bench-plain-5-current: ok 469.0 ms
+RUN goto_bench-optimize-1-main
+DONE goto_bench-optimize-1-main: ok 481.0 ms
+RUN goto_bench-optimize-1-current
+DONE goto_bench-optimize-1-current: ok 477.0 ms
+RUN goto_bench-optimize-2-current
+DONE goto_bench-optimize-2-current: ok 468.0 ms
+RUN goto_bench-optimize-2-main
+DONE goto_bench-optimize-2-main: ok 471.0 ms
+RUN goto_bench-optimize-3-main
+DONE goto_bench-optimize-3-main: ok 493.0 ms
+RUN goto_bench-optimize-3-current
+DONE goto_bench-optimize-3-current: ok 473.0 ms
+RUN goto_bench-optimize-4-current
+DONE goto_bench-optimize-4-current: ok 476.0 ms
+RUN goto_bench-optimize-4-main
+DONE goto_bench-optimize-4-main: ok 471.0 ms
+RUN goto_bench-optimize-5-main
+DONE goto_bench-optimize-5-main: ok 475.0 ms
+RUN goto_bench-optimize-5-current
+DONE goto_bench-optimize-5-current: ok 466.0 ms
+RUN invoice_doc_generator-plain-1-main
+DONE invoice_doc_generator-plain-1-main: ok 16397.0 ms
+RUN invoice_doc_generator-plain-1-current
+DONE invoice_doc_generator-plain-1-current: ok 16258.0 ms
+RUN invoice_doc_generator-plain-2-current
+DONE invoice_doc_generator-plain-2-current: ok 16778.0 ms
+RUN invoice_doc_generator-plain-2-main
+DONE invoice_doc_generator-plain-2-main: ok 16676.0 ms
+RUN invoice_doc_generator-plain-3-main
+DONE invoice_doc_generator-plain-3-main: ok 16456.0 ms
+RUN invoice_doc_generator-plain-3-current
+DONE invoice_doc_generator-plain-3-current: ok 16224.0 ms
+RUN invoice_doc_generator-plain-4-current
+DONE invoice_doc_generator-plain-4-current: ok 16305.0 ms
+RUN invoice_doc_generator-plain-4-main
+DONE invoice_doc_generator-plain-4-main: ok 16336.0 ms
+RUN invoice_doc_generator-plain-5-main
+DONE invoice_doc_generator-plain-5-main: ok 16300.0 ms
+RUN invoice_doc_generator-plain-5-current
+DONE invoice_doc_generator-plain-5-current: ok 16411.0 ms
+RUN invoice_doc_generator-optimize-1-main
+DONE invoice_doc_generator-optimize-1-main: ok 16406.0 ms
+RUN invoice_doc_generator-optimize-1-current
+DONE invoice_doc_generator-optimize-1-current: ok 16287.0 ms
+RUN invoice_doc_generator-optimize-2-current
+DONE invoice_doc_generator-optimize-2-current: ok 16338.0 ms
+RUN invoice_doc_generator-optimize-2-main
+DONE invoice_doc_generator-optimize-2-main: ok 16465.0 ms
+RUN invoice_doc_generator-optimize-3-main
+DONE invoice_doc_generator-optimize-3-main: ok 16520.0 ms
+RUN invoice_doc_generator-optimize-3-current
+DONE invoice_doc_generator-optimize-3-current: ok 16206.0 ms
+RUN invoice_doc_generator-optimize-4-current
+DONE invoice_doc_generator-optimize-4-current: ok 16317.0 ms
+RUN invoice_doc_generator-optimize-4-main
+DONE invoice_doc_generator-optimize-4-main: ok 16491.0 ms
+RUN invoice_doc_generator-optimize-5-main
+DONE invoice_doc_generator-optimize-5-main: ok 16334.0 ms
+RUN invoice_doc_generator-optimize-5-current
+DONE invoice_doc_generator-optimize-5-current: ok 16176.0 ms
+RUN json_parse-plain-1-main
+DONE json_parse-plain-1-main: ok 237.0 ms
+RUN json_parse-plain-1-current
+DONE json_parse-plain-1-current: ok 237.0 ms
+RUN json_parse-plain-2-current
+DONE json_parse-plain-2-current: ok 239.0 ms
+RUN json_parse-plain-2-main
+DONE json_parse-plain-2-main: ok 236.0 ms
+RUN json_parse-plain-3-main
+DONE json_parse-plain-3-main: ok 232.0 ms
+RUN json_parse-plain-3-current
+DONE json_parse-plain-3-current: ok 250.0 ms
+RUN json_parse-plain-4-current
+DONE json_parse-plain-4-current: ok 234.0 ms
+RUN json_parse-plain-4-main
+DONE json_parse-plain-4-main: ok 240.0 ms
+RUN json_parse-plain-5-main
+DONE json_parse-plain-5-main: ok 243.0 ms
+RUN json_parse-plain-5-current
+DONE json_parse-plain-5-current: ok 236.0 ms
+RUN json_parse-optimize-1-main
+DONE json_parse-optimize-1-main: ok 239.0 ms
+RUN json_parse-optimize-1-current
+DONE json_parse-optimize-1-current: ok 242.0 ms
+RUN json_parse-optimize-2-current
+DONE json_parse-optimize-2-current: ok 243.0 ms
+RUN json_parse-optimize-2-main
+DONE json_parse-optimize-2-main: ok 234.0 ms
+RUN json_parse-optimize-3-main
+DONE json_parse-optimize-3-main: ok 238.0 ms
+RUN json_parse-optimize-3-current
+DONE json_parse-optimize-3-current: ok 239.0 ms
+RUN json_parse-optimize-4-current
+DONE json_parse-optimize-4-current: ok 237.0 ms
+RUN json_parse-optimize-4-main
+DONE json_parse-optimize-4-main: ok 237.0 ms
+RUN json_parse-optimize-5-main
+DONE json_parse-optimize-5-main: ok 241.0 ms
+RUN json_parse-optimize-5-current
+DONE json_parse-optimize-5-current: ok 241.0 ms
+RUN json_write-plain-1-main
+DONE json_write-plain-1-main: ok 246.0 ms
+RUN json_write-plain-1-current
+DONE json_write-plain-1-current: ok 257.0 ms
+RUN json_write-plain-2-current
+DONE json_write-plain-2-current: ok 255.0 ms
+RUN json_write-plain-2-main
+DONE json_write-plain-2-main: ok 243.0 ms
+RUN json_write-plain-3-main
+DONE json_write-plain-3-main: ok 250.0 ms
+RUN json_write-plain-3-current
+DONE json_write-plain-3-current: ok 261.0 ms
+RUN json_write-plain-4-current
+DONE json_write-plain-4-current: ok 259.0 ms
+RUN json_write-plain-4-main
+DONE json_write-plain-4-main: ok 244.0 ms
+RUN json_write-plain-5-main
+DONE json_write-plain-5-main: ok 251.0 ms
+RUN json_write-plain-5-current
+DONE json_write-plain-5-current: ok 266.0 ms
+RUN json_write-optimize-1-main
+DONE json_write-optimize-1-main: ok 222.0 ms
+RUN json_write-optimize-1-current
+DONE json_write-optimize-1-current: ok 257.0 ms
+RUN json_write-optimize-2-current
+DONE json_write-optimize-2-current: ok 259.0 ms
+RUN json_write-optimize-2-main
+DONE json_write-optimize-2-main: ok 222.0 ms
+RUN json_write-optimize-3-main
+DONE json_write-optimize-3-main: ok 222.0 ms
+RUN json_write-optimize-3-current
+DONE json_write-optimize-3-current: ok 257.0 ms
+RUN json_write-optimize-4-current
+DONE json_write-optimize-4-current: ok 265.0 ms
+RUN json_write-optimize-4-main
+DONE json_write-optimize-4-main: ok 222.0 ms
+RUN json_write-optimize-5-main
+DONE json_write-optimize-5-main: ok 224.0 ms
+RUN json_write-optimize-5-current
+DONE json_write-optimize-5-current: ok 259.0 ms
+RUN pi_leibniz-plain-1-main
+DONE pi_leibniz-plain-1-main: ok 191.0 ms
+RUN pi_leibniz-plain-1-current
+DONE pi_leibniz-plain-1-current: ok 183.0 ms
+RUN pi_leibniz-plain-2-current
+DONE pi_leibniz-plain-2-current: ok 180.0 ms
+RUN pi_leibniz-plain-2-main
+DONE pi_leibniz-plain-2-main: ok 188.0 ms
+RUN pi_leibniz-plain-3-main
+DONE pi_leibniz-plain-3-main: ok 187.0 ms
+RUN pi_leibniz-plain-3-current
+DONE pi_leibniz-plain-3-current: ok 182.0 ms
+RUN pi_leibniz-plain-4-current
+DONE pi_leibniz-plain-4-current: ok 185.0 ms
+RUN pi_leibniz-plain-4-main
+DONE pi_leibniz-plain-4-main: ok 187.0 ms
+RUN pi_leibniz-plain-5-main
+DONE pi_leibniz-plain-5-main: ok 189.0 ms
+RUN pi_leibniz-plain-5-current
+DONE pi_leibniz-plain-5-current: ok 182.0 ms
+RUN pi_leibniz-optimize-1-main
+DONE pi_leibniz-optimize-1-main: ok 179.0 ms
+RUN pi_leibniz-optimize-1-current
+DONE pi_leibniz-optimize-1-current: ok 172.0 ms
+RUN pi_leibniz-optimize-2-current
+DONE pi_leibniz-optimize-2-current: ok 173.0 ms
+RUN pi_leibniz-optimize-2-main
+DONE pi_leibniz-optimize-2-main: ok 180.0 ms
+RUN pi_leibniz-optimize-3-main
+DONE pi_leibniz-optimize-3-main: ok 186.0 ms
+RUN pi_leibniz-optimize-3-current
+DONE pi_leibniz-optimize-3-current: ok 173.0 ms
+RUN pi_leibniz-optimize-4-current
+DONE pi_leibniz-optimize-4-current: ok 173.0 ms
+RUN pi_leibniz-optimize-4-main
+DONE pi_leibniz-optimize-4-main: ok 181.0 ms
+RUN pi_leibniz-optimize-5-main
+DONE pi_leibniz-optimize-5-main: ok 179.0 ms
+RUN pi_leibniz-optimize-5-current
+DONE pi_leibniz-optimize-5-current: ok 173.0 ms
+RUN pi_leibniz_15-plain-1-main
+DONE pi_leibniz_15-plain-1-main: ok 274.0 ms
+RUN pi_leibniz_15-plain-1-current
+DONE pi_leibniz_15-plain-1-current: ok 266.0 ms
+RUN pi_leibniz_15-plain-2-current
+DONE pi_leibniz_15-plain-2-current: ok 272.0 ms
+RUN pi_leibniz_15-plain-2-main
+DONE pi_leibniz_15-plain-2-main: ok 274.0 ms
+RUN pi_leibniz_15-plain-3-main
+DONE pi_leibniz_15-plain-3-main: ok 269.0 ms
+RUN pi_leibniz_15-plain-3-current
+DONE pi_leibniz_15-plain-3-current: ok 264.0 ms
+RUN pi_leibniz_15-plain-4-current
+DONE pi_leibniz_15-plain-4-current: ok 269.0 ms
+RUN pi_leibniz_15-plain-4-main
+DONE pi_leibniz_15-plain-4-main: ok 271.0 ms
+RUN pi_leibniz_15-plain-5-main
+DONE pi_leibniz_15-plain-5-main: ok 268.0 ms
+RUN pi_leibniz_15-plain-5-current
+DONE pi_leibniz_15-plain-5-current: ok 273.0 ms
+RUN pi_leibniz_15-optimize-1-main
+DONE pi_leibniz_15-optimize-1-main: ok 254.0 ms
+RUN pi_leibniz_15-optimize-1-current
+DONE pi_leibniz_15-optimize-1-current: ok 253.0 ms
+RUN pi_leibniz_15-optimize-2-current
+DONE pi_leibniz_15-optimize-2-current: ok 244.0 ms
+RUN pi_leibniz_15-optimize-2-main
+DONE pi_leibniz_15-optimize-2-main: ok 253.0 ms
+RUN pi_leibniz_15-optimize-3-main
+DONE pi_leibniz_15-optimize-3-main: ok 246.0 ms
+RUN pi_leibniz_15-optimize-3-current
+DONE pi_leibniz_15-optimize-3-current: ok 259.0 ms
+RUN pi_leibniz_15-optimize-4-current
+DONE pi_leibniz_15-optimize-4-current: ok 249.0 ms
+RUN pi_leibniz_15-optimize-4-main
+DONE pi_leibniz_15-optimize-4-main: ok 246.0 ms
+RUN pi_leibniz_15-optimize-5-main
+DONE pi_leibniz_15-optimize-5-main: ok 246.0 ms
+RUN pi_leibniz_15-optimize-5-current
+DONE pi_leibniz_15-optimize-5-current: ok 268.0 ms
+RUN regexp-plain-1-main
+DONE regexp-plain-1-main: ok 72.0 ms
+RUN regexp-plain-1-current
+DONE regexp-plain-1-current: ok 69.0 ms
+RUN regexp-plain-2-current
+DONE regexp-plain-2-current: ok 70.0 ms
+RUN regexp-plain-2-main
+DONE regexp-plain-2-main: ok 69.0 ms
+RUN regexp-plain-3-main
+DONE regexp-plain-3-main: ok 68.0 ms
+RUN regexp-plain-3-current
+DONE regexp-plain-3-current: ok 68.0 ms
+RUN regexp-plain-4-current
+DONE regexp-plain-4-current: ok 72.0 ms
+RUN regexp-plain-4-main
+DONE regexp-plain-4-main: ok 71.0 ms
+RUN regexp-plain-5-main
+DONE regexp-plain-5-main: ok 69.0 ms
+RUN regexp-plain-5-current
+DONE regexp-plain-5-current: ok 69.0 ms
+RUN regexp-optimize-1-main
+DONE regexp-optimize-1-main: ok 70.0 ms
+RUN regexp-optimize-1-current
+DONE regexp-optimize-1-current: ok 70.0 ms
+RUN regexp-optimize-2-current
+DONE regexp-optimize-2-current: ok 69.0 ms
+RUN regexp-optimize-2-main
+DONE regexp-optimize-2-main: ok 69.0 ms
+RUN regexp-optimize-3-main
+DONE regexp-optimize-3-main: ok 71.0 ms
+RUN regexp-optimize-3-current
+DONE regexp-optimize-3-current: ok 70.0 ms
+RUN regexp-optimize-4-current
+DONE regexp-optimize-4-current: ok 69.0 ms
+RUN regexp-optimize-4-main
+DONE regexp-optimize-4-main: ok 70.0 ms
+RUN regexp-optimize-5-main
+DONE regexp-optimize-5-main: ok 69.0 ms
+RUN regexp-optimize-5-current
+DONE regexp-optimize-5-current: ok 74.0 ms
+RUN simple_parquet_reader-plain-1-main
+DONE simple_parquet_reader-plain-1-main: ok 391.0 ms
+RUN simple_parquet_reader-plain-1-current
+DONE simple_parquet_reader-plain-1-current: ok 429.0 ms
+RUN simple_parquet_reader-plain-2-current
+DONE simple_parquet_reader-plain-2-current: ok 427.0 ms
+RUN simple_parquet_reader-plain-2-main
+DONE simple_parquet_reader-plain-2-main: ok 386.0 ms
+RUN simple_parquet_reader-plain-3-main
+DONE simple_parquet_reader-plain-3-main: ok 386.0 ms
+RUN simple_parquet_reader-plain-3-current
+DONE simple_parquet_reader-plain-3-current: ok 434.0 ms
+RUN simple_parquet_reader-plain-4-current
+DONE simple_parquet_reader-plain-4-current: ok 423.0 ms
+RUN simple_parquet_reader-plain-4-main
+DONE simple_parquet_reader-plain-4-main: ok 389.0 ms
+RUN simple_parquet_reader-plain-5-main
+DONE simple_parquet_reader-plain-5-main: ok 390.0 ms
+RUN simple_parquet_reader-plain-5-current
+DONE simple_parquet_reader-plain-5-current: ok 423.0 ms
+RUN simple_parquet_reader-optimize-1-main
+DONE simple_parquet_reader-optimize-1-main: ok 379.0 ms
+RUN simple_parquet_reader-optimize-1-current
+DONE simple_parquet_reader-optimize-1-current: ok 407.0 ms
+RUN simple_parquet_reader-optimize-2-current
+DONE simple_parquet_reader-optimize-2-current: ok 406.0 ms
+RUN simple_parquet_reader-optimize-2-main
+DONE simple_parquet_reader-optimize-2-main: ok 391.0 ms
+RUN simple_parquet_reader-optimize-3-main
+DONE simple_parquet_reader-optimize-3-main: ok 383.0 ms
+RUN simple_parquet_reader-optimize-3-current
+DONE simple_parquet_reader-optimize-3-current: ok 408.0 ms
+RUN simple_parquet_reader-optimize-4-current
+DONE simple_parquet_reader-optimize-4-current: ok 401.0 ms
+RUN simple_parquet_reader-optimize-4-main
+DONE simple_parquet_reader-optimize-4-main: ok 377.0 ms
+RUN simple_parquet_reader-optimize-5-main
+DONE simple_parquet_reader-optimize-5-main: ok 388.0 ms
+RUN simple_parquet_reader-optimize-5-current
+DONE simple_parquet_reader-optimize-5-current: ok 414.0 ms
+RUN str_concat-plain-1-main
+DONE str_concat-plain-1-main: ok 2.0 ms
+RUN str_concat-plain-1-current
+DONE str_concat-plain-1-current: ok 2.0 ms
+RUN str_concat-plain-2-current
+DONE str_concat-plain-2-current: ok 2.0 ms
+RUN str_concat-plain-2-main
+DONE str_concat-plain-2-main: ok 2.0 ms
+RUN str_concat-plain-3-main
+DONE str_concat-plain-3-main: ok 1.0 ms
+RUN str_concat-plain-3-current
+DONE str_concat-plain-3-current: ok 1.0 ms
+RUN str_concat-plain-4-current
+DONE str_concat-plain-4-current: ok 1.0 ms
+RUN str_concat-plain-4-main
+DONE str_concat-plain-4-main: ok 2.0 ms
+RUN str_concat-plain-5-main
+DONE str_concat-plain-5-main: ok 1.0 ms
+RUN str_concat-plain-5-current
+DONE str_concat-plain-5-current: ok 1.0 ms
+RUN str_concat-optimize-1-main
+DONE str_concat-optimize-1-main: ok 1.0 ms
+RUN str_concat-optimize-1-current
+DONE str_concat-optimize-1-current: ok 1.0 ms
+RUN str_concat-optimize-2-current
+DONE str_concat-optimize-2-current: ok 1.0 ms
+RUN str_concat-optimize-2-main
+DONE str_concat-optimize-2-main: ok 2.0 ms
+RUN str_concat-optimize-3-main
+DONE str_concat-optimize-3-main: ok 1.0 ms
+RUN str_concat-optimize-3-current
+DONE str_concat-optimize-3-current: ok 1.0 ms
+RUN str_concat-optimize-4-current
+DONE str_concat-optimize-4-current: ok 1.0 ms
+RUN str_concat-optimize-4-main
+DONE str_concat-optimize-4-main: ok 1.0 ms
+RUN str_concat-optimize-5-main
+DONE str_concat-optimize-5-main: ok 2.0 ms
+RUN str_concat-optimize-5-current
+DONE str_concat-optimize-5-current: ok 1.0 ms
+RUN str_find-plain-1-main
+DONE str_find-plain-1-main: ok 267.0 ms
+RUN str_find-plain-1-current
+DONE str_find-plain-1-current: ok 297.0 ms
+RUN str_find-plain-2-current
+DONE str_find-plain-2-current: ok 313.0 ms
+RUN str_find-plain-2-main
+DONE str_find-plain-2-main: ok 274.0 ms
+RUN str_find-plain-3-main
+DONE str_find-plain-3-main: ok 268.0 ms
+RUN str_find-plain-3-current
+DONE str_find-plain-3-current: ok 294.0 ms
+RUN str_find-plain-4-current
+DONE str_find-plain-4-current: ok 313.0 ms
+RUN str_find-plain-4-main
+DONE str_find-plain-4-main: ok 271.0 ms
+RUN str_find-plain-5-main
+DONE str_find-plain-5-main: ok 276.0 ms
+RUN str_find-plain-5-current
+DONE str_find-plain-5-current: ok 302.0 ms
+RUN str_find-optimize-1-main
+DONE str_find-optimize-1-main: ok 272.0 ms
+RUN str_find-optimize-1-current
+DONE str_find-optimize-1-current: ok 293.0 ms
+RUN str_find-optimize-2-current
+DONE str_find-optimize-2-current: ok 315.0 ms
+RUN str_find-optimize-2-main
+DONE str_find-optimize-2-main: ok 274.0 ms
+RUN str_find-optimize-3-main
+DONE str_find-optimize-3-main: ok 273.0 ms
+RUN str_find-optimize-3-current
+DONE str_find-optimize-3-current: ok 292.0 ms
+RUN str_find-optimize-4-current
+DONE str_find-optimize-4-current: ok 310.0 ms
+RUN str_find-optimize-4-main
+DONE str_find-optimize-4-main: ok 276.0 ms
+RUN str_find-optimize-5-main
+DONE str_find-optimize-5-main: ok 276.0 ms
+RUN str_find-optimize-5-current
+DONE str_find-optimize-5-current: ok 313.0 ms
+RUN str_index-plain-1-main
+DONE str_index-plain-1-main: ok 66.0 ms
+RUN str_index-plain-1-current
+DONE str_index-plain-1-current: ok 66.0 ms
+RUN str_index-plain-2-current
+DONE str_index-plain-2-current: ok 67.0 ms
+RUN str_index-plain-2-main
+DONE str_index-plain-2-main: ok 66.0 ms
+RUN str_index-plain-3-main
+DONE str_index-plain-3-main: ok 61.0 ms
+RUN str_index-plain-3-current
+DONE str_index-plain-3-current: ok 76.0 ms
+RUN str_index-plain-4-current
+DONE str_index-plain-4-current: ok 66.0 ms
+RUN str_index-plain-4-main
+DONE str_index-plain-4-main: ok 62.0 ms
+RUN str_index-plain-5-main
+DONE str_index-plain-5-main: ok 61.0 ms
+RUN str_index-plain-5-current
+DONE str_index-plain-5-current: ok 66.0 ms
+RUN str_index-optimize-1-main
+DONE str_index-optimize-1-main: ok 61.0 ms
+RUN str_index-optimize-1-current
+DONE str_index-optimize-1-current: ok 66.0 ms
+RUN str_index-optimize-2-current
+DONE str_index-optimize-2-current: ok 66.0 ms
+RUN str_index-optimize-2-main
+DONE str_index-optimize-2-main: ok 62.0 ms
+RUN str_index-optimize-3-main
+DONE str_index-optimize-3-main: ok 61.0 ms
+RUN str_index-optimize-3-current
+DONE str_index-optimize-3-current: ok 66.0 ms
+RUN str_index-optimize-4-current
+DONE str_index-optimize-4-current: ok 68.0 ms
+RUN str_index-optimize-4-main
+DONE str_index-optimize-4-main: ok 63.0 ms
+RUN str_index-optimize-5-main
+DONE str_index-optimize-5-main: ok 64.0 ms
+RUN str_index-optimize-5-current
+DONE str_index-optimize-5-current: ok 69.0 ms
+RUN table_compare-plain-1-main
+DONE table_compare-plain-1-main: ok 4650.0 ms
+RUN table_compare-plain-1-current
+DONE table_compare-plain-1-current: ok 4466.0 ms
+RUN table_compare-plain-2-current
+DONE table_compare-plain-2-current: ok 4482.0 ms
+RUN table_compare-plain-2-main
+DONE table_compare-plain-2-main: ok 4480.0 ms
+RUN table_compare-plain-3-main
+DONE table_compare-plain-3-main: ok 4416.0 ms
+RUN table_compare-plain-3-current
+DONE table_compare-plain-3-current: ok 4432.0 ms
+RUN table_compare-optimize-1-main
+DONE table_compare-optimize-1-main: ok 4453.0 ms
+RUN table_compare-optimize-1-current
+DONE table_compare-optimize-1-current: ok 4560.0 ms
+RUN table_compare-optimize-2-current
+DONE table_compare-optimize-2-current: ok 4495.0 ms
+RUN table_compare-optimize-2-main
+DONE table_compare-optimize-2-main: ok 4462.0 ms
+RUN table_compare-optimize-3-main
+DONE table_compare-optimize-3-main: ok 4439.0 ms
+RUN table_compare-optimize-3-current
+DONE table_compare-optimize-3-current: ok 4428.0 ms
+RUN table_compare2-plain-1-main
+DONE table_compare2-plain-1-main: ok 803.0 ms
+RUN table_compare2-plain-1-current
+DONE table_compare2-plain-1-current: ok 805.0 ms
+RUN table_compare2-plain-2-current
+DONE table_compare2-plain-2-current: ok 806.0 ms
+RUN table_compare2-plain-2-main
+DONE table_compare2-plain-2-main: ok 788.0 ms
+RUN table_compare2-plain-3-main
+DONE table_compare2-plain-3-main: ok 784.0 ms
+RUN table_compare2-plain-3-current
+DONE table_compare2-plain-3-current: ok 813.0 ms
+RUN table_compare2-optimize-1-main
+DONE table_compare2-optimize-1-main: ok 766.0 ms
+RUN table_compare2-optimize-1-current
+DONE table_compare2-optimize-1-current: ok 801.0 ms
+RUN table_compare2-optimize-2-current
+DONE table_compare2-optimize-2-current: ok 782.0 ms
+RUN table_compare2-optimize-2-main
+DONE table_compare2-optimize-2-main: ok 766.0 ms
+RUN table_compare2-optimize-3-main
+DONE table_compare2-optimize-3-main: ok 779.0 ms
+RUN table_compare2-optimize-3-current
+DONE table_compare2-optimize-3-current: ok 788.0 ms
+RUN table_save_load-plain-1-main
+DONE table_save_load-plain-1-main: ok 1328.0 ms
+RUN table_save_load-plain-1-current
+DONE table_save_load-plain-1-current: ok 1346.0 ms
+RUN table_save_load-plain-2-current
+DONE table_save_load-plain-2-current: ok 1331.0 ms
+RUN table_save_load-plain-2-main
+DONE table_save_load-plain-2-main: ok 1329.0 ms
+RUN table_save_load-plain-3-main
+DONE table_save_load-plain-3-main: ok 1314.0 ms
+RUN table_save_load-plain-3-current
+DONE table_save_load-plain-3-current: ok 1344.0 ms
+RUN table_save_load-optimize-1-main
+DONE table_save_load-optimize-1-main: ok 1318.0 ms
+RUN table_save_load-optimize-1-current
+DONE table_save_load-optimize-1-current: ok 1292.0 ms
+RUN table_save_load-optimize-2-current
+DONE table_save_load-optimize-2-current: ok 1307.0 ms
+RUN table_save_load-optimize-2-main
+DONE table_save_load-optimize-2-main: ok 1296.0 ms
+RUN table_save_load-optimize-3-main
+DONE table_save_load-optimize-3-main: ok 1337.0 ms
+RUN table_save_load-optimize-3-current
+DONE table_save_load-optimize-3-current: ok 1320.0 ms
+RUN table_sort-plain-1-main
+DONE table_sort-plain-1-main: ok 67.0 ms
+RUN table_sort-plain-1-current
+DONE table_sort-plain-1-current: ok 73.0 ms
+RUN table_sort-plain-2-current
+DONE table_sort-plain-2-current: ok 68.0 ms
+RUN table_sort-plain-2-main
+DONE table_sort-plain-2-main: ok 68.0 ms
+RUN table_sort-plain-3-main
+DONE table_sort-plain-3-main: ok 70.0 ms
+RUN table_sort-plain-3-current
+DONE table_sort-plain-3-current: ok 71.0 ms
+RUN table_sort-plain-4-current
+DONE table_sort-plain-4-current: ok 69.0 ms
+RUN table_sort-plain-4-main
+DONE table_sort-plain-4-main: ok 69.0 ms
+RUN table_sort-plain-5-main
+DONE table_sort-plain-5-main: ok 75.0 ms
+RUN table_sort-plain-5-current
+DONE table_sort-plain-5-current: ok 69.0 ms
+RUN table_sort-optimize-1-main
+DONE table_sort-optimize-1-main: ok 72.0 ms
+RUN table_sort-optimize-1-current
+DONE table_sort-optimize-1-current: ok 69.0 ms
+RUN table_sort-optimize-2-current
+DONE table_sort-optimize-2-current: ok 68.0 ms
+RUN table_sort-optimize-2-main
+DONE table_sort-optimize-2-main: ok 74.0 ms
+RUN table_sort-optimize-3-main
+DONE table_sort-optimize-3-main: ok 71.0 ms
+RUN table_sort-optimize-3-current
+DONE table_sort-optimize-3-current: ok 71.0 ms
+RUN table_sort-optimize-4-current
+DONE table_sort-optimize-4-current: ok 72.0 ms
+RUN table_sort-optimize-4-main
+DONE table_sort-optimize-4-main: ok 67.0 ms
+RUN table_sort-optimize-5-main
+DONE table_sort-optimize-5-main: ok 68.0 ms
+RUN table_sort-optimize-5-current
+DONE table_sort-optimize-5-current: ok 69.0 ms
+RUN table_total-plain-1-main
+DONE table_total-plain-1-main: ok 53.0 ms
+RUN table_total-plain-1-current
+DONE table_total-plain-1-current: ok 56.0 ms
+RUN table_total-plain-2-current
+DONE table_total-plain-2-current: ok 57.0 ms
+RUN table_total-plain-2-main
+DONE table_total-plain-2-main: ok 54.0 ms
+RUN table_total-plain-3-main
+DONE table_total-plain-3-main: ok 50.0 ms
+RUN table_total-plain-3-current
+DONE table_total-plain-3-current: ok 56.0 ms
+RUN table_total-plain-4-current
+DONE table_total-plain-4-current: ok 58.0 ms
+RUN table_total-plain-4-main
+DONE table_total-plain-4-main: ok 55.0 ms
+RUN table_total-plain-5-main
+DONE table_total-plain-5-main: ok 51.0 ms
+RUN table_total-plain-5-current
+DONE table_total-plain-5-current: ok 56.0 ms
+RUN table_total-optimize-1-main
+DONE table_total-optimize-1-main: ok 43.0 ms
+RUN table_total-optimize-1-current
+DONE table_total-optimize-1-current: ok 43.0 ms
+RUN table_total-optimize-2-current
+DONE table_total-optimize-2-current: ok 45.0 ms
+RUN table_total-optimize-2-main
+DONE table_total-optimize-2-main: ok 44.0 ms
+RUN table_total-optimize-3-main
+DONE table_total-optimize-3-main: ok 42.0 ms
+RUN table_total-optimize-3-current
+DONE table_total-optimize-3-current: ok 43.0 ms
+RUN table_total-optimize-4-current
+DONE table_total-optimize-4-current: ok 43.0 ms
+RUN table_total-optimize-4-main
+DONE table_total-optimize-4-main: ok 43.0 ms
+RUN table_total-optimize-5-main
+DONE table_total-optimize-5-main: ok 44.0 ms
+RUN table_total-optimize-5-current
+DONE table_total-optimize-5-current: ok 46.0 ms
+RUN textdoc_invoice-plain-1-main
+DONE textdoc_invoice-plain-1-main: ok 1068.0 ms
+RUN textdoc_invoice-plain-1-current
+DONE textdoc_invoice-plain-1-current: ok 1064.0 ms
+RUN textdoc_invoice-plain-2-current
+DONE textdoc_invoice-plain-2-current: ok 1012.0 ms
+RUN textdoc_invoice-plain-2-main
+DONE textdoc_invoice-plain-2-main: ok 1036.0 ms
+RUN textdoc_invoice-plain-3-main
+DONE textdoc_invoice-plain-3-main: ok 1068.0 ms
+RUN textdoc_invoice-plain-3-current
+DONE textdoc_invoice-plain-3-current: ok 1058.0 ms
+RUN textdoc_invoice-plain-4-current
+DONE textdoc_invoice-plain-4-current: ok 1008.0 ms
+RUN textdoc_invoice-plain-4-main
+DONE textdoc_invoice-plain-4-main: ok 1024.0 ms
+RUN textdoc_invoice-plain-5-main
+DONE textdoc_invoice-plain-5-main: ok 1049.0 ms
+RUN textdoc_invoice-plain-5-current
+DONE textdoc_invoice-plain-5-current: ok 1072.0 ms
+RUN textdoc_invoice-optimize-1-main
+DONE textdoc_invoice-optimize-1-main: ok 1004.0 ms
+RUN textdoc_invoice-optimize-1-current
+DONE textdoc_invoice-optimize-1-current: ok 1014.0 ms
+RUN textdoc_invoice-optimize-2-current
+DONE textdoc_invoice-optimize-2-current: ok 1003.0 ms
+RUN textdoc_invoice-optimize-2-main
+DONE textdoc_invoice-optimize-2-main: ok 1024.0 ms
+RUN textdoc_invoice-optimize-3-main
+DONE textdoc_invoice-optimize-3-main: ok 1013.0 ms
+RUN textdoc_invoice-optimize-3-current
+DONE textdoc_invoice-optimize-3-current: ok 995.0 ms
+RUN textdoc_invoice-optimize-4-current
+DONE textdoc_invoice-optimize-4-current: ok 1043.0 ms
+RUN textdoc_invoice-optimize-4-main
+DONE textdoc_invoice-optimize-4-main: ok 1021.0 ms
+RUN textdoc_invoice-optimize-5-main
+DONE textdoc_invoice-optimize-5-main: ok 1042.0 ms
+RUN textdoc_invoice-optimize-5-current
+DONE textdoc_invoice-optimize-5-current: ok 1009.0 ms
+RUN xml_parse-plain-1-main
+DONE xml_parse-plain-1-main: ok 868.0 ms
+RUN xml_parse-plain-1-current
+DONE xml_parse-plain-1-current: ok 823.0 ms
+RUN xml_parse-plain-2-current
+DONE xml_parse-plain-2-current: ok 819.0 ms
+RUN xml_parse-plain-2-main
+DONE xml_parse-plain-2-main: ok 880.0 ms
+RUN xml_parse-plain-3-main
+DONE xml_parse-plain-3-main: ok 877.0 ms
+RUN xml_parse-plain-3-current
+DONE xml_parse-plain-3-current: ok 829.0 ms
+RUN xml_parse-plain-4-current
+DONE xml_parse-plain-4-current: ok 819.0 ms
+RUN xml_parse-plain-4-main
+DONE xml_parse-plain-4-main: ok 872.0 ms
+RUN xml_parse-plain-5-main
+DONE xml_parse-plain-5-main: ok 861.0 ms
+RUN xml_parse-plain-5-current
+DONE xml_parse-plain-5-current: ok 836.0 ms
+RUN xml_parse-optimize-1-main
+DONE xml_parse-optimize-1-main: ok 822.0 ms
+RUN xml_parse-optimize-1-current
+DONE xml_parse-optimize-1-current: ok 788.0 ms
+RUN xml_parse-optimize-2-current
+DONE xml_parse-optimize-2-current: ok 794.0 ms
+RUN xml_parse-optimize-2-main
+DONE xml_parse-optimize-2-main: ok 830.0 ms
+RUN xml_parse-optimize-3-main
+DONE xml_parse-optimize-3-main: ok 846.0 ms
+RUN xml_parse-optimize-3-current
+DONE xml_parse-optimize-3-current: ok 795.0 ms
+RUN xml_parse-optimize-4-current
+DONE xml_parse-optimize-4-current: ok 794.0 ms
+RUN xml_parse-optimize-4-main
+DONE xml_parse-optimize-4-main: ok 819.0 ms
+RUN xml_parse-optimize-5-main
+DONE xml_parse-optimize-5-main: ok 826.0 ms
+RUN xml_parse-optimize-5-current
+DONE xml_parse-optimize-5-current: ok 852.0 ms
+RUN xml_write-plain-1-main
+DONE xml_write-plain-1-main: ok 339.0 ms
+RUN xml_write-plain-1-current
+DONE xml_write-plain-1-current: ok 291.0 ms
+RUN xml_write-plain-2-current
+DONE xml_write-plain-2-current: ok 296.0 ms
+RUN xml_write-plain-2-main
+DONE xml_write-plain-2-main: ok 348.0 ms
+RUN xml_write-plain-3-main
+DONE xml_write-plain-3-main: ok 343.0 ms
+RUN xml_write-plain-3-current
+DONE xml_write-plain-3-current: ok 287.0 ms
+RUN xml_write-plain-4-current
+DONE xml_write-plain-4-current: ok 295.0 ms
+RUN xml_write-plain-4-main
+DONE xml_write-plain-4-main: ok 342.0 ms
+RUN xml_write-plain-5-main
+DONE xml_write-plain-5-main: ok 348.0 ms
+RUN xml_write-plain-5-current
+DONE xml_write-plain-5-current: ok 284.0 ms
+RUN xml_write-optimize-1-main
+DONE xml_write-optimize-1-main: ok 322.0 ms
+RUN xml_write-optimize-1-current
+DONE xml_write-optimize-1-current: ok 292.0 ms
+RUN xml_write-optimize-2-current
+DONE xml_write-optimize-2-current: ok 301.0 ms
+RUN xml_write-optimize-2-main
+DONE xml_write-optimize-2-main: ok 318.0 ms
+RUN xml_write-optimize-3-main
+DONE xml_write-optimize-3-main: ok 320.0 ms
+RUN xml_write-optimize-3-current
+DONE xml_write-optimize-3-current: ok 290.0 ms
+RUN xml_write-optimize-4-current
+DONE xml_write-optimize-4-current: ok 291.0 ms
+RUN xml_write-optimize-4-main
+DONE xml_write-optimize-4-main: ok 318.0 ms
+RUN xml_write-optimize-5-main
+DONE xml_write-optimize-5-main: ok 316.0 ms
+RUN xml_write-optimize-5-current
+DONE xml_write-optimize-5-current: ok 288.0 ms
+RUN zip_read-plain-1-main
+DONE zip_read-plain-1-main: ok 18.0 ms
+RUN zip_read-plain-1-current
+DONE zip_read-plain-1-current: ok 20.0 ms
+RUN zip_read-plain-2-current
+DONE zip_read-plain-2-current: ok 18.0 ms
+RUN zip_read-plain-2-main
+DONE zip_read-plain-2-main: ok 19.0 ms
+RUN zip_read-plain-3-main
+DONE zip_read-plain-3-main: ok 20.0 ms
+RUN zip_read-plain-3-current
+DONE zip_read-plain-3-current: ok 18.0 ms
+RUN zip_read-plain-4-current
+DONE zip_read-plain-4-current: ok 18.0 ms
+RUN zip_read-plain-4-main
+DONE zip_read-plain-4-main: ok 18.0 ms
+RUN zip_read-plain-5-main
+DONE zip_read-plain-5-main: ok 18.0 ms
+RUN zip_read-plain-5-current
+DONE zip_read-plain-5-current: ok 18.0 ms
+RUN zip_read-optimize-1-main
+DONE zip_read-optimize-1-main: ok 19.0 ms
+RUN zip_read-optimize-1-current
+DONE zip_read-optimize-1-current: ok 18.0 ms
+RUN zip_read-optimize-2-current
+DONE zip_read-optimize-2-current: ok 19.0 ms
+RUN zip_read-optimize-2-main
+DONE zip_read-optimize-2-main: ok 18.0 ms
+RUN zip_read-optimize-3-main
+DONE zip_read-optimize-3-main: ok 18.0 ms
+RUN zip_read-optimize-3-current
+DONE zip_read-optimize-3-current: ok 19.0 ms
+RUN zip_read-optimize-4-current
+DONE zip_read-optimize-4-current: ok 20.0 ms
+RUN zip_read-optimize-4-main
+DONE zip_read-optimize-4-main: ok 20.0 ms
+RUN zip_read-optimize-5-main
+DONE zip_read-optimize-5-main: ok 19.0 ms
+RUN zip_read-optimize-5-current
+DONE zip_read-optimize-5-current: ok 18.0 ms
+RUN zip_write-plain-1-main
+DONE zip_write-plain-1-main: ok 44.0 ms
+RUN zip_write-plain-1-current
+DONE zip_write-plain-1-current: ok 47.0 ms
+RUN zip_write-plain-2-current
+DONE zip_write-plain-2-current: ok 46.0 ms
+RUN zip_write-plain-2-main
+DONE zip_write-plain-2-main: ok 45.0 ms
+RUN zip_write-plain-3-main
+DONE zip_write-plain-3-main: ok 46.0 ms
+RUN zip_write-plain-3-current
+DONE zip_write-plain-3-current: ok 45.0 ms
+RUN zip_write-plain-4-current
+DONE zip_write-plain-4-current: ok 45.0 ms
+RUN zip_write-plain-4-main
+DONE zip_write-plain-4-main: ok 45.0 ms
+RUN zip_write-plain-5-main
+DONE zip_write-plain-5-main: ok 45.0 ms
+RUN zip_write-plain-5-current
+DONE zip_write-plain-5-current: ok 45.0 ms
+RUN zip_write-optimize-1-main
+DONE zip_write-optimize-1-main: ok 44.0 ms
+RUN zip_write-optimize-1-current
+DONE zip_write-optimize-1-current: ok 45.0 ms
+RUN zip_write-optimize-2-current
+DONE zip_write-optimize-2-current: ok 44.0 ms
+RUN zip_write-optimize-2-main
+DONE zip_write-optimize-2-main: ok 44.0 ms
+RUN zip_write-optimize-3-main
+DONE zip_write-optimize-3-main: ok 44.0 ms
+RUN zip_write-optimize-3-current
+DONE zip_write-optimize-3-current: ok 46.0 ms
+RUN zip_write-optimize-4-current
+DONE zip_write-optimize-4-current: ok 44.0 ms
+RUN zip_write-optimize-4-main
+DONE zip_write-optimize-4-main: ok 44.0 ms
+RUN zip_write-optimize-5-main
+DONE zip_write-optimize-5-main: ok 50.0 ms
+RUN zip_write-optimize-5-current
+DONE zip_write-optimize-5-current: ok 46.0 ms
+FINISHED; failures/mismatches: 8

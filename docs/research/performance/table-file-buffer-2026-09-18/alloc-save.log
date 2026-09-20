@@ -1,0 +1,13 @@
+   Compiling bsl-http v0.2.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-http)
+   Compiling open-bsl v0.4.2 (/home/kan/Документы/develop/open-bsl/crates/open-bsl)
+    Finished `release` profile [optimized] target(s) in 4.53s
+     Running `target/release/examples/alloc-profile target/table-allocation-study/table_save_load-save.bsl`
+layout,BslValue,24,BslObject,88
+phase,requests,requested_bytes,reallocations,live_bytes,peak_live_bytes,le16,le32,le64,le128,le256,le512,gt512
+генерация: 1684 мс (564564 строк)
+prepare,24270115,1090013634,564708,401254061,401254594,15236784,1693742,1129162,6210257,31,25,114
+run,210,416199407,27,401254059,645486014,158,4,13,6,2,2,25
+сохранение: 572 мс
+загрузка: 906 мс
+проверка: 995 мс, тождественно, строк 564564, колонок 5
+1478

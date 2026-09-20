@@ -1,0 +1,48 @@
+table_compare-plain-1-before 3215.0
+table_compare-plain-1-after 3301.0
+table_compare-plain-2-after 3256.0
+table_compare-plain-2-before 3243.0
+table_compare-plain-3-before 3228.0
+table_compare-plain-3-after 3197.0
+table_compare-optimize-1-before 3243.0
+table_compare-optimize-1-after 3300.0
+table_compare-optimize-2-after 3318.0
+table_compare-optimize-2-before 3198.0
+table_compare-optimize-3-before 3180.0
+table_compare-optimize-3-after 3206.0
+table_compare2-plain-1-before 796.0
+table_compare2-plain-1-after 801.0
+table_compare2-plain-2-after 792.0
+table_compare2-plain-2-before 852.0
+table_compare2-plain-3-before 849.0
+table_compare2-plain-3-after 807.0
+table_compare2-optimize-1-before 790.0
+table_compare2-optimize-1-after 816.0
+table_compare2-optimize-2-after 788.0
+table_compare2-optimize-2-before 771.0
+table_compare2-optimize-3-before 785.0
+table_compare2-optimize-3-after 811.0
+table_save_load-plain-1-before 1324.0
+table_save_load-plain-1-after 1322.0
+table_save_load-plain-2-after 1333.0
+table_save_load-plain-2-before 1357.0
+table_save_load-plain-3-before 1336.0
+table_save_load-plain-3-after 1316.0
+table_save_load-optimize-1-before 1360.0
+table_save_load-optimize-1-after 1353.0
+table_save_load-optimize-2-after 1341.0
+table_save_load-optimize-2-before 1340.0
+table_save_load-optimize-3-before 1359.0
+table_save_load-optimize-3-after 1304.0
+table_compare plain ms 0.7051591845916342 -0.9603469640644402 2.6749611197511625
+table_compare plain instructions 0.00849149531446288 -0.0024162548744266488 0.020997627241992056
+table_compare optimize ms 2.109195700346541 0.8176100628930927 3.7523452157598447
+table_compare optimize instructions -0.011540250588570888 -0.04780037111328239 0.026198505086805213
+table_compare2 plain ms -3.78703642801342 -7.042253521126762 0.628140703517599
+table_compare2 plain instructions -0.004521382900302129 -0.011189789385701587 0.00039884478248986
+table_compare2 optimize ms 2.9360566051356582 2.204928664072625 3.3121019108280247
+table_compare2 optimize instructions 0.013187125849907963 -0.0021431950783856735 0.041637494190482904
+table_save_load plain ms -1.1388902038831545 -1.7686072218128235 -0.15105740181269312
+table_save_load plain instructions 2.5045273041211327 2.5030257437030246 2.506930539550578
+table_save_load optimize ms -1.4957241559160896 -4.047093451066964 0.07462686567163423
+table_save_load optimize instructions 2.5382398466469023 2.5280767985287333 2.5507782625541875

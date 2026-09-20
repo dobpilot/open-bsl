@@ -1,0 +1,10 @@
+   Compiling bsl-http v0.2.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-http)
+   Compiling open-bsl v0.4.2 (/home/kan/Документы/develop/open-bsl/crates/open-bsl)
+    Finished `release` profile [optimized] target(s) in 2.02s
+     Running `target/release/examples/alloc-profile benchmarks/bmp_rotate.bsl`
+layout,BslValue,24,BslObject,88
+phase,requests,requested_bytes,reallocations,live_bytes,peak_live_bytes,le16,le32,le64,le128,le256,le512,gt512
+prepare,150,57631,12,120978,120994,37,60,3,8,14,11,17
+run,240031,28801103,1,3962106,3962122,15,0,6,240006,0,0,4
+BMP 400x600, байтов: 960054, контрольная сумма: 633613994
+215

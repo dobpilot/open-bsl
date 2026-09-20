@@ -1,0 +1,65 @@
+RUN background_jobs-plain-1-main
+DONE background_jobs-plain-1-main: ok 5947.0 ms
+RUN background_jobs-plain-1-current
+DONE background_jobs-plain-1-current: ok 6696.0 ms
+RUN background_jobs-plain-2-current
+DONE background_jobs-plain-2-current: ok 6756.0 ms
+RUN background_jobs-plain-2-main
+DONE background_jobs-plain-2-main: ok 5815.0 ms
+RUN background_jobs-plain-3-main
+DONE background_jobs-plain-3-main: ok 5795.0 ms
+RUN background_jobs-plain-3-current
+DONE background_jobs-plain-3-current: ok 6985.0 ms
+RUN background_jobs-optimize-1-main
+DONE background_jobs-optimize-1-main: ok 4916.0 ms
+RUN background_jobs-optimize-1-current
+DONE background_jobs-optimize-1-current: ok 5373.0 ms
+RUN background_jobs-optimize-2-current
+DONE background_jobs-optimize-2-current: ok 5339.0 ms
+RUN background_jobs-optimize-2-main
+DONE background_jobs-optimize-2-main: ok 4942.0 ms
+RUN background_jobs-optimize-3-main
+DONE background_jobs-optimize-3-main: ok 4933.0 ms
+RUN background_jobs-optimize-3-current
+DONE background_jobs-optimize-3-current: ok 5361.0 ms
+RUN cbr_rates-plain-1-main
+DONE cbr_rates-plain-1-main: ok 805.0 ms
+RUN cbr_rates-plain-1-current
+DONE cbr_rates-plain-1-current: ok 606.0 ms
+RUN cbr_rates-plain-2-current
+DONE cbr_rates-plain-2-current: ok 291.0 ms
+RUN cbr_rates-plain-2-main
+DONE cbr_rates-plain-2-main: ok 321.0 ms
+RUN cbr_rates-plain-3-main
+DONE cbr_rates-plain-3-main: ok 310.0 ms
+RUN cbr_rates-plain-3-current
+DONE cbr_rates-plain-3-current: ok 335.0 ms
+RUN cbr_rates-plain-4-current
+DONE cbr_rates-plain-4-current: ok 312.0 ms
+RUN cbr_rates-plain-4-main
+DONE cbr_rates-plain-4-main: ok 313.0 ms
+RUN cbr_rates-plain-5-main
+DONE cbr_rates-plain-5-main: ok 302.0 ms
+RUN cbr_rates-plain-5-current
+DONE cbr_rates-plain-5-current: ok 330.0 ms
+RUN cbr_rates-optimize-1-main
+DONE cbr_rates-optimize-1-main: ok 1623.0 ms
+RUN cbr_rates-optimize-1-current
+DONE cbr_rates-optimize-1-current: ok 1953.0 ms
+RUN cbr_rates-optimize-2-current
+DONE cbr_rates-optimize-2-current: ok 1909.0 ms
+RUN cbr_rates-optimize-2-main
+DONE cbr_rates-optimize-2-main: ok 1887.0 ms
+RUN cbr_rates-optimize-3-main
+DONE cbr_rates-optimize-3-main: ok 1920.0 ms
+RUN cbr_rates-optimize-3-current
+DONE cbr_rates-optimize-3-current: ok 1913.0 ms
+RUN cbr_rates-optimize-4-current
+DONE cbr_rates-optimize-4-current: ok 2000.0 ms
+RUN cbr_rates-optimize-4-main
+DONE cbr_rates-optimize-4-main: ok 1832.0 ms
+RUN cbr_rates-optimize-5-main
+DONE cbr_rates-optimize-5-main: ok 1978.0 ms
+RUN cbr_rates-optimize-5-current
+DONE cbr_rates-optimize-5-current: ok 1856.0 ms
+FINISHED; failures/mismatches: 0

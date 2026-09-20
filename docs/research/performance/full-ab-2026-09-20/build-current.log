@@ -1,0 +1,153 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.189
+   Compiling stable_deref_trait v1.2.1
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v2.0.1
+   Compiling dunce v1.0.5
+   Compiling cfg-if v1.0.4
+   Compiling pkg-config v0.3.34
+   Compiling fs_extra v1.3.0
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling futures-core v0.3.33
+   Compiling itoa v1.0.18
+   Compiling smallvec v1.15.2
+   Compiling litemap v0.8.3
+   Compiling writeable v0.6.4
+   Compiling zeroize v1.9.0
+   Compiling aws-lc-rs v1.18.0
+   Compiling memchr v2.8.3
+   Compiling once_cell v1.21.4
+   Compiling icu_properties_data v2.3.0
+   Compiling utf8_iter v1.0.4
+   Compiling icu_normalizer_data v2.3.0
+   Compiling typenum v1.20.1
+   Compiling crc32fast v1.5.0
+   Compiling log v0.4.33
+   Compiling rustls-pki-types v1.15.1
+   Compiling rustls v0.23.43
+   Compiling untrusted v0.9.0
+   Compiling percent-encoding v2.3.2
+   Compiling slab v0.4.12
+   Compiling httparse v1.10.1
+   Compiling futures-task v0.3.33
+   Compiling simd-adler32 v0.3.10
+   Compiling tower-service v0.3.3
+   Compiling try-lock v0.2.5
+   Compiling subtle v2.6.1
+   Compiling adler2 v2.0.1
+   Compiling tracing-core v0.1.36
+   Compiling futures-channel v0.3.33
+   Compiling thiserror v2.0.20
+   Compiling atomic-waker v1.1.2
+   Compiling want v0.3.1
+   Compiling num-traits v0.2.19
+   Compiling futures-util v0.3.33
+   Compiling bitflags v2.13.1
+   Compiling form_urlencoded v1.2.2
+   Compiling sync_wrapper v1.0.2
+   Compiling ipnet v2.12.1
+   Compiling tower-layer v0.3.3
+   Compiling hashbrown v0.17.1
+   Compiling miniz_oxide v0.8.9
+   Compiling zip v2.4.2
+   Compiling bumpalo v3.20.3
+   Compiling openssl-probe v0.2.1
+   Compiling base64 v0.22.1
+   Compiling equivalent v1.0.2
+   Compiling bit-vec v0.8.0
+   Compiling rustls-native-certs v0.8.4
+   Compiling regex-syntax v0.8.11
+   Compiling cfg_aliases v0.2.2
+   Compiling http v1.5.0
+   Compiling aho-corasick v1.1.5
+   Compiling zopfli v0.8.3
+   Compiling tracing v0.1.44
+   Compiling cpufeatures v0.3.0
+   Compiling bit-set v0.8.0
+   Compiling nix v0.31.3
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling flate2 v1.1.9
+   Compiling hybrid-array v0.4.14
+   Compiling zmij v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling bsl-syntax v0.3.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-syntax)
+   Compiling serde_json v1.0.151
+   Compiling utf8parse v0.2.2
+   Compiling indexmap v2.14.0
+   Compiling unicode-width v0.2.2
+   Compiling unicode-segmentation v1.13.3
+   Compiling num-integer v0.1.46
+   Compiling jobserver v0.1.35
+   Compiling http-body v1.1.0
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling cc v1.4.0
+   Compiling http-body-util v0.1.5
+   Compiling num-bigint v0.4.8
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling digest v0.11.3
+   Compiling md-5 v0.11.0
+   Compiling sha1 v0.11.0
+   Compiling sha2 v0.11.0
+   Compiling tokio v1.53.1
+   Compiling cmake v0.1.58
+   Compiling regex-automata v0.4.18
+   Compiling aws-lc-sys v0.44.0
+   Compiling bsl-number v0.3.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-number)
+   Compiling synstructure v0.13.2
+   Compiling displaydoc v0.2.7
+   Compiling zerovec-derive v0.11.6
+   Compiling thiserror-impl v2.0.20
+   Compiling bsl-rt v0.3.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-rt)
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling rustyline v18.0.1
+   Compiling zerofrom v0.1.8
+   Compiling yoke v0.8.3
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.3.0
+   Compiling icu_locale_core v2.3.0
+   Compiling icu_provider v2.3.1
+   Compiling fancy-regex v0.19.0
+   Compiling icu_normalizer v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling hyper v1.11.0
+   Compiling tower v0.5.3
+   Compiling bsl-bytecode v0.3.1 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-bytecode)
+   Compiling bsl-format v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-format)
+   Compiling bsl-binbuf v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-binbuf)
+   Compiling bsl-xml v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-xml)
+   Compiling bsl-sema v0.3.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-sema)
+   Compiling bsl-pdf v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-pdf)
+   Compiling bsl-stream v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-stream)
+   Compiling bsl-textdoc v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-textdoc)
+   Compiling bsl-json v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-json)
+   Compiling bsl-zip v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-zip)
+   Compiling bsl-crypto v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-crypto)
+   Compiling bsl-regexp v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-regexp)
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling hyper-util v0.1.20
+   Compiling tower-http v0.6.11
+   Compiling bsl-spreadsheet v0.1.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-spreadsheet)
+   Compiling bsl-vm v0.3.1 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-vm)
+   Compiling bsl-compiler v0.3.1 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-compiler)
+   Compiling rustls-webpki v0.103.15
+   Compiling tokio-rustls v0.26.4
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.4
+   Compiling bsl-http v0.2.0 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-http)
+   Compiling open-bsl v0.4.2 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/open-bsl)
+   Compiling bsl-cli v0.3.1 (/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-build/current-src/crates/bsl-cli)
+    Finished `release` profile [optimized] target(s) in 29.61s

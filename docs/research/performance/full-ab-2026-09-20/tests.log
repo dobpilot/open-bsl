@@ -1,0 +1,3216 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running unittests src/lib.rs (target/debug/deps/bsl_binbuf-b54d1c555dcbae69)
+
+running 11 tests
+test tests::a_shift_of_32_is_an_error_not_zero ... ok
+test tests::check_bit_uses_indices_0_to_31 ... ok
+test tests::shifting_left_drops_the_high_bits ... ok
+test tests::the_mask_requires_every_bit_not_just_one ... ok
+test tests::parsing_is_not_capped_at_any_machine_width ... ok
+test tests::bitwise_matches_the_measured_table ... ok
+test tests::component_function_codes_are_static_and_dense ... ok
+test tests::bitwise_and_rejects_an_operand_at_2_32 ... ok
+test tests::set_bit_takes_a_boolean_only ... ok
+test tests::the_radix_prefix_is_required_and_lowercase ... ok
+test tests::parse_radix_matches_the_platform_at_two_hundred_digits ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_bytecode-0c50a6bd4e167fe4)
+
+running 43 tests
+test analysis::tests::a_call_between_copy_and_death_stops_the_estimate ... ok
+test analysis::tests::a_call_between_the_constant_and_its_use_stops_folding ... ok
+test analysis::tests::a_call_reading_the_copy_as_its_receiver_keeps_it ... ok
+test analysis::tests::a_copy_inside_a_protected_range_stays ... ok
+test analysis::tests::a_copy_dying_inside_its_block_is_removable ... ok
+test analysis::tests::a_call_reading_the_copy_only_as_its_window_loses_it ... ok
+test analysis::tests::a_copy_alive_past_the_block_stays ... ok
+test analysis::tests::a_copy_into_a_byref_parameter_is_not_turned_into_a_direct_base ... ok
+test analysis::tests::a_copy_into_a_module_slot_is_not_turned_into_a_direct_base ... ok
+test analysis::tests::a_copy_of_a_byref_parameter_stays ... ok
+test analysis::tests::a_copy_overlapping_a_module_slot_stays ... ok
+test analysis::tests::a_failing_operation_is_left_to_run_time ... ok
+test analysis::tests::a_copy_whose_source_is_overwritten_stays ... ok
+test analysis::tests::a_non_numeric_constant_is_not_folded ... ok
+test analysis::tests::a_receiver_copy_dying_at_an_open_procedure_is_removable ... ok
+test analysis::tests::a_redefinition_makes_the_register_unknown ... ok
+test analysis::tests::arithmetic_over_two_constants_folds ... ok
+test analysis::tests::constants_propagate_through_a_chain_and_through_a_copy ... ok
+test analysis::tests::open_call_effects_include_reference_targets_and_finish_the_bundle ... ok
+test analysis::tests::knowledge_does_not_cross_a_block_boundary ... ok
+test bundle::tests::byref_params_may_alias_each_other ... ok
+test bundle::tests::heap_reads_bundle_heap_writes_do_not ... ok
+test bundle::tests::independent_neighbours_bundle_up ... ok
+test bundle::tests::jump_target_starts_a_bundle_and_jump_trails ... ok
+test bundle::tests::module_vars_overlap_frame_regs_only_at_top_level ... ok
+test bundle::tests::two_prints_keep_their_order ... ok
+test bundle::tests::verify_rejects_a_forged_table ... ok
+test bundle::tests::war_is_allowed_waw_is_not ... ok
+test image::tests::a_bundle_table_computed_with_the_wrong_overlap_is_rejected ... ok
+test image::tests::a_chunk_line_row_longer_than_its_code_is_refused ... ok
+test image::tests::a_chunk_line_row_shorter_than_its_code_is_refused ... ok
+test image::tests::a_chunk_may_have_no_lines_while_others_have_them ... ok
+test image::tests::a_dynamic_fragment_addresses_its_own_operands ... ok
+test image::tests::a_line_table_short_of_a_chunk_is_refused ... ok
+test image::tests::a_line_table_with_a_row_per_chunk_and_a_line_per_instruction_is_accepted ... ok
+test image::tests::a_module_slot_out_of_range_is_rejected_before_the_first_instruction ... ok
+test image::tests::a_register_outside_the_frame_is_rejected_before_the_first_instruction ... ok
+test image::tests::an_empty_bundle_table_is_a_legitimate_opt_out ... ok
+test image::tests::an_empty_line_table_means_no_debug_info_and_is_accepted ... ok
+test image::tests::the_module_projection_does_not_legalise_a_register_outside_the_frame ... ok
+test image::tests::the_sample_image_is_valid_to_begin_with ... ok
+test image::tests::unbundled_finalization_clears_a_previously_built_table ... ok
+test instr::tests::instruction_stays_eight_bytes ... ok
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/call_target.rs (target/debug/deps/call_target-dbd205d0184e7d51)
+
+running 3 tests
+test a_call_past_the_last_function_is_an_error ... ok
+test a_call_of_chunk_zero_is_an_error_not_a_panic ... ok
+test a_named_function_without_a_chunk_is_an_error ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/configuration.rs (target/debug/deps/configuration-50dc6c1d11efbaf5)
+
+running 14 tests
+test a_by_ref_import_against_znach_is_rejected ... ok
+test a_link_past_the_catalog_is_rejected ... ok
+test a_self_link_is_rejected ... ok
+test a_link_to_a_non_exported_function_is_rejected ... ok
+test a_link_to_a_non_exported_variable_is_rejected ... ok
+test an_arity_mismatch_across_modules_is_rejected ... ok
+test a_configuration_image_without_entry_round_trips ... ok
+test duplicate_module_names_differing_only_in_case_are_rejected ... ok
+test a_configuration_image_round_trips_byte_identical ... ok
+test an_import_cycle_is_rejected ... ok
+test every_module_passes_the_single_program_perimeter ... ok
+test the_valid_catalog_passes_verification ... ok
+test a_single_program_image_round_trips_through_parse_image ... ok
+test parse_program_rejects_a_configuration_image ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/constant_domain.rs (target/debug/deps/constant_domain-121564208e5e3009)
+
+running 5 tests
+test a_constant_dereferences_to_its_value ... ok
+test a_type_value_is_not_a_bytecode_constant ... ok
+test an_object_is_not_a_bytecode_constant ... ok
+test every_representable_value_becomes_a_constant ... ok
+test the_checked_conversion_and_printing_agree_on_representability ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fused_operands.rs (target/debug/deps/fused_operands-68d0dc6f76813d31)
+
+running 2 tests
+test add_const_rejects_invalid_registers_and_constant ... ok
+test both_fused_jumps_reject_invalid_operands ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/image_finalize.rs (target/debug/deps/image_finalize-bf32cea9044231c7)
+
+running 3 tests
+test a_lone_chunk_has_its_own_finalization ... ok
+test a_stale_bundle_table_is_rejected ... ok
+test finalize_computes_the_overlap_from_the_image_itself ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/imports.rs (target/debug/deps/imports-099b0ec9ef0ea875)
+
+running 3 tests
+test a_dynamic_program_is_checked_against_the_catalog_export_surface ... ok
+test import_names_targets_and_unused_cycles_are_verified ... ok
+test declared_imports_round_trip_without_static_links ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/jump_target.rs (target/debug/deps/jump_target-6784cea1610fad91)
+
+running 5 tests
+test fused_equality_jump_rejects_an_invalid_register_and_constant ... ok
+test an_empty_handler_at_the_end_of_the_chunk_is_legal ... ok
+test a_tampered_exception_handler_is_rejected_before_execution ... ok
+test a_hand_edited_bytecode_target_is_rejected_before_execution ... ok
+test tampering_is_rejected_for_each_of_the_eight_target_carrying_opcodes ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/object_call_arguments.rs (target/debug/deps/object_call_arguments-73f20ac7a34fd222)
+
+running 3 tests
+test malformed_open_call_modes_are_rejected_with_or_without_bundles ... ok
+test open_call_argument_modes_are_required_in_the_text_format ... ok
+test open_call_modes_survive_round_trip_and_image_validation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/section_counts.rs (target/debug/deps/section_counts-706a3de4695206fd)
+
+running 1 test
+test an_absurd_count_is_caught_by_the_counter_check_in_every_section ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/text_format.rs (target/debug/deps/text_format-0a7a500ab762472c)
+
+running 9 tests
+test a_foreign_or_missing_header_is_rejected ... ok
+test a_semicolon_inside_a_string_constant_is_not_a_comment ... ok
+test format_without_open_method_argument_modes_is_rejected ... ok
+test objects_in_constants_are_refused_rather_than_printed_wrong ... ok
+test a_corrupted_body_names_the_line ... ok
+test comments_and_blank_lines_are_ignored_by_the_parser ... ok
+test a_hand_built_program_survives_print_and_parse ... ok
+test the_declaration_kind_is_printed_read_back_and_denied_to_the_top_level ... ok
+test date_constants_round_trip_ticks_and_refuse_the_seconds_format ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/bsl_cli-bed4dbecb63f4be8)
+
+running 42 tests
+test complete::tests::word_start_finds_the_beginning_of_the_typed_name ... ok
+test api_reference::tests::arity_formats_exact_and_ranged_counts ... ok
+test api_reference::tests::aliases_do_not_repeat_the_primary_type_name ... ok
+test dap::wire::tests::a_header_without_content_length_is_an_error ... ok
+test dap::wire::tests::a_non_numeric_length_is_an_error ... ok
+test dap::wire::tests::an_absurd_length_is_refused_before_allocating ... ok
+test highlight::tests::date_literal_is_its_own_piece ... ok
+test highlight::tests::a_comment_swallows_the_rest_of_the_line ... ok
+test dap::wire::tests::the_header_name_is_case_insensitive ... ok
+test dap::wire::tests::length_counts_bytes_not_characters ... ok
+test dap::wire::tests::two_frames_glued_into_one_read_are_both_returned ... ok
+test dap::wire::tests::one_whole_frame_is_read ... ok
+test dap::wire::tests::a_frame_torn_across_reads_is_assembled ... ok
+test highlight::tests::literals_swallow_their_content ... ok
+test highlight::tests::keywords_builtins_and_plain_names_get_different_pieces ... ok
+test highlight::tests::pieces_cover_the_line_without_gaps ... ok
+test debug_flag_tests::bare_debug_listens_on_the_loopback_default ... ok
+test debug_flag_tests::an_address_without_debug_is_refused ... ok
+test debug_flag_tests::host_and_port_are_taken_in_both_spellings ... ok
+test debug_flag_tests::without_any_flag_debugging_is_off ... ok
+test debug_flag_tests::a_non_numeric_port_is_refused ... ok
+test debug_flag_tests::a_flag_without_its_value_is_refused ... ok
+test debug_flag_tests::a_port_out_of_range_is_refused ... ok
+test highlight::tests::colorize_never_changes_the_text_itself ... ok
+test complete::tests::replacement_starts_at_the_word_not_at_the_cursor ... ok
+test debug_flag_tests::the_help_names_the_flags_and_their_actual_defaults ... ok
+test complete::tests::prefix_matching_ignores_case_but_inserts_the_canonical_spelling ... ok
+test complete::tests::after_a_dot_only_methods_and_field_names_are_offered ... ok
+test complete::tests::after_new_only_constructible_types_are_offered ... ok
+test complete::tests::in_an_expression_builtins_keywords_and_session_variables_are_offered ... ok
+test tests::command_table_is_well_formed ... ok
+test tests::every_advertised_flag_resolves_to_a_command ... ok
+test tests::help_mentions_every_command ... ok
+test debug_flag_tests::an_unresolvable_host_is_refused ... ok
+test complete::tests::candidates_are_unique_and_sorted ... ok
+test api_reference::tests::disjoint_arities_are_rendered_for_all_component_members ... ok
+test repl::tests::a_failing_line_does_not_poison_the_session ... ok
+test repl::tests::temporary_resources_survive_lines_and_are_cleaned_at_session_end ... ok
+test repl::tests::structure_fields_become_member_candidates ... ok
+test session::tests::finishing_source_and_loaded_bytecode_cleans_every_resource_before_returning ... ok
+test repl::tests::session_variables_become_completion_candidates ... ok
+test repl::tests::a_field_name_introduced_by_this_very_line_resolves ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/application.rs (target/debug/deps/application-4d8a78f6e2d6c82b)
+
+running 7 tests
+test repl_provides_the_application_launcher ... ok
+test async_child_started_without_wait_survives_cli_exit ... ok
+test unobserved_application_promise_does_not_lose_the_launch_at_cli_exit ... ok
+test child_started_without_wait_survives_cli_exit ... ok
+test cli_runapp_has_real_exit_codes_cwd_and_literal_arguments_in_both_formats ... ok
+test runapp_output_targets_match_the_server_oracle_in_both_formats ... ok
+test async_launch_matches_measured_client_results_in_source_and_bytecode ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/array_method_index_edges.rs (target/debug/deps/array_method_index_edges-78d7a212f39e3522)
+
+running 1 test
+test array_method_indices_match_the_server_oracle_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/bundles.rs (target/debug/deps/bundles-ba559bfcb3271201)
+
+running 2 tests
+test bundle_invariants_hold_on_the_whole_corpus ... ok
+test copy_analysis_invariants_hold_on_the_whole_corpus ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/cli.rs (target/debug/deps/cli-bce96babacad6243)
+
+running 18 tests
+test an_unknown_command_is_an_error_pointing_at_help ... ok
+test the_help_lists_every_selectable_pass ... ok
+test help_is_printed_to_stdout_with_a_zero_exit_code ... ok
+test the_removed_jit_flag_is_rejected_and_omitted_from_help ... ok
+test a_command_without_its_argument_shows_that_commands_usage ... ok
+test an_unknown_pass_name_is_refused_rather_than_ignored ... ok
+test a_script_with_a_utf8_bom_runs ... ok
+test a_script_path_still_runs_the_script ... ok
+test checked_in_api_reference_matches_the_generator ... ok
+test script_arguments_land_in_the_command_line_arguments_array ... ok
+test a_folded_division_by_zero_is_still_caught_under_optimize ... ok
+test api_reference_is_printed_to_stdout_or_written_to_a_file ... ok
+test a_znach_parameter_stays_private_under_copy_elimination ... ok
+test cli_runs_sync_and_async_http_through_the_system_adapter ... ok
+test the_declaration_kind_survives_the_whole_pipeline ... ok
+test the_optimize_modifier_reaches_modules_linked_by_a_directive ... ok
+test the_optimize_modifier_takes_a_list_of_passes ... ok
+test a_handler_sees_the_values_from_the_point_the_exception_was_raised ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/conformance.rs (target/debug/deps/conformance-6c8520f3d02e13b2)
+
+running 5 tests
+test conformance_fixtures_match_oracle_output ... ok
+test fixtures_produce_the_same_output_when_run_from_printed_bytecode ... ok
+test measure_script_runs_under_this_interpreter ... ok
+test pure_measure_scripts_match_their_platform_output ... ok
+test the_optimizing_passes_agree_with_the_plain_run_on_every_script has been running for over 60 seconds
+test the_optimizing_passes_agree_with_the_plain_run_on_every_script ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 77.69s
+
+     Running tests/dap_handshake.rs (target/debug/deps/dap_handshake-e985b278cc66c82f)
+
+running 16 tests
+test an_address_flag_without_debug_is_refused ... ok
+test debug_with_a_removing_pass_is_refused_from_the_command_line ... ok
+test a_session_handshakes_runs_the_script_and_reports_the_end ... ok
+test a_breakpoint_stops_before_its_line_runs ... ok
+test pause_reaches_a_run_that_never_stops_on_its_own ... ok
+test a_breakpoint_moved_to_the_next_line_actually_fires_there ... ok
+test a_busy_port_is_refused_clearly_and_does_not_panic ... ok
+test a_forward_jump_inside_one_line_is_not_a_re_entry ... ok
+test a_suspended_frame_reports_the_call_line_not_the_next_one ... ok
+test zero_based_clients_get_zero_based_lines_and_working_breakpoints ... ok
+test a_stopped_frame_shows_its_locals ... ok
+test evaluate_answers_in_the_frame_the_editor_chose ... ok
+test a_breakpoint_on_a_single_line_loop_fires_every_iteration ... ok
+test a_breakpoint_in_a_loop_body_fires_every_iteration ... ok
+test line_and_column_bases_are_independent ... ok
+test step_over_skips_a_call_while_step_in_enters_it ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/document_association.rs (target/debug/deps/document_association-8ae0df0d5ef1e894)
+
+running 3 tests
+test document_handler ... ok
+test native_child ... ok
+test documents_open_without_waiting_for_the_handler_and_reject_exit_waits ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+
+     Running tests/file_archive_content_io_edges.rs (target/debug/deps/file_archive_content_io_edges-13171f7c0d23066a)
+
+running 1 test
+test archive_content_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/file_archive_io_edges.rs (target/debug/deps/file_archive_io_edges-21193ce9fbeb40cf)
+
+running 1 test
+test archive_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/file_attribute_arguments.rs (target/debug/deps/file_attribute_arguments-e2076a1ff8ca200f)
+
+running 14 tests
+test wrapped_file_dates_match_the_async_server_oracle_in_both_formats ... ok
+test date_shift_limits_match_the_server_oracle_in_both_formats ... ok
+test wrapped_file_date_boundaries_match_the_server_oracle_in_both_formats ... ok
+test wrapped_file_date_order_matches_the_server_oracle_in_both_formats ... ok
+test wrapped_file_dates_match_the_begin_server_oracle_in_both_formats ... ok
+test file_date_components_match_the_server_oracle_in_both_formats ... ok
+test stream_resize_edges_match_the_server_oracle_in_both_formats ... ok
+test attribute_error_order_matches_the_client_oracle_in_both_formats ... ok
+test file_time_string_arguments_match_the_server_oracle_in_both_formats ... ok
+test file_date_precision_matches_the_server_oracle_in_both_formats ... ok
+test wrapped_file_dates_match_the_measured_semantics_in_both_formats ... ok
+test recursion_arguments_match_the_sync_oracle_in_both_formats ... ok
+test recursion_arguments_match_the_async_oracle_in_both_formats ... ok
+test attribute_arguments_match_sync_and_async_oracles_in_both_formats ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.32s
+
+     Running tests/file_attribute_string_edges.rs (target/debug/deps/file_attribute_string_edges-5b50d0ceef641620)
+
+running 1 test
+test attribute_strings_match_native_whitespace_and_words_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_constructor_more_types.rs (target/debug/deps/file_constructor_more_types-f1411eb74c23edcc)
+
+running 1 test
+test measured_object_arguments_use_their_string_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/file_create_directory_edges.rs (target/debug/deps/file_create_directory_edges-5e2dc0148909f058)
+
+running 1 test
+test create_directory_matches_native_suffix_paths_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/file_create_directory_failures.rs (target/debug/deps/file_create_directory_failures-e4c80c0ddccec944)
+
+running 1 test
+test partial_directory_creation_failures_match_native_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_create_directory_roots.rs (target/debug/deps/file_create_directory_roots-bce2230b8955165a)
+
+running 3 tests
+test composite_relative_forms_match_native_without_losing_the_async_string ... ok
+test directory_roots_and_file_objects_match_native_in_every_execution_mode ... ok
+test async_directory_roots_keep_values_and_identity_in_every_execution_mode ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_create_directory_server_types.rs (target/debug/deps/file_create_directory_server_types-0cb1616779f5f64e)
+
+running 1 test
+test server_directory_creation_formats_every_measured_type ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_create_directory_types.rs (target/debug/deps/file_create_directory_types-7b8452190f2ec23b)
+
+running 1 test
+test async_directory_creation_formats_types_and_returns_the_original_value ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/file_delete_more_types.rs (target/debug/deps/file_delete_more_types-df8da4ca61de9359)
+
+running 2 tests
+test delete_masks_accept_measured_object_types_in_every_execution_mode ... ok
+test async_delete_masks_remove_files_named_by_measured_object_types ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/file_delete_partial_failure.rs (target/debug/deps/file_delete_partial_failure-66e05edb4081873d)
+
+running 1 test
+test partial_delete_failure_matches_native_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_http_certificate_io_edges.rs (target/debug/deps/file_http_certificate_io_edges-af9f9e59f83fe2e2)
+
+running 1 test
+test http_certificate_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_json_io_edges.rs (target/debug/deps/file_json_io_edges-5d78d78a330c41b2)
+
+running 1 test
+test json_file_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_object_devices.rs (target/debug/deps/file_object_devices-e67736b84121a797)
+
+running 1 test
+test file_object_devices_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/file_object_host_edges.rs (target/debug/deps/file_object_host_edges-1c99cc1eb0bae7d3)
+
+running 1 test
+test file_object_host_edges_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/file_object_io_edges.rs (target/debug/deps/file_object_io_edges-1f42fcf05e3c4e8e)
+
+running 1 test
+test file_methods_and_binary_write_match_native_io_paths_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/file_pdf_io_edges.rs (target/debug/deps/file_pdf_io_edges-3ec9ec6b4fc43e6e)
+
+running 1 test
+test pdf_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running tests/file_read_io_edges.rs (target/debug/deps/file_read_io_edges-1b3da1ddd3ea8cb1)
+
+running 1 test
+test file_readers_match_native_io_paths_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_search_access_order.rs (target/debug/deps/file_search_access_order-61659e44f003be3c)
+
+running 1 test
+test search_checks_recursion_before_access_and_hides_root_denial_in_every_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_search_directory_cycle.rs (target/debug/deps/file_search_directory_cycle-6f89be414b24bd1c)
+
+running 1 test
+test directory_cycle_matches_native_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/file_search_link_spaces.rs (target/debug/deps/file_search_link_spaces-fad1654430942d5e)
+
+running 1 test
+test links_with_space_names_match_native_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/file_search_metadata_errors.rs (target/debug/deps/file_search_metadata_errors-90f31c4214e55cec)
+
+running 1 test
+test measured_metadata_errors_match_native_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/file_search_more_mask_types.rs (target/debug/deps/file_search_more_mask_types-e29c0276e338a1a7)
+
+running 1 test
+test object_masks_match_sync_and_async_native_results_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_search_order.rs (target/debug/deps/file_search_order-dc4676aefd1be18e)
+
+running 1 test
+test search_preserves_the_measured_host_and_level_order_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_search_sfile_directory.rs (target/debug/deps/file_search_sfile_directory-ab315952010a79eb)
+
+running 1 test
+test sfile_directory_matches_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_search_sfile_links.rs (target/debug/deps/file_search_sfile_links-78fcace2f937e666)
+
+running 1 test
+test sfile_links_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/file_search_sfile_selection.rs (target/debug/deps/file_search_sfile_selection-0e09e734cdcb87f4)
+
+running 1 test
+test sfile_selection_matches_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/file_search_spaces.rs (target/debug/deps/file_search_spaces-54fb33b142be44bc)
+
+running 1 test
+test synchronous_and_async_search_match_native_space_names_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/file_spreadsheet_io_edges.rs (target/debug/deps/file_spreadsheet_io_edges-74519ae359672ed2)
+
+running 1 test
+test spreadsheet_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/file_text_writer_io_edges.rs (target/debug/deps/file_text_writer_io_edges-8a9d01ca6858e025)
+
+running 1 test
+test text_writer_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/file_textdoc_io_edges.rs (target/debug/deps/file_textdoc_io_edges-83df058403860023)
+
+running 1 test
+test text_document_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/file_write_io_edges.rs (target/debug/deps/file_write_io_edges-2d886f0bf622be42)
+
+running 1 test
+test file_write_io_edges_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/file_xdto_factory_io_edges.rs (target/debug/deps/file_xdto_factory_io_edges-a9dfbbea6385b6ee)
+
+running 1 test
+test xdto_factory_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/file_xml_io_edges.rs (target/debug/deps/file_xml_io_edges-25c8a9b285a8da3f)
+
+running 1 test
+test xml_file_paths_match_the_server_oracle_in_both_formats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/notification_name_types.rs (target/debug/deps/notification_name_types-39a64998e88f6751)
+
+running 1 test
+test measured_notification_name_types_agree_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/table_compare2.rs (target/debug/deps/table_compare2-eb9ffb0ce3ebeaa5)
+
+running 1 test
+test table_compare2_cases_match_the_platform_result_as_a_multiset ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/table_method_index_edges.rs (target/debug/deps/table_method_index_edges-bdee11cd609af263)
+
+running 1 test
+test table_method_indices_match_the_server_oracle_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/temporary_cleanup.rs (target/debug/deps/temporary_cleanup-daf83ff8e1c43a40)
+
+running 4 tests
+test killing_cli_does_not_run_cleanup_or_adopt_the_file_later ... ok
+test cli_refuses_to_remove_a_replacement_without_changing_success ... ok
+test a_new_cli_process_does_not_adopt_or_remove_an_old_temporary_file ... ok
+test cli_cleans_sync_and_async_bsl_temporary_files_for_source_and_bytecode ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_compiler-6c92e0f7f2b85e34)
+
+running 2 tests
+test compiler::tests::a_binary_chain_compiles_to_the_frame_limit_and_refuses_past_it ... ok
+test compiler::tests::folding_visits_grow_linearly_with_expression_depth ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/cfg.rs (target/debug/deps/cfg-263ead6fdfe87e04)
+
+running 34 tests
+test a_constant_survives_a_merge_with_an_unreachable_branch ... ok
+test a_dynamic_fragment_kills_every_slot ... ok
+test a_fractional_literal_is_a_number_without_the_integer_tier ... ok
+test a_handler_is_entered_from_every_block_of_the_protected_body ... ok
+test a_loop_bound_of_unknown_type_leaves_the_variable_unproven ... ok
+test a_loop_header_merges_the_back_edge ... ok
+test a_loop_carried_counter_is_not_constant ... ok
+test a_dead_definition_still_interferes_with_what_is_live ... ok
+test a_loop_variable_the_body_assigns_proves_nothing ... ok
+test a_loop_closed_by_goto_gets_a_phi_too ... ok
+test a_numeric_loop_variable_carries_the_int64_tier ... ok
+test an_unreachable_block_has_no_dominator ... ok
+test an_operation_that_may_overflow_drops_the_tier ... ok
+test an_unreachable_block_carries_no_values ... ok
+test arithmetic_folds_but_a_failing_operation_does_not ... ok
+test a_variable_written_in_both_branches_gets_a_phi_at_the_join ... ok
+test division_does_not_prove_an_integer_even_from_integers ... ok
+test different_constants_on_the_branches_meet_to_top ... ok
+test a_value_used_only_in_a_return_is_live ... ok
+test integer_arithmetic_proves_the_int64_tier ... ok
+test straight_line_code_needs_no_phi ... ok
+test simultaneously_live_values_get_different_registers ... ok
+test the_same_constant_on_both_branches_survives_the_join ... ok
+test uses_are_recorded_and_dominated_by_their_definitions ... ok
+test values_that_never_overlap_may_share_a_register ... ok
+test eight_thousand_sequential_conditions_do_not_blow_up ... ok
+test the_control_flow_graph_holds_its_invariants_on_the_corpus ... ok
+test constant_propagation_converges_on_the_corpus ... ok
+test the_ssa_holds_its_invariants_on_the_corpus ... ok
+test the_tier_lattice_converges_on_the_corpus ... ok
+test every_slot_the_generator_writes_is_predicted_by_the_analysis ... ok
+test the_layout_never_grows_the_frame_and_somewhere_shrinks_it ... ok
+test the_applied_slot_layout_holds_on_the_corpus ... ok
+test the_allocation_holds_on_the_corpus ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+
+     Running tests/const_fold.rs (target/debug/deps/const_fold-af0a3504e4a16482)
+
+running 11 tests
+test a_division_by_zero_keeps_its_instruction ... ok
+test a_constant_sum_becomes_a_single_load ... ok
+test a_modulo_by_zero_keeps_its_instruction ... ok
+test a_negated_constant_expression_folds_to_its_result ... ok
+test a_nested_constant_expression_folds_to_its_result ... ok
+test folding_is_off_unless_it_is_asked_for ... ok
+test a_variable_operand_leaves_the_addition_to_run_time ... ok
+test a_deep_unary_chain_folds_to_one_load ... ok
+test subtraction_division_and_modulo_fold_too ... ok
+test a_deep_unary_chain_rooted_at_a_variable_compiles_unfolded ... ok
+test a_deep_chain_rooted_at_a_variable_compiles_unfolded ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/copy_elim.rs (target/debug/deps/copy_elim-4d08dedc982e6d98)
+
+running 3 tests
+test a_bsl_call_keeps_the_copy_that_makes_znach_private ... ok
+test a_wide_window_stays_in_temporaries_while_narrow_ones_reach_the_locals ... ok
+test a_single_argument_method_reads_its_argument_where_it_lives ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/debug_info.rs (target/debug/deps/debug_info-33f0c07799d76a6d)
+
+running 13 tests
+test a_fragment_counts_lines_from_its_own_text ... ok
+test a_fragment_without_debug_info_carries_no_lines ... ok
+test debug_info_with_a_removing_pass_is_refused ... ok
+test a_body_without_return_has_as_many_lines_as_instructions ... ok
+test debug_info_with_a_non_removing_pass_is_allowed ... ok
+test a_parameter_default_carries_the_line_it_was_declared_on ... ok
+test a_line_lies_inside_the_source ... ok
+test debug_info_with_a_slot_remapping_pass_is_refused ... ok
+test a_debug_image_carries_no_bundle_markup ... ok
+test without_debug_info_the_table_is_empty ... ok
+test every_instruction_of_every_chunk_gets_a_line ... ok
+test instructions_carry_the_line_of_their_own_statement ... ok
+test local_names_are_materialized_for_every_chunk_under_debug_info ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dynamic_await.rs (target/debug/deps/dynamic_await-930545fee9589909)
+
+running 1 test
+test dynamic_await_is_rejected_with_or_without_registry_and_async_caller ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/goto.rs (target/debug/deps/goto-3c58e79b847946f5)
+
+running 3 tests
+test forward_backward_and_end_labels_patch_absolute_jump_targets ... ok
+test adjacent_labels_may_share_one_pc ... ok
+test goto_uses_the_checked_i16_target_conversion ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+
+     Running tests/jump_target.rs (target/debug/deps/jump_target-0016fe3efa39e036)
+
+running 3 tests
+test a_chunk_within_the_limit_compiles_and_keeps_every_target_in_range ... ok
+test a_chunk_past_the_limit_is_a_compile_error_and_not_a_broken_program ... ok
+test the_limit_is_exactly_i16_max_and_not_a_round_number_near_it ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+
+     Running tests/object_call_arguments.rs (target/debug/deps/object_call_arguments-d4a55b8879d4435f)
+
+running 3 tests
+test a_variable_passed_to_an_unknown_method_is_not_a_proven_core_receiver ... ok
+test structure_property_preserves_an_indexed_output_target ... ok
+test open_calls_preserve_reference_candidates_and_omitted_positions ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/operands.rs (target/debug/deps/operands-0bad62fad3a7b2db)
+
+running 5 tests
+test a_local_is_still_copied_before_an_effectful_neighbour ... ok
+test local_less_than_number_branches_without_a_boolean_temporary ... ok
+test local_plus_number_uses_the_constant_directly_but_reverse_add_does_not ... ok
+test a_local_next_to_a_number_is_read_without_a_move_in_both_positions ... ok
+test local_number_equality_branches_without_a_boolean_temporary ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/text_round_trip.rs (target/debug/deps/text_round_trip-54edfb250c214c57)
+
+running 6 tests
+test effectful_core_constructors_use_the_component_abi ... ok
+test component_constructor_without_a_result_type_keeps_methods_open ... ok
+test reparsed_program_matches_the_original_structurally ... ok
+test round_trip_through_text_is_byte_identical ... ok
+test round_trip_with_debug_info_is_byte_identical_and_keeps_the_lines ... ok
+test the_corpus_covers_every_opcode ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_crypto-9596bc928ba7554a)
+
+running 2 tests
+test tests::snapshot_does_not_consume_the_hasher ... ok
+test tests::official_abc_vectors_match_all_supported_algorithms ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_format-32b208ce77508131)
+
+running 21 tests
+test tests::an_unknown_locale_falls_back_to_russian ... ok
+test tests::canonical_form_recipe_matches_to_canonical_directly ... ok
+test tests::boolean_keys_override_the_locale_text ... ok
+test tests::default_format_groups_with_nbsp_and_comma ... ok
+test tests::date_keys_survive_a_semicolon_inside_the_quoted_pattern ... ok
+test tests::date_format_prefers_the_explicit_pattern_over_the_long_code ... ok
+test tests::empty_grouping_parameter_disables_grouping ... ok
+test tests::frac_digits_pads_with_zeros_when_value_has_fewer ... ok
+test tests::frac_digits_rounds_in_decimal_half_up ... ok
+test tests::leading_zeros_pad_up_to_the_total_digits ... ok
+test tests::locale_sets_the_separators_and_explicit_keys_win ... ok
+test tests::locale_switches_the_month_and_weekday_names ... ok
+test tests::measured_locales_use_their_measured_separators ... ok
+test tests::nbsp_is_u00a0_not_a_plain_space ... ok
+test tests::negative_numbers_group_correctly ... ok
+test tests::non_number_values_format_via_display ... ok
+test tests::round_trip_through_default_format_and_parse ... ok
+test tests::shift_beyond_thirty_digits_is_an_error_not_a_silent_noop ... ok
+test tests::shift_moves_the_decimal_point_exactly ... ok
+test tests::zero_prints_empty_from_format_and_zero_from_string ... ok
+test tests::total_digits_is_a_field_width_and_overflow_fills_it_with_nines ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_http-930ac919c5552bda)
+
+running 9 tests
+test system::tests::local_proxy_exclusions_match_the_measured_host_classes ... ok
+test system::tests::system_adapter_preserves_non_success_status_headers_and_body ... ok
+test system::tests::system_adapter_keeps_two_requests_in_flight ... ok
+test system::tests::bracketed_ipv6_loopback_bypasses_explicit_proxy ... ok
+test system::tests::system_adapter_reuses_an_idle_http_connection ... ok
+test system::tests::client_identity_format_is_checked_at_transport_creation ... ok
+test system::tests::explicit_proxy_receives_the_absolute_request_target ... ok
+test system::tests::system_adapter_classifies_a_response_deadline_as_timeout ... ok
+test system::tests::system_adapter_returns_every_status_class_without_following_redirects ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/system_tls.rs (target/debug/deps/system_tls-46a504e74defa061)
+
+running 2 tests
+test tls_client_certificate_is_sent_only_when_configured ... ok
+test tls_trust_hostname_and_insecure_modes_are_distinct ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_json-a10cd7629c8a90c5)
+
+running 53 tests
+test bridge::tests::invalid_json_key_is_not_cached ... ok
+test bridge::tests::json_key_cache_reuses_exact_spelling_and_preserves_case_insensitivity ... ok
+test bridge::tests::read_json_value_rejects_an_empty_string ... ok
+test bridge::tests::repeated_json_schema_reuses_shape_and_duplicate_overwrites_slot ... ok
+test bridge::tests::write_json_without_a_convert_function_keeps_the_plain_type_error ... ok
+test bridge::tests::write_json_value_rejects_date_at_top_level_and_nested ... ok
+test dates::tests::a_transition_shifts_both_writing_variants ... ok
+test bridge::tests::write_json_value_rejects_a_map_while_write_json_still_accepts_it ... ok
+test bridge::tests::write_and_read_json_value_round_trip_scalars_and_structures ... ok
+test dates::tests::a_sub_minute_offset_prints_truncated_and_subtracts_in_full ... ok
+test dates::tests::empty_date_formats_without_error_in_local_variants ... ok
+test dates::tests::millisecond_fraction_rounds_toward_the_earlier_second_on_both_sides_of_the_epoch ... ok
+test dates::tests::non_iso_format_requires_the_universal_variant ... ok
+test dates::tests::read_json_date_parses_iso_without_zone ... ok
+test dates::tests::read_json_date_parses_iso_with_z_as_a_utc_moment ... ok
+test dates::tests::nested_microsoft_date_matches_the_standalone_content_in_the_document ... ok
+test dates::tests::read_json_date_rejects_garbage_in_every_format ... ok
+test dates::tests::read_json_date_rejects_microsoft_format_with_backslashes ... ok
+test dates::tests::read_json_date_parses_javascript_and_microsoft_examples_from_the_article ... ok
+test dates::tests::read_json_date_reports_the_chosen_error_text ... ok
+test dates::tests::universal_variant_of_the_empty_date_clamps_to_the_floor_instead_of_erroring ... ok
+test dates::tests::write_json_date_local_variant_is_iso_without_zone ... ok
+test dates::tests::write_json_date_rejects_wrong_argument_types ... ok
+test dates::tests::read_json_date_round_trips_every_writing_variant ... ok
+test dates::tests::write_json_date_local_offset_variant_appends_the_machine_offset ... ok
+test bridge::tests::oversized_json_schema_stays_dictionary_and_is_not_cached ... ok
+test objects::tests::nine_argument_writer_settings_reach_the_writer_without_loss ... ok
+test objects::tests::serializer_setting_accessors_round_trip_every_field ... ok
+test objects::tests::serializer_settings_default_is_iso_local_and_arrays_stay_arrays ... ok
+test objects::tests::the_article_typo_spelling_of_date_format_property_is_rejected ... ok
+test dates::tests::write_json_date_universal_variant_covers_all_three_formats ... ok
+test parse::tests::escapes_are_unescaped_including_surrogate_pairs ... ok
+test parse::tests::event_sequence_matches_the_platform ... ok
+test parse::tests::exponents_are_expanded_exactly ... ok
+test parse::tests::malformed_input_is_tolerated_the_way_the_platform_tolerates_it ... ok
+test parse::tests::parser_keeps_the_bsl_string_snapshot_assigned_to_it ... ok
+test parse::tests::unescaped_utf8_and_tolerated_truncation_use_the_fast_path ... ok
+test tests::published_component_codes_are_stable ... ok
+test write::tests::a_failed_file_write_keeps_the_writer_a_file_writer_for_retry ... ok
+test write::tests::a_value_in_an_object_without_a_name_is_rejected ... ok
+test write::tests::bsl_property_name_uses_the_same_escaping_rules ... ok
+test write::tests::check_structure_defaults_to_true ... ok
+test bridge::tests::json_document_below_the_depth_limit_still_reads ... ok
+test write::tests::compact_output_has_no_space_after_the_colon ... ok
+test write::tests::default_settings_break_lines_without_indenting ... ok
+test write::tests::disabling_check_structure_does_not_lift_any_known_check ... ok
+test write::tests::escaping_follows_the_measured_rules ... ok
+test write::tests::full_writer_settings_apply_every_measured_escape_flag ... ok
+test write::tests::indent_repeats_per_depth ... ok
+test write::tests::numbers_keep_exact_decimal_form ... ok
+test write::tests::undefined_is_written_as_null_while_null_and_date_are_rejected ... ok
+test bridge::tests::too_deep_json_document_is_an_error_not_a_crash ... ok
+test bridge::tests::cyclic_value_in_write_json_is_an_error_not_a_crash ... ok
+
+test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_number-936347b2968037a3)
+
+running 14 tests
+test number::tests::in_place_addition_matches_normal_addition_and_normalizes_decimals ... ok
+test number::tests::fast_divisibility_by_ten_matches_i128_remainder ... ok
+test number::tests::remainder_takes_the_sign_of_the_dividend ... ok
+test number::tests::fast_i64_overflow_promotes_without_losing_decimal_exactness ... ok
+test number::tests::remainder_by_zero_is_an_error ... ok
+test number::tests::fast_i64_paths_are_used_without_losing_decimal_exactness ... ok
+test text::length_tests::canonical_len_bound_is_exact ... ok
+test text::length_tests::digits_from_bits_survives_the_32_bit_boundary ... ok
+test number::tests::limb_divisibility_by_ten_matches_bigint_remainder ... ok
+test text::length_tests::canonical_output_covers_integer_fraction_and_big_mantissas ... ok
+test number::tests::remainder_agrees_with_truncated_division ... ok
+test number::exact_division_tests::exact_division_by_ten_matches_ordinary_division ... ok
+test number::division_tests::hardware_division_matches_the_previous_implementation ... ok
+test text::length_tests::a_huge_scale_prints_correctly ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/extreme_values.rs (target/debug/deps/extreme_values-e4d39f636369e3e0)
+
+running 6 tests
+test a_unit_base_is_exact_at_every_exponent_including_the_smallest ... ok
+test an_extreme_exponent_is_a_clean_error_rather_than_a_panic_or_a_hang ... ok
+test ordinary_exponents_keep_working ... ok
+test negating_the_smallest_mantissa_gives_the_positive_value ... ok
+test the_absolute_value_of_the_smallest_mantissa_is_positive ... ok
+test the_remainder_of_the_smallest_mantissa_by_minus_one_is_zero ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle.rs (target/debug/deps/oracle-366ae7e92d050d93)
+
+running 15 tests
+test division_27_digits ... ok
+test division_half_up_on_exact_tie ... ok
+test equality_ignores_representation ... ok
+test mul_normalizes_when_one_operand_goes_big ... ok
+test f64_return_matches_the_platform_on_every_measured_point ... ok
+test multiplication_is_exact ... ok
+test numeric_for_step_has_integer_fast_path_and_decimal_fallback ... ok
+test pow_integer_exponent_is_exact ... ok
+test round_to_scale_is_half_up ... ok
+test round_to_scale_half_down_keeps_the_tie_closer_to_zero ... ok
+test size_is_24_bytes ... ok
+test sqrt_goes_through_f64_15_significant ... ok
+test sqrt_of_002_differs_from_the_platform_by_one_ulp ... ok
+test trunc_to_scale_is_toward_zero_not_half_up ... ok
+test scale_grows_without_bound ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/scale_invariants.rs (target/debug/deps/scale_invariants-d3e9b0744965aabd)
+
+running 12 tests
+test division_gives_the_exact_documented_result ... ok
+test multiplication_is_refused_only_when_the_normalised_result_is_out_of_range ... ok
+test rounding_to_a_negative_scale_keeps_the_hash_contract ... ok
+test multiplying_at_the_limit_is_an_error_and_never_a_panic_or_a_wrong_answer ... ok
+test rounding_to_an_extreme_target_scale_neither_panics_nor_lies ... ok
+test the_extreme_i32_values_are_refused_by_both_constructors ... ok
+test the_infallible_constructor_covers_whole_numbers ... ok
+test a_negative_scale_stays_legal_inside_the_bound ... ok
+test the_constructor_accepts_both_limits_and_refuses_the_next_value_on_each_side ... ok
+test to_canonical_never_panics_on_any_constructible_number ... ok
+test equal_values_stay_equal_ordered_and_hashed_alike_across_scales ... ok
+test dividing_at_the_scale_limits_gives_a_definite_answer ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_pdf-a43ac467e9d93da0)
+
+running 43 tests
+test document::tests::pdf_attachments_read_the_relationship ... ok
+test document::tests::pdf_attachments_survive_an_unsupported_filter ... ok
+test document::tests::pdf_reader_accepts_an_empty_page_tree ... ok
+test document::tests::pdf_attachments_skip_entries_without_data_or_name ... ok
+test document::tests::pdf_attachments_decode_names_and_collapse_duplicates ... ok
+test document::tests::pdf_reader_parses_the_value_syntax ... ok
+test document::tests::pdf_reader_names_the_unsupported_filter ... ok
+test document::tests::pdf_reader_gives_zero_for_degenerate_boxes ... ok
+test document::tests::pdf_attachments_walk_a_name_tree_with_kids ... ok
+test document::tests::pdf_reader_follows_the_prev_chain ... ok
+test document::tests::pdf_reader_inherits_boxes_but_not_rotation ... ok
+test document::tests::pdf_attachments_fixture_hex_matches_the_captured_file ... ok
+test document::tests::pdf_reader_converts_points_to_millimetres ... ok
+test document::tests::pdf_reader_refuses_an_encrypted_file ... ok
+test document::tests::pdf_reader_rejects_broken_input_without_hanging ... ok
+test document::tests::pdf_attachments_are_written_with_raw_name_bytes ... ok
+test tests::constructor_codes_are_static_and_dense ... ok
+test document::tests::pdf_reader_normalises_rotation_like_the_platform ... ok
+test document::tests::pdf_reader_reads_back_the_platform_margins ... ok
+test document::tests::pdf_reader_sees_the_platform_landscape_page ... ok
+test writer::tests::pdf_agl_table_is_sorted_and_covers_cyrillic ... ok
+test document::tests::pdf_reader_takes_length_from_an_indirect_object_and_survives_a_wrong_one ... ok
+test writer::tests::pdf_bad_input_is_an_error_not_a_panic ... ok
+test document::tests::pdf_reader_undoes_every_png_row_filter ... ok
+test writer::tests::pdf_adler32_matches_zlib ... ok
+test document::tests::pdf_attachments_reject_a_broken_name_tree ... ok
+test writer::tests::pdf_document_without_text_has_no_font_resources ... ok
+test document::tests::pdf_reader_takes_margins_from_the_trim_box_only ... ok
+test document::tests::pdf_reader_reads_xref_stream_with_object_stream ... ok
+test document::tests::pdf_reader_reads_the_writer_output ... ok
+test writer::tests::pdf_cyrillic_codes_are_declared_in_tounicode ... ok
+test writer::tests::pdf_primitives_reach_the_content_stream ... ok
+test writer::tests::pdf_xref_points_at_every_object ... ok
+test writer::tests::pdf_output_is_deterministic ... ok
+test document::tests::pdf_attachments_round_trip_over_both_xref_kinds ... ok
+test writer::tests::pdf_encoding_overflows_into_a_second_font_resource ... ok
+test writer::tests::pdf_stream_lengths_match_the_bytes ... ok
+test writer::tests::pdf_flate_streams_round_trip ... ok
+test document::tests::pdf_reader_rejects_boundary_numbers_in_dictionaries ... ok
+test document::tests::pdf_reader_reads_every_committed_platform_file ... ok
+test document::tests::pdf_reader_survives_every_prefix_of_a_good_file ... ok
+test writer::tests::pdf_pdftotext_extracts_the_written_text ... ok
+test writer::tests::pdf_cyrillic_is_actually_painted ... ok
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_regexp-df4b9085282953e2)
+
+running 55 tests
+test engine::tables::tests::every_digit_range_is_whole_blocks_of_ten ... ok
+test engine::tables::tests::the_edges_of_the_ranges_answer_correctly ... ok
+test engine::tables::tests::the_ranges_are_sorted_and_disjoint ... ok
+test engine::tests::a_broken_pattern_is_an_error_and_not_a_panic ... ok
+test engine::tests::backrefs_match_the_platform_contract ... ok
+test engine::tests::a_pattern_may_be_empty ... ok
+test engine::tests::literals_and_escapes_match_themselves ... ok
+test engine::tests::a_repeated_group_keeps_what_its_iterations_wrote ... ok
+test engine::tests::alternation_prefers_the_leftmost_branch ... ok
+test engine::tests::an_inline_flag_works_from_its_place_to_the_end_of_its_group ... ok
+test engine::tests::the_implementation_limits_are_errors_too ... ok
+test engine::tests::backtracking_restores_the_groups_it_had_written ... ok
+test engine::tests::a_group_that_did_not_take_part_has_no_value ... ok
+test engine::tests::the_multiline_flag_moves_the_anchors_to_every_line ... ok
+test tests::a_bad_pattern_is_a_catchable_error_from_every_one_of_the_four ... ok
+test engine::tests::groups_are_numbered_by_their_opening_parenthesis ... ok
+test engine::tests::an_empty_iteration_stops_the_loop ... ok
+test tests::a_fractional_position_is_truncated_rather_than_rejected ... ok
+test engine::tests::possessive_and_atomic_do_not_give_back ... ok
+test engine::tests::the_search_is_leftmost ... ok
+test engine::tests::flag_groups_scope_like_the_platform ... ok
+test tests::a_group_object_is_of_its_own_type ... ok
+test tests::a_digit_after_the_dollar_may_be_any_decimal_one ... ok
+test tests::a_non_string_argument_is_a_type_error ... ok
+test tests::a_miss_is_an_object_with_zero_position_not_undefined ... ok
+test tests::a_position_outside_the_string_is_rejected_but_not_on_an_empty_one ... ok
+test tests::empty_matches_step_by_one_code_point ... ok
+test engine::tests::lookaround_matches_the_platform_contract ... ok
+test tests::a_reference_to_a_missing_group_truncates_instead_of_raising ... ok
+test tests::an_empty_pattern_or_an_empty_subject_finds_nothing_but_still_replaces ... ok
+test tests::a_group_that_did_not_take_part_differs_from_an_empty_one_by_position ... ok
+test engine::tests::an_empty_pass_of_a_bounded_quantifier_keeps_the_text_like_the_platform ... ok
+test tests::the_empty_cutoff_comes_before_the_pattern_is_even_parsed ... ok
+test tests::only_three_properties_exist_on_both_objects ... ok
+test engine::tests::quantifiers_count_repetitions ... ok
+test tests::search_from_the_end_takes_the_rightmost_start_and_does_not_overlap ... ok
+test tests::a_dollar_without_a_digit_is_literal_and_a_backslash_escapes ... ok
+test tests::groups_go_by_opening_parenthesis_and_skip_the_whole_match ... ok
+test engine::tests::class_operations_follow_the_measured_semantics ... ok
+test tests::like_wants_the_whole_string_and_backtracks_to_get_it ... ok
+test tests::a_replacement_takes_group_references_with_a_bounded_number_of_digits ... ok
+test tests::flags_come_both_from_arguments_and_from_the_pattern ... ok
+test engine::tests::anchors_hold_the_ends_of_the_text ... ok
+test engine::tests::word_boundaries_sit_between_word_and_punctuation ... ok
+test engine::tests::the_case_insensitive_flag_folds_cyrillic ... ok
+test engine::tests::classes_take_members_and_ranges ... ok
+test engine::tests::a_surrogate_pair_counts_as_one_character ... ok
+test engine::tests::a_dot_takes_any_character_but_a_line_terminator ... ok
+test engine::tests::unicode_properties_follow_the_general_category ... ok
+test engine::tests::backtracking_priority_matches_the_classic_rules ... ok
+test engine::tests::a_lazy_quantifier_takes_the_shortest_match ... ok
+test engine::tests::shorthand_classes_and_their_negations ... ok
+test engine::tests::dotall_takes_every_terminator ... ok
+test engine::tests::the_word_class_holds_the_measured_set ... ok
+test engine::tests::the_rendered_pattern_grows_with_the_source_not_the_expansion ... ok
+
+test result: ok. 55 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_rt-1224db42a83b34a6)
+
+running 284 tests
+test background_jobs::wait_tests::server_wait_timeouts_truncate_milliseconds_before_testing_the_sign ... ok
+test bindata::tests::a_slice_carries_the_whole_buffer_api ... ok
+test bindata::tests::a_slice_outlives_its_source_and_a_clone_keeps_object_identity ... ok
+test bindata::tests::a_buffer_built_from_a_string_is_little_endian ... ok
+test bindata::tests::an_unallocatable_size_is_an_error_not_a_panic ... ok
+test bindata::tests::an_encoding_may_be_named_by_a_string_and_an_unknown_name_is_an_error ... ok
+test bindata::tests::bitwise_ops_apply_the_mask_at_the_given_position ... ok
+test bindata::tests::byte_access_outside_the_buffer_is_a_catchable_error ... ok
+test bindata::tests::buffer_methods_reject_a_foreign_receiver ... ok
+test bindata::tests::ansi_and_oem_ignore_the_add_bom_flag ... ok
+test bindata::tests::byte_value_outside_the_range_is_rejected ... ok
+test bindata::tests::byte_access_reads_and_writes ... ok
+test bindata::tests::concat_builds_a_new_buffer_and_leaves_the_receiver_alone ... ok
+test bindata::tests::copy_is_independent_of_the_source ... ok
+test bindata::tests::fractional_position_truncates_towards_zero ... ok
+test bindata::tests::integer_access_past_the_end_is_an_error ... ok
+test bindata::tests::integer_write_rejects_values_that_do_not_fit ... ok
+test bindata::tests::integers_are_unsigned_across_the_whole_range ... ok
+test bindata::tests::integers_round_trip_in_both_byte_orders ... ok
+test bindata::tests::invalid_bytes_and_a_truncated_tail_become_the_replacement_character ... ok
+test bindata::tests::invert_covers_the_whole_buffer_the_tail_or_a_span ... ok
+test bindata::tests::invert_rejects_a_count_that_overflows_the_position ... ok
+test bindata::tests::invert_rejects_a_span_that_leaves_the_buffer ... ok
+test bindata::tests::invert_rejects_an_empty_buffer ... ok
+test bindata::tests::invert_with_a_zero_count_runs_to_the_end ... ok
+test bindata::tests::new_buffer_is_zero_filled_and_little_endian ... ok
+test bindata::tests::reading_a_string_back_strips_the_leading_signature ... ok
+test bindata::tests::slice_checks_its_bounds ... ok
+test bindata::tests::slice_gets_its_own_byte_order ... ok
+test bindata::tests::slice_is_a_window_into_the_same_bytes ... ok
+test bindata::tests::slice_length_defaults_to_the_rest_of_the_buffer ... ok
+test bindata::tests::split_cuts_on_every_occurrence_of_the_separator ... ok
+test bindata::tests::split_handles_a_multibyte_separator ... ok
+test bindata::tests::split_rejects_an_empty_or_non_buffer_separator ... ok
+test bindata::tests::split_without_a_match_yields_the_whole_buffer ... ok
+test bindata::tests::the_argument_types_are_checked ... ok
+test bindata::tests::the_buffers_own_byte_order_drives_the_default ... ok
+test bindata::tests::the_constructor_checks_both_arguments ... ok
+test bindata::tests::the_defaults_are_utf_8_without_a_signature ... ok
+test bindata::tests::the_two_readers_do_not_accept_each_others_argument ... ok
+test bindata::tests::two_buffers_with_equal_content_are_not_equal ... ok
+test bindata::tests::write_accepts_a_slice_of_the_receiver_itself ... ok
+test bindata::tests::write_copies_a_block_and_counts_from_the_source_start ... ok
+test bindata::tests::write_rejects_a_bad_count_or_position ... ok
+test bindata::tests::write_truncates_at_the_end_of_the_receiver ... ok
+test builtin::name_table_tests::a_structure_method_with_too_few_arguments_is_an_error_not_a_panic ... ok
+test builtin::name_table_tests::base64_builtins_follow_the_measured_invalid_input_contracts ... ok
+test builtin::name_table_tests::a_structure_method_with_too_many_arguments_is_an_error_too ... ok
+test builtin::name_table_tests::blank_string_follows_the_measured_primitive_contract ... ok
+test builtin::name_table_tests::builtin_math_functions_lookup_and_call ... ok
+test builtin::name_table_tests::builtin_method_count_on_array ... ok
+test builtin::name_table_tests::builtin_method_upper_bound_on_array ... ok
+test builtin::name_table_tests::call_builtin_fn_rejects_too_few_arguments ... ok
+test builtin::name_table_tests::call_builtin_method_rejects_too_few_arguments ... ok
+test builtin::name_table_tests::localized_string_selects_language_and_decodes_quotes_and_lines ... ok
+test builtin::name_table_tests::builtin_names_are_unique ... ok
+test builtin::name_table_tests::the_file_builtins_reject_a_wrong_argument_count_instead_of_panicking ... ok
+test component::descriptor_sizes::descriptors_have_the_expected_size ... ok
+test component::tests::a_minimal_context_reports_capability_missing ... ok
+test builtin::name_table_tests::no_builtin_method_answers_for_a_foreign_package ... ok
+test component::tests::constructor_result_must_name_an_owned_constructor_and_type_once ... ok
+test component::tests::dependency_version_is_exact ... ok
+test component::tests::duplicate_function_alias_is_rejected_case_insensitively ... ok
+test component::tests::missing_binary_data_stream_factory_is_a_catchable_component_error ... ok
+test component::tests::object_members_are_unique_per_type ... ok
+test builtin::name_table_tests::unknown_names_do_not_resolve ... ok
+test component::tests::object_members_must_belong_to_a_declared_type ... ok
+test component::tests::registry_is_sorted_and_aliases_resolve_to_one_code ... ok
+test date::tests::add_months_clamps_the_day_into_the_target_month ... ok
+test component::tests::two_binary_data_stream_factories_are_rejected ... ok
+test date::tests::civil_round_trips_across_the_whole_supported_range ... ok
+test date::tests::default_display_is_the_documented_default_pattern ... ok
+test date::tests::difference_of_two_dates_is_in_seconds ... ok
+test date::tests::empty_date_is_zero_not_a_negative_unix_offset ... ok
+test date::tests::impossible_calendar_dates_are_rejected_not_rolled_over ... ok
+test date::tests::literal_digits_parse_in_both_lengths_and_reject_garbage ... ok
+test date::tests::pattern_formatting_distinguishes_month_from_minute_by_case ... ok
+test date::tests::period_boundaries_keep_the_last_second_inside_the_period ... ok
+test date::tests::range_ends_are_exactly_the_first_and_last_representable_second ... ok
+test date::tests::subsecond_storage_preserves_seconds_api_and_checked_shifts ... ok
+test date::tests::weekday_is_monday_first_and_agrees_with_start_of_week ... ok
+test date::tests::wrapped_file_dates_keep_zero_fields_unsigned_order_and_cyclic_differences ... ok
+test encoding::tests::ascii_replaces_on_write_and_rejects_high_bytes_on_read ... ok
+test encoding::tests::base64_rejects_bad_padding_and_ignores_whitespace ... ok
+test encoding::tests::base64_vectors_round_trip ... ok
+test encoding::tests::bytes_match_what_the_platform_writes ... ok
+test encoding::tests::every_encoding_round_trips_cyrillic ... ok
+test encoding::tests::hex_uses_uppercase ... ok
+test encoding::tests::latin1_maps_every_byte_directly ... ok
+test encoding::tests::unknown_name_is_rejected_rather_than_silently_utf8 ... ok
+test encoding::tests::url_decode_keeps_plus_and_incomplete_percent_and_replaces_bad_utf8 ... ok
+test encoding::tests::url_modes_match_the_measured_platform_sets ... ok
+test encoding::tests::wrong_encoding_yields_replacement_characters ... ok
+test enums::tests::a_member_of_one_enum_is_not_found_in_another ... ok
+test enums::tests::enum_names_resolve_case_insensitively ... ok
+test enums::tests::measured_display_text_keeps_its_trailing_spaces ... ok
+test enums::tests::stream_enum_members_print_as_human_text ... ok
+test env::tests::a_fixed_zone_takes_whole_minutes_within_fourteen_hours ... ok
+test env::tests::a_local_time_around_a_transition_resolves_the_measured_way ... ok
+test env::tests::a_given_random_sequence_comes_back_in_order ... ok
+test env::tests::a_test_clock_advances_on_its_own_terms ... ok
+test env::tests::the_process_clock_is_past_the_unix_epoch ... ok
+test env::tests::arguments_belong_to_the_environment_that_was_given_them ... ok
+test error_info::tests::detail_is_an_immutable_snapshot ... ok
+test env::tests::the_process_random_source_does_not_repeat_itself ... ok
+test error_info::tests::detail_rejects_another_value_type ... ok
+test file::tests::exists_hides_only_the_measured_metadata_errors ... ok
+test file::tests::begin_refuses_legacy_and_reduced_hosts_before_path_mutation ... ok
+test file::tests::file_time_string_parser_keeps_the_measured_whitespace_nul_and_zero_rules ... ok
+test file::tests::file_attribute_arguments_do_not_change_the_condition_aliases ... ok
+test file::tests::initialization_without_a_promise_executor_does_not_mutate_the_path ... ok
+test file::tests::sfile_path_uses_the_measured_lexical_properties ... ok
+test file::tests::universal_file_time_keeps_the_measured_fraction_after_wrapping ... ok
+test file::tests::the_complete_file_method_inventory_keeps_names_arities_and_call_kinds ... ok
+test fill::tests::a_non_string_property_list_is_a_type_error ... ok
+test fill::tests::a_name_in_the_list_must_exist_on_both_sides ... ok
+test fill::tests::a_property_list_hides_the_exclusion_list ... ok
+test fill::tests::empty_list_transfers_nothing ... ok
+test fill::tests::exclusion_list_alone_skips_named_properties ... ok
+test fill::tests::filling_an_object_from_itself_does_not_panic ... ok
+test fill::tests::a_rejected_list_leaves_the_suffix_after_the_bad_name_written ... ok
+test fill::tests::only_shared_names_are_copied ... ok
+test fill::tests::property_names_match_case_insensitively ... ok
+test fill::tests::structure_and_table_row_fill_each_other ... ok
+test fill::tests::table_row_copy_plan_is_reused_and_invalidated_by_schema_change ... ok
+test fill::tests::table_row_fast_path_can_copy_a_row_into_itself ... ok
+test fill::tests::table_rows_copy_by_column_name_instead_of_position ... ok
+test fill::tests::table_row_fast_path_preserves_partial_write_before_list_error ... ok
+test fill::tests::values_without_properties_are_accepted_and_do_nothing ... ok
+test fill::tests::table_rows_without_a_list_copy_intersection_and_honor_exclusion ... ok
+test fold::tests::equal_names_in_any_case_share_the_hash ... ok
+test fold::tests::folded_eq_matches_uppercase_comparison ... ok
+test job_dto::tests::a_fitting_error_is_returned_untouched ... ok
+test job_dto::tests::a_normal_budget_keeps_the_suffix_and_coordinates ... ok
+test job_dto::tests::a_zero_budget_empties_every_text_field ... ok
+test job_dto::tests::bounded_is_strict_for_any_budget ... ok
+test locale::tests::locale_codes_are_case_and_separator_insensitive ... ok
+test job_dto::tests::truncation_respects_char_boundaries ... ok
+test locale::tests::measured_locales_parse ... ok
+test locale::tests::russian_group_separator_is_nbsp_not_a_plain_space ... ok
+test locale::tests::unknown_locale_falls_back_to_russian ... ok
+test notification::tests::constructor_preserves_host_receivers_without_calling_or_checking_arity ... ok
+test notification::tests::text_encoding_error_name_reuses_the_success_name_and_hides_modules ... ok
+test notification::tests::base_method_declarations_match_native_receiver_matrices ... ok
+test shape::tests::add_field_reaches_same_shape_as_direct_intern_with_same_key_set ... ok
+test shape::tests::from_existing_seeds_by_keys_so_transitions_still_converge ... ok
+test shape::tests::remove_then_add_back_returns_to_the_original_shape ... ok
+test string::tests::append_invalidates_cached_derived_forms ... ok
+test string::tests::bmp_characters_count_one_per_code_unit ... ok
+test string::tests::cached_lowercase_preserves_full_unicode_conversion ... ok
+test string::tests::case_conversion_does_not_break_on_non_ascii ... ok
+test string::tests::char_and_char_code_round_trip_including_outside_bmp ... ok
+test string::tests::concat_matches_plus_operator_semantics ... ok
+test string::tests::equality_is_by_content_not_identity ... ok
+test string::tests::direct_utf8_write_matches_lossy_conversion_without_allocating_a_string ... ok
+test string::tests::find_agrees_with_mid_on_the_position_it_returns ... ok
+test open_questions::tests::ids_are_unique_across_questions_and_anchors ... ok
+test string::tests::find_is_1_based_in_utf16_units_not_utf8_bytes ... ok
+test string::tests::left_right_mid_are_1_based_code_unit_slices ... ok
+test string::tests::line_helpers_treat_crlf_as_one_break_and_empty_text_as_one_line ... ok
+test string::tests::one_sided_trims_do_not_touch_the_other_side ... ok
+test string::tests::owned_utf8_constructor_seeds_only_its_own_cache ... ok
+test open_questions::tests::ids_look_like_area_dot_question ... ok
+test string::tests::replace_handles_all_occurrences_and_empty_needle ... ok
+test string::tests::surrogate_pair_counts_as_two_code_units ... ok
+test string::tests::split_keeps_empty_pieces_and_round_trips_through_join ... ok
+test string::tests::template_substitutes_by_number_and_escapes_double_percent ... ok
+test string::tests::utf8_len_matches_the_written_bytes ... ok
+test table::tests::add_column_reports_a_taken_name ... ok
+test table::tests::add_row_reports_exhaustion_before_touching_columns ... ok
+test table::tests::appending_to_a_string_default_does_not_change_other_defaults ... ok
+test shape::tests::add_field_refuses_to_intern_past_the_transition_threshold ... ok
+test table::tests::collapse_resolves_fingerprint_collisions_by_the_full_key ... ok
+test table::tests::adjust_follows_the_measured_platform_rules ... ok
+test table::tests::collapse_reuses_unique_group_columns_and_keeps_duplicate_specs ... ok
+test table::tests::reordered_dense_row_ids_use_a_dense_reverse_index ... ok
+test table::tests::sequential_row_ids_need_no_reverse_map_and_fallback_after_delete ... ok
+test table::tests::set_row_ids_rejects_malformed_input ... ok
+test table::tests::sort_moves_values_without_cloning ... ok
+test temp_storage::tests::a_budget_below_one_reserve_chunk_still_admits_both_writes ... ok
+test temp_storage::tests::a_non_portable_staged_value_keeps_its_own_error ... ok
+test temp_storage::tests::a_job_session_releases_credits_when_staged_writes_are_taken ... ok
+test temp_storage::tests::staging_credits_are_released_on_commit_and_on_drop ... ok
+test temp_storage::tests::a_small_write_does_not_reserve_the_whole_global_budget ... ok
+test temp_storage::tests::a_tight_global_budget_still_admits_a_fitting_write ... ok
+test tests::reserve_hint_clamps_untrusted_counts ... ok
+test types::tests::canonical_name_is_the_russian_one ... ok
+test tz::tests::garbage_input_is_none_not_a_panic ... ok
+test tz::tests::transition_switches_the_offset_at_the_exact_moment ... ok
+test tz::tests::missing_file_falls_back_to_zero_offset ... ok
+test enums::tests::every_member_resolves_from_both_languages ... ok
+test tz::tests::v1_only_file_with_a_single_fixed_type_is_used_everywhere ... ok
+test types::tests::lookup_accepts_both_languages_case_insensitively ... ok
+test tz::tests::v2_block_is_preferred_over_v1_and_covers_a_wider_range ... ok
+test uuid::tests::non_canonical_forms_are_errors ... ok
+test uuid::tests::round_trip_lowers_the_case_and_keeps_the_bytes ... ok
+test uuid::tests::v4_from_bytes_sets_version_and_variant_bits ... ok
+test value::collections::tests::array_index_get_set_roundtrip ... ok
+test value::collections::tests::array_out_of_bounds_is_an_error ... ok
+test value::collections::tests::arrays_and_structures_are_reference_types ... ok
+test temp_storage::tests::a_held_reserve_chunk_does_not_reject_a_fitting_neighbour ... ok
+test value::collections::tests::native_property_names_fold_cyrillic_in_both_directions ... ok
+test temp_storage::tests::a_replacement_holds_the_previous_credit_until_it_succeeds ... ok
+test temp_storage::tests::a_held_small_write_does_not_starve_a_concurrent_one ... ok
+test value::collections::tests::structure_field_get_set_by_interned_name ... ok
+test value::collections::tests::unknown_field_is_an_error ... ok
+test value::io::tests::binary_data_combine_concatenates_in_array_order ... ok
+test value::io::tests::binary_data_combine_empty_array ... ok
+test value::io::tests::binary_data_combine_rejects_a_non_binary_element ... ok
+test value::io::tests::binary_data_split_empty_yields_one_empty_part ... ok
+test value::io::tests::binary_data_split_exact_multiple ... ok
+test value::io::tests::binary_data_split_part_larger_than_whole ... ok
+test value::io::tests::binary_data_split_rejects_non_positive_and_fractional_sizes ... ok
+test value::io::tests::binary_data_split_short_tail ... ok
+test value::io::tests::text_writer_close_keeps_the_buffer_when_flush_fails ... ok
+test temp_storage::tests::a_held_late_reserve_does_not_reject_a_fitting_neighbour ... ok
+test value::strings::tests::uuid_is_accepted_by_case_conversion_functions ... ok
+test value::tests::binary_data_compares_and_hashes_by_content ... ok
+test value::tests::binary_data_display_is_a_hex_dump_capped_at_256_bytes ... ok
+test value::tests::condition_converts_numbers_and_boolean_words ... ok
+test value::tests::display_matches_measured_platform_strings ... ok
+test value::tests::display_matches_measured_platform_strings_for_collections ... ok
+test value::tests::equal_value_objects_hash_equal ... ok
+test value::tests::equality_by_value_across_representations ... ok
+test value::tests::hash_follows_partial_eq_when_value_eq_and_identity_key_both_exist ... ok
+test value::collections::tests::dictionary_structure_delete_keeps_order_of_the_rest ... ok
+test value::collections::tests::dictionary_structure_does_not_poison_inline_cache_for_shaped_objects ... ok
+test value::collections::tests::structure_degrades_to_dictionary_after_threshold_inserts ... ok
+test value::tests::the_value_equality_and_hash_law_holds_across_object_kinds ... ok
+test value::collections::tests::dictionary_structure_field_get_set_roundtrip ... ok
+test value_graph::tests::a_non_portable_root_names_its_type_at_any_budget ... ok
+test value_graph::tests::a_non_portable_value_reached_by_the_walk_names_its_type ... ok
+test value_graph::tests::a_round_trip_between_two_sessions_preserves_values ... ok
+test value_graph::tests::a_sufficient_budget_still_captures_everything ... ok
+test value_graph::tests::a_value_table_round_trips_with_columns_and_rows ... ok
+test value_graph::tests::aliases_survive_the_transfer ... ok
+test value_graph::tests::an_unsupported_value_is_rejected_with_its_type_name ... ok
+test value_graph::tests::cycles_are_captured_and_rebuilt ... ok
+test value_graph::tests::structures_and_maps_round_trip ... ok
+test value_list::tests::an_empty_value_list_has_the_measured_empty_string_representation ... ok
+test value_graph::tests::measure_agrees_with_capture_on_every_shape ... ok
+test temp_storage::tests::a_repeated_staged_write_replaces_the_previous_one ... ok
+test vstr::tests::composite_column_types_serialize_in_the_canonical_platform_order ... ok
+test vstr::tests::cyclic_value_is_a_catchable_error_not_a_crash ... ok
+test vstr::tests::column_title_width_and_qualifiers_survive_the_transit ... ok
+test vstr::tests::composite_type_with_a_reference_survives_the_transit ... ok
+test vstr::tests::double_serialization_escapes_like_the_platform ... ok
+test vstr::tests::database_reference_shape_survives_the_transit_inside_a_container ... ok
+test vstr::tests::database_references_survive_the_transit_and_compare_by_value ... ok
+test vstr::tests::empty_value_table_matches_the_platform_byte_for_byte ... ok
+test vstr::tests::file_bytes_preserves_the_existing_bom_and_lf_expansion ... ok
+test vstr::tests::fixed_array_reads_as_a_plain_array ... ok
+test vstr::tests::garbage_and_count_mismatch_are_errors ... ok
+test vstr::tests::map_pairs_serialize_in_insertion_order_for_transit_stability ... ok
+test vstr::tests::one_cell_value_table_matches_the_platform_byte_for_byte ... ok
+test vstr::tests::file_pair_matches_the_platform_byte_for_byte_and_round_trips ... ok
+test vstr::tests::parser_accepts_dense_text_without_newlines ... ok
+test vstr::tests::platform_map_text_survives_the_transit_byte_for_byte ... ok
+test vstr::tests::repeated_object_unfolds_into_copies_like_the_platform ... ok
+test vstr::tests::scalars_match_the_platform_byte_for_byte ... ok
+test vstr::tests::simple_array_matches_the_platform_byte_for_byte ... ok
+test vstr::tests::round_trip_preserves_types_and_content ... ok
+test vstr::tests::structure_matches_the_platform_byte_for_byte ... ok
+test vstr::tests::sparse_row_and_column_ids_survive_the_transit ... ok
+test vstr::tests::type_description_value_matches_the_platform_and_round_trips ... ok
+test vstr::tests::typed_column_matches_the_platform_byte_for_byte ... ok
+test vstr::tests::types_round_trip_and_match_measured_uuids ... ok
+test vstr::tests::unknown_type_uuid_survives_the_transit_as_opaque ... ok
+test vstr::tests::uuid_value_survives_the_transit_as_opaque ... ok
+test vstr::tests::undefined_in_the_middle_survives_the_round_trip ... ok
+test vstr::tests::value_list_survives_the_transit_as_opaque ... ok
+test value_graph::tests::the_budget_stops_the_capture_before_allocation ... ok
+test value_graph::tests::measure_matches_capture_without_allocating ... ok
+test temp_storage::tests::two_serializers_reserve_the_global_budget_before_capture ... ok
+test builtin::name_table_tests::every_builtin_name_resolves_to_its_own_variant ... ok
+test file::tests::every_file_member_name_occurs_in_the_platform_probe_suite ... ok
+test types::tests::every_type_round_trips_through_its_own_names ... ok
+test value_graph::tests::a_reserving_budget_takes_credit_incrementally ... ok
+test component::tests::the_string_path_drives_a_pending_call_to_completion ... ok
+test value::collections::tests::shape_table_stops_growing_after_degradation ... ok
+test value_graph::tests::the_charged_print_peak_covers_the_real_one ... ok
+test value_graph::tests::a_capture_never_allocates_more_than_it_charged ... ok
+test value_graph::tests::a_small_budget_refuses_before_allocating_the_value ... ok
+test value_graph::tests::a_dry_pass_never_prints_a_big_number ... ok
+
+test result: ok. 284 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+     Running tests/application_command_line.rs (target/debug/deps/application_command_line-700d0d66c2f62719)
+
+running 3 tests
+test invalid_command_lines_do_not_leak_the_input ... ok
+test escapes_follow_quote_context_and_never_expand_shell_text ... ok
+test unix_quotes_preserve_empty_arguments_unicode_and_adjacent_parts ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/application_host.rs (target/debug/deps/application_host-6f634e759b54a1b8)
+
+running 2 tests
+test accepted_completion_outlives_the_environment_without_cancellation ... ok
+test application_launch_is_opt_in_and_preserves_structured_arguments ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/arity.rs (target/debug/deps/arity-b0b41b7bfebdb845)
+
+running 4 tests
+test disjoint_counts_do_not_accept_the_gaps ... ok
+test method_dispatch_rejects_disallowed_counts ... ok
+test ranges_and_exact_counts_keep_their_contract ... ok
+test malformed_count_sets_are_rejected ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/array_access_methods.rs (target/debug/deps/array_access_methods-eb156a6e04e914cd)
+
+running 4 tests
+test failed_insert_preserves_the_array_including_impossible_allocation ... ok
+test insertion_extends_with_undefined_and_keeps_aliases_and_values ... ok
+test setter_checks_index_and_arity_before_mutation ... ok
+test method_indices_are_prepared_without_changing_bracket_indices ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/delete_races.rs (target/debug/deps/delete_races-cc2a1ea2fdc47357)
+
+running 2 tests
+test vanished_selected_entry_stops_without_reenumeration_or_rollback ... ok
+test entry_created_after_selection_is_not_deleted ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/file_async.rs (target/debug/deps/file_async-8372111aef8385c1)
+
+running 8 tests
+test cancellation_after_temp_lookup_skips_the_next_host_call ... ok
+test async_directory_request_uses_the_session_formatter_for_non_strings ... ok
+test cancellation_precedes_io_and_never_rolls_back_completed_changes ... ok
+test metadata_writes_check_cancellation_before_and_after_success_or_error ... ok
+test metadata_keeps_errors_and_checks_cancellation_after_host_returns ... ok
+test cancellation_wins_over_errors_from_every_global_host_operation ... ok
+test results_keep_original_directory_string_and_host_temp_separator ... ok
+test directory_creation_normalizes_before_host_io_without_changing_the_result ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/file_begin_oracle.rs (target/debug/deps/file_begin_oracle-0bf69d9ff666d284)
+
+running 1 test
+test native_begin_arity_distinguishes_call_errors_from_delayed_operation_errors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/file_handle_resize.rs (target/debug/deps/file_handle_resize-8140897a461d1c90)
+
+running 3 tests
+test old_host_refuses_resize_without_calling_other_operations ... ok
+test read_only_resize_fails_without_changing_file_or_position ... ok
+test system_resize_preserves_position_and_zero_fills_extension ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/file_masks.rs (target/debug/deps/file_masks-a9a18b5fa9b760c7)
+
+running 2 tests
+test file_masks_match_the_isolated_platform_cases ... ok
+test named_classes_and_escapes_match_the_platform_oracle ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/file_metadata.rs (target/debug/deps/file_metadata-e710441443aa87b7)
+
+running 5 tests
+test legacy_metadata_constructors_do_not_invent_a_size ... ok
+test system_character_device_is_a_measured_file ... ok
+test system_metadata_reports_size_and_follows_links_and_special_files ... ok
+test system_read_only_preserves_data_and_does_not_grant_write_to_other_users ... ok
+test system_fifo_and_unix_socket_are_measured_files ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/find_files.rs (target/debug/deps/find_files-6b9a22cf9c889d8b)
+
+running 21 tests
+test cancellation_during_walk_discards_partial_results ... ok
+test cancellation_after_link_metadata_prevents_descent ... ok
+test direct_sfile_path_without_a_mask_is_empty_before_host_access ... ok
+test deletion_selects_only_matching_children_and_observes_cancellation ... ok
+test formatted_deletion_uses_the_supplied_formatter_and_host ... ok
+test broken_links_stop_matches_and_child_selection_independently ... ok
+test invalid_host_names_never_escape_the_directory ... ok
+test direct_and_recursive_search_return_host_bound_files ... ok
+test measured_sfile_directory_is_never_descended ... ok
+test measured_descendant_errors_are_skipped_and_cancellation_wins ... ok
+test measured_sfile_links_have_one_selection_rule_for_all_target_kinds ... ok
+test missing_or_non_directory_search_roots_return_empty_arrays ... ok
+test single_threaded_files_do_not_implicitly_grant_background_access ... ok
+test measured_metadata_errors_match_the_native_ordered_oracle ... ok
+test whitespace_search_keeps_raw_matching_and_entry_kind_but_trims_descent ... ok
+test system_background_access_observes_the_same_files_across_threads ... ok
+test cancellation_precedes_io_and_depth_is_bounded ... ok
+test sfile_selection_matches_the_server_matrix ... ok
+test links_with_space_names_match_the_native_ordered_oracle ... ok
+test multiple_and_nonmatching_broken_links_match_the_native_ordered_oracle ... ok
+test recursive_search_follows_directory_links_without_changing_entry_kind ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.32s
+
+     Running tests/method_lookup.rs (target/debug/deps/method_lookup-c0d0d531f90dd7b1)
+
+running 4 tests
+test dynamic_receiver_explicitly_declares_methods_without_dispatch ... ok
+test lookup_does_not_trim_names_or_invent_missing_methods ... ok
+test lookup_returns_the_original_descriptor_without_calling_it ... ok
+test static_receiver_uses_the_shared_lookup_without_calling_handlers ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/notification_method_matrix.rs (target/debug/deps/notification_method_matrix-400cf34bca1f8d5c)
+
+running 2 tests
+test measured_names_cover_the_complete_builtin_method_table ... ok
+test native_matrix_preserves_receiver_errors_separately_from_missing_methods ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/open_questions_registry.rs (target/debug/deps/open_questions_registry-c5ddd99d7173a097)
+
+running 3 tests
+test the_job_plan_remaining_table_is_registered ... ok
+test measure_script_covers_every_registry_id ... ok
+test open_questions_registry_matches_source_markers ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/public_paths.rs (target/debug/deps/public_paths-714e57a8f49327ee)
+
+running 6 tests
+test directory_noop_preparation_is_available_through_the_runtime_facade ... ok
+test domain_methods_keep_their_inherent_signatures ... ok
+test legacy_http_spawner_keeps_its_implementation_and_rejects_file_requests ... ok
+test value_and_error_keep_their_root_paths_and_traits ... ok
+test simple_mask_is_available_through_the_runtime_facade ... ok
+test value_and_error_keep_the_baseline_layout ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/system_application.rs (target/debug/deps/system_application-8ff7c26c21ab9ae4)
+
+running 5 tests
+test native_child ... ok
+
+running 1 test
+
+running 1 test
+
+running 1 test
+test parsed_unix_command_reaches_the_real_child_without_expansion ... ok
+test system_launcher_preserves_argv_cwd_and_reports_exit_and_spawn_errors ... ok
+test losing_the_result_receiver_does_not_kill_or_leave_a_zombie ... ok
+test documents_deliver_open_errors_without_claiming_process_exit ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/system_file_removal.rs (target/debug/deps/system_file_removal-d524e50ce9b8dad9)
+
+running 6 tests
+test removing_a_tree_preserves_targets_of_links_inside_it ... ok
+test system_filesystem_does_not_confine_parent_components_to_a_root ... ok
+test trailing_separators_do_not_allow_removing_an_ordinary_file ... ok
+test actual_directories_with_trailing_separators_are_still_removed ... ok
+test removing_a_selected_directory_link_preserves_its_target ... ok
+test removing_file_and_broken_links_never_removes_or_creates_the_target ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/table_access_methods.rs (target/debug/deps/table_access_methods-a454ac77dec6b987)
+
+running 3 tests
+test deleted_row_remains_invalid_through_method_access ... ok
+test negative_fraction_bad_arity_and_named_column_do_not_mutate_the_table ... ok
+test measured_method_indices_select_live_rows_columns_and_cells ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/temporary_directory.rs (target/debug/deps/temporary_directory-2de6a8238fdee2c7)
+
+running 4 tests
+test custom_filesystem_defaults_to_unsupported_without_other_file_operations ... ok
+test temporary_path_child ... ok
+test create_directory_matches_the_measured_existing_parent_and_file_cases ... ok
+test standard_host_uses_temp_then_tmp_without_fallback_on_invalid_path ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/temporary_file_ownership.rs (target/debug/deps/temporary_file_ownership-2836e33497ee05ae)
+
+running 5 tests
+test a_path_alone_cannot_be_registered_as_deletion_authority ... ok
+test dropping_an_unregistered_record_closes_but_does_not_delete ... ok
+test closed_registry_returns_the_whole_record_for_another_session ... ok
+test legacy_split_releases_cleanup_capability_without_deleting_the_file ... ok
+test registering_transfers_the_original_resource_without_touching_the_handle ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/temporary_file_transfer.rs (target/debug/deps/temporary_file_transfer-8f4fb299294a602a)
+
+running 3 tests
+test closed_registry_returns_transferred_ownership_without_io_or_deletion ... ok
+test transferred_result_keeps_the_original_handle_and_cleanup_resource ... ok
+test dropping_either_form_closes_resources_without_deleting_the_file ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_sema-6acbfa65dea83dea)
+
+running 72 tests
+test resolver::tests::a_context_function_call_as_a_statement_is_allowed ... ok
+test resolver::tests::a_lowercase_okr_resolves_like_its_canonical_form ... ok
+test resolver::tests::a_multiline_statement_reports_where_it_starts ... ok
+test resolver::tests::a_lowercase_vychislit_resolves_to_dyn_eval ... ok
+test resolver::tests::a_mixed_case_repeated_module_var_collapses_to_one_slot ... ok
+test resolver::tests::a_parameter_keeps_the_line_it_was_declared_on ... ok
+test resolver::tests::a_required_parameter_after_an_optional_one_must_be_supplied ... ok
+test resolver::tests::a_type_outside_the_list_is_not_constructible ... ok
+test resolver::tests::a_statement_keeps_its_source_line_through_resolution ... ok
+test resolver::tests::a_user_procedure_in_a_dynamic_expression_is_rejected ... ok
+test resolver::tests::an_intrinsic_call_as_a_statement_is_rejected ... ok
+test resolver::tests::an_omitted_trailing_optional_argument_takes_its_default ... ok
+test resolver::tests::builtin_function_arity_mismatch_is_an_error ... ok
+test resolver::tests::argument_count_mismatch_is_an_error ... ok
+test resolver::tests::async_parameters_are_always_passed_by_value ... ok
+test resolver::tests::a_procedure_in_an_expression_is_rejected ... ok
+test resolver::tests::an_unknown_method_is_left_for_the_runtime_receiver ... ok
+test resolver::tests::builtin_function_call_resolves_without_user_declaration ... ok
+test resolver::tests::await_is_only_allowed_inside_an_async_method ... ok
+test resolver::tests::calling_undeclared_function_is_an_error ... ok
+test resolver::tests::case_insensitive_identifier_is_the_same_variable ... ok
+test resolver::tests::chars_line_feed_and_carriage_return_are_compile_time_strings ... ok
+test resolver::tests::duplicate_and_unknown_labels_are_sema_errors ... ok
+test resolver::tests::count_method_call_resolves_on_array ... ok
+test resolver::tests::duplicate_function_name_is_an_error ... ok
+test resolver::tests::command_line_arguments_reads_bare_and_a_local_shadows_it ... ok
+test resolver::tests::execute_resolves_to_rstmt_execute ... ok
+test resolver::tests::export_inside_a_method_body_is_a_compile_error ... ok
+test resolver::tests::for_loop_variable_is_declared_and_alive_in_body ... ok
+test resolver::tests::export_flags_reach_resolved_program ... ok
+test resolver::tests::for_each_declares_loop_variable ... ok
+test resolver::tests::functions_can_be_called_before_their_declaration ... ok
+test resolver::tests::goto_resolves_forward_case_insensitive_and_keyword_labels ... ok
+test resolver::tests::implicit_declaration_on_first_assignment ... ok
+test resolver::tests::labels_are_scoped_to_one_module_or_function_body ... ok
+test resolver::tests::index_and_field_assignment_targets ... ok
+test resolver::tests::new_array_resolves_dimensions ... ok
+test resolver::tests::new_structure_keys_only_defaults_values_to_undefined ... ok
+test resolver::tests::new_structure_with_dynamic_key_list_is_unsupported ... ok
+test resolver::tests::new_structure_with_literal_keys_and_values ... ok
+test resolver::tests::goto_may_not_enter_a_block_or_a_sibling_branch ... ok
+test resolver::tests::every_new_type_is_recognised_by_resolve_new ... ok
+test resolver::tests::params_occupy_the_first_slots_by_val_flag_recorded ... ok
+test resolver::tests::raise_with_and_without_expression ... ok
+test resolver::tests::goto_may_stay_in_a_block_or_leave_it ... ok
+test resolver::tests::reading_undefined_variable_is_an_error ... ok
+test resolver::tests::resolve_snippet_stmts_seeds_existing_locals_and_extends ... ok
+test resolver::tests::skipping_a_builtin_argument_resolves_to_undefined ... ok
+test resolver::tests::top_level_can_call_functions_declared_anywhere_in_module ... ok
+test resolver::tests::skipping_a_defaulted_parameter_resolves_to_skipped_marker ... ok
+test resolver::tests::the_repl_keeps_bare_intrinsic_calls ... ok
+test resolver::tests::skipping_a_parameter_without_a_default_is_an_error ... ok
+test resolver::tests::a_user_procedure_in_an_expression_is_rejected ... ok
+test resolver::tests::try_except_resolves_both_bodies ... ok
+test resolver::tests::var_decl_registers_slot_without_runtime_effect ... ok
+test resolver::tests::vychislit_resolves_to_dyn_eval ... ok
+test resolver::tests::a_registered_core_constructor_still_proves_a_core_receiver ... ok
+test resolver::tests::a_registry_procedure_is_a_statement_but_not_an_expression ... ok
+test resolver::tests::a_registry_constructor_arity_mismatch_is_reported ... ok
+test resolver::tests::a_reassignment_from_an_unknown_value_reopens_the_calls ... ok
+test resolver::tests::a_registry_constructed_receiver_stays_open ... ok
+test resolver::tests::by_ref_argument_passing_kills_the_verdict_but_by_val_does_not ... ok
+test resolver::tests::an_external_constructor_that_shadows_a_legacy_core_name_stays_open ... ok
+test resolver::tests::a_core_receiver_closes_every_method_not_just_some ... ok
+test resolver::tests::a_proven_core_receiver_closes_its_method_calls ... ok
+test resolver::tests::different_core_constructors_still_prove_a_core_receiver ... ok
+test resolver::tests::loop_variables_are_not_tracked ... ok
+test resolver::tests::function_parameters_are_never_tracked ... ok
+test resolver::tests::registry_calls_reject_gaps_in_constructor_and_function_arities ... ok
+test resolver::tests::dynamic_execution_in_scope_reopens_the_calls ... ok
+test resolver::tests::module_variables_aggregate_sites_across_functions ... ok
+test resolver::tests::a_numeric_literal_beyond_max_scale_is_an_error_not_a_panic ... ok
+
+test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_spreadsheet-41d70b4f3e2a6c9a)
+
+running 46 tests
+test document::tests::a_quote_in_text_is_doubled ... ok
+test document::tests::height_never_shrinks_after_clearing_a_cell ... ok
+test document::tests::begin_row_group_rejects_extra_arguments ... ok
+test document::tests::empty_document_has_a_header_and_no_trailing_newline ... ok
+test document::tests::page_properties_round_trip_through_bsl ... ok
+test document::tests::output_shifts_rows_down ... ok
+test document::tests::margins_come_back_from_the_mxl_written_by_the_platform ... ok
+test pdf_layout::tests::pdf_control_character_in_a_cell_is_an_error ... ok
+test document::tests::margins_survive_the_mxl_round_trip ... ok
+test pdf_layout::tests::pdf_empty_document_is_one_empty_page ... ok
+test xlsx::tests::cancellation_splits_a_column_merge ... ok
+test xlsx::tests::color_is_in_direct_order ... ok
+test xlsx::tests::column_names ... ok
+test xlsx::tests::degenerate_merge_is_skipped ... ok
+test pdf_layout::tests::pdf_alignment_moves_the_text_inside_the_cell ... ok
+test tests::constructor_codes_are_static_and_dense ... ok
+test xlsx::tests::cell_ref_is_one_based_by_row ... ok
+test xlsx::tests::equal_styling_reuses_the_style ... ok
+test xlsx::tests::number_recognition ... ok
+test xlsx::tests::merges_are_carried_into_ooxml ... ok
+test pdf_layout::tests::pdf_merge_draws_one_cell_for_the_whole_rectangle ... ok
+test pdf_layout::tests::pdf_margins_are_millimetres ... ok
+test pdf_layout::tests::pdf_borders_use_the_measured_colour_and_widths ... ok
+test xlsx::tests::overlaps_never_reach_the_workbook ... ok
+test pdf_layout::tests::pdf_cell_colours_are_reset_after_the_cell ... ok
+test xlsx::tests::row_merge_is_expanded ... ok
+test xlsx::tests::special_characters_are_escaped ... ok
+test pdf_layout::tests::pdf_default_grid_matches_the_measured_geometry ... ok
+test xlsx::tests::shared_strings_are_deduplicated ... ok
+test pdf_layout::tests::pdf_long_text_spills_over_empty_neighbours_only ... ok
+test xlsx::tests::a_number_format_makes_the_cell_numeric ... ok
+test xlsx::tests::values_and_parameters_reach_the_workbook ... ok
+test xlsx::tests::column_merge_is_expanded ... ok
+test xlsx::tests::border_reaches_the_workbook ... ok
+test pdf_layout::tests::pdf_merge_declared_far_beyond_the_document_is_clamped ... ok
+test document::tests::write_refuses_a_file_type_it_cannot_produce ... ok
+test pdf_layout::tests::pdf_page_is_a4_and_landscape_swaps_it ... ok
+test pdf_layout::tests::pdf_multiline_cell_becomes_separate_lines ... ok
+test pdf_layout::tests::pdf_cell_font_reaches_the_stream ... ok
+test pdf_layout::tests::pdf_vertical_alignment_follows_the_measured_defaults ... ok
+test xlsx::tests::the_archive_has_every_required_part ... ok
+test xlsx::tests::a_real_report_lays_out_like_the_platform ... ok
+test pdf_layout::tests::pdf_rows_that_do_not_fit_start_a_new_page ... ok
+test pdf_layout::tests::pdf_text_matches_the_platform_file ... ok
+test pdf_layout::tests::pdf_narrow_columns_keep_every_word ... ok
+test pdf_layout::tests::pdf_wide_document_splits_by_columns_first ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/mxl_oracle.rs (target/debug/deps/mxl_oracle-429f1c2c9fa853bc)
+
+running 84 tests
+test area_intersection ... ok
+test bold ... ok
+test all_styling_at_once ... ok
+test background_color ... ok
+test dump_for_the_platform_crosscheck ... ignored, готовит файлы для встречной проверки на платформе
+test cell_parameter ... ok
+test collapsed_group ... ok
+test clearing_the_name ... ok
+test cell_drilldown ... ok
+test cell_without_text ... ok
+test column_width ... ok
+test drawing_over_a_tall_row ... ok
+test drawing_over_a_wide_column ... ok
+test drawing_without_geometry ... ok
+test duplicate_name_is_ignored ... ok
+test empty_document ... ok
+test equal_color_is_reused ... ok
+test equal_font_is_reused ... ok
+test equal_width_reuses_the_format ... ok
+test borders_by_side ... ok
+test fixed_top ... ok
+test drawing_with_offset ... ok
+test font_and_alignment_in_one_format ... ok
+test fixation_is_a_count_and_has_a_left_field ... ok
+test grid_hidden ... ok
+test column_width_units ... ok
+test group_without_a_name ... ok
+test merge_beyond_content ... ok
+test merge_cancelled_in_one_row ... ok
+test merged_cells ... ok
+test merge_of_one_cell ... ok
+test merges_are_sorted ... ok
+test merge_survives_output ... ok
+test named_column_area ... ok
+test named_row_area ... ok
+test outline_on_all_sides ... ok
+test named_area ... ok
+test nested_groups ... ok
+test line_styles_and_width ... ok
+test outline_with_one_argument ... ok
+test horizontal_alignment ... ok
+test newline_inside_cell ... ok
+test parameter_replaces_text ... ok
+test print_scale ... ok
+test parameter_in_empty_document ... ok
+test palette_is_filled_row_by_row ... ok
+test repeated_merge_adds_no_record ... ok
+test print_area_test ... ok
+test row_format_precedes_cell_format ... ok
+test quotes_and_braces_in_text ... ok
+test row_height ... ok
+test second_column ... ok
+test renaming_keeps_one_record ... ok
+test a_real_report_from_1c ... ok
+test second_row ... ok
+test fonts_test ... ok
+test row_without_cells ... ok
+test single_cell ... ok
+test sparse_document ... ok
+test row_groups_test ... ok
+test text_color ... ok
+test text_and_background_color_together ... ok
+test two_adjacent_merges ... ok
+test row_height_units ... ok
+test two_columns_of_different_width ... ok
+test two_by_two_block ... ok
+test three_named_areas ... ok
+test two_different_fonts ... ok
+test two_different_lines ... ok
+test two_groups_in_a_row ... ok
+test two_named_areas_go_alphabetically ... ok
+test two_drawings ... ok
+test unmerge_drops_the_record ... ok
+test two_values_share_the_type_descriptor ... ok
+test vertical_merge ... ok
+test whole_column_merge ... ok
+test whole_row_merge ... ok
+test word_wrap ... ok
+test yellow_background ... ok
+test value_cells ... ok
+test vertical_alignment ... ok
+test xml_template_parsing ... ok
+test roundtrip_on_the_supported_subset ... ok
+test every_oracle_parses ... ok
+
+test result: ok. 83 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_stream-37ed8b501d45f44f)
+
+running 71 tests
+test datarw::tests::a_reader_over_binary_data_has_no_interleaving_at_all ... ok
+test datarw::tests::a_short_integer_read_consumes_nothing ... ok
+test datarw::tests::a_stream_without_the_needed_access_is_a_catchable_error ... ok
+test datarw::tests::bulk_reads_return_what_is_left_and_zero_means_everything ... ok
+test datarw::tests::extra_arguments_are_rejected_at_runtime ... ok
+test datarw::tests::closing_neither_closes_the_target_nor_disables_the_object ... ok
+test datarw::tests::fractional_and_negative_counts_are_rejected ... ok
+test datarw::tests::integer_and_byte_ranges_match_the_platform ... ok
+test datarw::tests::a_writer_over_an_existing_file_does_not_truncate_it ... ok
+test datarw::tests::methods_reject_the_wrong_side_and_a_foreign_receiver ... ok
+test datarw::tests::moving_the_target_back_to_the_expected_position_heals_the_reader ... ok
+test datarw::tests::read_chars_counts_characters_not_bytes ... ok
+test datarw::tests::reader_copy_and_writer_buffer_follow_the_connector_contract ... ok
+test datarw::tests::read_line_splits_on_the_separator_without_translating_it_back ... ok
+test datarw::tests::readers_and_writers_are_equal_by_identity ... ok
+test datarw::tests::reader_rejects_operation_after_target_stream_was_moved_directly ... ok
+test datarw::tests::reading_past_the_end_yields_undefined_for_byte_and_integers ... ok
+test datarw::tests::six_argument_writer_can_disable_line_feed_conversion ... ok
+test datarw::tests::skip_moves_the_position_past_the_end_instead_of_reading ... ok
+test datarw::tests::source_stream_proxy_moves_the_reader_without_triggering_interleaving ... ok
+test datarw::tests::text_encoding_is_honoured_on_both_sides ... ok
+test datarw::tests::the_bound_is_exactly_at_2_32_not_below ... ok
+test datarw::tests::the_constructor_starts_at_the_streams_current_position ... ok
+test datarw::tests::the_constructor_rejects_what_the_platform_rejects ... ok
+test datarw::tests::the_read_result_exposes_size_and_both_getters ... ok
+test datarw::tests::a_huge_read_over_a_file_is_a_catchable_error_not_an_abort ... ok
+test datarw::tests::the_reader_never_reads_ahead_of_the_target_stream ... ok
+test datarw::tests::the_readers_byte_order_property_is_shown_but_not_used ... ok
+test datarw::tests::the_writer_reaches_the_target_stream_immediately ... ok
+test datarw::tests::the_bounded_read_forms_reject_a_count_of_2_32_or_more ... ok
+test datarw::tests::the_writers_byte_order_property_is_live ... ok
+test datarw::tests::the_two_sides_accept_different_sources ... ok
+test datarw::tests::writer_rejects_operation_after_target_stream_was_moved_directly ... ok
+test stream::tests::a_closed_stream_keeps_its_position_and_flags_but_nothing_else ... ok
+test datarw::tests::writing_text_adds_no_signature_but_expands_line_feeds ... ok
+test stream::tests::a_file_stream_obeys_the_close_law ... ok
+test stream::tests::a_fractional_buffer_offset_truncates_but_a_fractional_count_is_rejected ... ok
+test stream::tests::a_file_stream_opens_through_the_session_file_system ... ok
+test stream::tests::a_file_stream_grows_over_a_hole_and_reads_it_back_as_zeroes ... ok
+test stream::tests::a_hole_left_by_seeking_reads_back_as_zeroes ... ok
+test stream::tests::a_missing_directory_is_a_catchable_error ... ok
+test stream::tests::a_new_memory_stream_is_empty_readable_and_writable ... ok
+test stream::tests::a_stream_over_a_buffer_shares_its_memory_and_its_fixed_size ... ok
+test stream::tests::a_stream_over_a_buffer_survives_that_buffer_as_its_own_argument ... ok
+test stream::tests::both_streams_print_the_same_name_but_stay_different_types ... ok
+test stream::tests::close_and_get_binary_data_is_repeatable_and_returns_the_whole_stream ... ok
+test stream::tests::append_only_sets_the_initial_position ... ok
+test stream::tests::copy_to_moves_both_positions_and_zero_copies_nothing ... ok
+test stream::tests::read_and_write_check_the_buffer_bounds_and_the_argument_types ... ok
+test stream::tests::access_restricts_the_operations ... ok
+test stream::tests::reading_near_the_end_returns_what_is_left ... ok
+test stream::tests::resize_allocation_failure_preserves_owned_bytes_and_position ... ok
+test stream::tests::seeking_from_all_three_origins ... ok
+test stream::tests::seeking_past_the_ends_clamps_at_zero_and_never_resizes ... ok
+test stream::tests::seeking_rejects_a_fractional_offset_and_a_foreign_enum ... ok
+test stream::tests::shrinking_buffer_window_keeps_aliases_and_rejects_later_growth ... ok
+test stream::tests::stream_methods_reject_a_receiver_that_is_not_a_stream ... ok
+test stream::tests::streams_are_equal_by_identity ... ok
+test stream::tests::the_constructor_rejects_what_the_platform_rejects ... ok
+test stream::tests::the_numeric_argument_is_a_capacity_not_a_limit ... ok
+test stream::tests::the_file_constructor_rejects_what_the_platform_rejects ... ok
+test stream::tests::the_manager_checks_its_own_arity_and_argument_types ... ok
+test stream::tests::write_after_seek_to_u64_edge_is_error_not_panic ... ok
+test stream::tests::writing_advances_the_position_and_grows_the_stream ... ok
+test tests::constructor_codes_are_static_and_dense ... ok
+test textreader::tests::reader_consumes_utf8_then_returns_undefined_and_closes_only_itself ... ok
+test textreader::tests::reader_decodes_string_encoding_and_removes_initial_bom ... ok
+test stream::tests::the_open_mode_table_on_a_missing_file_matches_the_platform ... ok
+test stream::tests::the_open_mode_table_on_an_existing_file_matches_the_platform ... ok
+test stream::tests::a_shared_spelling_without_a_declared_owner_is_rejected ... ok
+test stream::tests::the_shared_display_name_resolves_to_the_file_stream ... ok
+
+test result: ok. 71 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/temporary_file_oracle.rs (target/debug/deps/temporary_file_oracle-06569e6be17a5cf9)
+
+running 4 tests
+test native_temporary_sharing_follows_the_file_across_hard_links_and_rename ... ok
+test native_temporary_file_visibility_distinguishes_metadata_from_shared_read_access ... ok
+test native_async_temporary_parameters_preserve_identity_and_separate_call_from_await_errors ... ok
+test native_temporary_file_parameters_cover_both_positions_and_languages ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_syntax-29722a99c211dd2b)
+
+running 66 tests
+test keywords::tests::spellings_are_unique ... ok
+test keywords::tests::ordinary_identifiers_are_not_keywords ... ok
+test lexer::tests::a_comment_may_follow_a_directive_but_other_text_may_not ... ok
+test lexer::tests::a_directive_can_split_an_expression ... ok
+test lexer::tests::a_hash_inside_a_string_literal_is_not_a_directive ... ok
+test lexer::tests::a_disabled_branch_need_not_be_lexable ... ok
+test lexer::tests::a_region_name_is_one_identifier ... ok
+test lexer::tests::a_true_condition_keeps_the_branch_and_a_false_one_drops_it ... ok
+test lexer::tests::an_unknown_symbol_is_false_and_not_an_error ... ok
+test lexer::tests::bilingual_keywords_resolve_to_same_variant ... ok
+test lexer::tests::compilation_directives_are_accepted_and_produce_no_tokens ... ok
+test lexer::tests::conditionals_nest ... ok
+test lexer::tests::date_literal_requires_8_or_14_digits ... ok
+test lexer::tests::directive_and_symbol_names_ignore_case_including_cyrillic ... ok
+test lexer::tests::elsif_and_else_pick_exactly_one_branch ... ok
+test lexer::tests::english_directives_and_symbols_work ... ok
+test lexer::tests::extension_annotations_and_a_bare_ampersand_are_errors ... ok
+test lexer::tests::identifiers_case_insensitive_lookup_but_plain_ident_otherwise ... ok
+test lexer::tests::line_comments_are_skipped ... ok
+test lexer::tests::multiline_string_requires_continuation_bar ... ok
+test keywords::tests::every_spelling_resolves_to_its_own_keyword ... ok
+test lexer::tests::logical_operators_and_parentheses_work ... ok
+test lexer::tests::numbers_no_exponent_notation ... ok
+test lexer::tests::operators_and_punctuation ... ok
+test lexer::tests::regions_are_skipped_but_need_a_name ... ok
+test lexer::tests::string_literal_with_escaped_quote ... ok
+test lexer::tests::regions_must_be_balanced ... ok
+test lexer::tests::the_host_may_redefine_the_symbol_set ... ok
+test lexer::tests::the_measured_directive_errors_are_errors_here_too ... ok
+test lexer::tests::unexpected_char_is_an_error ... ok
+test lexer::tests::utf8_bom_is_accepted_only_at_the_start_of_the_source ... ok
+test lines::tests::empty_source_still_has_line_one ... ok
+test lines::tests::first_byte_is_line_one ... ok
+test lines::tests::line_count_matches_the_newlines ... ok
+test lines::tests::multibyte_characters_do_not_shift_the_line ... ok
+test lines::tests::newline_itself_belongs_to_the_line_it_ends ... ok
+test lines::tests::offset_after_newline_starts_the_next_line ... ok
+test lines::tests::offset_past_the_end_is_the_last_line ... ok
+test parser::tests::a_literal_value_never_reaches_the_diagnostic_text ... ok
+test parser::tests::a_target_that_cannot_be_assigned_to_is_a_parse_error ... ok
+test parser::tests::assignment_vs_equality_disambiguated_by_position ... ok
+test parser::tests::async_modifier_is_preserved_on_functions_and_procedures ... ok
+test parser::tests::const_is_not_a_reserved_word ... ok
+test parser::tests::fractional_label_is_rejected ... ok
+test parser::tests::implicit_assignment_no_var_needed ... ok
+test parser::tests::a_parenthesised_target_is_rejected ... ok
+test parser::tests::lvalue_is_a_path_not_a_name ... ok
+test parser::tests::return_without_expression_is_undefined ... ok
+test parser::tests::optional_semicolons_before_block_enders ... ok
+test parser::tests::await_is_an_expression_in_both_spellings ... ok
+test parser::tests::skipped_arguments_are_none ... ok
+test parser::tests::the_target_error_points_at_the_target ... ok
+test parser::tests::try_except ... ok
+test parser::tests::unary_chains_fold_right_associatively ... ok
+test parser::tests::labels_and_goto_accept_both_languages_numbers_and_keywords ... ok
+test parser::tests::function_without_return_is_callable_as_statement ... ok
+test parser::tests::for_each_and_numeric_for ... ok
+test parser::tests::ternary_operator ... ok
+test parser::tests::unary_minus_binds_tighter_than_division ... ok
+test parser::tests::new_expression_with_and_without_args ... ok
+test parser::tests::await_may_be_used_as_a_statement ... ok
+test parser::tests::var_decl_export_covers_the_whole_name_list ... ok
+test parser::tests::allowed_expression_nesting_still_parses ... ok
+test parser::tests::deep_expression_nesting_is_a_parse_error_not_a_crash ... ok
+test parser::tests::deep_statement_nesting_is_a_parse_error_not_a_crash ... ok
+test parser::tests::long_not_and_minus_chains_do_not_recurse ... ok
+
+test result: ok. 66 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/nbody_ast_snapshot.rs (target/debug/deps/nbody_ast_snapshot-825928248420d293)
+
+running 2 tests
+test nbody_fixture_parses_into_stable_ast ... ok
+test nbody_pow_variant_parses_into_stable_ast ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/nbody_fixture.rs (target/debug/deps/nbody_fixture-c557d3b8e68ec5d8)
+
+running 2 tests
+test nbody_fixture_tokenizes_without_errors ... ok
+test nbody_pow_variant_tokenizes_without_errors ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_textdoc-7437538ea16e5f25)
+
+running 10 tests
+test tests::add_line_terminates_every_line ... ok
+test tests::constructor_code_is_static ... ok
+test tests::area_runs_until_the_next_directive ... ok
+test tests::line_count_follows_the_measured_model ... ok
+test tests::out_of_range_line_numbers_are_silent ... ok
+test tests::directives_are_case_insensitive_and_may_be_indented ... ok
+test tests::only_parameters_present_in_the_text_can_be_set ... ok
+test tests::text_keeps_carriage_returns_but_lines_do_not ... ok
+test tests::parameter_names_ignore_padding_spaces ... ok
+test tests::output_pads_or_truncates_to_the_placeholder_width ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_vm-9ab23752894c5999)
+
+running 250 tests
+test modules::reference_tests::a_module_variable_holding_its_owner_reference_does_not_retain_the_state ... ok
+test scheduler::application_tests::immediate_application_completion_is_registered_before_delivery ... ok
+test scheduler::error_tests::cancellation_and_invalid_bytecode_are_not_deferred ... ok
+test scheduler::application_tests::refused_application_has_no_promise_or_wait ... ok
+test scheduler::application_tests::blocking_component_path_uses_the_application_mappers ... ok
+test scheduler::application_tests::late_application_completion_after_drop_cannot_resolve_a_new_execution ... ok
+test modules::tests::execution_parts_use_one_module_key_without_moving_caches_into_the_session ... ok
+test notifications::tests::an_unconvertible_standard_flag_keeps_the_original_io_error ... ok
+test modules::tests::execution_parts_preserve_the_order_and_text_of_invalid_table_errors ... ok
+test scheduler::error_tests::discarding_debug_root_keeps_other_waiters_and_errors ... ok
+test scheduler::error_tests::dropping_the_queue_releases_values_owned_by_errors ... ok
+test scheduler::error_tests::synchronous_wait_keeps_other_tasks_and_errors_frozen_in_order ... ok
+test scheduler::error_tests::detached_error_keeps_its_place_before_later_promise_waiters ... ok
+test snippet::tests::dynamic_link_remapping_checks_each_instruction_and_argument_before_offsetting ... ok
+test modules::reference_tests::an_external_reference_does_not_resurrect_a_completed_module_instance ... ok
+test snippet::tests::two_sessions_do_not_share_dynamic_nesting_depth ... ok
+test scheduler::application_tests::application_completion_wakes_and_maps_only_on_the_execution_thread ... ok
+test tests::a_dynamic_fragment_comes_from_the_host_not_from_the_vm ... ok
+test tests::a_by_ref_parameter_still_writes_back_next_to_a_skipped_position ... ok
+test tests::a_non_numeric_string_in_arithmetic_is_an_error ... ok
+test tests::a_proven_core_receiver_compiles_closed_even_with_a_registry ... ok
+test tests::a_host_compile_failure_becomes_a_catchable_dynamic_error ... ok
+test tests::an_unknown_locale_falls_back_to_russian ... ok
+test tests::add_month_clamps_the_day_rather_than_failing ... ok
+test tests::appending_a_string_to_itself_does_not_read_a_moving_buffer ... ok
+test tests::adding_a_non_string_to_a_string_leaves_the_variable_intact ... ok
+test tests::appending_through_a_byref_parameter_reaches_the_caller ... ok
+test tests::appending_in_place_never_changes_a_string_someone_else_holds ... ok
+test tests::array_index_out_of_bounds_is_a_runtime_error ... ok
+test tests::array_construction_indexing_and_mutation ... ok
+test tests::arrays_are_reference_types_across_by_reference_calls ... ok
+test linking::tests::owned_tables_outlive_the_program_and_registry_and_share_their_caches ... ok
+test tests::a_string_on_the_left_pulls_the_right_operand_into_itself ... ok
+test tests::array_add_delete_clear_methods ... ok
+test scheduler::application_tests::canceling_a_dynamic_async_task_after_root_return_is_not_success ... ok
+test tests::await_of_an_ordinary_value_yields_and_returns_that_value ... ok
+test tests::async_tasks_share_module_state_but_not_local_stacks ... ok
+test tests::builtin_sqrt_of_negative_is_a_runtime_error ... ok
+test tests::async_calls_and_ready_await_follow_the_measured_order ... ok
+test scheduler::error_tests::debug_poll_does_not_run_an_old_task_woken_by_a_completion ... ok
+test tests::bare_reraise_inside_except_rethrows_caught_value ... ok
+test tests::await_suspends_an_async_task_and_returns_the_function_result ... ok
+test tests::builtin_sqrt_and_pow ... ok
+test tests::by_reference_argument_that_is_not_a_bare_variable_does_not_crash ... ok
+test tests::by_reference_parameter_mutates_callers_variable ... ok
+test scheduler::application_tests::a_detached_parked_error_is_reported_after_the_caller_continues ... ok
+test tests::call_module_function_by_name_returns_value ... ok
+test tests::by_value_parameter_does_not_mutate_callers_variable ... ok
+test tests::by_reference_swap_via_two_parameters ... ok
+test tests::a_failed_module_body_poisons_the_instance_for_the_session ... ok
+test tests::a_second_run_of_the_same_program_starts_with_cold_caches ... ok
+test tests::call_module_function_on_procedure_returns_undefined ... ok
+test tests::call_module_function_unknown_name_is_rt_error ... ok
+test tests::call_module_function_mutates_module_var ... ok
+test tests::call_module_function_passes_several_args ... ok
+test snippet::tests::dynamic_images_survive_the_fragment_but_not_their_last_task ... ok
+test tests::chislo_parses_grouped_string_back_round_trip ... ok
+test tests::a_run_allocates_both_cache_slots_for_every_instruction ... ok
+test tests::code_after_try_runs_normally_when_nothing_is_raised ... ok
+test tests::a_configuration_call_reads_and_writes_the_service_module ... ok
+test tests::a_polymorphic_open_call_site_revalidates_its_method_cache ... ok
+test tests::arithmetic_pulls_strings_and_booleans_to_numbers ... ok
+test tests::call_module_function_with_dynamic_eval_inside ... ok
+test tests::call_module_function_wrong_arity_is_rt_error ... ok
+test tests::cel_truncates_toward_zero_not_half_up ... ok
+test tests::corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic ... ok
+test tests::component_function_resolves_compiles_links_and_runs ... ok
+test tests::component_constructor_resolves_compiles_links_and_runs ... ok
+test tests::by_ref_arguments_cross_the_module_boundary_both_ways ... ok
+test tests::component_mismatch_is_rejected_before_execution ... ok
+test tests::count_method_call_on_array ... ok
+test tests::component_object_owns_properties_methods_and_indexes ... ok
+test tests::corrupt_bytecode_is_an_error_not_a_panic ... ok
+test tests::current_date_lands_inside_the_supported_range ... ok
+test tests::array_set_keeps_result_use_on_the_open_path ... ok
+test tests::coercion_has_limits ... ok
+test scheduler::application_tests::application_method_parks_then_resumes_the_real_vm_or_unwinds_the_error ... ok
+test tests::current_universal_date_in_milliseconds_runs_benchmark_style_script ... ok
+test tests::condition_converts_numbers_and_words_but_not_anything_else ... ok
+test tests::debug_hook::the_hook_can_stop_the_run ... ok
+test tests::debug_hook::dynamic_frames_keep_the_existing_step_over_contract ... ok
+test tests::date_literal_and_constructor_agree_in_both_lengths ... ok
+test tests::debug_hook::the_hook_sees_every_instruction_in_order ... ok
+test tests::debug_hook::failed_debug_evaluation_keeps_local_and_module_argument_writes ... ok
+test tests::dates_compare_by_moment_in_time ... ok
+test tests::date_arithmetic_is_in_seconds_both_ways ... ok
+test tests::division_by_zero_is_a_runtime_error ... ok
+test tests::a_type_description_accepts_a_component_type_by_name ... ok
+test tests::division_matches_oracle_27_digits_inside_a_function ... ok
+test tests::date_components_are_readable_individually ... ok
+test tests::display_of_array_and_structure_matches_measured_platform_strings ... ok
+test tests::dictionary_structure_preserves_insertion_order_in_for_each ... ok
+test tests::dictionary_structure_still_answers_field_access_and_delete_from_script ... ok
+test tests::dynamic_code_inside_a_loop_reuses_the_compiled_chunk ... ok
+test tests::dynamic_await_is_rejected_even_from_an_async_frame ... ok
+test tests::dynamic_code_requires_a_string_argument ... ok
+test tests::dynamic_code_with_syntax_error_is_a_dynamic_error ... ok
+test tests::dynamic_compile_error_is_catchable_at_runtime ... ok
+test tests::dynamic_fragment_resolves_its_own_component_requirement ... ok
+test tests::dynamic_code_sees_parameters_including_by_reference_ones ... ok
+test tests::dynamic_fragments_preserve_static_and_fragment_structure_shapes ... ok
+test tests::dynamic_marking_reaches_nested_statements ... ok
+test tests::dynamic_scope_is_the_frame_not_the_top_level ... ok
+test tests::dynamic_scope_marking_only_touches_functions_that_need_it ... ok
+test tests::exception_on_a_non_first_bundle_member_lands_in_the_right_handler ... ok
+test tests::explicit_argument_overrides_default_even_when_declared ... ok
+test tests::exception_raised_inside_a_called_function_is_caught_by_callers_try ... ok
+test tests::file_search_observes_execution_cancellation_inside_the_host_iterator ... ok
+test tests::execute_nesting_below_the_limit_still_works ... ok
+test tests::empty_date_literal_is_the_zero_of_the_epoch ... ok
+test tests::for_each_over_array ... ok
+test tests::for_each_break_and_continue ... ok
+test tests::for_each_over_structure_yields_key_value_pairs_in_insertion_order ... ok
+test tests::explicitly_passed_undefined_is_not_a_skipped_argument ... ok
+test tests::component_linking_rejects_gaps_even_in_precompiled_calls ... ok
+test tests::format_with_explicit_spec_suppresses_grouping ... ok
+test tests::function_call_and_return_value ... ok
+test tests::function_without_return_yields_undefined_and_is_callable_as_statement ... ok
+test tests::import_sites_are_typed_before_the_first_instruction ... okhello
+
+test tests::host_writer_error_is_returned_without_a_panic ... ok
+test tests::host_streams_are_used_by_builtins_components_and_dynamic_code ... ok
+test tests::get_prop_inline_cache_stays_correct_across_different_shapes ... ok
+test tests::format_specifiers_beyond_the_measured_four_reach_the_formatter ... ok
+test tests::format_understands_df_and_dlf_keys ... ok
+test tests::invalid_calendar_dates_fail_but_arithmetic_saturates_at_the_measured_limits ... ok
+test tests::map_clear_resets_count_to_zero ... ok
+test tests::legacy_single_argument_delete_bytecode_still_runs ... ok
+test tests::left_right_mid_builtins ... ok
+test tests::map_delete_removes_key_and_is_a_no_op_when_missing ... ok
+test tests::message_builtin_prints_and_returns_undefined ... ok
+test tests::mid_without_length_runs_to_the_end_of_the_string ... ok
+test tests::map_for_each_yields_key_value_pairs_in_insertion_order ... ok
+test tests::map_key_hash_is_scale_independent ... ok
+test tests::map_insert_get_count_and_missing_key_returns_undefined ... ok
+test tests::nonexistent_calendar_literal_is_rejected_at_resolve_time ... ok
+test tests::nested_array_slots_are_independent_objects ... ok
+test tests::nested_array_dimensions ... ok
+test tests::logical_operators_convert_operands_and_yield_a_boolean ... ok
+-0,1690751638285246089411924154950544330362020079224197627513409700284104758554713716285161351498302016
+-0,169074531424022549007248775090595256892562474469418085940771242694945770599063956273051093743518613384809043624477773598962691253354405040369124774230935325975584981315864942287614512667682170326796089993195623431492876810672873288129970080182375411631375172787197707637752555245219437314682382427737774564163830441207629253310979378273051819218297539444392572174607662788496940573490535057322157852778086138147302421949563441410970102301113098784094069317192585482337676023298855815649362290970798655795227967900609568985330611309354935437448880059891393150255497216
+test tests::mutual_forward_calls_between_functions ... ok
+test tests::nested_execute_sees_and_updates_module_vars ... ok
+test tests::nested_try_inner_handler_wins_over_outer ... ok
+test tests::okrugl_rounds_half_up_in_decimal_not_f64 ... ok
+test tests::open_call_site_did_not_grow ... ok
+test tests::open_call_metadata_is_prepared_before_the_first_instruction ... ok
+test tests::json_callback_calls_a_real_module_function_on_read ... ok
+test tests::raise_with_value_is_caught_and_carries_the_value ... ok
+test tests::one_sided_trims_and_line_helpers ... ok
+test tests::json_callback_raise_propagates_to_the_caller ... ok
+test tests::recursion_factorial ... ok
+test tests::recursion_well_below_the_limit_still_works ... ok
+test tests::recursion_through_execute_is_a_catchable_error_not_a_crash ... ok
+test tests::scheduler_quantum_defaults_to_the_confirmed_value ... ok
+test tests::numeric_for_specialization_preserves_counter_assignment_and_final_value ... ok
+test tests::json_callback_unknown_name_is_catchable ... ok
+test tests::json_callback_calls_a_real_module_function_on_write ... ok
+test tests::json_callback_sees_module_variables ... ok
+test tests::json_callback_refusal_travels_back_through_the_parameter_slot ... ok
+test tests::module_argument_cells_are_released_on_return_and_exception ... ok
+test tests::nbody_smoke_runs_the_real_benchmark_shape_for_a_few_steps ... ok
+test tests::short_circuit_or_skips_right_operand_on_true ... ok
+test tests::short_circuit_chain_of_three_operands ... ok
+test tests::skipped_call_argument_default_may_reference_earlier_parameter ... ok
+test tests::short_circuit_and_skips_right_operand_on_false ... ok
+test tests::skipped_call_argument_falls_back_to_default_when_all_optional_omitted ... ok
+test tests::set_prop_inline_cache_stays_correct_across_different_shapes ... ok
+test tests::skipped_call_argument_uses_declared_default ... ok
+test tests::simvol_and_kodsimvola_round_trip_and_agree_with_the_nbsp_measurement ... ok
+test tests::strdlina_counts_utf16_code_units_including_surrogate_pairs ... ok
+test tests::period_boundaries_and_weekday_from_script ... ok
+test tests::string_comparison_is_lexicographic ... ok
+test tests::string_concatenation_via_plus ... ok
+test tests::okrugl_third_argument_selects_the_rounding_mode ... ok
+test tests::stroka_groups_by_default_with_nbsp ... ok
+test tests::stroka_of_boolean_and_undefined_matches_measured_strings ... ok
+test tests::structure_delete_missing_field_is_a_no_op ... ok
+test tests::strnaiti_returns_a_position_usable_by_sred_without_conversion ... ok
+test tests::structure_construction_and_field_access ... ok
+test tests::strrazdelit_and_strsoedinit_round_trip_through_an_array ... ok
+test tests::structure_insert_adds_a_new_field_at_runtime ... ok
+test tests::strshablon_substitutes_positional_values ... ok
+test tests::structure_clear_resets_field_set_not_just_values ... ok
+test tests::structure_delete_removes_field_and_shrinks_count ... ok
+test tests::structure_insert_on_existing_field_overwrites_value_not_shape ... ok
+test tests::structure_insert_in_a_loop_converges_on_one_shape_like_the_literal_path ... ok
+test tests::structure_keys_only_defaults_to_undefined ... ok
+test tests::strzamenit_replaces_every_occurrence ... ok
+test tests::table_collapse_ignores_non_numeric_values_when_summing ... ok
+test tests::structure_property_reports_presence_and_writes_the_output_argument ... ok
+test tests::table_collapse_groups_and_sums ... ok
+test tests::table_column_exposes_name_and_type_description ... ok
+test tests::table_collapse_without_summing_columns_leaves_unique_keys ... ok
+test tests::table_sort_of_strings_matches_the_measured_collation ... ok
+test tests::table_collapse_drops_the_columns_outside_both_lists ... ok
+test tests::table_copy_columns_keeps_the_structure_and_drops_the_rows ... ok
+test tests::table_copy_makes_an_independent_table ... ok
+test tests::table_difference_function_runs_end_to_end ... ok
+test tests::table_move_past_the_edge_is_an_error ... ok
+test tests::table_sort_rejects_an_unknown_column_instead_of_silently_doing_nothing ... ok
+test tests::table_collapse_keeps_the_first_row_of_each_group_alive ... ok
+test tests::table_load_column_ignores_the_length_mismatch ... ok
+test tests::table_copy_takes_only_the_listed_rows_and_columns ... ok
+test tests::table_sort_keeps_live_row_objects_pointing_at_their_own_row ... ok
+test tests::table_move_keeps_live_rows_valid ... ok
+test tests::table_sort_is_stable_and_uses_the_second_key_only_on_ties ... ok
+test tests::table_index_of_a_deleted_row_is_an_error ... ok
+test tests::table_unload_and_load_column_round_trip ... ok
+test tests::table_sort_orders_ascending_and_descending ... ok
+test tests::table_total_sums_the_column ... ok
+test tests::text_writer_writes_utf8_and_flushes_on_close ... ok
+test tests::try_except_catches_internal_runtime_error ... ok
+test tests::table_find_rows_matches_every_field_of_the_search_structure ... ok
+test tests::ternary_does_not_evaluate_the_branch_it_did_not_take ... ok
+test tests::table_find_returns_a_row_or_undefined ... ok
+test tests::table_wave3_methods_reject_unknown_columns ... ok
+test tests::tipznch_of_a_date_is_the_localized_type_name ... ok
+test tests::unbounded_recursion_is_a_catchable_error_not_oom ... ok
+test tests::tipznch_compares_equal_across_different_values_of_one_type ... ok
+test tests::uncaught_exception_outside_any_try_propagates_as_an_error ... ok
+test tests::unbounded_recursion_outside_try_is_a_stack_overflow_error ... ok
+test tests::type_name_printed_by_stroka_matches_the_value_it_came_from ... ok
+test tests::unknown_field_is_a_runtime_error ... ok
+test tests::unknown_type_name_is_a_runtime_error_not_undefined ... ok
+test tests::value_table_accessing_deleted_row_is_an_error ... ok
+test tests::value_table_clear_resets_row_count ... ok
+test tests::upper_lower_trimall_builtins ... ok
+test tests::value_table_add_column_add_row_and_field_access ... ok
+test tests::value_table_row_count_and_indexing ... ok
+test tests::value_table_for_each_over_rows ... ok
+test tests::value_table_row_identity_survives_deleting_a_different_row ... ok
+test tests::value_table_unknown_column_is_an_error ... ok
+test tests::vychislit_can_construct_and_use_new_values ... ok
+test tests::ternary_takes_the_same_conditions_as_everything_else ... ok
+test tests::vychislit_evaluates_an_expression ... ok
+test tests::vypolnit_can_construct_a_new_structure_inside_the_snippet_itself ... ok
+test tests::vychislit_sees_existing_top_level_variables ... ok
+test tests::vypolnit_can_run_control_flow_and_read_it_back ... ok
+test tests::vychislit_inside_a_function_reads_its_locals ... ok
+test tests::vychislit_reads_a_property_whose_name_never_appears_in_static_code ... ok
+test tests::vypolnit_declaring_procedures_is_rejected ... ok
+test tests::the_front_end_compiles_and_runs_a_configuration_end_to_end ... ok
+test tests::vypolnit_field_access_on_structure_created_by_static_code ... ok
+test tests::vypolnit_mutates_an_existing_top_level_variable ... ok
+test tests::vypolnit_new_local_does_not_leak_to_enclosing_scope ... ok
+test tests::vypolnit_inside_a_function_sees_and_changes_its_locals ... ok
+test tests::while_and_for_loops_still_work_at_top_level ... ok
+test tests::znachenie_zapolneno_enables_the_short_circuit_guard_idiom ... ok
+test tests::without_a_host_compiler_dynamic_code_is_a_catchable_error ... ok
+test tests::znachenie_zapolneno_covers_the_measured_cases ... ok
+test tests::write_json_of_a_cyclic_structure_is_catchable ... ok
+test tests::dynamic_structure_indices_are_checked_before_and_after_relocation ... ok
+
+test result: ok. 250 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/byref_module_var.rs (target/debug/deps/byref_module_var-96fd6cd4b1ec00d8)
+
+running 1 test
+test a_module_var_passed_by_ref_from_a_procedure_is_mutated ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/malformed_program.rs (target/debug/deps/malformed_program-ec9be07a9d4ee201)
+
+running 25 tests
+test a_default_mode_without_a_default_prologue_yields_undefined_not_leftovers ... ok
+test a_correct_program_still_runs ... ok
+test a_handler_out_of_the_chunk_is_invalid_bytecode_too ... ok
+test a_call_targeting_the_top_level_chunk_is_invalid_bytecode ... ok
+test a_call_whose_argument_registers_leave_the_frame_is_invalid_bytecode ... ok
+test a_wrong_builtin_arg_count_is_invalid_bytecode ... ok
+test a_default_prologue_pointing_past_the_parameters_is_invalid_bytecode ... ok
+test an_empty_handler_at_the_end_unwinds_into_ordinary_termination ... ok
+test a_byref_local_past_the_frame_locals_is_invalid_bytecode ... ok
+test a_wrong_fixed_arity_method_arg_count_is_invalid_bytecode ... ok
+test a_numeric_for_target_that_is_not_its_own_pc_is_invalid_bytecode ... ok
+test a_frame_whose_locals_outnumber_its_registers_is_invalid_bytecode ... ok
+test argument_modes_that_outnumber_the_parameters_are_invalid_bytecode ... ok
+test a_property_name_id_past_the_name_table_is_invalid_bytecode ... ok
+test a_runtime_invalid_bytecode_is_not_caught_by_an_exception_handler ... ok
+test the_intact_listing_still_round_trips_and_runs ... ok
+test a_frame_name_table_with_a_repeated_name_is_invalid_bytecode ... ok
+test a_name_table_with_a_repeated_spelling_is_invalid_bytecode ... ok
+test passing_by_reference_into_a_znach_parameter_is_invalid_bytecode ... ok
+test param_mode_counts_that_disagree_with_the_arity_are_invalid_bytecode ... ok
+test a_shape_repeating_a_field_name_is_invalid_bytecode ... ok
+test a_new_structure_with_a_broken_geometry_is_invalid_bytecode ... ok
+test the_sample_really_contains_every_target_carrying_opcode ... ok
+test tables_of_names_and_bodies_that_disagree_in_length_are_invalid_bytecode ... ok
+test every_jump_of_every_opcode_is_checked_wherever_it_sits ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/public_paths.rs (target/debug/deps/public_paths-8cae611f425ace77)
+
+running 2 tests
+test debug_interfaces_keep_their_root_paths_and_signatures ... ok
+test execution_interfaces_keep_their_root_paths ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_xml-c81d4e1bde8cf5e6)
+
+running 183 tests
+test core::tests::a_file_writer_survives_a_failed_close_write ... ok
+test core::tests::a_broken_doctype_is_an_error_and_not_a_hang ... ok
+test core::tests::broken_markup_is_an_error ... ok
+test core::tests::cdata_merges_into_the_surrounding_text_run ... ok
+test core::tests::a_declared_entity_becomes_a_node_of_its_own_in_content ... ok
+test core::tests::an_entity_is_substituted_in_an_attribute_value ... ok
+test core::tests::attribute_runs_preserve_unicode_quotes_and_entities ... ok
+test core::tests::declaration_and_comment_are_not_reported_but_a_comment_splits_text ... ok
+test core::tests::default_formatting_indents_elements_but_not_text ... ok
+test core::tests::cdata_and_raw_are_mirror_images_of_each_other ... ok
+test core::tests::a_parameter_entity_is_replaced_inside_the_subset ... ok
+test core::tests::entities_and_character_references_are_decoded ... ok
+test core::tests::escaping_differs_between_text_and_attribute ... ok
+test core::tests::finished_text_is_non_mutating_and_matches_finish ... ok
+test core::tests::empty_element_is_indistinguishable_from_a_pair_of_tags ... ok
+test core::tests::file_target_uses_crlf_for_structure_but_not_inside_text ... ok
+test core::tests::empty_text_leaves_the_element_collapsed ... ok
+test core::tests::closing_names_preserve_unicode_and_diagnostics ... ok
+test core::tests::indent_flag_removes_every_line_break ... ok
+test core::tests::mixed_content_keeps_the_closing_tag_tight_after_text ... ok
+test core::tests::internal_subset_is_scanned_past_its_traps ... ok
+test core::tests::name_scanning_preserves_multibyte_names_and_delimiters ... ok
+test core::tests::namespace_declaration_stays_an_attribute_and_resolves_the_prefix ... ok
+test core::tests::entity_bomb_in_content_is_checked_without_expansion ... ok
+test core::tests::parser_source_preserves_all_unicode_characters ... ok
+test core::tests::round_trip_survives_escaping ... ok
+test core::tests::structure_violations_are_rejected ... ok
+test core::tests::recursive_entities_are_rejected_at_the_reference ... ok
+test core::tests::text_runs_preserve_unicode_and_boundaries ... ok
+test core::tests::unclosed_element_is_not_completed_on_finish ... ok
+test core::tests::whitespace_only_text_is_dropped_but_padding_survives ... ok
+test dom::tests::dom_attribute_lookup_ignores_prefixed_names ... ok
+test dom::tests::dom_attribute_value_is_a_text_child ... ok
+test dom::tests::dom_attributes_are_set_and_removed ... ok
+test dom::tests::dom_attributes_carry_namespaces ... ok
+test dom::tests::dom_bad_names_and_arities_are_rejected ... ok
+test dom::tests::dom_broken_input_is_an_error ... ok
+test dom::tests::dom_build_continues_from_the_readers_position ... ok
+test dom::tests::dom_builds_the_element_tree ... ok
+test dom::tests::dom_child_and_attribute_collections_are_live ... ok
+test dom::tests::dom_children_are_inserted_removed_and_replaced ... ok
+test dom::tests::dom_created_nodes_carry_the_platform_names ... ok
+test dom::tests::dom_document_members_match_the_platform ... ok
+test dom::tests::dom_exhausted_reader_gives_an_empty_document ... ok
+test dom::tests::dom_inserting_a_node_with_a_parent_moves_it ... ok
+test dom::tests::dom_insertion_rules_match_the_platform ... ok
+test dom::tests::dom_keeps_comments_inside_the_root_only ... ok
+test dom::tests::dom_node_values_of_one_node_are_equal_and_hash_alike ... ok
+test dom::tests::dom_node_value_outlives_the_document_variable ... ok
+test dom::tests::dom_nodes_compare_by_identity ... ok
+test dom::tests::dom_processing_instructions_survive_around_the_root ... ok
+test tests::constructor_and_function_codes_are_static_and_dense ... ok
+test dom::tests::dom_text_merges_cdata_and_drops_blank_runs ... ok
+test dom::tests::dom_serialization_matches_the_platform_shape ... ok
+test tests::xml_character_ranges_match_the_platform_contract ... ok
+test dom::tests::dom_writable_properties_follow_the_platform ... ok
+test dom::tests::dom_search_matches_full_and_local_names ... ok
+test dom::tests::dom_navigation_links_parents_and_siblings ... ok
+test dom::tests::dom_serialization_places_namespace_declarations ... ok
+test xdto::tests::a_factory_is_built_from_a_schema_set_or_from_nothing ... ok
+test xdto::tests::base64_wraps_at_the_measured_width ... ok
+test xdto::tests::a_facet_violating_default_breaks_the_whole_factory ... ok
+test xdto::tests::a_factory_from_a_file_reports_a_missing_or_broken_source ... ok
+test xdto::tests::a_factory_over_a_schema_set_resolves_names_across_schemas ... ok
+test xdto::tests::an_empty_lexical_form_is_zero_only_for_numbers ... ok
+test xdto::tests::a_fresh_instance_answers_with_defaults_and_empty_lists ... ok
+test xdto::tests::a_list_is_a_window_into_its_owner ... ok
+test xdto::tests::any_type_properties_carry_the_type_of_their_value ... ok
+test xdto::tests::a_wildcard_opens_the_type_and_switches_the_write_order ... ok
+test xdto::tests::a_nested_object_keeps_its_owner_and_is_validated ... ok
+test xdto::tests::enumeration_facet_compares_values_not_spelling ... ok
+test xdto::tests::derived_list_and_union_types_map_as_measured ... ok
+test xdto::tests::base_type_defaults_to_any_type_and_any_simple_type ... ok
+test xdto::tests::builtin_types_map_to_the_measured_bsl_types ... ok
+test xdto::tests::facet_checks_follow_the_measured_grid ... ok
+test xdto::tests::default_value_comes_from_both_default_and_fixed ... ok
+test xdto::tests::facet_checks_reach_writes_and_reads ... ok
+test xdto::tests::facet_length_counts_characters_bytes_and_items ... ok
+test xdto::tests::broken_schemas_report_errors_instead_of_panicking ... ok
+test xdto::tests::facets_are_inherited_along_the_whole_chain ... ok
+test xdto::tests::factory_create_builds_a_value_from_its_lexical_form ... ok
+test xdto::tests::facets_report_their_kind_and_lexical_value ... ok
+test xdto::tests::factory_create_builds_an_object_that_knows_its_type ... ok
+test xdto::tests::factory_type_takes_a_pair_or_an_expanded_name ... ok
+test xdto::tests::nil_and_xsi_type_survive_the_round_trip ... ok
+test xdto::tests::pattern_facet_is_an_honest_unsupported_error ... ok
+test xdto::tests::lexical_forms_follow_the_measured_conversions ... ok
+test xdto::tests::instance_members_tell_filling_from_defaults ... ok
+test xdto::tests::object_type_flags_follow_the_content_model ... ok
+test xdto::tests::properties_are_flattened_attributes_first_then_elements ... ok
+test xdto::tests::occurrence_bounds_multiply_through_model_groups ... ok
+test xdto::tests::every_builtin_row_is_backed_by_a_measured_line ... ok
+test xdto::tests::reading_without_a_type_refuses_instead_of_guessing ... ok
+test xdto::tests::reading_a_composite_document_maps_every_lexical_form ... ok
+test xdto::tests::reading_leaves_the_reader_on_the_next_node ... ok
+test xdto::tests::reading_rejects_a_document_that_does_not_match_the_type ... ok
+test xdto::tests::property_type_falls_back_to_any_type ... ok
+test xdto::tests::property_form_and_namespace_follow_the_schema_forms ... ok
+test xdto::tests::type_and_property_values_print_as_measured ... ok
+test dom::tests::dom_document_at_the_depth_limit_still_works ... ok
+test xdto::tests::union_picks_the_first_member_whose_facets_accept ... ok
+test xdto::tests::the_sequence_follows_the_order_of_filling ... ok
+test xdto::tests::write_rejects_element_name_with_colon ... ok
+test xdto::tests::the_round_trip_is_stable_after_the_first_pass ... ok
+test xdto::tests::values_of_simple_types_read_and_write_as_values ... ok
+test xdto::tests::a_written_zone_is_converted_into_the_factories_own_zone ... ok
+test xdto::tests::types_are_references_into_one_model ... ok
+test xdto::tests::writing_declares_namespaces_the_way_the_platform_does ... ok
+test xdto::tests::writing_follows_the_measured_lexical_forms ... ok
+test xdto::tests::writing_orders_properties_by_the_type_or_by_the_filling ... ok
+test xdto::tests::xdto_serializer_leaves_the_reader_on_the_next_node ... ok
+test xdto::tests::writing_a_property_goes_through_the_lexical_form ... ok
+test xdto::tests::xdto_serializer_honours_xsi_type_on_the_element_it_reads ... ok
+test xdto::tests::xdto_serializer_needs_a_factory ... ok
+test xml::attribute_key_reuse_preserves_unicode_and_changed_strings ... ok
+test xml::reader_name_properties_preserve_node_and_attribute_views ... ok
+test xdto::tests::xdto_serializer_generates_a_prefix_when_the_uri_is_the_instance_namespace ... ok
+test dom::tests::dom_document_deeper_than_the_limit_is_an_error_not_a_crash ... ok
+test xml::xml_string_arguments_preserve_utf16_replacement_semantics ... ok
+test xml::reader_utf16_input_matches_the_utf8_conversion ... ok
+test xdto::tests::xdto_serializer_says_plainly_what_it_does_not_implement ... ok
+test xpath::tests::an_unknown_prefix_is_an_error_not_an_empty_set ... ok
+test xpath::tests::a_created_expression_is_reusable ... ok
+test xpath::tests::an_iterator_does_not_see_later_changes ... ok
+test xpath::tests::a_name_without_a_prefix_matches_only_the_empty_namespace ... ok
+test xpath::tests::an_empty_separator_splits_the_string_at_its_start ... ok
+test xdto::tests::xdto_serializer_refuses_an_undefined_name_that_comes_with_a_uri ... ok
+test xpath::tests::axes_and_predicates_walk_in_document_order ... ok
+test xpath::tests::document_context_is_the_document_element ... ok
+test xpath::tests::lang_reads_xml_lang_from_the_ancestors ... ok
+test xpath::tests::infinities_reach_string_but_not_the_bsl_number ... ok
+test xpath::tests::members_belong_to_their_result_kind ... ok
+test xpath::tests::namespace_declarations_are_not_on_the_attribute_axis ... ok
+test xpath::tests::context_nodes_follow_the_measured_rules ... ok
+test xpath::tests::node_tests_reach_comments_text_and_processing_instructions ... ok
+test xpath::tests::number_parsing_takes_a_dot_and_refuses_a_comma ... ok
+test xpath::tests::comparisons_expand_node_sets ... ok
+test xpath::tests::number_to_string_matches_the_platform ... ok
+test xpath::tests::the_method_resolver_keeps_a_foreign_tree_alive ... ok
+test xpath::tests::the_resolver_knows_xmlns_but_not_xml ... ok
+test xpath::tests::position_outside_a_predicate_is_an_error ... ok
+test xpath::tests::the_resolver_reads_the_scope_of_its_node ... ok
+test xpath::tests::results_carry_the_very_same_nodes ... ok
+test xsd::tests::annotation_carries_documentation_and_appinfo ... ok
+test xdto::tests::xdto_serializer_refuses_what_needs_configuration_metadata ... ok
+test xsd::tests::anonymous_type_belongs_to_its_declaration ... ok
+test xpath::tests::string_and_number_functions_follow_the_measured_platform ... ok
+test xpath::tests::requested_kinds_pick_a_field_instead_of_converting ... ok
+test xpath::tests::unsupported_syntax_is_an_honest_error ... ok
+test xsd::tests::broken_and_foreign_input_follows_the_platform ... ok
+test xsd::tests::empty_schema_has_no_components_and_no_dom ... ok
+test xdto::tests::xdto_serializer_writes_the_measured_element_for_every_primitive ... ok
+test xsd::tests::expanded_name_is_a_value_not_a_reference ... ok
+test xsd::tests::constructs_outside_the_model_are_named_errors ... ok
+test xsd::tests::list_and_union_keep_their_lexical_members ... ok
+test xsd::tests::complex_type_exposes_content_particle_and_attribute_uses ... ok
+test xsd::tests::element_declaration_keeps_the_lexical_type_name_and_default ... ok
+test xsd::tests::inheritance_keeps_the_lexical_base_name_and_method ... ok
+test xsd::tests::indexing_past_the_end_is_an_error ... ok
+test xsd::tests::named_collections_are_sorted_while_components_follow_the_document ... ok
+test xsd::tests::named_lookup_takes_a_name_a_pair_and_an_expanded_name ... ok
+test xdto::tests::xdto_serializer_takes_the_element_name_and_uri_from_the_arguments ... ok
+test xdto::tests::xdto_serializer_reads_by_an_explicit_bsl_type ... ok
+test xsd::tests::skipped_constructs_load_without_component_nodes ... ok
+test xsd::tests::schema_reports_its_namespace_version_and_forms ... ok
+test xsd::tests::only_numeric_facets_have_the_fixed_flag ... ok
+test xsd::tests::particle_occurs_bounds_repeat_what_is_written ... ok
+test xsd::tests::references_are_separate_declarations ... ok
+test xsd::tests::unresolvable_qnames_become_undefined ... ok
+test dom::tests::dom_insertion_respects_the_depth_limit ... ok
+test xsd::tests::simple_type_exposes_base_name_variety_and_facets ... ok
+test xsd::tests::typed_value_is_read_from_the_lexical_form_not_the_declared_type ... ok
+test xsd::tests::schema_set_holds_one_schema_per_namespace ... ok
+test xdto::tests::xdto_serializer_reads_by_element_name_and_falls_back_to_a_string ... ok
+test xdto::tests::xdto_serializer_round_trips_every_supported_primitive ... ok
+test core::tests::deep_linear_parameter_entity_chain_parses ... ok
+test core::tests::deep_linear_entity_chain_expands_in_attribute ... ok
+test xdto::tests::write_of_cyclic_instance_is_a_catchable_error ... ok
+test xdto::tests::write_deeper_than_limit_is_a_catchable_error ... ok
+test core::tests::the_expansion_budget_is_not_multiplied_by_the_attribute_count ... ok
+test core::tests::references_in_one_attribute_value_share_the_budget ... ok
+test core::tests::parameter_entity_bomb_hits_the_expansion_budget ... ok
+test core::tests::entity_bomb_in_attribute_hits_the_expansion_budget ... ok
+
+test result: ok. 183 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_zip-4434018a4472916b)
+
+running 48 tests
+test archive::tests::a_broken_utf8_name_with_the_flag_set_stays_raw_bytes ... ok
+test archive::tests::a_name_without_the_utf8_flag_stays_raw_bytes ... ok
+test archive::tests::a_broken_archive_fails_in_the_constructor ... ok
+test archive::tests::a_closed_archive_refuses_everything_and_reopens ... ok
+test archive::tests::a_single_byte_name_is_decoded_as_lossy_utf8 ... ok
+test archive::tests::an_empty_archive_has_no_entries ... ok
+test archive::tests::an_encrypted_entry_is_reported_before_its_data_are_touched ... ok
+test archive::tests::a_zip64_local_header_is_skipped_by_its_own_extra_length ... ok
+test archive::tests::a_comment_does_not_hide_the_end_of_directory_record ... ok
+test archive::tests::input_that_is_not_an_archive_is_rejected ... ok
+test archive::tests::encryption_and_bzip2_are_refused_instead_of_silently_dropped ... ok
+test archive::tests::simple_mask_transfer_preserves_empty_unicode_and_literal_brackets ... ok
+test archive::tests::dos_dates_are_normalized_arithmetically ... ok
+test archive::tests::the_archive_comment_is_readable ... ok
+test archive::tests::extract_checks_the_element_and_refuses_encrypted_entries ... ok
+test archive::tests::entries_with_a_data_descriptor_are_read_by_the_directory_sizes ... ok
+test archive::tests::a_stale_entry_never_extracts_the_record_that_took_its_number ... ok
+test archive::tests::missing_paths_are_errors_and_a_plain_directory_is_skipped ... ok
+test archive::tests::the_archive_type_argument_only_accepts_zip ... ok
+test archive::tests::the_archive_writer_has_its_own_argument_tail ... ok
+test archive::tests::colliding_names_stop_the_add_and_keep_what_came_before ... ok
+test archive::tests::data_are_compressed_with_method_eight ... ok
+test archive::tests::directory_entries_read_back_as_directories ... ok
+test archive::tests::find_matches_the_original_name_not_the_substituted_one ... ok
+test archive::tests::the_extension_is_taken_from_the_last_dot ... ok
+test archive::tests::entry_properties_and_find_follow_the_platform ... ok
+test archive::tests::a_trailing_slash_on_a_directory_means_the_all_matching_mask ... ok
+test archive::tests::a_directory_entry_and_a_file_inside_it_share_one_node ... ok
+test archive::tests::the_comment_survives_a_round_trip ... ok
+test archive::tests::an_archive_from_our_own_writer_reads_back ... ok
+test archive::tests::extract_of_a_stale_entry_errors_instead_of_panicking ... ok
+test archive::tests::the_archive_starts_with_a_signature_and_ends_with_the_directory_record ... ok
+test archive::tests::forbidden_characters_and_collisions_match_the_platform ... ok
+test archive::tests::the_mask_matches_the_measured_way ... ok
+test archive::tests::the_reference_archive_with_stored_and_deflated_entries_reads ... ok
+test archive::writer::tests::an_unreadable_file_does_not_reserve_its_name ... ok
+test archive::tests::the_archive_goes_through_the_session_file_system ... ok
+test tests::constructor_codes_are_static_and_dense ... ok
+test archive::tests::extract_all_honours_the_path_mode ... ok
+test tests::the_two_archive_writers_have_different_argument_limits ... ok
+test archive::tests::without_the_subdirectory_mode_only_the_named_directory_is_taken ... ok
+test archive::tests::the_compression_method_decides_the_storage_method ... ok
+test archive::tests::properties_of_a_stale_entry_are_refused ... ok
+test archive::tests::a_directory_without_matches_becomes_an_entry_unless_it_was_selected ... ok
+test archive::tests::the_three_path_modes_name_one_file_the_measured_way ... ok
+test archive::tests::writing_closes_the_archive_and_clears_the_entries ... ok
+test archive::tests::the_collision_suffix_goes_before_the_last_dot ... ok
+test archive::tests::recursion_keeps_subpaths_only_in_the_relative_mode ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/open_bsl-c1b692497136a098)
+
+running 40 tests
+test jobs::registry::tests::an_invalid_config_is_rejected ... ok
+test jobs::registry::tests::an_overflowing_config_is_rejected_without_panic ... ok
+test jobs::registry::tests::an_overflowing_admission_sum_is_a_resource_limit ... ok
+test jobs::registry::tests::admission_reserves_and_finish_releases ... ok
+test jobs::registry::tests::history_eviction_is_amortized_on_insert ... ok
+test jobs::registry::tests::a_duplicate_key_is_rejected_until_terminal ... ok
+test jobs::registry::tests::a_claimed_terminal_transition_is_not_stolen_by_a_broken_runtime ... ok
+test jobs::registry::tests::history_byte_eviction_subtracts_what_was_added ... ok
+test jobs::registry::tests::record_bytes_count_key_strings_error_and_messages ... ok
+test engine::debug_info_tests::without_asking_the_image_carries_no_lines ... ok
+test dynamic::tests::the_same_text_in_another_module_gets_its_own_chunk ... ok
+test dynamic::tests::the_same_text_in_another_scope_gets_its_own_chunk ... ok
+test dynamic::tests::catalog_owners_are_part_of_the_scope_and_reuse_only_their_own_fragments ... ok
+test dynamic::tests::every_fragment_gets_a_scope_of_its_own ... ok
+test jobs::runtime::pool_tests::target_resolution_rejects_unknown_and_non_exported ... ok
+test dynamic::tests::a_broken_fragment_reports_its_error_as_text ... ok
+test dynamic::tests::the_same_text_in_the_same_scope_is_compiled_once ... ok
+test jobs::runtime::pool_tests::unrepresentable_wait_deadlines_return_errors_instead_of_panicking ... ok
+test jobs::runtime::pool_tests::waiting_for_an_unknown_job_is_a_job_expired_error ... ok
+test state::tests::pollable_execution_matches_run_for_pure_bsl ... ok
+test jobs::runtime::pool_tests::the_first_admission_returns_before_the_pool_is_fully_started ... ok
+test jobs::worker::tests::a_failed_commit_after_a_bsl_error_becomes_a_secondary_cause ... ok
+test state::tests::nested_dynamic_code_is_not_recompiled_on_a_repeat_run ... ok
+test jobs::runtime::pool_tests::a_job_runs_to_completion_in_a_worker ... ok
+test jobs::runtime::pool_tests::a_shutdown_during_starting_is_safe ... ok
+test state::tests::standalone_metadata_has_no_configuration_common_modules ... ok
+test engine::debug_info_tests::the_builder_can_ask_for_debug_info ... ok
+test state::tests::repeated_runs_of_one_module_reuse_the_cached_fragments ... ok
+test jobs::runtime::pool_tests::many_jobs_all_reach_terminal_states ... ok
+test jobs::runtime::pool_tests::the_pool_spawns_no_threads_before_the_first_admission ... ok
+test jobs::runtime::pool_tests::a_queued_to_running_transition_does_not_finish_the_manager_wait ... ok
+test state::tests::two_states_do_not_share_the_fragment_cache ... ok
+test engine::debug_info_tests::debug_info_with_a_pass_that_breaks_it_is_refused_through_the_facade ... ok
+test jobs::runtime::pool_tests::missing_required_arguments_fail_the_job ... ok
+test state::tests::two_modules_in_one_state_get_their_own_fragments ... ok
+test jobs::runtime::pool_tests::rust_wait_terminal_still_requires_every_job_in_both_services ... ok
+test jobs::runtime::pool_tests::a_raising_job_finishes_as_failed_with_the_error_text ... ok
+test jobs::worker::tests::a_shutdown_during_the_commit_window_rolls_back ... ok
+test jobs::worker::tests::a_terminal_event_in_the_helping_window_is_not_lost ... ok
+test jobs::worker::tests::wait_first_change_parks_without_periodic_wakeups ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/application_async.rs (target/debug/deps/application_async-90001d276e3f8a4e)
+
+running 5 tests
+test submit_refusal_is_an_await_error_and_does_not_leak_host_text ... ok
+test absent_launcher_fails_at_await_and_bad_arity_at_compile_time ... ok
+test async_launch_defaults_errors_and_dynamic_promises_share_the_outer_execution ... ok
+test a_failed_parked_dynamic_call_keeps_local_writes_and_propagates_the_error ... ok
+test application_promise_yields_to_neighbors_and_maps_deferred_results ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/application_bsl.rs (target/debug/deps/application_bsl-69d5fe99903ec8a0)
+
+running 11 tests
+test eval_can_park_in_a_module_function_and_return_value_and_reference_updates ... ok
+test runapp_without_wait_and_dropped_waiter_do_not_own_the_application ... ok
+test a_parked_dynamic_call_freezes_other_tasks_of_the_same_execution ... ok
+test runapp_rejects_explicit_invalid_defaults_without_launch_or_output_mutation ... ok
+test runapp_evaluates_every_argument_once_in_source_order ... ok
+test runapp_writes_local_module_and_aliased_parameters_with_all_optimizations ... ok
+test runapp_writes_imported_variables_and_dynamic_output ... ok
+test launch_confirmation_parks_without_waiting_for_application_exit ... ok
+test nested_dynamic_waits_restore_locals_aliases_and_module_state_on_success_and_error ... ok
+test runapp_delivers_deferred_results_and_preserves_output_on_errors ... ok
+test runapp_wait_frees_a_single_worker_and_survives_cancellation_and_shutdown ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+     Running tests/application_system.rs (target/debug/deps/application_system-2c202ffdd9fc3eae)
+
+running 3 tests
+test native_child ... ok
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+test real_application_survives_job_cancellation_and_runtime_shutdown_and_is_reaped ... ok
+test async_application_survives_job_cancellation_and_runtime_shutdown_and_is_reaped ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/array_insert.rs (target/debug/deps/array_insert-87f0e92846152d91)
+
+running 1 test
+test direct_and_parameter_insert_preserve_the_procedure_boundary_with_optimizations ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/configuration.rs (target/debug/deps/configuration-885c01c3dca0e2e4)
+
+running 22 tests
+test an_import_cycle_is_a_build_error ... ok
+test a_non_exported_function_is_invisible_to_the_entry ... ok
+test common_modules_import_each_other ... ok
+поймана
+test temp_storage_local_round_trip_and_delete ... ok
+test cancelling_a_queued_job_finishes_it_immediately ... ok
+test an_entry_calls_the_common_module_through_the_facade ... ok
+test without_a_catalog_the_manager_raises_a_catchable_error ... ok
+test each_run_gets_fresh_module_instances ... ok
+test eager_init_runs_module_bodies_before_the_entry ... ok
+test extra_arguments_fail_the_job_asynchronously ... ok
+test job_messages_are_recorded_and_drained ... ok
+test the_bsl_surface_runs_and_inspects_a_background_job ... ok
+test cancelling_a_running_job_bypasses_the_exception_handler ... ok
+test a_nested_job_completes_on_a_single_worker_pool ... ok
+test the_documented_manager_surface_works_end_to_end ... ok
+test temp_storage_stages_job_writes_until_terminal ... ok
+test a_helper_driven_child_parked_on_http_frees_the_worker ... ok
+test cancelling_a_parked_sync_http_job_does_not_wait_for_the_transport ... ok
+test a_job_waiting_for_a_co_resident_of_its_own_worker_does_not_deadlock ... ok
+test shutdown_cancels_residents_and_rejects_new_submissions ... ok
+test engine_clones_share_the_job_runtime ... ok
+test a_parked_sync_http_job_frees_its_worker ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/connector_compile.rs (target/debug/deps/connector_compile-cf8d7c346b605df4)
+
+running 1 test
+test complete_connector_http_2_6_0_compiles_without_source_changes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/connector_payloads.rs (target/debug/deps/connector_payloads-088da17a76d62b9f)
+
+running 3 tests
+test connector_multipart_and_gzip_round_trip_real_payloads ... ok
+test connector_digest_and_aws4_match_independent_vectors ... ok
+test connector_public_api_drives_requests_cookies_and_redirects ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/counter_example.rs (target/debug/deps/counter_example-85afc838b0f38e10)
+
+running 1 test
+test the_readme_counter_example_prints_two ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/debug_context.rs (target/debug/deps/debug_context-4cb8980196bf9aad)
+
+running 4 tests
+test delayed_file_operation_outlives_evaluate_in_the_original_host ... ok
+test a_lazy_module_body_keeps_the_callers_current_instruction_line ... ok
+test selected_frames_keep_modules_imports_references_and_writes_after_error ... ok
+test evaluated_promises_survive_without_running_paused_tasks ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/dynamic_errors.rs (target/debug/deps/dynamic_errors-298cc1513e85dfab)
+
+running 3 tests
+test foreign_module_arguments_keep_dynamic_writes_when_the_fragment_fails ... ok
+test awaited_dynamic_child_errors_preserve_caller_locals ... ok
+test a_dynamic_child_writes_the_same_module_after_the_fragment_returns ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/dynamic_execution.rs (target/debug/deps/dynamic_execution-99b3f8b37c429ebb)
+
+running 2 tests
+test rejected_dynamic_await_preserves_the_callers_promise_and_local ... ok
+test dynamic_frames_keep_catalog_aliases_callbacks_and_async_code_alive ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/dynamic_imports.rs (target/debug/deps/dynamic_imports-5ae167cd9dc0428a)
+
+running 2 tests
+test unused_declared_imports_keep_eager_initialization_order_after_loading ... ok
+test dynamic_imports_keep_aliases_visibility_arguments_and_nested_scopes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/dynamic_module_scope.rs (target/debug/deps/dynamic_module_scope-7e8b27fd7e0ef29a)
+
+running 1 test
+test dynamic_fragments_keep_the_module_owner_in_functions_and_nested_scopes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/embedding.rs (target/debug/deps/embedding-de6e47477c138d6b)
+
+running 23 tests
+test a_str_becomes_a_value_and_format_value_renders_it ... ok
+test the_host_may_declare_its_own_preprocessor_context ... ok
+test a_component_reports_its_own_category_without_a_variant_in_the_core ... ok
+test binbuf_feature_records_and_executes_bit_operations_as_component_calls ... ok
+test dynamic_code_sees_the_same_preprocessor_context_as_the_module ... ok
+test a_phase_error_prints_itself_and_is_reachable_through_source ... ok
+test engine_builder_exposes_a_registered_component_to_source_code ... ok
+test pdf_feature_records_constructors_and_builds_attachments ... ok
+test json_feature_registers_functions_objects_and_module_callbacks ... ok
+test states_use_independent_stdout_and_stderr ... ok
+test state_exec_and_eval_hide_the_internal_pipeline ... ok
+test textdoc_feature_registers_constructor_methods_and_parameters ... ok
+test stream_feature_records_constructors_and_supports_the_bare_manager ... ok
+test regexp_feature_registers_functions_and_external_result_objects ... ok
+test xml_feature_records_xdto_constructors_and_functions ... ok
+test host_zone::a_host_method_writes_to_stdout ... ok
+test host_zone::a_host_method_and_property_read_the_zone ... ok
+test spreadsheet_feature_records_the_constructor_and_builds_areas ... ok
+test module_round_trips_through_the_public_bytecode_api ... ok
+test zip_feature_records_constructors_and_reads_written_archives ... ok
+test binary_data_opens_a_read_stream ... ok
+test the_default_preprocessor_context_is_an_external_connection ... ok
+test one_source_compiles_into_a_server_build_and_a_client_build ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/error_info.rs (target/debug/deps/error_info-06f4cde385d98044)
+
+running 2 tests
+test error_info_is_a_stable_snapshot ... ok
+test error_info_outside_a_handler_has_the_measured_default ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/error_notifications.rs (target/debug/deps/error_notifications-7a7200763f43ea7e)
+
+running 2 tests
+test detached_errors_keep_the_native_queue_prefix_before_the_first_report ... ok
+test error_handler_kinds_preserve_the_measured_first_error ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.73s
+
+     Running tests/file_async.rs (target/debug/deps/file_async-19045acd6cb669a1)
+
+running 14 tests
+test search_waits_without_blocking_the_driver_and_keeps_host_objects ... ok
+test dropping_execution_cancels_after_blocked_io_without_reading_entries ... ok
+test component_file_promises_survive_direct_and_dynamic_calls ... ok
+test host_panic_rejects_the_promise_instead_of_leaving_it_pending ... ok
+test unavailable_host_and_bad_arguments_reject_promises_at_await ... ok
+test file_metadata_promises_are_nonblocking_and_keep_the_objects_zone ... ok
+test initialization_keeps_aliases_and_hash_keys_without_background_access ... ok
+test invalid_recursion_aliases_do_not_start_a_host_search ... ok
+test metadata_setters_return_promises_and_do_not_roll_back_a_canceled_write ... ok
+test dynamic_file_promises_belong_to_the_caller_and_do_not_block_evaluation ... ok
+test invalid_attribute_aliases_never_reach_the_host_setter ... ok
+test deleting_a_link_with_trailing_separators_never_deletes_its_target ... ok
+test every_measured_begin_method_delivers_the_expected_arguments ... ok
+test single_worker_pool_runs_other_jobs_and_wakes_or_cancels_file_waiters ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.75s
+
+     Running tests/file_mobile.rs (target/debug/deps/file_mobile-b49ef7be22ef6b3b)
+
+running 1 test
+test mobile_file_members_keep_measured_names_arities_and_call_stage ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/file_notifications.rs (target/debug/deps/file_notifications-931edb137dfbdf96)
+
+running 7 tests
+test standard_processing_returns_the_operation_error_not_the_handlers_caught_error ... ok
+test a_callback_can_schedule_another_callback_with_the_same_name ... ok
+test bad_setter_value_is_delivered_with_a_mutable_standard_flag_and_original_data ... ok
+test initialization_delivers_after_the_call_and_survives_root_return ... ok
+test description_is_checked_before_mutation_and_empty_description_is_accepted ... ok
+test callback_exceptions_follow_the_measured_handler_kind ... ok
+test standard_flag_matches_native_values_and_preserves_the_original_error ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.86s
+
+     Running tests/file_partial_failure.rs (target/debug/deps/file_partial_failure-fe37148a8f452d04)
+
+running 1 test
+test partial_deletion_preserves_effects_stops_at_the_first_failure_and_keeps_the_host ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.45s
+
+     Running tests/fixed_collections.rs (target/debug/deps/fixed_collections-d2602c4b14f4af1d)
+
+running 4 tests
+test fixed_collection_constructors_validate_the_measured_sources ... ok
+test notification_accepts_only_the_measured_fixed_collection_methods ... ok
+test property_writes_module_and_imported_variables_in_every_mode ... ok
+test fixed_collections_are_shallow_immutable_snapshots_in_every_mode ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/host_environment.rs (target/debug/deps/host_environment-6a741d26b9f61f5a)
+
+running 32 tests
+test files::temporary_binary_file_stays_in_the_session_file_system ... ok
+test a_given_random_source_produces_the_expected_identifier ... ok
+test files::two_states_write_into_their_own_file_systems ... ok
+test a_fixed_clock_makes_the_time_reproducible ... ok
+test injected_services::a_given_random_source_is_used_by_the_run ... ok
+test injected_services::the_arguments_are_used_by_the_run ... ok
+test files::file_object_observes_updates_in_its_host_filesystem ... ok
+test files::a_file_system_failure_is_a_catchable_error_both_ways ... ok
+test files::create_directory_uses_the_session_host_and_remains_a_procedure ... ok
+test files::file_read_only_uses_current_host_attributes_and_measured_arguments ... ok
+test files::file_constructor_accepts_omitted_and_formatted_arguments ... ok
+test files::binary_data_reads_through_the_sessions_file_system ... ok
+test files::file_io_paths_are_normalized_before_the_session_host ... ok
+test files::file_hidden_is_a_host_attribute_not_a_filename_convention ... ok
+test files::the_file_system_is_used_by_all_file_operations ... ok
+test files::file_times_use_host_metadata_and_the_session_zone ... ok
+test files::a_failing_close_from_the_session_file_system_is_catchable ... ok
+test files::temporary_directory_comes_from_the_session_host ... ok
+test files::explicit_undefined_recursion_differs_from_an_omitted_argument ... ok
+test injected_services::a_fixed_clock_is_used_by_the_run ... ok
+test files::temporary_name_extensions_are_normalized_before_the_host_call ... ok
+test files::find_files_returns_objects_bound_to_the_session ... ok
+test files::file_object_has_the_measured_path_properties_and_english_aliases ... ok
+test zone::the_zone_is_used_by_component_functions ... ok
+test files::json_open_file_round_trips_through_the_sessions_file_system ... ok
+test zone::an_xdto_factory_keeps_the_zone_of_the_run_that_built_it ... ok
+test zone::reading_a_dated_string_lands_in_the_sessions_own_zone ... ok
+test zone::the_zone_shifts_the_universal_variant ... ok
+test two_states_of_one_engine_see_their_own_arguments ... ok
+test zone::two_states_of_one_engine_see_their_own_zone ... ok
+test two_states_do_not_share_a_clock ... ok
+test states_do_not_consume_each_others_random_sequence ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/http_async.rs (target/debug/deps/http_async-3ed174d29889bed9)
+
+running 9 tests
+test all_async_http_methods_use_the_execution_promise_table ... ok
+test finite_poll_waits_without_blocking_and_state_is_reusable_after_completion ... ok
+test async_request_is_snapshotted_and_transport_error_is_raised_at_await ... ok
+test dropping_an_execution_parked_on_a_sync_call_cancels_the_request ... ok
+test all_sync_http_methods_use_the_same_wire_mapping ... ok
+test a_sync_method_parks_the_execution_instead_of_blocking ... ok
+test a_sync_transport_error_is_catchable_at_the_call_site ... ok
+test dropping_waiting_execution_cancels_request_and_ignores_late_completion ... ok
+test proxy_and_tls_objects_become_transport_configuration ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/http_system.rs (target/debug/deps/http_system-ac224d27d21871e5)
+
+running 2 tests
+test system_http_runs_end_to_end_through_pollable_execution ... ok
+test system_http_runs_end_to_end_through_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/job_public_paths.rs (target/debug/deps/job_public_paths-c5b4f678cd962e0b)
+
+running 2 tests
+test job_runtime_methods_keep_their_public_signatures ... ok
+test job_types_and_host_traits_keep_their_public_paths ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/job_review_fixes.rs (target/debug/deps/job_review_fixes-42e84bb2dd5c7e23)
+
+running 27 tests
+test an_oversized_payload_is_rejected_catchably ... ok
+test a_session_sink_receives_the_global_message_dto ... ok
+test a_factory_error_fails_only_its_job ... ok
+test eviction_during_the_manager_wait_raises_job_expired ... ok
+test a_nested_job_inherits_the_deny_network_profile ... ok
+test message_fields_survive_and_drain_is_atomic ... ok
+test live_message_drain_is_atomic ... ok
+test a_worker_panic_fails_the_job_and_the_worker_is_replaced ... ok
+test a_job_target_calls_a_user_registered_library ... ok
+test an_isolated_file_system_profile_confines_job_writes ... ok
+test message_budget_is_cumulative_across_drains ... ok
+test a_foreign_host_profile_id_is_rejected ... ok
+test display_backpressure_is_catchable_and_history_survives ... ok
+test the_message_budget_is_enforced_catchably ... ok
+test the_global_staging_budget_is_released_on_terminal ... ok
+test a_huge_graph_in_a_message_field_is_refused_by_the_budget ... ok
+test a_huge_error_is_bounded_by_the_error_budget ... ok
+test a_child_job_publishes_to_its_immediate_parent_only ... ok
+test the_per_job_staging_budget_is_enforced ... ok
+test eviction_during_the_job_wait_raises_job_expired ... ok
+test evicted_snapshot_live_methods_raise_job_expired ... ok
+test a_deny_network_profile_removes_network_from_the_job ... ok
+test the_profile_factory_runs_once_per_job ... ok
+test a_closed_caller_session_fails_the_publishing_job ... ok
+test the_inflight_limit_is_enforced_and_released ... ok
+test a_closed_runtime_raises_runtime_closed_but_properties_survive ... ok
+test three_consecutive_startup_panics_break_the_runtime ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/job_wait_contract.rs (target/debug/deps/job_wait_contract-01d6df0ea7d48faa)
+
+running 8 tests
+test legacy_wait_is_a_procedure_even_in_nested_and_dynamic_expressions ... ok
+test legacy_wait_rejects_timeout_failure_and_cancellation ... ok
+test manager_wait_requires_an_array_through_the_bsl_surface ... ok
+test extreme_bsl_wait_timeouts_are_catchable_in_foreground_and_worker ... ok
+test fresh_and_stale_terminal_snapshots_and_repeated_waits_follow_the_server_contract ... ok
+test canceling_the_child_returns_its_canceled_snapshot_to_the_parent ... ok
+test nested_manager_wait_returns_the_first_terminal_job_and_can_be_repeated ... ok
+test canceling_a_waiting_parent_does_not_cancel_its_child ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 40.44s
+
+     Running tests/measure_scripts.rs (target/debug/deps/measure_scripts-5ac2a16bb0b38b18)
+
+running 1 test
+test the_background_jobs_measure_script_runs_with_the_platform_catalog ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/module_aliases.rs (target/debug/deps/module_aliases-e96f545419e481ed)
+
+running 5 tests
+test an_active_module_argument_observes_async_tasks_and_keeps_its_writes ... ok
+test failed_imported_argument_initialization_does_not_enter_the_static_callee ... ok
+test static_imported_async_arguments_keep_the_existing_snapshot_contract ... ok
+test imported_variables_and_nested_calls_share_the_same_parameter_cell ... ok
+test static_calls_preserve_imported_arguments_and_initialize_their_owners ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/module_calls.rs (target/debug/deps/module_calls-8df4a7f923f50d85)
+
+running 3 tests
+test module_references_cross_catalog_and_entry_frames_without_changing_the_owner ... ok
+test module_calls_execute_exports_with_the_current_state_and_argument_modes ... ok
+test module_calls_preserve_aliases_values_defaults_and_exception_sites ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/module_reference.rs (target/debug/deps/module_reference-98d86182c111cd6f)
+
+running 3 tests
+test a_module_variable_can_shadow_the_global_property_without_changing_the_other_alias ... ok
+test catalog_modules_keep_separate_references_across_calls_and_dynamic_fragments ... ok
+test current_module_reference_keeps_identity_and_exports_in_every_execution_mode ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/object_call_arguments.rs (target/debug/deps/object_call_arguments-f067428c8eca7438)
+
+running 1 test
+test native_open_calls_keep_captured_values_and_check_the_actual_method_arity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/scheduler.rs (target/debug/deps/scheduler-e59ba555fa49e6a7)
+
+running 4 tests
+test zero_scheduler_quantum_is_rejected_before_execution ... ok
+test fast_numeric_for_yields_only_when_another_task_is_live ... ok
+test backward_goto_and_frame_changes_are_scheduler_safe_points ... ok
+test backward_edges_switch_tasks_in_fifo_order ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/system_temporary_access.rs (target/debug/deps/system_temporary_access-d660919fc1e0490d)
+
+running 2 tests
+test system_temporary_access_child ... ok
+test system_temporary_read_access_follows_the_opened_carrier_not_its_old_path ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/table_access.rs (target/debug/deps/table_access-3aa160920e3b511d)
+
+running 1 test
+test table_methods_keep_typed_writes_and_reject_set_expressions_with_optimizations ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/temporary_files.rs (target/debug/deps/temporary_files-329ca6c6e9fcde5f)
+
+running 6 tests
+test closing_state_returns_late_resources_and_does_not_scan_old_ones ... ok
+test cleanup_never_converts_a_saved_path_into_deletion_authority ... ok
+test callback_can_register_the_next_batch_without_a_refcell_borrow ... ok
+test cleanup_is_session_local_and_not_an_invocation_epilogue ... ok
+test drop_reports_cleanup_errors_after_bsl_failure ... ok
+test callback_failure_is_diagnostic_and_does_not_replace_bsl_result ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/temporary_stream.rs (target/debug/deps/temporary_stream-d526dae4e9bd91a7)
+
+running 7 tests
+test legacy_manager_does_not_adopt_the_callers_registry_or_file_authority ... ok
+test a_host_without_ownership_is_refused_before_creating_a_file ... ok
+test bsl_errors_do_not_delete_the_file_before_the_host_cleanup ... ok
+test a_broken_host_contract_does_not_turn_the_path_into_deletion_authority ... ok
+test a_saved_manager_retains_its_session_and_rejects_creation_after_that_session_closes ... ok
+test measured_temporary_parameters_match_for_both_aliases_before_host_io ... ok
+test a_temporary_stream_uses_the_created_handle_and_waits_for_session_cleanup ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/temporary_stream_async.rs (target/debug/deps/temporary_stream_async-9a272fe8e4750240)
+
+running 5 tests
+test host_creation_failure_is_repeatable_at_await ... ok
+test waiting_for_temporary_creation_does_not_block_a_neighbor_task ... ok
+test async_temporary_stream_preserves_identity_and_defers_parameter_errors ... ok
+test dropping_execution_waits_for_started_temporary_creation_before_state_cleanup ... ok
+test measured_async_temporary_parameters_keep_the_call_and_await_stages ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/value_list_methods.rs (target/debug/deps/value_list_methods-70c3cf8831db92bc)
+
+running 3 tests
+test notify_description_accepts_every_measured_value_list_handler_name ... ok
+test begin_delivery_calls_the_same_value_list_method_table_in_every_mode ... ok
+test measured_value_list_methods_work_through_direct_and_parameter_calls ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/value_table_indexes.rs (target/debug/deps/value_table_indexes-8728fd5b7d5df2e3)
+
+running 1 test
+test measured_value_table_indexes_work_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/lib.rs (target/debug/deps/open_bsl_consumer-4e5ade6301ab303d)
+
+running 3 tests
+test tests::every_value_kind_classifies ... ok
+test tests::a_syntax_error_is_matchable_by_kind ... ok
+test tests::the_component_runs_through_the_facade_alone ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+   Doc-tests bsl_binbuf
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_bytecode
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_compiler
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_crypto
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_format
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_http
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_json
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_number
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_pdf
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_regexp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_rt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_sema
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_spreadsheet
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_stream
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_syntax
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_textdoc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_vm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_xml
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests bsl_zip
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests open_bsl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests open_bsl_consumer
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

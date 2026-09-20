@@ -1,0 +1,80 @@
+RUN json_parse-lua-1
+DONE json_parse-lua-1: ok
+RUN json_parse-lua-2
+DONE json_parse-lua-2: ok
+RUN json_parse-lua-3
+DONE json_parse-lua-3: ok
+RUN json_parse-lua-4
+DONE json_parse-lua-4: ok
+RUN json_parse-lua-5
+DONE json_parse-lua-5: ok
+RUN json_parse-luajit-1
+DONE json_parse-luajit-1: ok
+RUN json_parse-luajit-2
+DONE json_parse-luajit-2: ok
+RUN json_parse-luajit-3
+DONE json_parse-luajit-3: ok
+RUN json_parse-luajit-4
+DONE json_parse-luajit-4: ok
+RUN json_parse-luajit-5
+DONE json_parse-luajit-5: ok
+RUN json_parse-python-1
+DONE json_parse-python-1: ok
+RUN json_parse-python-2
+DONE json_parse-python-2: ok
+RUN json_parse-python-3
+DONE json_parse-python-3: ok
+RUN json_parse-python-4
+DONE json_parse-python-4: ok
+RUN json_parse-python-5
+DONE json_parse-python-5: ok
+RUN json_parse-oscript-1
+DONE json_parse-oscript-1: ok
+RUN json_parse-oscript-2
+DONE json_parse-oscript-2: ok
+RUN json_parse-oscript-3
+DONE json_parse-oscript-3: ok
+RUN json_parse-oscript-4
+DONE json_parse-oscript-4: ok
+RUN json_parse-oscript-5
+DONE json_parse-oscript-5: ok
+RUN json_write-lua-1
+DONE json_write-lua-1: ok
+RUN json_write-lua-2
+DONE json_write-lua-2: ok
+RUN json_write-lua-3
+DONE json_write-lua-3: ok
+RUN json_write-lua-4
+DONE json_write-lua-4: ok
+RUN json_write-lua-5
+DONE json_write-lua-5: ok
+RUN json_write-luajit-1
+DONE json_write-luajit-1: ok
+RUN json_write-luajit-2
+DONE json_write-luajit-2: ok
+RUN json_write-luajit-3
+DONE json_write-luajit-3: ok
+RUN json_write-luajit-4
+DONE json_write-luajit-4: ok
+RUN json_write-luajit-5
+DONE json_write-luajit-5: ok
+RUN json_write-python-1
+DONE json_write-python-1: ok
+RUN json_write-python-2
+DONE json_write-python-2: ok
+RUN json_write-python-3
+DONE json_write-python-3: ok
+RUN json_write-python-4
+DONE json_write-python-4: ok
+RUN json_write-python-5
+DONE json_write-python-5: ok
+RUN json_write-oscript-1
+DONE json_write-oscript-1: ok
+RUN json_write-oscript-2
+DONE json_write-oscript-2: ok
+RUN json_write-oscript-3
+DONE json_write-oscript-3: ok
+RUN json_write-oscript-4
+DONE json_write-oscript-4: ok
+RUN json_write-oscript-5
+DONE json_write-oscript-5: ok

@@ -209,7 +209,7 @@ for bsl in benchmarks/*.bsl; do
         rm -f "$SCRATCH/$name.bsl-cli-jit.out"
         rm -f "$SCRATCH/test.csv"
         case $name in csv_write*) workdir=$SCRATCH ;; esac
-        HEAVY_SEEN=yes
+        HEAVY_SEEN="$HEAVY_SEEN $name"
     fi
 
     ours=$(median_ms "$BSL_CLI" "$bsl" "$workdir") || ours="ошибка"
@@ -254,9 +254,9 @@ if [ -n "$HEAVY_SEEN" ]; then
     # Сверка: сценарий с файловым выводом сам ничего не печатает, кроме
     # миллисекунд, поэтому "все посчитали одно и то же" проверяется
     # СЛИЧЕНИЕМ ФАЙЛОВ, а не строкой в выводе.
-    for produced in "$SCRATCH"/*.bsl-cli.out; do
+    for base in $HEAVY_SEEN; do
+        produced="$SCRATCH/$base.bsl-cli.out"
         [ -f "$produced" ] || continue
-        base=$(basename "$produced" .bsl-cli.out)
         for other in "$SCRATCH/$base".*.out; do
             [ "$other" = "$produced" ] && continue
             rt=$(basename "$other" .out); rt=${rt#"$base."}

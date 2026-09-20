@@ -1,0 +1,433 @@
+ M benchmarks/1c/combined.bsl
+ M benchmarks/1c/combined.platform.txt
+ M benchmarks/README.md
+ M benchmarks/background_jobs.bsl
+ M benchmarks/call_overhead.bsl
+ M benchmarks/run.sh
+ M crates/bsl-bytecode/src/analysis.rs
+ M crates/bsl-bytecode/src/chunk.rs
+ M crates/bsl-bytecode/src/configuration.rs
+ M crates/bsl-bytecode/src/dynamic.rs
+ M crates/bsl-bytecode/src/image.rs
+ M crates/bsl-bytecode/src/instr.rs
+ M crates/bsl-bytecode/src/lib.rs
+ M crates/bsl-bytecode/src/text.rs
+ M crates/bsl-bytecode/tests/support/mod.rs
+ M crates/bsl-bytecode/tests/text_format.rs
+ M crates/bsl-cli/src/api_reference.rs
+ M crates/bsl-cli/src/bytecode.rs
+ M crates/bsl-cli/src/main.rs
+ M crates/bsl-cli/src/repl.rs
+ M crates/bsl-compiler/src/compiler.rs
+ M crates/bsl-compiler/src/dynamic.rs
+ M crates/bsl-compiler/src/lib.rs
+ M crates/bsl-compiler/src/ssa.rs
+ M crates/bsl-compiler/tests/debug_info.rs
+ M crates/bsl-compiler/tests/text_round_trip.rs
+ M crates/bsl-crypto/src/lib.rs
+ M crates/bsl-http/src/lib.rs
+ M crates/bsl-http/src/objects.rs
+ M crates/bsl-json/src/dates.rs
+ M crates/bsl-json/src/lib.rs
+ M crates/bsl-json/src/objects.rs
+ M crates/bsl-pdf/src/document/surface.rs
+ M crates/bsl-pdf/src/lib.rs
+ M crates/bsl-rt/src/builtin.rs
+ M crates/bsl-rt/src/component.rs
+ M crates/bsl-rt/src/date.rs
+ M crates/bsl-rt/src/env.rs
+ M crates/bsl-rt/src/error.rs
+ M crates/bsl-rt/src/http.rs
+ M crates/bsl-rt/src/lib.rs
+ M crates/bsl-rt/src/object_protocol.rs
+ M crates/bsl-rt/src/open_questions.rs
+ M crates/bsl-rt/src/promise.rs
+ M crates/bsl-rt/src/table.rs
+ M crates/bsl-rt/src/value/collections.rs
+ M crates/bsl-rt/src/value/dates.rs
+ M crates/bsl-rt/src/value/io.rs
+ M crates/bsl-rt/src/value/mod.rs
+ M crates/bsl-rt/src/value/tables.rs
+ M crates/bsl-rt/src/value_list.rs
+ M crates/bsl-rt/src/vstr.rs
+ M crates/bsl-rt/tests/public_paths.rs
+ M crates/bsl-sema/src/core_receivers.rs
+ M crates/bsl-sema/src/lib.rs
+ M crates/bsl-sema/src/resolved.rs
+ M crates/bsl-sema/src/resolver.rs
+ M crates/bsl-spreadsheet/src/document/bridge.rs
+ M crates/bsl-spreadsheet/src/lib.rs
+ M crates/bsl-stream/src/datarw.rs
+ M crates/bsl-stream/src/lib.rs
+ M crates/bsl-stream/src/stream.rs
+ M crates/bsl-textdoc/src/lib.rs
+ M crates/bsl-vm/src/debug.rs
+ M crates/bsl-vm/src/entry.rs
+ M crates/bsl-vm/src/lib.rs
+ M crates/bsl-vm/src/linking.rs
+ M crates/bsl-vm/src/modules.rs
+ M crates/bsl-vm/src/scheduler.rs
+ M crates/bsl-vm/src/snippet.rs
+ M crates/bsl-vm/src/tests.rs
+ M crates/bsl-xml/src/core.rs
+ M crates/bsl-xml/src/lib.rs
+ M crates/bsl-xml/src/xdto/factory.rs
+ M crates/bsl-xml/src/xdto/instance.rs
+ M crates/bsl-xml/src/xml.rs
+ M crates/bsl-zip/src/archive/reader.rs
+ M crates/bsl-zip/src/archive/tests.rs
+ M crates/bsl-zip/src/archive/writer.rs
+ M crates/bsl-zip/src/lib.rs
+ M crates/open-bsl/src/dynamic.rs
+ M crates/open-bsl/src/engine.rs
+ M crates/open-bsl/src/jobs/prepare.rs
+ M crates/open-bsl/src/lib.rs
+ M crates/open-bsl/src/state.rs
+ M crates/open-bsl/tests/host_environment.rs
+ M docs/architecture/rust-module-boundaries.md
+ M docs/plans/README.md
+ M docs/reference/bsl-api/README.md
+ M docs/reference/bsl-api/api.md
+ M openspec/specs/bytecode-image/spec.md
+ M openspec/specs/debug-adapter/spec.md
+ M openspec/specs/execution-engine/spec.md
+ M tests/conformance/measure/1c/gen-form-module.py
+ M tests/conformance/measure/measure-all.bsl
+?? 1.tmp
+?? benchmarks/1c/background_jobs.server.platform.txt
+?? crates/bsl-bytecode/tests/imports.rs
+?? crates/bsl-bytecode/tests/object_call_arguments.rs
+?? crates/bsl-cli/src/session.rs
+?? crates/bsl-cli/tests/application.rs
+?? crates/bsl-cli/tests/array_method_index_edges.rs
+?? crates/bsl-cli/tests/document_association.rs
+?? crates/bsl-cli/tests/file_archive_content_io_edges.rs
+?? crates/bsl-cli/tests/file_archive_io_edges.rs
+?? crates/bsl-cli/tests/file_attribute_arguments.rs
+?? crates/bsl-cli/tests/file_attribute_string_edges.rs
+?? crates/bsl-cli/tests/file_constructor_more_types.rs
+?? crates/bsl-cli/tests/file_create_directory_edges.rs
+?? crates/bsl-cli/tests/file_create_directory_failures.rs
+?? crates/bsl-cli/tests/file_create_directory_roots.rs
+?? crates/bsl-cli/tests/file_create_directory_server_types.rs
+?? crates/bsl-cli/tests/file_create_directory_types.rs
+?? crates/bsl-cli/tests/file_delete_more_types.rs
+?? crates/bsl-cli/tests/file_delete_partial_failure.rs
+?? crates/bsl-cli/tests/file_http_certificate_io_edges.rs
+?? crates/bsl-cli/tests/file_json_io_edges.rs
+?? crates/bsl-cli/tests/file_object_devices.rs
+?? crates/bsl-cli/tests/file_object_host_edges.rs
+?? crates/bsl-cli/tests/file_object_io_edges.rs
+?? crates/bsl-cli/tests/file_pdf_io_edges.rs
+?? crates/bsl-cli/tests/file_read_io_edges.rs
+?? crates/bsl-cli/tests/file_search_access_order.rs
+?? crates/bsl-cli/tests/file_search_directory_cycle.rs
+?? crates/bsl-cli/tests/file_search_link_spaces.rs
+?? crates/bsl-cli/tests/file_search_metadata_errors.rs
+?? crates/bsl-cli/tests/file_search_more_mask_types.rs
+?? crates/bsl-cli/tests/file_search_order.rs
+?? crates/bsl-cli/tests/file_search_sfile_directory.rs
+?? crates/bsl-cli/tests/file_search_sfile_links.rs
+?? crates/bsl-cli/tests/file_search_sfile_selection.rs
+?? crates/bsl-cli/tests/file_search_spaces.rs
+?? crates/bsl-cli/tests/file_spreadsheet_io_edges.rs
+?? crates/bsl-cli/tests/file_text_writer_io_edges.rs
+?? crates/bsl-cli/tests/file_textdoc_io_edges.rs
+?? crates/bsl-cli/tests/file_write_io_edges.rs
+?? crates/bsl-cli/tests/file_xdto_factory_io_edges.rs
+?? crates/bsl-cli/tests/file_xml_io_edges.rs
+?? crates/bsl-cli/tests/notification_name_types.rs
+?? crates/bsl-cli/tests/table_method_index_edges.rs
+?? crates/bsl-cli/tests/temporary_cleanup.rs
+?? crates/bsl-compiler/tests/dynamic_await.rs
+?? crates/bsl-compiler/tests/object_call_arguments.rs
+?? crates/bsl-rt/src/application.rs
+?? crates/bsl-rt/src/file.rs
+?? crates/bsl-rt/src/file_async.rs
+?? crates/bsl-rt/src/file_search.rs
+?? crates/bsl-rt/src/fixed_collections.rs
+?? crates/bsl-rt/src/mask.rs
+?? crates/bsl-rt/src/module_reference.rs
+?? crates/bsl-rt/src/notification.rs
+?? crates/bsl-rt/src/temporary_file_access.rs
+?? crates/bsl-rt/src/temporary_files.rs
+?? crates/bsl-rt/src/value_table_indexes.rs
+?? crates/bsl-rt/tests/application_command_line.rs
+?? crates/bsl-rt/tests/application_host.rs
+?? crates/bsl-rt/tests/arity.rs
+?? crates/bsl-rt/tests/array_access_methods.rs
+?? crates/bsl-rt/tests/delete_races.rs
+?? crates/bsl-rt/tests/file_async.rs
+?? crates/bsl-rt/tests/file_begin_oracle.rs
+?? crates/bsl-rt/tests/file_handle_resize.rs
+?? crates/bsl-rt/tests/file_masks.rs
+?? crates/bsl-rt/tests/file_metadata.rs
+?? crates/bsl-rt/tests/find_files.rs
+?? crates/bsl-rt/tests/method_lookup.rs
+?? crates/bsl-rt/tests/notification_method_matrix.rs
+?? crates/bsl-rt/tests/system_application.rs
+?? crates/bsl-rt/tests/system_file_removal.rs
+?? crates/bsl-rt/tests/table_access_methods.rs
+?? crates/bsl-rt/tests/temporary_directory.rs
+?? crates/bsl-rt/tests/temporary_file_ownership.rs
+?? crates/bsl-rt/tests/temporary_file_transfer.rs
+?? crates/bsl-stream/tests/
+?? crates/bsl-vm/src/modules/
+?? crates/bsl-vm/src/notifications.rs
+?? crates/bsl-vm/src/scheduler/
+?? crates/open-bsl/examples/alloc-profile.rs
+?? crates/open-bsl/tests/application_async.rs
+?? crates/open-bsl/tests/application_bsl.rs
+?? crates/open-bsl/tests/application_system.rs
+?? crates/open-bsl/tests/array_insert.rs
+?? crates/open-bsl/tests/debug_context.rs
+?? crates/open-bsl/tests/dynamic_errors.rs
+?? crates/open-bsl/tests/dynamic_execution.rs
+?? crates/open-bsl/tests/dynamic_imports.rs
+?? crates/open-bsl/tests/dynamic_module_scope.rs
+?? crates/open-bsl/tests/error_notifications.rs
+?? crates/open-bsl/tests/file_async.rs
+?? crates/open-bsl/tests/file_mobile.rs
+?? crates/open-bsl/tests/file_notifications.rs
+?? crates/open-bsl/tests/file_partial_failure.rs
+?? crates/open-bsl/tests/fixed_collections.rs
+?? crates/open-bsl/tests/module_aliases.rs
+?? crates/open-bsl/tests/module_calls.rs
+?? crates/open-bsl/tests/module_reference.rs
+?? crates/open-bsl/tests/object_call_arguments.rs
+?? crates/open-bsl/tests/system_temporary_access.rs
+?? crates/open-bsl/tests/table_access.rs
+?? crates/open-bsl/tests/temporary_files.rs
+?? crates/open-bsl/tests/temporary_stream.rs
+?? crates/open-bsl/tests/temporary_stream_async.rs
+?? crates/open-bsl/tests/value_list_methods.rs
+?? crates/open-bsl/tests/value_table_indexes.rs
+?? docs/plans/filesystem-completion-audit-2026-09-15.md
+?? docs/reference/bsl-api/application-launch.md
+?? docs/reference/bsl-api/module-reference.md
+?? docs/reference/bsl-api/temporary-file-cleanup.md
+?? docs/research/compatibility/async-error-queue-2026-09-17.md
+?? docs/research/compatibility/date-subseconds-server-2026-09-17.md
+?? docs/research/compatibility/debug-evaluate-context-2026-09-17.md
+?? docs/research/compatibility/document-association-host-2026-09-09.md
+?? docs/research/compatibility/document-association-implementation-2026-09-16.md
+?? docs/research/compatibility/dynamic-await-rejection-2026-09-17.md
+?? docs/research/compatibility/dynamic-execution-2026-09-17.md
+?? docs/research/compatibility/dynamic-imports-2026-09-17.md
+?? docs/research/compatibility/dynamic-local-exceptions-2026-09-17.md
+?? docs/research/compatibility/dynamic-module-scope-2026-09-17.md
+?? docs/research/compatibility/dynamic-owned-tables-2026-09-17.md
+?? docs/research/compatibility/file-archive-content-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-archive-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-async-client-2026-09-09.md
+?? docs/research/compatibility/file-async-globals-client-2026-09-10.md
+?? docs/research/compatibility/file-async-read-client-2026-09-10.md
+?? docs/research/compatibility/file-async-server-2026-09-09.md
+?? docs/research/compatibility/file-async-write-client-2026-09-10.md
+?? docs/research/compatibility/file-attribute-access-order-2026-09-18.md
+?? docs/research/compatibility/file-attribute-arguments-2026-09-16.md
+?? docs/research/compatibility/file-attribute-string-edges-server-2026-09-17.md
+?? docs/research/compatibility/file-attributes-server-2026-09-09.md
+?? docs/research/compatibility/file-begin-arity-client-2026-09-16.md
+?? docs/research/compatibility/file-begin-delivery-2026-09-17.md
+?? docs/research/compatibility/file-begin-description-client-2026-09-17.md
+?? docs/research/compatibility/file-begin-handler-kinds-2026-09-17.md
+?? docs/research/compatibility/file-callback-methods-client-2026-09-10.md
+?? docs/research/compatibility/file-callback-object-delivery-client-2026-09-16.md
+?? docs/research/compatibility/file-callbacks-client-2026-09-10.md
+?? docs/research/compatibility/file-constructor-more-types-server-2026-09-17.md
+?? docs/research/compatibility/file-constructor-server-2026-09-10.md
+?? docs/research/compatibility/file-create-directory-edges-server-2026-09-17.md
+?? docs/research/compatibility/file-create-directory-failures-server-2026-09-18.md
+?? docs/research/compatibility/file-create-directory-relative-forms-client-2026-09-17.md
+?? docs/research/compatibility/file-create-directory-roots-server-2026-09-17.md
+?? docs/research/compatibility/file-create-directory-types-client-2026-09-18.md
+?? docs/research/compatibility/file-create-directory-types-server-2026-09-18.md
+?? docs/research/compatibility/file-create-paths-attempt-2026-09-15.md
+?? docs/research/compatibility/file-create-paths-server-2026-09-16.md
+?? docs/research/compatibility/file-delete-async-types-client-2026-09-10.md
+?? docs/research/compatibility/file-delete-links-server-2026-09-10.md
+?? docs/research/compatibility/file-delete-masks-server-2026-09-09.md
+?? docs/research/compatibility/file-delete-more-types-async-client-2026-09-17.md
+?? docs/research/compatibility/file-delete-more-types-server-2026-09-17.md
+?? docs/research/compatibility/file-delete-partial-failure-server-2026-09-18.md
+?? docs/research/compatibility/file-delete-types-server-2026-09-10.md
+?? docs/research/compatibility/file-globals-server-2026-09-09.md
+?? docs/research/compatibility/file-http-certificate-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-initialize-arguments-client-2026-09-17.md
+?? docs/research/compatibility/file-initialize-identity-client-2026-09-10.md
+?? docs/research/compatibility/file-interface-inventory-2026-09-09.md
+?? docs/research/compatibility/file-interface-probe-coverage-2026-09-18.md
+?? docs/research/compatibility/file-json-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-mask-extensions-server-2026-09-17.md
+?? docs/research/compatibility/file-masks-server-2026-09-09.md
+?? docs/research/compatibility/file-masks-single-server-2026-09-09.md
+?? docs/research/compatibility/file-mobile-methods-client-2026-09-17.md
+?? docs/research/compatibility/file-object-devices-server-2026-09-18.md
+?? docs/research/compatibility/file-object-host-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-object-io-edges-server-2026-09-17.md
+?? docs/research/compatibility/file-object-server-2026-09-09.md
+?? docs/research/compatibility/file-operation-failures-2026-09-17.md
+?? docs/research/compatibility/file-pdf-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-read-io-edges-server-2026-09-17.md
+?? docs/research/compatibility/file-runapp-async-client-2026-09-16.md
+?? docs/research/compatibility/file-runapp-context-comparison-2026-09-17.md
+?? docs/research/compatibility/file-runapp-details-server-2026-09-09.md
+?? docs/research/compatibility/file-runapp-server-2026-09-09.md
+?? docs/research/compatibility/file-search-access-order-client-2026-09-18.md
+?? docs/research/compatibility/file-search-broken-masks-server-2026-09-10.md
+?? docs/research/compatibility/file-search-broken-middle-server-2026-09-10.md
+?? docs/research/compatibility/file-search-directory-cycle-server-2026-09-18.md
+?? docs/research/compatibility/file-search-edges-server-2026-09-09.md
+?? docs/research/compatibility/file-search-late-links-server-2026-09-16.md
+?? docs/research/compatibility/file-search-link-controls-server-2026-09-10.md
+?? docs/research/compatibility/file-search-link-spaces-server-2026-09-17.md
+?? docs/research/compatibility/file-search-links-async-client-2026-09-10.md
+?? docs/research/compatibility/file-search-links-server-2026-09-10.md
+?? docs/research/compatibility/file-search-metadata-errors-server-2026-09-17.md
+?? docs/research/compatibility/file-search-more-mask-types-client-2026-09-17.md
+?? docs/research/compatibility/file-search-order-server-2026-09-18.md
+?? docs/research/compatibility/file-search-recursion-arguments-2026-09-16.md
+?? docs/research/compatibility/file-search-sfile-directory-server-2026-09-18.md
+?? docs/research/compatibility/file-search-sfile-links-server-2026-09-18.md
+?? docs/research/compatibility/file-search-sfile-selection-server-2026-09-18.md
+?? docs/research/compatibility/file-search-sfile-server-2026-09-18.md
+?? docs/research/compatibility/file-search-spaces-server-2026-09-16.md
+?? docs/research/compatibility/file-search-types-server-2026-09-09.md
+?? docs/research/compatibility/file-spreadsheet-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-temp-async-and-sharing-2026-09-17.md
+?? docs/research/compatibility/file-temp-native-server-2026-09-09.md
+?? docs/research/compatibility/file-temp-parameters-server-2026-09-17.md
+?? docs/research/compatibility/file-temp-return-server-2026-09-15.md
+?? docs/research/compatibility/file-temp-stream-server-2026-09-09.md
+?? docs/research/compatibility/file-text-writer-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-textdoc-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-time-edges-server-2026-09-09.md
+?? docs/research/compatibility/file-time-string-arguments-server-2026-09-18.md
+?? docs/research/compatibility/file-times-server-2026-09-09.md
+?? docs/research/compatibility/file-write-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-xdto-factory-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-xml-io-edges-server-2026-09-18.md
+?? docs/research/compatibility/file-zero-date-server-2026-09-17.md
+?? docs/research/compatibility/files-api-2026-09-09.md
+?? docs/research/compatibility/filesystem-security-review-2026-09-16.md
+?? docs/research/compatibility/filesystem-security-review-2026-09-18.md
+?? docs/research/compatibility/module-aliases-2026-09-17.md
+?? docs/research/compatibility/module-calls-2026-09-17.md
+?? docs/research/compatibility/module-reference-2026-09-17.md
+?? docs/research/compatibility/notification-array-access-server-2026-09-10.md
+?? docs/research/compatibility/notification-array-index-edges-server-2026-09-17.md
+?? docs/research/compatibility/notification-array-insert-server-2026-09-16.md
+?? docs/research/compatibility/notification-core-methods-2026-09-10.md
+?? docs/research/compatibility/notification-description-client-2026-09-10.md
+?? docs/research/compatibility/notification-fixed-collections-client-2026-09-17.md
+?? docs/research/compatibility/notification-handlers-client-2026-09-10.md
+?? docs/research/compatibility/notification-name-types-client-2026-09-18.md
+?? docs/research/compatibility/notification-object-constructor-client-2026-09-10.md
+?? docs/research/compatibility/notification-receivers-client-2026-09-10.md
+?? docs/research/compatibility/notification-table-access-server-2026-09-16.md
+?? docs/research/compatibility/notification-table-index-edges-server-2026-09-17.md
+?? docs/research/compatibility/notification-table-index-methods-client-2026-09-17.md
+?? docs/research/compatibility/notification-value-list-methods-client-2026-09-17.md
+?? docs/research/compatibility/open-call-arguments-2026-09-17.md
+?? docs/research/compatibility/static-import-arguments-2026-09-17.md
+?? docs/research/compatibility/stream-resize-server-2026-09-10.md
+?? docs/research/compatibility/structure-property-output-server-2026-09-17.md
+?? docs/research/compatibility/temporary-file-transferable-2026-09-17.md
+?? docs/research/compatibility/temporary-stream-host-2026-09-17.md
+?? docs/research/performance/allocation-profile-2026-09-18/
+?? docs/research/performance/bsl-rt-ver4-ab-2026-09-08.md
+?? docs/research/performance/bsl-rt-ver4-ab-2026-09-08/
+?? docs/research/performance/flamegraphs-after-allocations-2026-09-18/
+?? docs/research/performance/flamegraphs-current-vs-main-2026-09-18/
+?? docs/research/performance/flamegraphs-linked-methods-2026-09-18/
+?? docs/research/performance/xml-attribute-key-2026-09-18/
+?? docs/research/performance/xml-attributes-2026-09-18/
+?? docs/research/performance/xml-end-name-2026-09-18/
+?? docs/research/performance/xml-name-2026-09-18/
+?? docs/research/performance/xml-properties-2026-09-18/
+?? docs/research/performance/xml-source-buffer-2026-09-18/
+?? docs/research/performance/xml-text-2026-09-18/
+?? docs/research/performance/xml-utf16-source-2026-09-18/
+?? docs/research/performance/xml-utf8-2026-09-18/
+?? openspec/changes/archive/2026-09-17-add-host-application-launch/
+?? openspec/changes/archive/2026-09-18-extend-filesystem-async/
+?? openspec/changes/archive/2026-09-18-extend-filesystem-operations/
+?? openspec/changes/archive/2026-09-18-extend-temporary-file-lifecycle/
+?? openspec/changes/archive/2026-09-18-link-typed-object-methods/
+?? openspec/changes/archive/2026-09-18-prepare-vm-call-sites/
+?? openspec/changes/archive/2026-09-18-prepare-vm-import-sites/
+?? openspec/specs/filesystem-async/
+?? openspec/specs/filesystem-operations/
+?? openspec/specs/host-application-launch/
+?? openspec/specs/temporary-file-lifecycle/
+?? tests/conformance/fixtures/dynamic_async_await.bsl
+?? tests/conformance/fixtures/dynamic_async_await.expected
+?? tests/conformance/fixtures/dynamic_async_context.bsl
+?? tests/conformance/fixtures/dynamic_async_context.expected
+?? tests/conformance/fixtures/dynamic_local_exceptions.bsl
+?? tests/conformance/fixtures/dynamic_local_exceptions.expected
+?? tests/conformance/fixtures/file_attributes_async.bsl
+?? tests/conformance/fixtures/file_attributes_async.expected
+?? tests/conformance/fixtures/file_begin_delivery.bsl
+?? tests/conformance/fixtures/file_begin_delivery.expected
+?? tests/conformance/fixtures/file_begin_handler_kinds.bsl
+?? tests/conformance/fixtures/file_begin_handler_kinds.expected
+?? tests/conformance/fixtures/file_constructor.bsl
+?? tests/conformance/fixtures/file_constructor.expected
+?? tests/conformance/fixtures/file_create_paths.bsl
+?? tests/conformance/fixtures/file_create_paths.expected
+?? tests/conformance/fixtures/file_create_paths_async.bsl
+?? tests/conformance/fixtures/file_create_paths_async.expected
+?? tests/conformance/fixtures/file_delete_masks.bsl
+?? tests/conformance/fixtures/file_delete_masks.expected
+?? tests/conformance/fixtures/file_delete_types.bsl
+?? tests/conformance/fixtures/file_delete_types.expected
+?? tests/conformance/fixtures/file_delete_types_async.bsl
+?? tests/conformance/fixtures/file_delete_types_async.expected
+?? tests/conformance/fixtures/file_globals_async.bsl
+?? tests/conformance/fixtures/file_globals_async.expected
+?? tests/conformance/fixtures/file_initialize_arguments.bsl
+?? tests/conformance/fixtures/file_initialize_arguments.expected
+?? tests/conformance/fixtures/file_initialize_async.bsl
+?? tests/conformance/fixtures/file_initialize_async.expected
+?? tests/conformance/fixtures/file_metadata_async.bsl
+?? tests/conformance/fixtures/file_metadata_async.expected
+?? tests/conformance/fixtures/file_path_trailing_spaces.bsl
+?? tests/conformance/fixtures/file_path_trailing_spaces.expected
+?? tests/conformance/fixtures/file_path_whitespace.bsl
+?? tests/conformance/fixtures/file_path_whitespace.expected
+?? tests/conformance/fixtures/file_promises_dynamic.bsl
+?? tests/conformance/fixtures/file_promises_dynamic.expected
+?? tests/conformance/fixtures/file_search.bsl
+?? tests/conformance/fixtures/file_search.expected
+?? tests/conformance/fixtures/file_search_async.bsl
+?? tests/conformance/fixtures/file_search_async.expected
+?? tests/conformance/fixtures/file_stream_name.bsl
+?? tests/conformance/fixtures/file_stream_name.expected
+?? tests/conformance/fixtures/module_argument_aliases.bsl
+?? tests/conformance/fixtures/module_argument_aliases.expected
+?? tests/conformance/fixtures/module_argument_dynamic_aliases.bsl
+?? tests/conformance/fixtures/module_argument_dynamic_aliases.expected
+?? tests/conformance/fixtures/module_argument_exception.bsl
+?? tests/conformance/fixtures/module_argument_exception.expected
+?? tests/conformance/fixtures/notification_array_access.bsl
+?? tests/conformance/fixtures/notification_array_access.expected
+?? tests/conformance/fixtures/notification_array_insert.bsl
+?? tests/conformance/fixtures/notification_array_insert.expected
+?? tests/conformance/fixtures/notification_object_constructor.bsl
+?? tests/conformance/fixtures/notification_object_constructor.expected
+?? tests/conformance/fixtures/notification_table_access.bsl
+?? tests/conformance/fixtures/notification_table_access.expected
+?? tests/conformance/fixtures/stream_resize_buffer.bsl
+?? tests/conformance/fixtures/stream_resize_buffer.expected
+?? tests/conformance/fixtures/stream_resize_values.bsl
+?? tests/conformance/fixtures/stream_resize_values.expected
+?? tests/conformance/fixtures/structure_property_output_ssa.bsl
+?? tests/conformance/fixtures/structure_property_output_ssa.expected
+?? tests/conformance/measure/1c/README.md
+?? tests/conformance/measure/1c/run-on-server-1c.py
+?? tests/conformance/measure/1c/test_gen_form_module.py
+?? tests/conformance/measure/1c/test_server_runner.py
+?? tests/conformance/measure/filesystem/
+?? tests/support/application_system.rs

@@ -1,0 +1,6 @@
+{
+  "lua": "/usr/bin/lua",
+  "luajit": "/usr/bin/luajit",
+  "python": "/usr/bin/python3",
+  "oscript": "/opt/oscript/bin/oscript"
+}

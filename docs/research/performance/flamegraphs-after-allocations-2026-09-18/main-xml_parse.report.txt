@@ -1,0 +1,942 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 8K of event 'cycles:u'
+# Event count (approx.): 35081810700
+#
+# Overhead  Command  Shared Object         Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+# ........  .......  ....................  ..........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+    28.39%  bsl-cli  bsl-cli               [.] bsl_vm::step
+            |          
+            |--11.67%--step (inlined)
+            |          |          
+            |           --11.56%--poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+            |--4.01%--clone (inlined)
+            |          |          
+            |           --3.47%--call_once<fn(&bsl_rt::value::BslValue) -> bsl_rt::value::BslValue, (&bsl_rt::value::BslValue)> (inlined)
+            |                     map<&bsl_rt::value::BslValue, bsl_rt::value::BslValue, fn(&bsl_rt::value::BslValue) -> bsl_rt::value::BslValue> (inlined)
+            |                     cloned<bsl_rt::value::BslValue> (inlined)
+            |                     reg_load (inlined)
+            |                     |          
+            |                      --3.37%--step (inlined)
+            |                                poll_linked (inlined)
+            |                                poll_with_registry_and_io (inlined)
+            |                                poll (inlined)
+            |                                branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                                run (inlined)
+            |                                run_file (inlined)
+            |                                main (inlined)
+            |                                __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                {closure#0}<()> (inlined)
+            |                                {closure#0} (inlined)
+            |                                do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                                catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                                catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                                lang_start_internal (inlined)
+            |                                main
+            |                                __libc_start_call_main
+            |                                __libc_start_main@@GLIBC_2.34
+            |                                _start
+            |          
+            |--1.86%--as_ref<alloc::rc::Rc<dyn bsl_rt::background_jobs::BackgroundJobService, alloc::alloc::Global>> (inlined)
+            |          step (inlined)
+            |          poll_linked (inlined)
+            |          poll_with_registry_and_io (inlined)
+            |          poll (inlined)
+            |          branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |          run (inlined)
+            |          run_file (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          {closure#0} (inlined)
+            |          do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |          catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          lang_start_internal (inlined)
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+            |--1.54%--reg_store (inlined)
+            |          |          
+            |           --1.54%--step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+            |--1.29%--saturating_sub (inlined)
+            |          step (inlined)
+            |          poll_linked (inlined)
+            |          poll_with_registry_and_io (inlined)
+            |          poll (inlined)
+            |          branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |          run (inlined)
+            |          run_file (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          {closure#0} (inlined)
+            |          do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |          catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          lang_start_internal (inlined)
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+            |--1.05%--branch<bsl_rt::value::BslValue, bsl_rt::error::RtError> (inlined)
+            |          step (inlined)
+            |          poll_linked (inlined)
+            |          poll_with_registry_and_io (inlined)
+            |          poll (inlined)
+            |          branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |          run (inlined)
+            |          run_file (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          {closure#0} (inlined)
+            |          do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |          catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          lang_start_internal (inlined)
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+            |--0.77%--get_mut<bsl_rt::value::BslValue> (inlined)
+            |          get_mut<bsl_rt::value::BslValue, usize> (inlined)
+            |          reg_store (inlined)
+            |          |          
+            |           --0.71%--step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+            |--0.58%--drop_glue<bsl_rt::value::BslValue> (inlined)
+            |          
+             --0.55%--non_null<alloc::alloc::Global, bsl_vm::Frame> (inlined)
+                       ptr<alloc::alloc::Global, bsl_vm::Frame> (inlined)
+                       ptr<bsl_vm::Frame, alloc::alloc::Global> (inlined)
+
+     6.66%  bsl-cli  bsl-cli               [.] bsl_vm::step_cold
+            |          
+            |--2.52%--step_cold (inlined)
+            |          |          
+            |           --2.47%--step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+            |--1.61%--branch<bsl_rt::component::CallOutcome, bsl_rt::error::RtError> (inlined)
+            |          step_cold (inlined)
+            |          step (inlined)
+            |          poll_linked (inlined)
+            |          poll_with_registry_and_io (inlined)
+            |          poll (inlined)
+            |          branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |          run (inlined)
+            |          run_file (inlined)
+            |          main (inlined)
+            |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |          {closure#0}<()> (inlined)
+            |          {closure#0} (inlined)
+            |          do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |          catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |          lang_start_internal (inlined)
+            |          main
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+             --0.83%--object_ref (inlined)
+                       step_cold (inlined)
+                       step (inlined)
+                       poll_linked (inlined)
+                       poll_with_registry_and_io (inlined)
+                       poll (inlined)
+                       branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                       run (inlined)
+                       run_file (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       {closure#0} (inlined)
+                       do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                       catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       lang_start_internal (inlined)
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+     5.11%  bsl-cli  bsl-cli               [.] <bsl_xml::core::XmlParser>::read
+            |          
+            |--1.86%--read (inlined)
+            |          |          
+            |           --1.70%--branch<core::option::Option<bsl_xml::core::XmlEvent>, bsl_rt::error::RtError> (inlined)
+            |                     read (inlined)
+            |                     reader_read (inlined)
+            |                     map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+            |                     invoke (inlined)
+            |                     step_cold (inlined)
+            |                     step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+             --0.58%--read_text_run (inlined)
+                       read (inlined)
+                       branch<core::option::Option<bsl_xml::core::XmlEvent>, bsl_rt::error::RtError> (inlined)
+                       read (inlined)
+                       reader_read (inlined)
+                       map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+                       invoke (inlined)
+                       step_cold (inlined)
+                       step (inlined)
+                       poll_linked (inlined)
+                       poll_with_registry_and_io (inlined)
+                       poll (inlined)
+                       branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                       run (inlined)
+                       run_file (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       {closure#0} (inlined)
+                       do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                       catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       lang_start_internal (inlined)
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+     4.00%  bsl-cli  bsl-cli               [.] <core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, <alloc::string::String>::from_utf16_lossy::{closure#0}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<char, <alloc::string::String as core::iter::traits::collect::Extend<char>>::extend<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, <alloc::string::String>::from_utf16_lossy::{closure#0}>>::{closure#0}>::{closure#0}>
+            |          
+            |--1.35%--len_utf8 (inlined)
+            |          len_utf8 (inlined)
+            |          push (inlined)
+            |          {closure#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>> (inlined)
+            |          {closure#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>> (inlined)
+            |          {closure#0}<core::result::Result<char, core::char::decode::DecodeUtf16Error>, char, (), alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>>> (inlined)
+            |          fold<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, (), core::iter::adapters::map::map_fold::{closure_env#0}<core::result::Result<char, core::char::decode::DecodeUtf16Error>, char, (), alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>>>> (inlined)
+            |          fold<char, core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>>> (inlined)
+            |          from_iter<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>> (inlined)
+            |          fmt (inlined)
+            |          expect<(), core::fmt::Error> (inlined)
+            |          spec_to_string<bsl_rt::string::BslString> (inlined)
+            |          |          
+            |           --1.34%--to_string<bsl_rt::string::BslString> (inlined)
+            |                     need_str (inlined)
+            |                     |          
+            |                      --1.17%--set_string (inlined)
+            |                                xml_set_string (inlined)
+            |                                map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+            |                                invoke (inlined)
+            |                                step_cold (inlined)
+            |                                step (inlined)
+            |                                poll_linked (inlined)
+            |                                poll_with_registry_and_io (inlined)
+            |                                poll (inlined)
+            |                                branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                                run (inlined)
+            |                                run_file (inlined)
+            |                                main (inlined)
+            |                                __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                {closure#0}<()> (inlined)
+            |                                {closure#0} (inlined)
+            |                                do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                                catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                                catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                                lang_start_internal (inlined)
+            |                                main
+            |                                __libc_start_call_main
+            |                                __libc_start_main@@GLIBC_2.34
+            |                                _start
+            |          
+             --0.83%--encode_utf8_raw_unchecked (inlined)
+                       push (inlined)
+                       {closure#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>> (inlined)
+                       {closure#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>> (inlined)
+                       {closure#0}<core::result::Result<char, core::char::decode::DecodeUtf16Error>, char, (), alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>>> (inlined)
+                       fold<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, (), core::iter::adapters::map::map_fold::{closure_env#0}<core::result::Result<char, core::char::decode::DecodeUtf16Error>, char, (), alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>>>> (inlined)
+                       fold<char, core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>>>> (inlined)
+                       from_iter<core::iter::adapters::map::Map<core::char::decode::DecodeUtf16<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<u16>>>, alloc::string::{impl#0}::from_utf16_lossy::{closure_env#0}>> (inlined)
+                       fmt (inlined)
+                       |          
+                        --0.74%--expect<(), core::fmt::Error> (inlined)
+                                  spec_to_string<bsl_rt::string::BslString> (inlined)
+                                  |          
+                                   --0.73%--to_string<bsl_rt::string::BslString> (inlined)
+                                             need_str (inlined)
+                                             |          
+                                              --0.58%--set_string (inlined)
+                                                        xml_set_string (inlined)
+                                                        map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+                                                        invoke (inlined)
+                                                        step_cold (inlined)
+                                                        step (inlined)
+                                                        poll_linked (inlined)
+                                                        poll_with_registry_and_io (inlined)
+                                                        poll (inlined)
+                                                        branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                                                        run (inlined)
+                                                        run_file (inlined)
+                                                        main (inlined)
+                                                        __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                                        {closure#0}<()> (inlined)
+                                                        {closure#0} (inlined)
+                                                        do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                                        catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                                                        catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                                        lang_start_internal (inlined)
+                                                        main
+                                                        __libc_start_call_main
+                                                        __libc_start_main@@GLIBC_2.34
+                                                        _start
+
+     2.94%  bsl-cli  bsl-cli               [.] <bsl_number::number::BslNumber>::add_sub
+            |          
+            |--1.12%--add_sub (inlined)
+            |          |          
+            |           --0.81%--add (inlined)
+            |                     branch<bsl_number::number::BslNumber, bsl_number::NumError> (inlined)
+            |                     add (inlined)
+            |                     add_rhs_op (inlined)
+            |                     |          
+            |                      --0.57%--add_const_op (inlined)
+            |                                step (inlined)
+            |                                poll_linked (inlined)
+            |                                poll_with_registry_and_io (inlined)
+            |                                poll (inlined)
+            |                                branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                                run (inlined)
+            |                                run_file (inlined)
+            |                                main (inlined)
+            |                                __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                                {closure#0}<()> (inlined)
+            |                                {closure#0} (inlined)
+            |                                do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                                catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                                catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                                lang_start_internal (inlined)
+            |                                main
+            |                                __libc_start_call_main
+            |                                __libc_start_main@@GLIBC_2.34
+            |                                _start
+            |          
+             --0.74%--overflowing_mul (inlined)
+                       checked_mul (inlined)
+                       scale_up_i64 (inlined)
+                       add_sub (inlined)
+                       |          
+                        --0.56%--add (inlined)
+                                  branch<bsl_number::number::BslNumber, bsl_number::NumError> (inlined)
+                                  add (inlined)
+                                  add_rhs_op (inlined)
+
+     2.70%  bsl-cli  bsl-cli               [.] bsl_vm::add_rhs_op
+            |          
+            |--1.08%--add_rhs_op (inlined)
+            |          |          
+            |           --0.83%--add_const_op (inlined)
+            |                     step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+             --0.64%--clone (inlined)
+                       |          
+                        --0.59%--call_once<fn(&bsl_rt::value::BslValue) -> bsl_rt::value::BslValue, (&bsl_rt::value::BslValue)> (inlined)
+                                  map<&bsl_rt::value::BslValue, bsl_rt::value::BslValue, fn(&bsl_rt::value::BslValue) -> bsl_rt::value::BslValue> (inlined)
+                                  cloned<bsl_rt::value::BslValue> (inlined)
+                                  reg_load (inlined)
+                                  add_rhs_op (inlined)
+
+     2.48%  bsl-cli  bsl-cli               [.] <bsl_rt::value::BslValue>::add
+            |          
+            |--1.44%--branch<bsl_number::number::BslNumber, bsl_number::NumError> (inlined)
+            |          add (inlined)
+            |          add_rhs_op (inlined)
+            |          |          
+            |           --1.05%--add_const_op (inlined)
+            |                     step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+             --0.90%--add (inlined)
+                       |          
+                        --0.67%--add_rhs_op (inlined)
+                                  |          
+                                   --0.52%--add_const_op (inlined)
+                                             step (inlined)
+                                             poll_linked (inlined)
+                                             poll_with_registry_and_io (inlined)
+                                             poll (inlined)
+                                             branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                                             run (inlined)
+                                             run_file (inlined)
+                                             main (inlined)
+                                             __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                             {closure#0}<()> (inlined)
+                                             {closure#0} (inlined)
+                                             do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                             catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                                             catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                             lang_start_internal (inlined)
+                                             main
+                                             __libc_start_call_main
+                                             __libc_start_main@@GLIBC_2.34
+                                             _start
+
+     2.43%  bsl-cli  bsl-cli               [.] <bsl_xml::core::XmlParser>::read_name
+            |          
+             --0.72%--read_name (inlined)
+                       |          
+                        --0.71%--branch<alloc::string::String, bsl_rt::error::RtError> (inlined)
+                                  |          
+                                   --0.68%--read (inlined)
+                                             branch<core::option::Option<bsl_xml::core::XmlEvent>, bsl_rt::error::RtError> (inlined)
+                                             read (inlined)
+                                             reader_read (inlined)
+                                             map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+                                             invoke (inlined)
+                                             step_cold (inlined)
+                                             step (inlined)
+                                             poll_linked (inlined)
+                                             poll_with_registry_and_io (inlined)
+                                             poll (inlined)
+                                             branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                                             run (inlined)
+                                             run_file (inlined)
+                                             main (inlined)
+                                             __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                             {closure#0}<()> (inlined)
+                                             {closure#0} (inlined)
+                                             do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                             catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                                             catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                             lang_start_internal (inlined)
+                                             main
+                                             __libc_start_call_main
+                                             __libc_start_main@@GLIBC_2.34
+                                             _start
+
+     2.24%  bsl-cli  bsl-cli               [.] <bsl_vm::ProgramExecution>::poll_linked
+            |          
+             --0.84%--poll_linked (inlined)
+                       poll_with_registry_and_io (inlined)
+                       poll (inlined)
+                       branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                       run (inlined)
+                       run_file (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       {closure#0} (inlined)
+                       do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                       catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       lang_start_internal (inlined)
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+     2.20%  bsl-cli  bsl-cli               [.] <alloc::vec::Vec<u16>>::extend_desugared::<core::str::iter::EncodeUtf16>
+            |          
+             --1.49%--extend_desugared<u16, alloc::alloc::Global, core::str::iter::EncodeUtf16> (inlined)
+                       |          
+                        --1.48%--utf16_units (inlined)
+                                  from_str (inlined)
+                                  |          
+                                  |--0.70%--name_from (inlined)
+                                  |          reader_name (inlined)
+                                  |          component_prop_get (inlined)
+                                  |          branch<bsl_rt::value::BslValue, bsl_rt::error::RtError> (inlined)
+                                  |          step (inlined)
+                                  |          poll_linked (inlined)
+                                  |          poll_with_registry_and_io (inlined)
+                                  |          poll (inlined)
+                                  |          branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                                  |          run (inlined)
+                                  |          run_file (inlined)
+                                  |          main (inlined)
+                                  |          __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  |          {closure#0}<()> (inlined)
+                                  |          {closure#0} (inlined)
+                                  |          do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                  |          catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                                  |          catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                  |          lang_start_internal (inlined)
+                                  |          main
+                                  |          __libc_start_call_main
+                                  |          __libc_start_main@@GLIBC_2.34
+                                  |          _start
+                                  |          
+                                   --0.51%--attribute_value (inlined)
+                                             reader_attribute_value (inlined)
+                                             map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+                                             invoke (inlined)
+                                             step_cold (inlined)
+                                             step (inlined)
+                                             poll_linked (inlined)
+                                             poll_with_registry_and_io (inlined)
+                                             poll (inlined)
+                                             branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                                             run (inlined)
+                                             run_file (inlined)
+                                             main (inlined)
+                                             __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                             {closure#0}<()> (inlined)
+                                             {closure#0} (inlined)
+                                             do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                             catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                                             catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                             lang_start_internal (inlined)
+                                             main
+                                             __libc_start_call_main
+                                             __libc_start_main@@GLIBC_2.34
+                                             _start
+
+     1.85%  bsl-cli  bsl-cli               [.] bsl_vm::linking::resolve_component_property
+     1.76%  bsl-cli  bsl-cli               [.] <core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<char, <alloc::string::String as core::iter::traits::collect::Extend<char>>::extend<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>::{closure#0}>::{closure#0}>
+            |          
+            |--0.56%--len_utf8 (inlined)
+            |          len_utf8 (inlined)
+            |          push (inlined)
+            |          {closure#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>> (inlined)
+            |          {closure#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>> (inlined)
+            |          {closure#0}<&char, char, (), fn(&char) -> char, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>> (inlined)
+            |          fold<char, (), core::iter::adapters::map::map_fold::{closure_env#0}<&char, char, (), fn(&char) -> char, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>>> (inlined)
+            |          fold<char, core::slice::iter::Iter<char>, fn(&char) -> char, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>> (inlined)
+            |          fold<core::slice::iter::Iter<char>, char, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>> (inlined)
+            |          read_name (inlined)
+            |          branch<alloc::string::String, bsl_rt::error::RtError> (inlined)
+            |          |          
+            |           --0.52%--read (inlined)
+            |                     branch<core::option::Option<bsl_xml::core::XmlEvent>, bsl_rt::error::RtError> (inlined)
+            |                     read (inlined)
+            |                     reader_read (inlined)
+            |                     map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+            |                     invoke (inlined)
+            |                     step_cold (inlined)
+            |                     step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+             --0.52%--encode_utf8_raw_unchecked (inlined)
+                       push (inlined)
+                       {closure#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>> (inlined)
+                       {closure#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>> (inlined)
+                       {closure#0}<&char, char, (), fn(&char) -> char, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>> (inlined)
+                       fold<char, (), core::iter::adapters::map::map_fold::{closure_env#0}<&char, char, (), fn(&char) -> char, core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>>> (inlined)
+                       fold<char, core::slice::iter::Iter<char>, fn(&char) -> char, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>> (inlined)
+                       fold<core::slice::iter::Iter<char>, char, (), core::iter::traits::iterator::Iterator::for_each::call::{closure_env#0}<char, alloc::string::{impl#15}::extend::{closure_env#0}<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<char>>>>> (inlined)
+                       read_name (inlined)
+                       branch<alloc::string::String, bsl_rt::error::RtError> (inlined)
+
+     1.69%  bsl-cli  libc.so.6             [.] malloc
+            |          
+            |--0.82%--__libc_malloc (inlined)
+            |          
+             --0.66%--tcache_get_n (inlined)
+                       tcache_get (inlined)
+                       __libc_malloc (inlined)
+
+     1.68%  bsl-cli  bsl-cli               [.] <alloc::raw_vec::RawVecInner>::finish_grow
+            |          
+             --0.90%--finish_grow<alloc::alloc::Global> (inlined)
+                       |          
+                        --0.68%--branch<core::ptr::non_null::NonNull<[u8]>, alloc::collections::TryReserveError> (inlined)
+                                  grow_amortized<alloc::alloc::Global> (inlined)
+                                  |          
+                                   --0.67%--do_reserve_and_handle<alloc::alloc::Global> (inlined)
+                                             |          
+                                              --0.53%--reserve<alloc::alloc::Global> (inlined)
+                                                        reserve<u8, alloc::alloc::Global> (inlined)
+                                                        reserve<u8, alloc::alloc::Global> (inlined)
+
+     1.63%  bsl-cli  libc.so.6             [.] cfree@GLIBC_2.2.5
+            |          
+             --1.37%--__libc_free (inlined)
+
+     1.59%  bsl-cli  bsl-cli               [.] bsl_xml::xml::read
+            |          
+            |--0.61%--read (inlined)
+            |          |          
+            |           --0.57%--reader_read (inlined)
+            |                     map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+            |                     invoke (inlined)
+            |                     step_cold (inlined)
+            |                     step (inlined)
+            |                     poll_linked (inlined)
+            |                     poll_with_registry_and_io (inlined)
+            |                     poll (inlined)
+            |                     branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+            |                     run (inlined)
+            |                     run_file (inlined)
+            |                     main (inlined)
+            |                     __rust_begin_short_backtrace<fn(), ()> (inlined)
+            |                     {closure#0}<()> (inlined)
+            |                     {closure#0} (inlined)
+            |                     do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+            |                     catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+            |                     lang_start_internal (inlined)
+            |                     main
+            |                     __libc_start_call_main
+            |                     __libc_start_main@@GLIBC_2.34
+            |                     _start
+            |          
+             --0.57%--branch<core::option::Option<bsl_xml::core::XmlEvent>, bsl_rt::error::RtError> (inlined)
+                       read (inlined)
+                       reader_read (inlined)
+                       map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+                       invoke (inlined)
+                       step_cold (inlined)
+                       step (inlined)
+                       poll_linked (inlined)
+                       poll_with_registry_and_io (inlined)
+                       poll (inlined)
+                       branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                       run (inlined)
+                       run_file (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       {closure#0} (inlined)
+                       do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                       catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       lang_start_internal (inlined)
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+     1.58%  bsl-cli  bsl-cli               [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&(usize, u32)>
+            |          
+             --0.55%--finish<core::hash::sip::Sip13Rounds> (inlined)
+                       finish (inlined)
+                       finish (inlined)
+                       hash_one<std::hash::random::RandomState, &(usize, u32)> (inlined)
+                       full (inlined)
+                       find_inner (inlined)
+                       find<((usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<(usize, u32), (usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>>> (inlined)
+                       get<((usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<(usize, u32), (usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>>> (inlined)
+                       get<(usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>, std::hash::random::RandomState, alloc::alloc::Global, (usize, u32)> (inlined)
+                       get<(usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>, std::hash::random::RandomState, alloc::alloc::Global, (usize, u32)> (inlined)
+                       resolve_component_property (inlined)
+                       branch<core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>, bsl_rt::error::RtError> (inlined)
+                       component_prop_get (inlined)
+                       branch<bsl_rt::value::BslValue, bsl_rt::error::RtError> (inlined)
+                       step (inlined)
+                       poll_linked (inlined)
+                       poll_with_registry_and_io (inlined)
+                       poll (inlined)
+                       branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                       run (inlined)
+                       run_file (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       {closure#0} (inlined)
+                       do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                       catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       lang_start_internal (inlined)
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+     1.42%  bsl-cli  bsl-cli               [.] <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+     1.35%  bsl-cli  bsl-cli               [.] __rustc::__rust_no_alloc_shim_is_unstable_v2
+            |
+            ---__rustc::__rust_no_alloc_shim_is_unstable_v2
+               |          
+                --0.66%--branch<core::ptr::non_null::NonNull<[u8]>, alloc::collections::TryReserveError> (inlined)
+                          grow_amortized<alloc::alloc::Global> (inlined)
+                          |          
+                           --0.64%--do_reserve_and_handle<alloc::alloc::Global> (inlined)
+
+     1.32%  bsl-cli  bsl-cli               [.] <std::hash::random::DefaultHasher as core::hash::Hasher>::write
+            |          
+             --0.82%--write<core::hash::sip::Sip13Rounds> (inlined)
+                       write (inlined)
+                       write (inlined)
+                       |          
+                        --0.55%--to_ne_bytes (inlined)
+                                  write_u32<std::hash::random::DefaultHasher> (inlined)
+                                  hash<std::hash::random::DefaultHasher> (inlined)
+                                  hash<usize, u32, std::hash::random::DefaultHasher> (inlined)
+                                  hash<(usize, u32), std::hash::random::DefaultHasher> (inlined)
+                                  hash_one<std::hash::random::RandomState, &(usize, u32)> (inlined)
+                                  full (inlined)
+                                  find_inner (inlined)
+                                  find<((usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<(usize, u32), (usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>>> (inlined)
+                                  get<((usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<(usize, u32), (usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>>> (inlined)
+                                  get<(usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>, std::hash::random::RandomState, alloc::alloc::Global, (usize, u32)> (inlined)
+                                  get<(usize, u32), core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>, std::hash::random::RandomState, alloc::alloc::Global, (usize, u32)> (inlined)
+                                  resolve_component_property (inlined)
+                                  branch<core::option::Option<(fn(&dyn bsl_rt::object_protocol::ObjectProtocol, &mut bsl_rt::component::CallContext) -> core::result::Result<bsl_rt::value::BslValue, bsl_rt::error::RtError>, core::option::Option<fn(&dyn bsl_rt::object_protocol::ObjectProtocol, bsl_rt::value::BslValue, &mut bsl_rt::component::CallContext) -> core::result::Result<(), bsl_rt::error::RtError>>)>, bsl_rt::error::RtError> (inlined)
+                                  component_prop_get (inlined)
+                                  branch<bsl_rt::value::BslValue, bsl_rt::error::RtError> (inlined)
+                                  step (inlined)
+                                  poll_linked (inlined)
+                                  poll_with_registry_and_io (inlined)
+                                  poll (inlined)
+                                  branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                                  run (inlined)
+                                  run_file (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  {closure#0} (inlined)
+                                  do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                  catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                                  catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                  lang_start_internal (inlined)
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     1.05%  bsl-cli  bsl-cli               [.] <bsl_xml::core::XmlParser>::read_attributes
+            |          
+             --0.57%--read_attributes (inlined)
+                       branch<alloc::vec::Vec<bsl_xml::core::XmlAttr, alloc::alloc::Global>, bsl_rt::error::RtError> (inlined)
+                       read (inlined)
+                       branch<core::option::Option<bsl_xml::core::XmlEvent>, bsl_rt::error::RtError> (inlined)
+                       read (inlined)
+                       reader_read (inlined)
+                       map<bsl_rt::value::BslValue, bsl_rt::error::RtError, bsl_rt::component::CallOutcome, fn(bsl_rt::value::BslValue) -> bsl_rt::component::CallOutcome> (inlined)
+                       invoke (inlined)
+                       step_cold (inlined)
+                       step (inlined)
+                       poll_linked (inlined)
+                       poll_with_registry_and_io (inlined)
+                       poll (inlined)
+                       branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                       run (inlined)
+                       run_file (inlined)
+                       main (inlined)
+                       __rust_begin_short_backtrace<fn(), ()> (inlined)
+                       {closure#0}<()> (inlined)
+                       {closure#0} (inlined)
+                       do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                       catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                       lang_start_internal (inlined)
+                       main
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+     0.81%  bsl-cli  libc.so.6             [.] _int_malloc
+            |          
+             --0.75%--_int_malloc
+
+     0.76%  bsl-cli  bsl-cli               [.] <alloc::vec::Vec<char> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<char, core::str::iter::Chars>>::from_iter
+     0.73%  bsl-cli  [unknown]             [k] 0xffffffff8b588466
+            |
+            ---0xffffffff8b588466
+               0xffffffff8b58dfc8
+               0xffffffff8b5937b8
+               0xffffffff8b594a82
+               0xffffffff8b5d2b66
+               0xffffffff8b5d5f8e
+               |          
+                --0.72%--0xffffffff8b55aae9
+                          0xffffffff8b55ae75
+                          0xffffffff8b55c62d
+                          0xffffffff8b55c9ab
+                          0xffffffff8b19e384
+                          0xffffffff8c45a542
+                          0xffffffff8ae012a6
+
+     0.68%  bsl-cli  libc.so.6             [.] __memmove_avx_unaligned_erms
+            |
+            ---__memmove_avx_unaligned_erms
+
+     0.67%  bsl-cli  bsl-cli               [.] __rustc::__rust_dealloc
+            |
+            ---__rustc::__rust_dealloc
+
+     0.67%  bsl-cli  bsl-cli               [.] <bsl_rt::value::BslValue>::as_condition
+            |
+            ---as_condition (inlined)
+
+     0.64%  bsl-cli  bsl-cli               [.] bsl_vm::linking::component_prop_get
+            |          
+             --0.62%--component_prop_get (inlined)
+                       |          
+                        --0.60%--branch<bsl_rt::value::BslValue, bsl_rt::error::RtError> (inlined)
+                                  step (inlined)
+                                  poll_linked (inlined)
+                                  poll_with_registry_and_io (inlined)
+                                  poll (inlined)
+                                  branch<open_bsl::state::ExecutionPoll, open_bsl::error::Error> (inlined)
+                                  run (inlined)
+                                  run_file (inlined)
+                                  main (inlined)
+                                  __rust_begin_short_backtrace<fn(), ()> (inlined)
+                                  {closure#0}<()> (inlined)
+                                  {closure#0} (inlined)
+                                  do_call<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                  catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (inlined)
+                                  catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (inlined)
+                                  lang_start_internal (inlined)
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main@@GLIBC_2.34
+                                  _start
+
+     0.62%  bsl-cli  bsl-cli               [.] bsl_vm::cached_component_method
+     0.55%  bsl-cli  bsl-cli               [.] bsl_vm::binop::<<bsl_rt::value::BslValue>::sub>
+     0.53%  bsl-cli  libc.so.6             [.] _int_free_chunk
+            |
+            ---_int_free_chunk
+
+
+
+#
+# (Tip: To trace calls using Processor Trace use perf record -e intel_pt// ... ; perf script --call-trace. Then use perf script --time A-B --insn-trace to look at region of interest.)
+#

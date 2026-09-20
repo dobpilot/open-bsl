@@ -1,0 +1,308 @@
+   Compiling bsl-rt v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-rt)
+   Compiling bsl-bytecode v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-bytecode)
+   Compiling bsl-sema v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-sema)
+   Compiling bsl-format v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-format)
+   Compiling bsl-binbuf v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-binbuf)
+   Compiling bsl-json v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-json)
+   Compiling bsl-xml v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-xml)
+   Compiling bsl-pdf v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-pdf)
+   Compiling bsl-textdoc v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-textdoc)
+   Compiling bsl-crypto v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-crypto)
+   Compiling bsl-regexp v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-regexp)
+   Compiling bsl-zip v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-zip)
+   Compiling bsl-stream v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-stream)
+   Compiling bsl-http v0.2.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-http)
+   Compiling bsl-compiler v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-compiler)
+   Compiling bsl-vm v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-vm)
+   Compiling bsl-spreadsheet v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-spreadsheet)
+   Compiling open-bsl v0.4.2 (/home/kan/Документы/develop/open-bsl/crates/open-bsl)
+   Compiling open-bsl-consumer v0.0.0 (/home/kan/Документы/develop/open-bsl/crates/open-bsl-consumer)
+   Compiling bsl-cli v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.13s
+     Running unittests src/lib.rs (target/debug/deps/bsl_binbuf-b54d1c555dcbae69)
+
+running 11 tests
+test tests::a_shift_of_32_is_an_error_not_zero ... ok
+test tests::bitwise_and_rejects_an_operand_at_2_32 ... ok
+test tests::bitwise_matches_the_measured_table ... ok
+test tests::check_bit_uses_indices_0_to_31 ... ok
+test tests::component_function_codes_are_static_and_dense ... ok
+test tests::set_bit_takes_a_boolean_only ... ok
+test tests::shifting_left_drops_the_high_bits ... ok
+test tests::the_mask_requires_every_bit_not_just_one ... ok
+test tests::parsing_is_not_capped_at_any_machine_width ... ok
+test tests::the_radix_prefix_is_required_and_lowercase ... ok
+test tests::parse_radix_matches_the_platform_at_two_hundred_digits ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/bsl_bytecode-0c50a6bd4e167fe4)
+
+running 43 tests
+test analysis::tests::a_call_between_copy_and_death_stops_the_estimate ... ok
+test analysis::tests::a_call_between_the_constant_and_its_use_stops_folding ... ok
+test analysis::tests::a_call_reading_the_copy_as_its_receiver_keeps_it ... ok
+test analysis::tests::a_copy_dying_inside_its_block_is_removable ... ok
+test analysis::tests::a_copy_alive_past_the_block_stays ... ok
+test analysis::tests::a_copy_inside_a_protected_range_stays ... ok
+test analysis::tests::a_copy_into_a_byref_parameter_is_not_turned_into_a_direct_base ... ok
+test analysis::tests::a_call_reading_the_copy_only_as_its_window_loses_it ... ok
+test analysis::tests::a_copy_into_a_module_slot_is_not_turned_into_a_direct_base ... ok
+test analysis::tests::a_copy_of_a_byref_parameter_stays ... ok
+test analysis::tests::a_copy_whose_source_is_overwritten_stays ... ok
+test analysis::tests::a_copy_overlapping_a_module_slot_stays ... ok
+test analysis::tests::a_failing_operation_is_left_to_run_time ... ok
+test analysis::tests::a_receiver_copy_dying_at_an_open_procedure_is_removable ... ok
+test analysis::tests::a_non_numeric_constant_is_not_folded ... ok
+test analysis::tests::a_redefinition_makes_the_register_unknown ... ok
+test analysis::tests::arithmetic_over_two_constants_folds ... ok
+test analysis::tests::constants_propagate_through_a_chain_and_through_a_copy ... ok
+test analysis::tests::open_call_effects_include_reference_targets_and_finish_the_bundle ... ok
+test analysis::tests::knowledge_does_not_cross_a_block_boundary ... ok
+test bundle::tests::byref_params_may_alias_each_other ... ok
+test bundle::tests::heap_reads_bundle_heap_writes_do_not ... ok
+test bundle::tests::independent_neighbours_bundle_up ... ok
+test bundle::tests::jump_target_starts_a_bundle_and_jump_trails ... ok
+test bundle::tests::module_vars_overlap_frame_regs_only_at_top_level ... ok
+test bundle::tests::two_prints_keep_their_order ... ok
+test bundle::tests::verify_rejects_a_forged_table ... ok
+test bundle::tests::war_is_allowed_waw_is_not ... ok
+test image::tests::a_bundle_table_computed_with_the_wrong_overlap_is_rejected ... ok
+test image::tests::a_chunk_line_row_longer_than_its_code_is_refused ... ok
+test image::tests::a_chunk_line_row_shorter_than_its_code_is_refused ... ok
+test image::tests::a_chunk_may_have_no_lines_while_others_have_them ... ok
+test image::tests::a_dynamic_fragment_addresses_its_own_operands ... ok
+test image::tests::a_line_table_short_of_a_chunk_is_refused ... ok
+test image::tests::a_line_table_with_a_row_per_chunk_and_a_line_per_instruction_is_accepted ... ok
+test image::tests::a_module_slot_out_of_range_is_rejected_before_the_first_instruction ... ok
+test image::tests::a_register_outside_the_frame_is_rejected_before_the_first_instruction ... ok
+test image::tests::an_empty_bundle_table_is_a_legitimate_opt_out ... ok
+test image::tests::an_empty_line_table_means_no_debug_info_and_is_accepted ... ok
+test image::tests::the_module_projection_does_not_legalise_a_register_outside_the_frame ... ok
+test image::tests::the_sample_image_is_valid_to_begin_with ... ok
+test image::tests::unbundled_finalization_clears_a_previously_built_table ... ok
+test instr::tests::instruction_stays_eight_bytes ... ok
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/call_target.rs (target/debug/deps/call_target-dbd205d0184e7d51)
+
+running 3 tests
+test a_call_past_the_last_function_is_an_error ... ok
+test a_call_of_chunk_zero_is_an_error_not_a_panic ... ok
+test a_named_function_without_a_chunk_is_an_error ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/configuration.rs (target/debug/deps/configuration-50dc6c1d11efbaf5)
+
+running 14 tests
+test a_by_ref_import_against_znach_is_rejected ... ok
+test a_link_past_the_catalog_is_rejected ... ok
+test a_link_to_a_non_exported_function_is_rejected ... ok
+test a_link_to_a_non_exported_variable_is_rejected ... ok
+test a_self_link_is_rejected ... ok
+test an_arity_mismatch_across_modules_is_rejected ... ok
+test a_configuration_image_round_trips_byte_identical ... ok
+test an_import_cycle_is_rejected ... ok
+test a_configuration_image_without_entry_round_trips ... ok
+test duplicate_module_names_differing_only_in_case_are_rejected ... ok
+test every_module_passes_the_single_program_perimeter ... ok
+test the_valid_catalog_passes_verification ... ok
+test a_single_program_image_round_trips_through_parse_image ... ok
+test parse_program_rejects_a_configuration_image ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/constant_domain.rs (target/debug/deps/constant_domain-121564208e5e3009)
+
+running 5 tests
+test a_constant_dereferences_to_its_value ... ok
+test a_type_value_is_not_a_bytecode_constant ... ok
+test an_object_is_not_a_bytecode_constant ... ok
+test every_representable_value_becomes_a_constant ... ok
+test the_checked_conversion_and_printing_agree_on_representability ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fused_operands.rs (target/debug/deps/fused_operands-68d0dc6f76813d31)
+
+running 2 tests
+test add_const_rejects_invalid_registers_and_constant ... ok
+test both_fused_jumps_reject_invalid_operands ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/image_finalize.rs (target/debug/deps/image_finalize-bf32cea9044231c7)
+
+running 3 tests
+test a_lone_chunk_has_its_own_finalization ... ok
+test finalize_computes_the_overlap_from_the_image_itself ... ok
+test a_stale_bundle_table_is_rejected ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/imports.rs (target/debug/deps/imports-099b0ec9ef0ea875)
+
+running 3 tests
+test a_dynamic_program_is_checked_against_the_catalog_export_surface ... ok
+test import_names_targets_and_unused_cycles_are_verified ... ok
+test declared_imports_round_trip_without_static_links ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/jump_target.rs (target/debug/deps/jump_target-6784cea1610fad91)
+
+running 5 tests
+test fused_equality_jump_rejects_an_invalid_register_and_constant ... ok
+test an_empty_handler_at_the_end_of_the_chunk_is_legal ... ok
+test a_tampered_exception_handler_is_rejected_before_execution ... ok
+test a_hand_edited_bytecode_target_is_rejected_before_execution ... ok
+test tampering_is_rejected_for_each_of_the_eight_target_carrying_opcodes ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/object_call_arguments.rs (target/debug/deps/object_call_arguments-73f20ac7a34fd222)
+
+running 3 tests
+test malformed_open_call_modes_are_rejected_with_or_without_bundles ... ok
+test open_call_argument_modes_are_required_in_the_text_format ... ok
+test open_call_modes_survive_round_trip_and_image_validation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/section_counts.rs (target/debug/deps/section_counts-706a3de4695206fd)
+
+running 1 test
+test an_absurd_count_is_caught_by_the_counter_check_in_every_section ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/text_format.rs (target/debug/deps/text_format-0a7a500ab762472c)
+
+running 9 tests
+test a_foreign_or_missing_header_is_rejected ... ok
+test format_without_open_method_argument_modes_is_rejected ... ok
+test a_semicolon_inside_a_string_constant_is_not_a_comment ... ok
+test a_corrupted_body_names_the_line ... ok
+test objects_in_constants_are_refused_rather_than_printed_wrong ... ok
+test comments_and_blank_lines_are_ignored_by_the_parser ... ok
+test a_hand_built_program_survives_print_and_parse ... ok
+test the_declaration_kind_is_printed_read_back_and_denied_to_the_top_level ... ok
+test date_constants_round_trip_ticks_and_refuse_the_seconds_format ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/bsl_cli-bed4dbecb63f4be8)
+
+running 42 tests
+test api_reference::tests::aliases_do_not_repeat_the_primary_type_name ... ok
+test api_reference::tests::arity_formats_exact_and_ranged_counts ... ok
+test complete::tests::word_start_finds_the_beginning_of_the_typed_name ... ok
+test complete::tests::replacement_starts_at_the_word_not_at_the_cursor ... ok
+test complete::tests::after_new_only_constructible_types_are_offered ... ok
+test dap::wire::tests::a_header_without_content_length_is_an_error ... ok
+test dap::wire::tests::a_non_numeric_length_is_an_error ... ok
+test complete::tests::prefix_matching_ignores_case_but_inserts_the_canonical_spelling ... ok
+test dap::wire::tests::an_absurd_length_is_refused_before_allocating ... ok
+test dap::wire::tests::a_frame_torn_across_reads_is_assembled ... ok
+test complete::tests::after_a_dot_only_methods_and_field_names_are_offered ... ok
+test dap::wire::tests::length_counts_bytes_not_characters ... ok
+test dap::wire::tests::one_whole_frame_is_read ... ok
+test dap::wire::tests::the_header_name_is_case_insensitive ... ok
+test dap::wire::tests::two_frames_glued_into_one_read_are_both_returned ... ok
+test complete::tests::in_an_expression_builtins_keywords_and_session_variables_are_offered ... ok
+test debug_flag_tests::a_flag_without_its_value_is_refused ... ok
+test debug_flag_tests::a_non_numeric_port_is_refused ... ok
+test debug_flag_tests::a_port_out_of_range_is_refused ... ok
+test debug_flag_tests::an_address_without_debug_is_refused ... ok
+test debug_flag_tests::bare_debug_listens_on_the_loopback_default ... ok
+test debug_flag_tests::host_and_port_are_taken_in_both_spellings ... ok
+test debug_flag_tests::without_any_flag_debugging_is_off ... ok
+test debug_flag_tests::the_help_names_the_flags_and_their_actual_defaults ... ok
+test highlight::tests::a_comment_swallows_the_rest_of_the_line ... ok
+test complete::tests::candidates_are_unique_and_sorted ... ok
+test highlight::tests::date_literal_is_its_own_piece ... ok
+test highlight::tests::colorize_never_changes_the_text_itself ... ok
+test debug_flag_tests::an_unresolvable_host_is_refused ... ok
+test highlight::tests::literals_swallow_their_content ... ok
+test highlight::tests::pieces_cover_the_line_without_gaps ... ok
+test highlight::tests::keywords_builtins_and_plain_names_get_different_pieces ... ok
+test tests::every_advertised_flag_resolves_to_a_command ... ok
+test tests::command_table_is_well_formed ... ok
+test tests::help_mentions_every_command ... ok
+test api_reference::tests::disjoint_arities_are_rendered_for_all_component_members ... ok
+test repl::tests::structure_fields_become_member_candidates ... ok
+test repl::tests::session_variables_become_completion_candidates ... ok
+test repl::tests::a_failing_line_does_not_poison_the_session ... ok
+test repl::tests::temporary_resources_survive_lines_and_are_cleaned_at_session_end ... ok
+test repl::tests::a_field_name_introduced_by_this_very_line_resolves ... ok
+test session::tests::finishing_source_and_loaded_bytecode_cleans_every_resource_before_returning ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/application.rs (target/debug/deps/application-4d8a78f6e2d6c82b)
+
+running 7 tests
+test repl_provides_the_application_launcher ... ok
+test child_started_without_wait_survives_cli_exit ... ok
+test async_child_started_without_wait_survives_cli_exit ... ok
+test unobserved_application_promise_does_not_lose_the_launch_at_cli_exit ... ok
+test cli_runapp_has_real_exit_codes_cwd_and_literal_arguments_in_both_formats ... ok
+test runapp_output_targets_match_the_server_oracle_in_both_formats ... ok
+test async_launch_matches_measured_client_results_in_source_and_bytecode ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/array_method_index_edges.rs (target/debug/deps/array_method_index_edges-78d7a212f39e3522)
+
+running 1 test
+test array_method_indices_match_the_server_oracle_in_every_execution_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/bundles.rs (target/debug/deps/bundles-ba559bfcb3271201)
+
+running 2 tests
+test bundle_invariants_hold_on_the_whole_corpus ... ok
+test copy_analysis_invariants_hold_on_the_whole_corpus ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/cli.rs (target/debug/deps/cli-bce96babacad6243)
+
+running 18 tests
+test cli_runs_sync_and_async_http_through_the_system_adapter ... FAILED
+test an_unknown_command_is_an_error_pointing_at_help ... ok
+test the_help_lists_every_selectable_pass ... ok
+test help_is_printed_to_stdout_with_a_zero_exit_code ... ok
+test the_removed_jit_flag_is_rejected_and_omitted_from_help ... ok
+test a_command_without_its_argument_shows_that_commands_usage ... ok
+test an_unknown_pass_name_is_refused_rather_than_ignored ... ok
+test a_script_with_a_utf8_bom_runs ... ok
+test checked_in_api_reference_matches_the_generator ... ok
+test a_script_path_still_runs_the_script ... ok
+test a_folded_division_by_zero_is_still_caught_under_optimize ... ok
+test api_reference_is_printed_to_stdout_or_written_to_a_file ... ok
+test script_arguments_land_in_the_command_line_arguments_array ... ok
+test a_znach_parameter_stays_private_under_copy_elimination ... ok
+test the_declaration_kind_survives_the_whole_pipeline ... ok
+test the_optimize_modifier_takes_a_list_of_passes ... ok
+test the_optimize_modifier_reaches_modules_linked_by_a_directive ... ok
+test a_handler_sees_the_values_from_the_point_the_exception_was_raised ... ok
+
+failures:
+
+---- cli_runs_sync_and_async_http_through_the_system_adapter stdout ----
+
+thread 'cli_runs_sync_and_async_http_through_the_system_adapter' (18141) panicked at crates/bsl-cli/tests/../../../tests/support/http_system.rs:68:56:
+локальный HTTP-сервер: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    cli_runs_sync_and_async_http_through_the_system_adapter
+
+test result: FAILED. 17 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+error: test failed, to rerun pass `-p bsl-cli --test cli`

@@ -1,0 +1,21 @@
+/usr/bin/luajit: ...sl/target/full-ab-2026-09-20-twins/scripts/cbr_rates.lua:9: module 'ssl.https' not found:
+	no field package.preload['ssl.https']
+	no file '/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-twins/scripts/lib/ssl/https.lua'
+	no file './ssl/https.lua'
+	no file '/usr/share/luajit-2.1/ssl/https.lua'
+	no file '/usr/local/share/lua/5.1/ssl/https.lua'
+	no file '/usr/local/share/lua/5.1/ssl/https/init.lua'
+	no file '/usr/share/lua/5.1/ssl/https.lua'
+	no file '/usr/share/lua/5.1/ssl/https/init.lua'
+	no file './ssl/https.so'
+	no file '/usr/local/lib/lua/5.1/ssl/https.so'
+	no file '/usr/lib64/lua/5.1/ssl/https.so'
+	no file '/usr/local/lib/lua/5.1/loadall.so'
+	no file './ssl.so'
+	no file '/usr/local/lib/lua/5.1/ssl.so'
+	no file '/usr/lib64/lua/5.1/ssl.so'
+	no file '/usr/local/lib/lua/5.1/loadall.so'
+stack traceback:
+	[C]: in function 'require'
+	...sl/target/full-ab-2026-09-20-twins/scripts/cbr_rates.lua:9: in main chunk
+	[C]: at 0x55cfcf79f6b0

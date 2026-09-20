@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/kan/Документы/develop/open-bsl/target/full-ab-2026-09-20-twins/scripts/simple_parquet_reader.py", line 37, in <module>
+    frame = pd.read_parquet(PATH)
+  File "/home/kan/.local/lib/python3.14/site-packages/pandas/io/parquet.py", line 653, in read_parquet
+    impl = get_engine(engine)
+  File "/home/kan/.local/lib/python3.14/site-packages/pandas/io/parquet.py", line 68, in get_engine
+    raise ImportError(
+    ...<7 lines>...
+    )
+ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'.
+A suitable version of pyarrow or fastparquet is required for parquet support.
+Trying to import the above resulted in these errors:
+ - Missing optional dependency 'pyarrow'. pyarrow is required for parquet support. Use pip or conda to install pyarrow.
+ - Missing optional dependency 'fastparquet'. fastparquet is required for parquet support. Use pip or conda to install fastparquet.

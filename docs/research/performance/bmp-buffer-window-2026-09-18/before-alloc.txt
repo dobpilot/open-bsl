@@ -1,0 +1,26 @@
+   Compiling bsl-rt v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-rt)
+   Compiling bsl-format v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-format)
+   Compiling bsl-bytecode v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-bytecode)
+   Compiling bsl-binbuf v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-binbuf)
+   Compiling bsl-xml v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-xml)
+   Compiling bsl-pdf v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-pdf)
+   Compiling bsl-sema v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-sema)
+   Compiling bsl-json v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-json)
+   Compiling bsl-zip v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-zip)
+   Compiling bsl-regexp v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-regexp)
+   Compiling bsl-crypto v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-crypto)
+   Compiling bsl-textdoc v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-textdoc)
+   Compiling bsl-stream v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-stream)
+   Compiling bsl-http v0.2.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-http)
+   Compiling bsl-vm v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-vm)
+   Compiling bsl-compiler v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-compiler)
+   Compiling bsl-spreadsheet v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-spreadsheet)
+   Compiling open-bsl v0.4.2 (/home/kan/Документы/develop/open-bsl/crates/open-bsl)
+    Finished `release` profile [optimized] target(s) in 7.05s
+     Running `target/release/examples/alloc-profile benchmarks/bmp_rotate.bsl`
+layout,BslValue,24,BslObject,88
+phase,requests,requested_bytes,reallocations,live_bytes,peak_live_bytes,le16,le32,le64,le128,le256,le512,gt512
+prepare,150,57631,12,120705,120721,37,60,3,8,14,11,17
+run,480037,42241439,1,3962225,3962241,15,0,240012,240006,0,0,4
+BMP 400x600, байтов: 960054, контрольная сумма: 633613994
+222
