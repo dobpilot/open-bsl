@@ -8,7 +8,7 @@
 - [x] 6. Expose and test the measured `ТекущийРежимЗапуска()` result for every supported session kind.
 - [x] 7. Expose the host-supplied platform version through `СистемнаяИнформация` during startup.
 - [x] 8. Add the complete configuration-extension snapshot, source and scope enums, manager methods, extension objects, and session application issues to `bsl-orm`.
-- [ ] 8a. Add the measured configuration compatibility mode to the immutable ORM catalog and metadata properties without declaring a new bare global.
+- [x] 8a. Add the measured configuration compatibility mode to the immutable ORM catalog and metadata properties without declaring a new bare global.
 - [ ] 9. Add the optional `bsl-cli --config-db` and `--principal` path while keeping existing CLI tests byte-for-byte unchanged where applicable.
 - [ ] 10. Exercise full startup for web-client, thin-client, and background-job sessions against the `demo`, `buh`, and `unf` configurations and preserve non-confidential evidence.
 - [ ] 11. Document every public Rust API in Russian, regenerate the BSL API reference, and build `open-bsl-consumer` using facade names only.

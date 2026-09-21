@@ -49,6 +49,7 @@ pub enum TypeId {
 
     /// Перечисления платформы. Тип члена — само перечисление.
     ScriptVariant,
+    CompatibilityMode,
     ClientRunMode,
     ConfigurationExtensionsSource,
     ConfigurationExtensionScope,
@@ -407,6 +408,7 @@ const NAMES: &[(TypeId, &str, &str)] = &[
 /// У перечислений режима запуска и расширений платформа печатает английское
 /// имя типа даже в русском интерфейсе. Значения измерены на 8.3.27.2342.
 const DISPLAY: &[(TypeId, &str)] = &[
+    (TypeId::CompatibilityMode, "Compatibility mode"),
     (TypeId::ClientRunMode, "ClientRunMode"),
     (
         TypeId::ConfigurationExtensionsSource,

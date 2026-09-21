@@ -32,7 +32,7 @@ pub use bsl_rt::{
     SerializedValueGraph, StagingBudget, SystemApplicationLauncher, SystemClock, SystemRandom,
     SystemTimeZone, TimeZone, TlsConfig, TransferableTemporaryFile, TypeDescriptor, TypeRef,
     UserMessageDto, UserMessageSink, background_job_type_descriptor, call_method_from_table,
-    folded_eq, get_property_from_table, set_property_from_table,
+    folded_eq, get_property_from_table, lookup_member, set_property_from_table,
 };
 pub use bsl_rt::{
     FileNotificationOperation, HostPromiseSpawner, HttpClient, HttpClientConfig, HttpClientFactory,

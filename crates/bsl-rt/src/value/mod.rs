@@ -58,6 +58,7 @@ pub enum BslValue {
 fn enum_kind_type_id(kind: EnumKind) -> TypeId {
     match kind {
         EnumKind::ScriptVariant => TypeId::ScriptVariant,
+        EnumKind::CompatibilityMode => TypeId::CompatibilityMode,
         EnumKind::ClientRunMode => TypeId::ClientRunMode,
         EnumKind::ConfigurationExtensionsSource => TypeId::ConfigurationExtensionsSource,
         EnumKind::ConfigurationExtensionScope => TypeId::ConfigurationExtensionScope,

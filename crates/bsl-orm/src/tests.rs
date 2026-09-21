@@ -121,6 +121,7 @@ fn catalog() -> Arc<MetadataCatalog> {
             "Демонстрационная",
             "1.2.3",
             ScriptVariant::Russian,
+            CompatibilityMode::Version8_3_24,
             ["role-user".into()],
         )
         .unwrap()
@@ -409,6 +410,48 @@ fn configuration_metadata_exposes_name_version_language_and_main_roles() {
 }
 
 #[test]
+fn configuration_metadata_exposes_the_measured_compatibility_mode() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Режим = Метаданные.РежимСовместимости;
+                Варианты = Метаданные.СвойстваОбъектов.РежимСовместимости;
+                Возврат Строка(ТипЗнч(Режим)) = "Compatibility mode"
+                    И Строка(Режим) = "Version8_3_24"
+                    И Строка(ТипЗнч(Варианты)) = "Metadata object enumerated property"
+                    И Строка(Варианты) = "MetadataObjectsPropertyEnumed"
+                    И Режим = Варианты["версия8_3_24"]
+                    И Режим = Метаданные.ObjectProperties.CompatibilityMode["VERSION8_3_24"];
+                "#,
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+
+    assert!(
+        engine
+            .compile("Возврат РежимСовместимости;")
+            .err()
+            .expect("голое имя режима совместимости не должно разрешаться")
+            .to_string()
+            .contains("переменная «РежимСовместимости» читается до присваивания")
+    );
+    for type_name in ["РежимСовместимости", "CompatibilityMode"] {
+        assert!(
+            state
+                .exec(&format!("Возврат Тип(\"{type_name}\");"))
+                .unwrap_err()
+                .to_string()
+                .contains(&format!("тип «{type_name}» не определён"))
+        );
+    }
+}
+
+#[test]
 fn missing_configuration_properties_and_invalid_main_roles_fail_explicitly() {
     let missing = Arc::new(
         MetadataCatalog::new(
@@ -450,6 +493,7 @@ fn missing_configuration_properties_and_invalid_main_roles_fail_explicitly() {
         "Конфигурация",
         "1",
         ScriptVariant::Russian,
+        CompatibilityMode::DontUse,
         ["missing".into()],
     )
     .unwrap_err();
