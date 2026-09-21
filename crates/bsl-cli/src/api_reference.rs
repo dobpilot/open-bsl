@@ -9,7 +9,14 @@ use bsl_rt::{FunctionKind, LibraryDescriptor, RuntimeRegistry};
 
 /// Печатает справочник в stdout либо записывает его в указанный файл.
 pub fn emit(output: Option<&str>) -> i32 {
-    let engine = match crate::engine() {
+    // Конфигурационные библиотеки входят в поставляемый API, но не в
+    // обычный движок CLI: без `--config-db` глобал `Метаданные` обязан
+    // сохранить прежнюю автономную заглушку.
+    let engine = match open_bsl::Engine::builder()
+        .register_library(bsl_orm::library())
+        .register_library(bsl_session::library())
+        .build()
+    {
         Ok(engine) => engine,
         Err(error) => {
             eprintln!("не удалось собрать каталог API: {error}");

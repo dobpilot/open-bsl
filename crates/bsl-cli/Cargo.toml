@@ -13,6 +13,8 @@ bsl-syntax = { path = "../bsl-syntax" }
 bsl-sema = { path = "../bsl-sema" }
 bsl-rt = { path = "../bsl-rt" }
 bsl-format = { path = "../bsl-format" }
+bsl-orm = { path = "../bsl-orm" }
+bsl-session = { path = "../bsl-session" }
 # Единственная внешняя зависимость всего рабочего пространства сверх
 # num-bigint: сырой режим терминала, редактирование строки и история для
 # REPL. Подсветку и дополнение реализуем сами через её трейты Highlighter и
