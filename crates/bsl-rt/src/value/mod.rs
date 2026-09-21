@@ -65,6 +65,8 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::ConfigurationExtensionApplicationIssueSeverity => {
             TypeId::ConfigurationExtensionApplicationIssueSeverity
         }
+        EnumKind::EventLogLevel => TypeId::EventLogLevel,
+        EnumKind::EventLogEntryTransactionMode => TypeId::EventLogEntryTransactionMode,
         EnumKind::JsonValueType => TypeId::JsonValueType,
         EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
         EnumKind::JsonEscapeCharacters => TypeId::JsonEscapeCharacters,

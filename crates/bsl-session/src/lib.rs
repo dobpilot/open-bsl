@@ -279,12 +279,94 @@ impl InfoBaseConnection {
     }
 }
 
+/// Уровень события журнала регистрации.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventLogLevel {
+    /// Примечание.
+    Note,
+    /// Информационное событие.
+    Information,
+    /// Предупреждение.
+    Warning,
+    /// Ошибка.
+    Error,
+}
+
+/// Связь записи журнала регистрации с транзакцией.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventLogTransactionMode {
+    /// Запись выполняется независимо от текущей транзакции.
+    Independent,
+    /// Запись следует результату текущей транзакции.
+    Transactional,
+}
+
+/// Неизменяемая запись, передаваемая журналу текущего сеанса.
+#[derive(Debug, Clone)]
+pub struct EventLogEntry {
+    event_name: Arc<str>,
+    level: EventLogLevel,
+    metadata: Value,
+    data: Value,
+    comment: Arc<str>,
+    transaction_mode: EventLogTransactionMode,
+}
+
+impl EventLogEntry {
+    /// Возвращает имя события.
+    #[must_use]
+    pub fn event_name(&self) -> &str {
+        &self.event_name
+    }
+
+    /// Возвращает уровень события.
+    #[must_use]
+    pub const fn level(&self) -> EventLogLevel {
+        self.level
+    }
+
+    /// Возвращает связанный объект метаданных либо `Неопределено`.
+    #[must_use]
+    pub const fn metadata(&self) -> &Value {
+        &self.metadata
+    }
+
+    /// Возвращает связанные данные либо `Неопределено`.
+    #[must_use]
+    pub const fn data(&self) -> &Value {
+        &self.data
+    }
+
+    /// Возвращает комментарий.
+    #[must_use]
+    pub fn comment(&self) -> &str {
+        &self.comment
+    }
+
+    /// Возвращает режим транзакции.
+    #[must_use]
+    pub const fn transaction_mode(&self) -> EventLogTransactionMode {
+        self.transaction_mode
+    }
+}
+
+/// Приёмник событий журнала регистрации одного сеанса.
+pub trait EventLogWriter: fmt::Debug {
+    /// Записывает одно событие.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку хоста, проверки прав или хранения журнала.
+    fn write(&self, entry: EventLogEntry) -> RtResult<()>;
+}
+
 /// Ресурсы одного открываемого сеанса.
 pub struct SessionResources {
     connection: Box<dyn std::any::Any>,
     connection_number: u64,
     data_access: Option<Rc<dyn DataAccess>>,
     connections: Option<Arc<[InfoBaseConnection]>>,
+    event_log_writer: Option<Rc<dyn EventLogWriter>>,
 }
 
 impl SessionResources {
@@ -296,6 +378,7 @@ impl SessionResources {
             connection_number,
             data_access: None,
             connections: None,
+            event_log_writer: None,
         }
     }
 
@@ -316,6 +399,13 @@ impl SessionResources {
         self.connections = Some(connections.into_iter().collect());
         self
     }
+
+    /// Подключает журнал регистрации этого сеанса.
+    #[must_use]
+    pub fn with_event_log_writer(mut self, writer: Rc<dyn EventLogWriter>) -> Self {
+        self.event_log_writer = Some(writer);
+        self
+    }
 }
 
 /// Дополнение [`bsl_orm::SessionData`] для runtime сеанса.
@@ -327,30 +417,11 @@ pub struct SessionRuntime {
     connection_string: Option<Arc<str>>,
     connection_number: u64,
     connections: Option<Arc<[InfoBaseConnection]>>,
+    event_log_writer: Option<Rc<dyn EventLogWriter>>,
     background_method: Option<Arc<str>>,
 }
 
 impl SessionRuntime {
-    fn new(
-        parameters: Rc<SessionParameters>,
-        kind: SessionKind,
-        platform_version: Arc<str>,
-        connection_string: Option<Arc<str>>,
-        connection_number: u64,
-        connections: Option<Arc<[InfoBaseConnection]>>,
-        background_method: Option<Arc<str>>,
-    ) -> Self {
-        Self {
-            parameters,
-            kind,
-            platform_version,
-            connection_string,
-            connection_number,
-            connections,
-            background_method,
-        }
-    }
-
     /// Возвращает контейнер параметров текущего сеанса.
     #[must_use]
     pub fn parameters(&self) -> &Rc<SessionParameters> {
@@ -379,6 +450,12 @@ impl SessionRuntime {
     #[must_use]
     pub fn connections(&self) -> Option<&[InfoBaseConnection]> {
         self.connections.as_deref()
+    }
+
+    /// Возвращает журнал регистрации текущего сеанса.
+    #[must_use]
+    pub fn event_log_writer(&self) -> Option<&Rc<dyn EventLogWriter>> {
+        self.event_log_writer.as_ref()
     }
 
     /// Возвращает полное имя метода текущего фонового задания.
@@ -713,6 +790,7 @@ impl SessionFactory {
             connection_number,
             data_access,
             connections,
+            event_log_writer,
         } = resources;
         if connection_number == 0 || connection_number > i64::MAX as u64 {
             return Err(SessionError::InvalidConnectionNumber(connection_number));
@@ -739,16 +817,18 @@ impl SessionFactory {
                 self.parameter_names.iter().cloned(),
             )?),
         };
+        let runtime = SessionRuntime {
+            parameters: Rc::clone(&parameters),
+            kind: self.kind,
+            platform_version: Arc::clone(&self.platform_version),
+            connection_string: self.connection_string.clone(),
+            connection_number,
+            connections,
+            event_log_writer,
+            background_method,
+        };
         let mut data = SessionData::new(Arc::clone(&self.catalog), principal.clone())
-            .with_extension(Rc::new(SessionRuntime::new(
-                Rc::clone(&parameters),
-                self.kind,
-                Arc::clone(&self.platform_version),
-                self.connection_string.clone(),
-                connection_number,
-                connections,
-                background_method,
-            )));
+            .with_extension(Rc::new(runtime));
         if let Some(data_access) = data_access {
             data = data.with_data_access(data_access);
         }
@@ -1164,6 +1244,71 @@ fn infobase_connections(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Valu
     ))
 }
 
+fn event_log_level(value: Option<&Value>) -> RtResult<EventLogLevel> {
+    match value.unwrap_or(&Value::Undefined) {
+        Value::Undefined => Ok(EventLogLevel::Note),
+        Value::Enum(EnumValue::EventLogLevelNote) => Ok(EventLogLevel::Note),
+        Value::Enum(EnumValue::EventLogLevelInformation) => Ok(EventLogLevel::Information),
+        Value::Enum(EnumValue::EventLogLevelWarning) => Ok(EventLogLevel::Warning),
+        Value::Enum(EnumValue::EventLogLevelError) => Ok(EventLogLevel::Error),
+        _ => Err(RtError::TypeError {
+            expected: "УровеньЖурналаРегистрации",
+            op: "ЗаписьЖурналаРегистрации",
+        }),
+    }
+}
+
+fn event_log_transaction_mode(value: Option<&Value>) -> RtResult<EventLogTransactionMode> {
+    match value.unwrap_or(&Value::Undefined) {
+        Value::Undefined => Ok(EventLogTransactionMode::Independent),
+        Value::Enum(EnumValue::EventLogEntryTransactionModeIndependent) => {
+            Ok(EventLogTransactionMode::Independent)
+        }
+        Value::Enum(EnumValue::EventLogEntryTransactionModeTransactional) => {
+            Ok(EventLogTransactionMode::Transactional)
+        }
+        _ => Err(RtError::TypeError {
+            expected: "РежимТранзакцииЗаписиЖурналаРегистрации",
+            op: "ЗаписьЖурналаРегистрации",
+        }),
+    }
+}
+
+fn write_log_event(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let event_name = match &arguments[0] {
+        Value::Str(value) => Arc::from(value.to_string()),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "ЗаписьЖурналаРегистрации",
+            });
+        }
+    };
+    let comment = match arguments.get(4).unwrap_or(&Value::Undefined) {
+        Value::Undefined => Arc::from(""),
+        Value::Str(value) => Arc::from(value.to_string()),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "ЗаписьЖурналаРегистрации",
+            });
+        }
+    };
+    let entry = EventLogEntry {
+        event_name,
+        level: event_log_level(arguments.get(1))?,
+        metadata: arguments.get(2).cloned().unwrap_or(Value::Undefined),
+        data: arguments.get(3).cloned().unwrap_or(Value::Undefined),
+        comment,
+        transaction_mode: event_log_transaction_mode(arguments.get(5))?,
+    };
+    let writer = Rc::clone(runtime(ctx)?.event_log_writer().ok_or_else(|| {
+        RtError::DynamicError("журнал регистрации не подключён для текущего сеанса".into())
+    })?);
+    writer.write(entry)?;
+    Ok(Value::Undefined)
+}
+
 fn infobase_connection_number_property(
     receiver: &dyn ObjectProtocol,
     _: &mut CallContext<'_>,
@@ -1411,6 +1556,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
         call: infobase_connections,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(11),
+        names: &["ЗаписьЖурналаРегистрации", "WriteLogEvent"],
+        arity: Arity::range(1, 6),
+        kind: FunctionKind::Procedure,
+        call: write_log_event,
     },
 ];
 

@@ -1,0 +1,13 @@
+file.begin	event-log-1
+EVENT_LOG.LEVEL.META	EnumEventLogLevel
+EVENT_LOG.LEVEL.NOTE	EventLogLevel:Note
+EVENT_LOG.LEVEL.INFORMATION	EventLogLevel:Information
+EVENT_LOG.LEVEL.WARNING	EventLogLevel:Warning
+EVENT_LOG.LEVEL.ERROR	EventLogLevel:Error
+EVENT_LOG.TRANSACTION_MODE.META	EnumEventLogEntryTransactionMode
+EVENT_LOG.TRANSACTION_MODE.INDEPENDENT	EventLogEntryTransactionMode:Independent
+EVENT_LOG.TRANSACTION_MODE.TRANSACTIONAL	EventLogEntryTransactionMode:Transactional
+EVENT_LOG.WRITE.MINIMAL	ok
+EVENT_LOG.WRITE.FIVE_ARGUMENTS	ok
+EVENT_LOG.WRITE.SIX_ARGUMENTS	ok
+file.end	event-log-1

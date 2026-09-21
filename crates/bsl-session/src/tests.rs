@@ -11,15 +11,16 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
             Arc::new(MetadataCatalog::new("configuration", vec![]).unwrap()),
             Principal::new("user", "Тест", Vec::new()),
         )
-        .with_extension(Rc::new(SessionRuntime::new(
+        .with_extension(Rc::new(SessionRuntime {
             parameters,
-            SessionKind::ThinClient,
-            Arc::from(PLATFORM_VERSION),
-            None,
-            1,
-            None,
-            None,
-        ))),
+            kind: SessionKind::ThinClient,
+            platform_version: Arc::from(PLATFORM_VERSION),
+            connection_string: None,
+            connection_number: 1,
+            connections: None,
+            event_log_writer: None,
+            background_method: None,
+        })),
     )
 }
 
@@ -275,6 +276,18 @@ fn principal() -> Principal {
 
 fn resources<T: 'static>(connection: T, connection_number: u64) -> SessionResources {
     SessionResources::new(Box::new(connection), connection_number)
+}
+
+#[derive(Debug, Default)]
+struct RecordingEventLog {
+    entries: RefCell<Vec<EventLogEntry>>,
+}
+
+impl EventLogWriter for RecordingEventLog {
+    fn write(&self, entry: EventLogEntry) -> RtResult<()> {
+        self.entries.borrow_mut().push(entry);
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -1272,5 +1285,99 @@ fn background_session_copies_parent_parameters_and_then_diverges() {
     assert_eq!(
         parent.parameters().peek("Копируемый").unwrap(),
         Some(Value::number_from_i64(7))
+    );
+}
+
+#[test]
+fn event_log_uses_the_current_session_writer_and_measured_enums() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let writer = Rc::new(RecordingEventLog::default());
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 1).with_event_log_writer(writer.clone()),
+        )
+        .unwrap();
+    let probe = session
+        .instantiate(
+            r#"
+            Процедура Записать() Экспорт
+                ЗаписьЖурналаРегистрации("minimal");
+                WriteLogEvent("full", EventLogLevel.Error, , 42, "comment",
+                    EventLogEntryTransactionMode.Transactional);
+            КонецПроцедуры
+
+            Функция Перечисления() Экспорт
+                Возврат Строка(ТипЗнч(УровеньЖурналаРегистрации)) + "|"
+                    + Строка(УровеньЖурналаРегистрации.Примечание) + "|"
+                    + Строка(УровеньЖурналаРегистрации.Информация) + "|"
+                    + Строка(УровеньЖурналаРегистрации.Предупреждение) + "|"
+                    + Строка(УровеньЖурналаРегистрации.Ошибка) + "|"
+                    + Строка(ТипЗнч(EventLogEntryTransactionMode)) + "|"
+                    + Строка(EventLogEntryTransactionMode.Independent) + "|"
+                    + Строка(EventLogEntryTransactionMode.Transactional);
+            КонецФункции
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        session.call(&probe, "Перечисления", vec![]).unwrap().0,
+        Value::Str(
+            "EnumEventLogLevel|Note|Information|Warning|Error|EnumEventLogEntryTransactionMode|Independent|Transactional"
+                .into()
+        )
+    );
+    session.call(&probe, "Записать", vec![]).unwrap();
+
+    let entries = writer.entries.borrow();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].event_name(), "minimal");
+    assert_eq!(entries[0].level(), EventLogLevel::Note);
+    assert_eq!(entries[0].metadata(), &Value::Undefined);
+    assert_eq!(entries[0].data(), &Value::Undefined);
+    assert_eq!(entries[0].comment(), "");
+    assert_eq!(
+        entries[0].transaction_mode(),
+        EventLogTransactionMode::Independent
+    );
+    assert_eq!(entries[1].event_name(), "full");
+    assert_eq!(entries[1].level(), EventLogLevel::Error);
+    assert_eq!(entries[1].data(), &Value::number_from_i64(42));
+    assert_eq!(entries[1].comment(), "comment");
+    assert_eq!(
+        entries[1].transaction_mode(),
+        EventLogTransactionMode::Transactional
+    );
+}
+
+#[test]
+fn event_log_fails_explicitly_without_a_session_writer() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut session = factory.open(principal(), resources((), 1)).unwrap();
+    let probe = session
+        .instantiate(
+            "Процедура Записать() Экспорт ЗаписьЖурналаРегистрации(\"event\"); КонецПроцедуры",
+        )
+        .unwrap();
+    assert!(
+        session
+            .call(&probe, "Записать", vec![])
+            .unwrap_err()
+            .to_string()
+            .contains("журнал регистрации не подключён")
     );
 }

@@ -54,6 +54,8 @@ pub enum TypeId {
     ConfigurationExtensionsSource,
     ConfigurationExtensionScope,
     ConfigurationExtensionApplicationIssueSeverity,
+    EventLogLevel,
+    EventLogEntryTransactionMode,
     JsonValueType,
     JsonLineBreak,
     JsonEscapeCharacters,
@@ -214,6 +216,16 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::ConfigurationExtensionApplicationIssueSeverity,
         "ВажностьПроблемыПримененияРасширенияКонфигурации",
         "ConfigurationExtensionApplicationIssueSeverity",
+    ),
+    (
+        TypeId::EventLogLevel,
+        "УровеньЖурналаРегистрации",
+        "EventLogLevel",
+    ),
+    (
+        TypeId::EventLogEntryTransactionMode,
+        "РежимТранзакцииЗаписиЖурналаРегистрации",
+        "EventLogEntryTransactionMode",
     ),
     // Тип с пробелом, как и остальные объектные типы JSON выше; значение
     // («Строка(Новый НастройкиСериализацииJSON)») — без, см. `lib.rs`.
@@ -421,6 +433,11 @@ const DISPLAY: &[(TypeId, &str)] = &[
     (
         TypeId::ConfigurationExtensionApplicationIssueSeverity,
         "ConfigurationExtensionApplicationIssueSeverity",
+    ),
+    (TypeId::EventLogLevel, "EventLogLevel"),
+    (
+        TypeId::EventLogEntryTransactionMode,
+        "EventLogEntryTransactionMode",
     ),
 ];
 

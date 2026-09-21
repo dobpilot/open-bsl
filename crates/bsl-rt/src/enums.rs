@@ -70,6 +70,14 @@ pub enum EnumValue {
     ConfigurationExtensionApplicationIssueSeverityLow,
     ConfigurationExtensionApplicationIssueSeverityModerate,
 
+    // --- Журнал регистрации ------------------------------------------
+    EventLogLevelNote,
+    EventLogLevelInformation,
+    EventLogLevelWarning,
+    EventLogLevelError,
+    EventLogEntryTransactionModeIndependent,
+    EventLogEntryTransactionModeTransactional,
+
     // --- ТипЗначенияJSON ---------------------------------------------
     JsonString,
     JsonNumber,
@@ -450,6 +458,10 @@ pub enum EnumKind {
     ConfigurationExtensionScope,
     /// Важность проблемы применения расширения конфигурации.
     ConfigurationExtensionApplicationIssueSeverity,
+    /// Уровень важности события журнала регистрации.
+    EventLogLevel,
+    /// Связь записи журнала регистрации с текущей транзакцией.
+    EventLogEntryTransactionMode,
     JsonValueType,
     JsonLineBreak,
     /// Способ перевода Unicode-символов в `\uXXXX` при записи JSON.
@@ -610,6 +622,11 @@ impl EnumKind {
                 "ВажностьПроблемыПримененияРасширенияКонфигурации",
                 "ConfigurationExtensionApplicationIssueSeverity",
             ),
+            EnumKind::EventLogLevel => ("УровеньЖурналаРегистрации", "EventLogLevel"),
+            EnumKind::EventLogEntryTransactionMode => (
+                "РежимТранзакцииЗаписиЖурналаРегистрации",
+                "EventLogEntryTransactionMode",
+            ),
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonEscapeCharacters => {
@@ -697,6 +714,9 @@ impl EnumKind {
             EnumKind::ConfigurationExtensionApplicationIssueSeverity => {
                 "EnumConfigurationExtensionApplicationIssueSeverity"
             }
+            // ИЗМЕРЕНО на 8.3.27 пробой `measure-event-log.bsl`.
+            EnumKind::EventLogLevel => "EnumEventLogLevel",
+            EnumKind::EventLogEntryTransactionMode => "EnumEventLogEntryTransactionMode",
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
             EnumKind::JsonLineBreak => "ПеречислениеПереносСтрокJSON",
             EnumKind::JsonEscapeCharacters => "ПеречислениеЭкранированиеСимволовJSON",
@@ -1004,6 +1024,50 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "НеИспользовать",
         "DontUse",
         "DontUse",
+    ),
+    // Имена, метатипы и представления измерены на платформе 8.3.27.2342
+    // пробой `measure-event-log.bsl`.
+    (
+        EnumKind::EventLogLevel,
+        EnumValue::EventLogLevelNote,
+        "Примечание",
+        "Note",
+        "Note",
+    ),
+    (
+        EnumKind::EventLogLevel,
+        EnumValue::EventLogLevelInformation,
+        "Информация",
+        "Information",
+        "Information",
+    ),
+    (
+        EnumKind::EventLogLevel,
+        EnumValue::EventLogLevelWarning,
+        "Предупреждение",
+        "Warning",
+        "Warning",
+    ),
+    (
+        EnumKind::EventLogLevel,
+        EnumValue::EventLogLevelError,
+        "Ошибка",
+        "Error",
+        "Error",
+    ),
+    (
+        EnumKind::EventLogEntryTransactionMode,
+        EnumValue::EventLogEntryTransactionModeIndependent,
+        "Независимая",
+        "Independent",
+        "Independent",
+    ),
+    (
+        EnumKind::EventLogEntryTransactionMode,
+        EnumValue::EventLogEntryTransactionModeTransactional,
+        "Транзакционная",
+        "Transactional",
+        "Transactional",
     ),
     (
         EnumKind::ClientRunMode,
@@ -2775,6 +2839,16 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     (
         "ConfigurationExtensionApplicationIssueSeverity",
         EnumKind::ConfigurationExtensionApplicationIssueSeverity,
+    ),
+    ("УровеньЖурналаРегистрации", EnumKind::EventLogLevel),
+    ("EventLogLevel", EnumKind::EventLogLevel),
+    (
+        "РежимТранзакцииЗаписиЖурналаРегистрации",
+        EnumKind::EventLogEntryTransactionMode,
+    ),
+    (
+        "EventLogEntryTransactionMode",
+        EnumKind::EventLogEntryTransactionMode,
     ),
     ("ТипЗначенияJSON", EnumKind::JsonValueType),
     ("JSONValueType", EnumKind::JsonValueType),

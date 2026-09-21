@@ -184,6 +184,7 @@ SESSION.FAILURE.NESTED_THEN_THROW.TRACE  startup|required:ПробаА|required:
 | `СоединениеИнформационнойБазы` | предоставляет `ИмяКомпьютера`, `ИмяПриложения`, `НомерСоединения` и остальные свойства описания соединения | сервер, толстый клиент, внешнее соединение | [SP-13] |
 | `Base64Строка(ДвоичныеДанные)` | возвращает `Строка`; это самостоятельная функция платформы, а не псевдоним, заявленный справкой для более нового `ПолучитьBase64СтрокуИзДвоичныхДанных` | все основные контексты | [SP-14] |
 | `Символы.ПС` | строка перевода строки | без ограничения контекста на странице свойства | [SP-15] |
+| `ЗаписьЖурналаРегистрации(ИмяСобытия, Уровень, ОбъектМетаданных, Данные, Комментарий, РежимТранзакции)` | первый параметр обязателен, остальные необязательны; уровни и режимы транзакции имеют отдельные системные перечисления | сервер, толстый клиент, внешнее соединение | [SP-37]–[SP-39] |
 
 Для внешнего соединения значение `ТекущийРежимЗапуска() = Неопределено`
 подтверждено справкой [SP-09]. Если хост представляет другой вид запуска, это
@@ -547,6 +548,14 @@ SESSION.INFOBASE.BACKGROUND_JOB    Active session|Background job|ЗамерыФ�
 пользователем, поскольку измерительная база запускается с административными
 правами.
 
+`ЗаписьЖурналаРегистрации()` также измерена на платформе 8.3.27.2342.
+Минимальный, пятиаргументный и шестиаргументный вызовы завершились успешно.
+Метатипы перечислений печатаются как `EnumEventLogLevel` и
+`EnumEventLogEntryTransactionMode`, а представления членов — `Note`,
+`Information`, `Warning`, `Error`, `Independent` и `Transactional`. Проба и
+полный вывод сохранены в `tests/conformance/measure/1c/measure-event-log.bsl`
+и `measure-event-log.platform.txt`.
+
 Последовательность проверки веб-доступа условна: она выполняется только в
 разделенном режиме, при включенной константе ограничения и полном старте.
 Однако подмена результата константы ради обхода ветки изменила бы семантику
@@ -711,3 +720,6 @@ runtime предоставляет значения через `Метаданн
 | SP-34 | `ВыборкаИзРезультатаЗапроса.Получить` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResultSelection/methods/Get1375.html` |
 | SP-35 | `ОбъектМетаданныхКонфигурация.РежимСовместимости` | `platform-syntax-help:syntax-context:objects/catalog63/catalog272/ConfigurationMetadataObject/properties/CompatibilityMode8209.html` |
 | SP-36 | `РежимСовместимости` и его члены | `platform-syntax-help:syntax-context:objects/catalog2/catalog370/CompatibilityMode.html` |
+| SP-37 | `ЗаписьЖурналаРегистрации` | `platform-syntax-help:syntax-context:objects/Global context/methods/catalog3403/WriteLogEvent1234.html` |
+| SP-38 | `УровеньЖурналаРегистрации` | `platform-syntax-help:syntax-context:objects/catalog2/catalog1449/EventLogLevel.html` |
+| SP-39 | `РежимТранзакцииЗаписиЖурналаРегистрации` | `platform-syntax-help:syntax-context:objects/catalog2/catalog1449/EventLogEntryTransactionMode.html` |
