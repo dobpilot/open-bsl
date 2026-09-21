@@ -606,6 +606,9 @@ gateway разумно и правдиво возвращать `Неопред�
 отбора. Доступ к чужому пользователю и выборка без отбора по текущему
 пользователю требуют `АдминистрированиеДанных`; сохранение требует
 `СохранениеДанныхПользователя` [SP-20], [SP-21], [SP-40]–[SP-42].
+Результат `Выбрать` имеет тип `СтандартноеХранилищеНастроекВыборка`,
+перемещается методом `Следующий` и открывает свойства `КлючОбъекта`,
+`КлючНастроек`, `Пользователь` и `Настройки` [SP-49]–[SP-53].
 
 `НастройкиНачальнойСтраницы` и `СоставФормНачальнойСтраницы` имеют
 нульаргументные конструкторы. Первый объект читает и устанавливает состав
@@ -749,3 +752,8 @@ runtime предоставляет значения через `Метаданн
 | SP-46 | конструктор `СоставФормНачальнойСтраницы` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageForms/ctors/ctor_Auto.html` |
 | SP-47 | `СоставФормНачальнойСтраницы.ЛеваяКолонка` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageForms/properties/LeftColumn10010.html` |
 | SP-48 | `СоставФормНачальнойСтраницы.ПраваяКолонка` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageForms/properties/RightColumn10011.html` |
+| SP-49 | `СтандартноеХранилищеНастроекВыборка` | `platform-syntax-help:syntax-context:objects/catalog125/catalog1705/StandardSettingsStorageSelection.html` |
+| SP-50 | `СтандартноеХранилищеНастроекВыборка.Следующий` | `platform-syntax-help:syntax-context:objects/catalog125/catalog1705/StandardSettingsStorageSelection/methods/Next4173.html` |
+| SP-51 | `СтандартноеХранилищеНастроекВыборка.КлючОбъекта` | `platform-syntax-help:syntax-context:objects/catalog125/catalog1705/StandardSettingsStorageSelection/properties/ObjectKey9352.html` |
+| SP-52 | `СтандартноеХранилищеНастроекВыборка.КлючНастроек` | `platform-syntax-help:syntax-context:objects/catalog125/catalog1705/StandardSettingsStorageSelection/properties/SettingsKey9353.html` |
+| SP-53 | `СтандартноеХранилищеНастроекВыборка.Пользователь` и `.Настройки` | `platform-syntax-help:syntax-context:objects/catalog125/catalog1705/StandardSettingsStorageSelection/properties/User9354.html`, `platform-syntax-help:syntax-context:objects/catalog125/catalog1705/StandardSettingsStorageSelection/properties/Settings9356.html` |

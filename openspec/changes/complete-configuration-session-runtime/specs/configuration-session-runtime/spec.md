@@ -122,6 +122,8 @@ The configuration-session runtime SHALL provide `ЗаписьЖурналаРе�
 ### Requirement: Principal-bound client settings
 For web-client and thin-client Sessions, the runtime SHALL expose `ХранилищеОбщихНастроек`/`CommonSettingsStorage` and `ХранилищеСистемныхНастроек`/`SystemSettingsStorage` through a client-settings adapter explicitly supplied for that Session. The standard manager SHALL provide `Загрузить`/`Load` with one through four arguments, `Сохранить`/`Save` with three through five arguments, and `Выбрать`/`Select` with zero or one argument. The adapter SHALL receive the selected principal and SHALL enforce the documented user-data-save and data-administration rights. Missing storage data, denied access, and an absent adapter SHALL remain distinguishable and SHALL NOT become an unrestricted or process-global store.
 
+`Выбрать`/`Select` SHALL return a standard-settings selection with `Следующий`/`Next` and read-only `КлючОбъекта`/`ObjectKey`, `КлючНастроек`/`SettingsKey`, `Пользователь`/`User`, and `Настройки`/`Settings` properties. The selection SHALL traverse only the immutable row snapshot returned by the current Session adapter.
+
 #### Scenario: Load current-user settings
 - **WHEN** managed-client code loads an existing setting without an explicit user name
 - **THEN** the adapter reads the setting for the current Session principal
@@ -133,6 +135,10 @@ For web-client and thin-client Sessions, the runtime SHALL expose `Хранил�
 #### Scenario: Client settings are unavailable
 - **WHEN** managed-client code uses a settings store without a client-settings adapter
 - **THEN** the operation fails explicitly
+
+#### Scenario: Traverse selected settings
+- **WHEN** the adapter returns matching settings rows and configuration code advances the selection
+- **THEN** the selection exposes each row through the documented properties in adapter order
 
 ### Requirement: Home-page settings values
 The session runtime SHALL provide the zero-argument `НастройкиНачальнойСтраницы`/`HomePageSettings` and `СоставФормНачальнойСтраницы`/`HomePageForms` constructors. A home-page settings value SHALL return and accept the current form composition through `ПолучитьСоставФорм`/`GetForms` and `УстановитьСоставФорм`/`SetForms`. A form composition SHALL expose read-only `ЛеваяКолонка`/`LeftColumn` and `ПраваяКолонка`/`RightColumn` array properties. Initial and updated compositions SHALL cross the same principal-bound client-settings adapter instead of being shared between Sessions.
