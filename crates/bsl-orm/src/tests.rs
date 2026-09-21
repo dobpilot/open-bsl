@@ -1,6 +1,22 @@
 use super::*;
 use std::rc::Rc;
 
+#[derive(Debug)]
+struct DataAccessStub;
+
+impl DataAccess for DataAccessStub {
+    fn constant_value(
+        &self,
+        metadata: &MetadataObject,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        assert_eq!(metadata.id(), "constant-answer");
+        assert_eq!(principal.id(), "user");
+        Ok(Value::number_from_i64(42))
+    }
+}
+
 fn catalog() -> Arc<MetadataCatalog> {
     Arc::new(
         MetadataCatalog::new(
@@ -10,6 +26,8 @@ fn catalog() -> Arc<MetadataCatalog> {
                 MetadataObject::new("role-admin", "Администратор", MetadataKind::Role),
                 MetadataObject::new("catalog-versions", "Версии", MetadataKind::Catalog)
                     .with_manager_module("ВерсииМенеджер"),
+                MetadataObject::new("constant-answer", "Ответ", MetadataKind::Constant)
+                    .with_manager_module("ОтветМенеджер"),
                 MetadataObject::new(
                     "scheduled-job-cleanup",
                     "ОчисткаДанных",
@@ -46,18 +64,34 @@ fn engine() -> open_bsl::Engine {
             КонецФункции
             "#,
         )
+        .common_module(
+            "ОтветМенеджер",
+            r#"
+            Функция Получить() Экспорт
+                Возврат 999;
+            КонецФункции
+            "#,
+        )
         .build()
         .unwrap()
 }
 
 fn state(engine: &open_bsl::Engine) -> open_bsl::State {
-    engine
-        .state_builder()
-        .host_data(Rc::new(SessionData::new(
-            catalog(),
-            Principal::new("user", "Тест", vec!["role-user".into()]),
-        )))
-        .build()
+    state_with_data_access(engine, None)
+}
+
+fn state_with_data_access(
+    engine: &open_bsl::Engine,
+    data_access: Option<Rc<dyn DataAccess>>,
+) -> open_bsl::State {
+    let mut session = SessionData::new(
+        catalog(),
+        Principal::new("user", "Тест", vec!["role-user".into()]),
+    );
+    if let Some(data_access) = data_access {
+        session = session.with_data_access(data_access);
+    }
+    engine.state_builder().host_data(Rc::new(session)).build()
 }
 
 #[test]
@@ -211,6 +245,28 @@ fn manager_export_runs_in_the_session_module_instance() {
 }
 
 #[test]
+fn platform_manager_method_wins_over_same_named_module_export() {
+    let engine = engine();
+    let mut state = state_with_data_access(&engine, Some(Rc::new(DataAccessStub)));
+    assert_eq!(
+        state.exec("Возврат Константы.Ответ.Получить();").unwrap(),
+        Value::number_from_i64(42)
+    );
+}
+
+#[test]
+fn platform_manager_method_does_not_fall_back_when_data_access_is_missing() {
+    let engine = engine();
+    let mut state = state(&engine);
+    let error = state
+        .exec("Возврат Константы.Ответ.Получить();")
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("доступ к данным конфигурации не подключён"));
+    assert!(!error.contains("999"));
+}
+
+#[test]
 fn unknown_manager_member_fails_explicitly() {
     let engine = engine();
     let mut state = state(&engine);
@@ -220,5 +276,12 @@ fn unknown_manager_member_fails_explicitly() {
             .unwrap_err()
             .to_string()
             .contains("НетТакойКонстанты")
+    );
+    assert!(
+        state
+            .exec("Возврат Справочники.Версии.НетТакогоМетода();")
+            .unwrap_err()
+            .to_string()
+            .contains("НетТакогоМетода")
     );
 }

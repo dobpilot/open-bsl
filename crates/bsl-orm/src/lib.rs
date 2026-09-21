@@ -17,8 +17,8 @@ use std::sync::Arc;
 use open_bsl::{
     Arity, CallContext, EnumKind, EnumValue, FunctionCode, FunctionDescriptor, FunctionKind,
     GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, Value, folded_eq,
-    get_property_from_table,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, Value, call_method_from_table,
+    folded_eq, get_property_from_table,
 };
 
 /// Основной язык программирования конфигурации.
@@ -339,10 +339,31 @@ impl Principal {
     }
 }
 
+/// Доступ к данным конфигурации в пределах одного сеанса.
+///
+/// Реализация принадлежит адаптеру источника данных. `bsl-orm` передаёт ей
+/// метаданные объекта, неизменяемого пользователя сеанса и текущий контекст
+/// вызова, через который доступны параметры того же сеанса.
+pub trait DataAccess {
+    /// Читает значение константы с учётом прав текущего пользователя.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, проверки прав, RLS или
+    /// инициализации требуемого параметра сеанса.
+    fn constant_value(
+        &self,
+        metadata: &MetadataObject,
+        principal: &Principal,
+        context: &mut CallContext<'_>,
+    ) -> RtResult<Value>;
+}
+
 /// Данные ORM, принадлежащие ровно одному `open_bsl::State`.
 pub struct SessionData {
     catalog: Arc<MetadataCatalog>,
     principal: Principal,
+    data_access: Option<Rc<dyn DataAccess>>,
     extension: Option<Rc<dyn Any>>,
 }
 
@@ -353,8 +374,16 @@ impl SessionData {
         Self {
             catalog,
             principal,
+            data_access: None,
             extension: None,
         }
+    }
+
+    /// Подключает адаптер данных, принадлежащий этому сеансу.
+    #[must_use]
+    pub fn with_data_access(mut self, data_access: Rc<dyn DataAccess>) -> Self {
+        self.data_access = Some(data_access);
+        self
     }
 
     /// Добавляет сеансовые данные верхнего слоя, например контейнер
@@ -390,6 +419,7 @@ impl fmt::Debug for SessionData {
             .debug_struct("SessionData")
             .field("catalog", &self.catalog)
             .field("principal", &self.principal)
+            .field("has_data_access", &self.data_access.is_some())
             .field("has_extension", &self.extension.is_some())
             .finish()
     }
@@ -734,6 +764,17 @@ impl ObjectProtocol for ManagerValue {
         let object = self.catalog.object_by_id(&self.object_id).ok_or_else(|| {
             RtError::DynamicError("объект менеджера отсутствует в каталоге".into())
         })?;
+        let methods = manager_methods(object.kind());
+        if method_exists(methods, name) {
+            return call_method_from_table(
+                methods,
+                MANAGER_TYPE.name,
+                self,
+                name,
+                arguments,
+                context,
+            );
+        }
         let module = object
             .manager_module()
             .ok_or_else(|| RtError::UnknownMethod {
@@ -753,10 +794,13 @@ impl ObjectProtocol for ManagerValue {
             .map(|(value, _)| value)
     }
 
-    fn has_method(&self, _: &str) -> bool {
+    fn has_method(&self, name: &str) -> bool {
         self.catalog
             .object_by_id(&self.object_id)
-            .is_some_and(|object| object.manager_module().is_some())
+            .is_some_and(|object| {
+                method_exists(manager_methods(object.kind()), name)
+                    || object.manager_module().is_some()
+            })
     }
 }
 
@@ -910,6 +954,29 @@ fn manager_name(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtRes
     Ok(Value::Str(object.name().into()))
 }
 
+fn constant_value(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let manager = receiver
+        .downcast_ref::<ManagerValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let metadata = manager
+        .catalog
+        .object_by_id(&manager.object_id)
+        .cloned()
+        .ok_or_else(|| RtError::DynamicError("объект менеджера отсутствует в каталоге".into()))?;
+    let (principal, data_access) = {
+        let session = session(context)?;
+        let data_access = session.data_access.as_ref().ok_or_else(|| {
+            RtError::DynamicError("доступ к данным конфигурации не подключён".into())
+        })?;
+        (session.principal.clone(), Rc::clone(data_access))
+    };
+    data_access.constant_value(&metadata, &principal, context)
+}
+
 static METADATA_COLLECTION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     &["Найти", "Find"],
     Arity::exact(1),
@@ -967,6 +1034,28 @@ static MANAGER_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
     get: manager_name,
     set: None,
 }];
+
+static CONSTANT_MANAGER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Получить", "Get"],
+    Arity::exact(0),
+    constant_value,
+)];
+
+fn manager_methods(kind: MetadataKind) -> &'static [MethodDescriptor] {
+    match kind {
+        MetadataKind::Constant => CONSTANT_MANAGER_METHODS,
+        _ => &[],
+    }
+}
+
+fn method_exists(methods: &[MethodDescriptor], name: &str) -> bool {
+    methods.iter().any(|method| {
+        method
+            .names()
+            .iter()
+            .any(|candidate| folded_eq(candidate, name))
+    })
+}
 
 fn collection_kind(name: &str) -> Option<MetadataKind> {
     [
@@ -1147,7 +1236,9 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&METADATA_OBJECT_PROPERTIES_TYPE)
         .with_properties(METADATA_OBJECT_PROPERTIES),
     ObjectMembersDescriptor::new(&MANAGERS_TYPE).with_dynamic_properties(),
-    ObjectMembersDescriptor::new(&MANAGER_TYPE).with_properties(MANAGER_PROPERTIES),
+    ObjectMembersDescriptor::new(&MANAGER_TYPE)
+        .with_methods(CONSTANT_MANAGER_METHODS)
+        .with_properties(MANAGER_PROPERTIES),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
