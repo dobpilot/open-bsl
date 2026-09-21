@@ -79,6 +79,21 @@ The session runtime SHALL expose `СтрокаСоединенияИнформа
 - **WHEN** configuration code calls the function in a Session whose host did not supply a string
 - **THEN** the call fails explicitly instead of returning an empty or synthetic string
 
+### Requirement: Stored value snapshot
+The ORM component SHALL provide `ХранилищеЗначения`/`ValueStorage` and `СжатиеДанных`/`Deflation` constructors with the platform arities. `СжатиеДанных` SHALL accept an optional integral level from `-1` through `9`. Constructing a stored value SHALL snapshot the supplied serializable value. Every `Получить`/`Get` call SHALL return a newly materialized value, and source aliases reached through separate collection entries SHALL become independent restored values. Unsupported values and invalid compression arguments SHALL fail explicitly.
+
+#### Scenario: Construction snapshots a mutable value
+- **WHEN** code stores an array and later changes the source array
+- **THEN** `Получить()` returns the value as it was during construction
+
+#### Scenario: Every read is detached
+- **WHEN** code mutates a collection returned by `Получить()` and calls `Получить()` again
+- **THEN** the later result retains the stored contents
+
+#### Scenario: Source aliases become independent values
+- **WHEN** two collection entries refer to the same mutable object before storage
+- **THEN** mutating the first restored entry does not change the second restored entry
+
 ### Requirement: Background session isolation and parameter inheritance
 A background job SHALL run in a new Session for an explicitly supplied selectable principal. It SHALL use a separate database connection and module instances. Its initial session parameters SHALL be copied from the parent session, and later changes in either session SHALL not change the other.
 
