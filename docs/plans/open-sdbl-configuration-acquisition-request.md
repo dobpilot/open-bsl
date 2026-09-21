@@ -96,3 +96,57 @@ impl InfoBaseUser {
 После появления этого API `open-bsl` зафиксирует зависимость воспроизводимым
 Git revision или выпущенной версией и реализует декодирование конфигурационного
 графа в `bsl-config-db`.
+
+## Точки изменения в текущем коде `open-sdbl`
+
+Запрос сверён с `open-sdbl` на коммите `494305e`. В нём уже есть большая часть
+нужной механики, поэтому новая операция не требует второго pipeline:
+
+- `open-sdbl-db/src/pipeline.rs` уже содержит публичный `ConfigResource` и
+  `assemble_parts`; `ConfigResource::compressed` хранит байты в том виде, в
+  котором их вернула таблица;
+- `MetadataSource` и `acquire_metadata` уже задают единственную read-only
+  транзакцию, commit/rollback, определение `StorageLayout`, пределы и получение
+  расширений;
+- provider-реализации `read_config` сейчас читают только фильтрованный набор,
+  заданный `PostgresMetadataQueries::CONFIG` и
+  `MsSqlMetadataQueries::CONFIG`;
+- `DatabaseSession::metadata` публикует только снимок и отчёт после завершения
+  acquisition;
+- `open-sdbl-db/src/extensions.rs::ExtensionIndex` объединяет ресурсы всех
+  расширений в один закрытый вектор. Для загрузки кода его нельзя выдавать как
+  результат новой операции: после объединения теряются владелец ресурса и
+  порядок применения расширений.
+
+Практически нужен соседний с `acquire_metadata` pipeline, который внутри той же
+транзакции читает полный `Config`, использует эти же байты для существующего
+metadata resolution и сохраняет их в результате. Запуск существующего
+`acquire_metadata`, а затем второй запрос полного `Config` контракту не
+соответствует: первый pipeline уже завершил транзакцию. Новый тип результата и
+`ConfigResource` должны быть реэкспортированы из корня `open-sdbl-db`, чтобы
+`bsl-config-db` не зависел от внутренних provider-модулей.
+
+Для расширений результат должен иметь явную оболочку примерно такого смысла:
+
+```rust
+pub struct AcquiredExtension {
+    pub identity: String,
+    pub name: String,
+    pub active: bool,
+    pub order: usize,
+    pub resources: Vec<ConfigResource>,
+}
+```
+
+Точные Rust-типы идентичности и порядка могут быть другими, если в `open-sdbl`
+уже есть более узкие типы. Существенно, чтобы два расширения с одинаковым
+именем ресурса не сливались и чтобы `bsl-config-db` мог применить только
+активные расширения в платформенном порядке.
+
+В модели пользователя необходимые признаки уже присутствуют:
+`InfoBaseUser::standard_authentication` и `InfoBaseUser::os_name`. Для текущего
+контракта допустимость пользователя равна
+`standard_authentication || !os_name.trim().is_empty()`; `show_in_list` и
+`administrative` на допустимость входа не влияют. Метод `can_authenticate()`
+следует разместить на `InfoBaseUser`, чтобы CLI и будущие потребители не
+дублировали это правило.
