@@ -91,6 +91,23 @@ The session runtime SHALL expose `НомерСоединенияИнформац
 - **THEN** the background Session returns the new number
 - **AND** the parent continues to return its original number
 
+### Requirement: Authorized information-base connection snapshot
+The session runtime SHALL provide `ПолучитьСоединенияИнформационнойБазы()`/`GetInfoBaseConnections()` from an immutable connection snapshot supplied by the host for the selected principal. Every returned connection SHALL expose the measured read-only `НомерСоединения`/`ConnectionNumber`, `ИмяПриложения`/`ApplicationName`, and `ИмяКомпьютера`/`ComputerName` properties. Session startup SHALL reject a supplied snapshot that does not contain the concrete Session connection number. Missing or denied connection-list access SHALL fail explicitly instead of returning an empty or current-only synthetic list.
+
+#### Scenario: Authorized connection list
+- **WHEN** the host supplies an authorized connection snapshot containing the concrete Session connection
+- **THEN** both language names return a new array of immutable connection values from that snapshot
+- **AND** the current connection can be found by the value returned from `НомерСоединенияИнформационнойБазы()`
+
+#### Scenario: Connection list unavailable
+- **WHEN** the selected principal lacks `АктивныеПользователи` or the host cannot acquire a complete connection snapshot
+- **THEN** requesting the list raises an explicit error
+- **AND** no partial or unrestricted list is returned
+
+#### Scenario: Inconsistent connection snapshot
+- **WHEN** a host attempts to open a Session with a connection snapshot that omits its concrete connection number
+- **THEN** startup fails before configuration code executes
+
 ### Requirement: Stored value snapshot
 The ORM component SHALL provide `ХранилищеЗначения`/`ValueStorage` and `СжатиеДанных`/`Deflation` constructors with the platform arities. `СжатиеДанных` SHALL accept an optional integral level from `-1` through `9`. Constructing a stored value SHALL snapshot the supplied serializable value. Every `Получить`/`Get` call SHALL return a newly materialized value, and source aliases reached through separate collection entries SHALL become independent restored values. Unsupported values and invalid compression arguments SHALL fail explicitly.
 
