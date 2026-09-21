@@ -366,6 +366,7 @@ impl fmt::Display for RtError {
                     crate::component::Capability::Network => "сеть",
                     crate::component::Capability::HostData => "данные хоста",
                     crate::component::Capability::HostPromises => "host-обещания",
+                    crate::component::Capability::SecurityModes => "режимы безопасности",
                     crate::component::Capability::TemporaryFiles => "учёт временных файлов",
                     crate::component::Capability::BackgroundJobs => "фоновые задания",
                     crate::component::Capability::TempStorage => "временное хранилище",

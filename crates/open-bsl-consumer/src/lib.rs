@@ -300,3 +300,7 @@ mod instance_tests;
 #[cfg(test)]
 #[path = "configuration_call_tests.rs"]
 mod configuration_call_tests;
+
+#[cfg(test)]
+#[path = "security_mode_tests.rs"]
+mod security_mode_tests;

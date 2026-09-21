@@ -34,6 +34,8 @@ pub(super) struct HostIo<'a, 'd> {
     /// исполнения. Заимствование не переживает вложенный drive; сами
     /// операции принадлежат внешнему AsyncState, а не стеку фрагмента.
     pub(super) file_promises: Option<&'a mut super::AsyncState>,
+    /// Режимы объемлющего BSL-вызова для вложенного `drive`.
+    pub(super) security_modes: super::SecurityModeSnapshot,
 }
 
 impl HostIo<'_, '_> {

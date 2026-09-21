@@ -1,7 +1,7 @@
 use super::snippet::DynamicDepthGuard;
 use super::{
-    HostIo, LinkedComponents, ModuleState, at, drive_linked, link_components, push_own_registers,
-    reg_load, reg_store,
+    HostIo, LinkedComponents, ModuleState, SecurityModeSnapshot, at, drive_linked, link_components,
+    push_own_registers, reg_load, reg_store,
 };
 use bsl_bytecode::{DynamicCompiler, Program};
 use bsl_rt::{BslValue, RtError};
@@ -101,6 +101,7 @@ pub(super) fn run_program_with_host<'a>(
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: SecurityModeSnapshot::default(),
     };
     let mut module_state = ModuleState::new(program);
     let (value, _) = drive_linked(
@@ -183,6 +184,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: SecurityModeSnapshot::default(),
     };
     let mut module_state = ModuleState::new(&program);
     drive_linked(
@@ -271,6 +273,7 @@ pub fn call_module_function(
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: SecurityModeSnapshot::default(),
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -316,6 +319,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: SecurityModeSnapshot::default(),
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }

@@ -1065,6 +1065,40 @@ fn infobase_connection_number(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResul
     ))
 }
 
+fn security_mode_flag(arguments: &[Value], operation: &'static str) -> RtResult<bool> {
+    match &arguments[0] {
+        Value::Boolean(value) => Ok(*value),
+        Value::Str(_) => Err(RtError::DynamicError(format!(
+            "{operation}: именованные профили безопасности не поддерживаются"
+        ))),
+        _ => Err(RtError::TypeError {
+            expected: "Булево",
+            op: operation,
+        }),
+    }
+}
+
+fn set_safe_mode(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    ctx.set_safe_mode(security_mode_flag(arguments, "УстановитьБезопасныйРежим")?)?;
+    Ok(Value::Undefined)
+}
+
+fn safe_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::Boolean(ctx.safe_mode()?))
+}
+
+fn set_privileged_mode(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    ctx.set_privileged_mode(security_mode_flag(
+        arguments,
+        "УстановитьПривилегированныйРежим",
+    )?)?;
+    Ok(Value::Undefined)
+}
+
+fn privileged_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::Boolean(ctx.privileged_mode()?))
+}
+
 fn current_infobase_session(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::new_object(InfoBaseSessionObject {
         background_method: runtime(ctx)?.background_method.clone(),
@@ -1188,6 +1222,34 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
         call: infobase_connection_number,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(6),
+        names: &["УстановитьБезопасныйРежим", "SetSafeMode"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Procedure,
+        call: set_safe_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(7),
+        names: &["БезопасныйРежим", "SafeMode"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: safe_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(8),
+        names: &["УстановитьПривилегированныйРежим", "SetPrivilegedMode"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Procedure,
+        call: set_privileged_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(9),
+        names: &["ПривилегированныйРежим", "PrivilegedMode"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: privileged_mode,
     },
 ];
 

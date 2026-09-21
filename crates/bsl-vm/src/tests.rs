@@ -487,6 +487,7 @@ fn run_unverified(program: &Program) -> Result<BslValue, RtError> {
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: crate::SecurityModeSnapshot::default(),
     };
     let mut module_state = crate::ModuleState::new(program);
     let (value, _) = crate::drive_linked(
@@ -551,6 +552,7 @@ fn run_source_with_hook(src: &str, hook: Box<dyn crate::DebugHook>) -> Result<Bs
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: crate::SecurityModeSnapshot::default(),
     };
     let mut module_state = crate::ModuleState::new(&program);
     crate::drive_linked(
@@ -4788,6 +4790,7 @@ fn call_module_function_with_dynamic_eval_inside() {
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: crate::SecurityModeSnapshot::default(),
     };
     let (value, params) = call_module_function_with_host(
         &program,

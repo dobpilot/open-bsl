@@ -184,6 +184,9 @@ pub(super) struct ModulesCtx<'a, 'b> {
     /// Номер каталожного модуля, который временно исполняется как корневая
     /// программа вложенного компонентного вызова.
     pub(super) root_catalog_module: Option<u32>,
+    /// Режимы безопасности и номер текущего кадра.
+    pub(super) security_modes: &'a super::TaskSecurityModes,
+    pub(super) security_frame: usize,
 }
 
 impl<'a> CatalogContext<'a> {

@@ -1240,6 +1240,7 @@ mod tests {
             background_jobs: None,
             temp_storage: None,
             message_sink: None,
+            security_modes: None,
         });
         assert!(matches!(
             file.call_method("НачатьИнициализацию", &arguments, &mut context),

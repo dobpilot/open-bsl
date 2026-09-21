@@ -3,8 +3,8 @@ use super::{
     load_imported_argument, load_module_argument,
 };
 use crate::{
-    AsyncState, Frame, MAX_CALL_DEPTH, ParamSlot, Task, TaskCompletion, TaskId, push_own_registers,
-    reg_load, reg_store,
+    AsyncState, Frame, MAX_CALL_DEPTH, ParamSlot, Task, TaskCompletion, TaskId, TaskSecurityModes,
+    push_own_registers, reg_load, reg_store,
 };
 use bsl_bytecode::{ArgMode, Program};
 use bsl_rt::{BslValue, RtError};
@@ -148,6 +148,7 @@ pub(crate) fn call_reference(
         arguments.push(argument);
     }
     if callee.is_async {
+        let inherited_security_modes = modules.security_modes.snapshot();
         let mut child_stack = Vec::with_capacity(callee.n_regs as usize);
         let mut aliases = Vec::with_capacity(arguments.len());
         for argument in arguments {
@@ -184,6 +185,9 @@ pub(crate) fn call_reference(
                 module_copybacks: Vec::new(),
                 numeric_for_state: None,
             }],
+            // НЕ ИЗМЕРЕНО(SECURITY.ASYNC_INHERITANCE) — отдельная async-задача
+            // получает снимок режимов в момент вызова.
+            security_modes: TaskSecurityModes::new(inherited_security_modes),
             stack: child_stack,
             current_exception: None,
             completion,

@@ -54,7 +54,109 @@ use snippet::run_dynamic_snippet;
 
 use bsl_bytecode::{ArgMode, DynamicCompiler, Instr, Program};
 use bsl_rt::{BslValue, HostPromiseSpawner as _, RtError};
+use std::cell::Cell;
 use std::io::Write;
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SecurityModeSnapshot {
+    safe: bool,
+    privileged: bool,
+}
+
+#[derive(Default)]
+struct TaskSecurityModes {
+    inherited: SecurityModeSnapshot,
+    safe_by_frame: Vec<Cell<u32>>,
+    privileged_by_frame: Vec<Cell<u32>>,
+}
+
+impl TaskSecurityModes {
+    fn new(inherited: SecurityModeSnapshot) -> Self {
+        Self {
+            inherited,
+            ..Self::default()
+        }
+    }
+
+    fn synchronize_frames(&mut self, count: usize) {
+        self.safe_by_frame.resize_with(count, Cell::default);
+        self.privileged_by_frame.resize_with(count, Cell::default);
+        self.safe_by_frame.truncate(count);
+        self.privileged_by_frame.truncate(count);
+    }
+
+    fn safe(&self) -> bool {
+        self.inherited.safe || self.safe_by_frame.iter().any(|depth| depth.get() != 0)
+    }
+
+    fn privileged(&self) -> bool {
+        !self.safe()
+            && (self.inherited.privileged
+                || self
+                    .privileged_by_frame
+                    .iter()
+                    .any(|depth| depth.get() != 0))
+    }
+
+    fn snapshot(&self) -> SecurityModeSnapshot {
+        SecurityModeSnapshot {
+            safe: self.safe(),
+            privileged: self.inherited.privileged
+                || self
+                    .privileged_by_frame
+                    .iter()
+                    .any(|depth| depth.get() != 0),
+        }
+    }
+}
+
+struct VmSecurityModeControl<'a> {
+    modes: &'a TaskSecurityModes,
+    frame: usize,
+}
+
+impl VmSecurityModeControl<'_> {
+    fn change(counter: &Cell<u32>, enabled: bool, name: &str) -> Result<(), RtError> {
+        let current = counter.get();
+        let next = if enabled {
+            current.checked_add(1).ok_or_else(|| {
+                RtError::DynamicError(format!("переполнен счётчик режима «{name}»"))
+            })?
+        } else {
+            current.checked_sub(1).ok_or_else(|| {
+                RtError::DynamicError(format!("текущий вызов не включал режим «{name}»"))
+            })?
+        };
+        counter.set(next);
+        Ok(())
+    }
+}
+
+impl bsl_rt::SecurityModeControl for VmSecurityModeControl<'_> {
+    fn safe_mode(&self) -> bool {
+        self.modes.safe()
+    }
+
+    fn set_safe_mode(&self, enabled: bool) -> Result<(), RtError> {
+        Self::change(
+            &self.modes.safe_by_frame[self.frame],
+            enabled,
+            "БезопасныйРежим",
+        )
+    }
+
+    fn privileged_mode(&self) -> bool {
+        self.modes.privileged()
+    }
+
+    fn set_privileged_mode(&self, enabled: bool) -> Result<(), RtError> {
+        Self::change(
+            &self.modes.privileged_by_frame[self.frame],
+            enabled,
+            "ПривилегированныйРежим",
+        )
+    }
+}
 
 struct Frame {
     /// Модуль, которому принадлежит `func_id`: `ROOT_MODULE` либо позиция
@@ -252,6 +354,7 @@ fn drive_with(
         dynamic_depth: &dynamic_depth,
         cancel_flag: None,
         file_promises: None,
+        security_modes: SecurityModeSnapshot::default(),
     };
     let mut module_state = ModuleState::new(program);
     let (value, _) = drive_linked(
@@ -533,6 +636,7 @@ impl ProgramExecution {
                 module_copybacks: Vec::new(),
                 numeric_for_state: None,
             }],
+            security_modes: TaskSecurityModes::default(),
             stack,
             current_exception: None,
             completion: TaskCompletion::Root,
@@ -556,6 +660,12 @@ impl ProgramExecution {
             cancel_flag: None,
             finished: false,
             debug_task_floor: None,
+        }
+    }
+
+    fn inherit_security_modes(&mut self, inherited: SecurityModeSnapshot) {
+        if let Some(root) = self.async_state.tasks[0].as_mut() {
+            root.security_modes = TaskSecurityModes::new(inherited);
         }
     }
 
@@ -794,6 +904,7 @@ impl ProgramExecution {
             dynamic_depth: &dynamic_depth,
             cancel_flag: self.cancel_flag.clone(),
             file_promises: None,
+            security_modes: SecurityModeSnapshot::default(),
         };
         self.poll_linked(program, &linked, None, &mut host, host_slice, None)
     }
@@ -895,6 +1006,7 @@ impl ProgramExecution {
             dynamic_depth: &dynamic_depth,
             cancel_flag: self.cancel_flag.clone(),
             file_promises: None,
+            security_modes: SecurityModeSnapshot::default(),
         };
         self.poll_linked(
             entry,
@@ -1209,12 +1321,15 @@ impl ProgramExecution {
                     } else {
                         (&mut scratch_state, Some(&mut *module_state))
                     };
+                task.security_modes.synchronize_frames(task.frames.len());
                 let mut modules_ctx = ModulesCtx {
                     root_program: program,
                     session: session_modules,
                     catalog,
                     root_state: step_root,
                     root_catalog_module: *root_catalog_module,
+                    security_modes: &task.security_modes,
+                    security_frame: task.frames.len() - 1,
                 };
                 let step_result = step(
                     &mut task.frames,
@@ -1231,6 +1346,7 @@ impl ProgramExecution {
                     async_state,
                     task_id,
                 );
+                task.security_modes.synchronize_frames(task.frames.len());
                 if cur_module != ROOT_MODULE {
                     std::mem::swap(
                         &mut scratch_state,
@@ -1377,6 +1493,7 @@ impl ProgramExecution {
                                 }
                             }
                         }
+                        task.security_modes.synchronize_frames(task.frames.len());
                         // Иначе кадры/pc уже поправлены внутри unwind_to_handler —
                         // просто продолжаем цикл со следующей итерации.
                     }
@@ -1414,6 +1531,7 @@ fn drive_linked(
         owned_module_state,
         SchedulerConfig::default(),
     );
+    execution.inherit_security_modes(host.security_modes);
     if let Some(hook) = debug {
         execution.set_debug_hook(hook);
     }
@@ -1537,6 +1655,7 @@ fn call_configuration_module_in_execution(
                 target_state.take_for_execution(),
                 SchedulerConfig::default(),
             );
+            execution.inherit_security_modes(host.security_modes);
             execution.root_catalog_module = Some(target_u32);
             execution.attach_catalog(catalog.catalog);
             execution.swap_session_modules(modules.session);
@@ -1575,6 +1694,7 @@ fn call_configuration_module_in_execution(
             target_state.take_for_execution(),
             SchedulerConfig::default(),
         );
+        execution.inherit_security_modes(host.security_modes);
         execution.root_catalog_module = Some(target_u32);
         execution.attach_catalog(catalog.catalog);
         execution.swap_session_modules(modules.session);
@@ -1629,6 +1749,10 @@ fn with_component_module_caller<R>(
     current_module: u32,
     body: impl FnOnce(&mut bsl_rt::CallContext<'_>) -> Result<R, RtError>,
 ) -> Result<R, RtError> {
+    let security_control = VmSecurityModeControl {
+        modes: modules.security_modes,
+        frame: modules.security_frame,
+    };
     let temporary_files = host.env.as_ref().map(|env| env.temporary_files());
     let HostIo {
         stdout,
@@ -1638,6 +1762,7 @@ fn with_component_module_caller<R>(
         dynamic_depth,
         cancel_flag,
         file_promises,
+        security_modes: _,
     } = host;
     let mut function_caller = |target: bsl_rt::FunctionCall<'_>,
                                args: Vec<BslValue>,
@@ -1651,6 +1776,7 @@ fn with_component_module_caller<R>(
             dynamic_depth,
             cancel_flag: cancel_flag.clone(),
             file_promises: file_promises.as_deref_mut(),
+            security_modes: security_control.modes.snapshot(),
         };
         match target {
             bsl_rt::FunctionCall::Current(name) => call_module_function_in_execution(
@@ -1692,6 +1818,7 @@ fn with_component_module_caller<R>(
         message_sink: linked.message_sink.as_ref(),
         host_promises: None,
         function_caller: Some(&mut function_caller),
+        security_modes: Some(&security_control),
     });
     if let Some(registry) = temporary_files {
         context.set_temporary_files(registry);
@@ -2684,6 +2811,9 @@ fn step(
                             module_copybacks: Vec::new(),
                             numeric_for_state: None,
                         }],
+                        // НЕ ИЗМЕРЕНО(SECURITY.ASYNC_INHERITANCE) — отдельная
+                        // async-задача получает снимок режимов в момент вызова.
+                        security_modes: TaskSecurityModes::new(modules.security_modes.snapshot()),
                         stack: child_stack,
                         current_exception: None,
                         completion,
@@ -2998,6 +3128,10 @@ fn step(
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
                 let v = if let Some(object) = ov.object_ref() {
+                    let security_control = VmSecurityModeControl {
+                        modes: modules.security_modes,
+                        frame: modules.security_frame,
+                    };
                     let mut promises = scheduler::ComponentPromises {
                         local: async_state,
                         files: host.file_promises.as_deref_mut(),
@@ -3021,6 +3155,7 @@ fn step(
                             message_sink: linked.message_sink.as_ref(),
                             host_promises: Some(&mut promises),
                             function_caller: None,
+                            security_modes: Some(&security_control),
                         });
                     if let Some(env) = host.env.as_ref() {
                         context.set_temporary_files(env.temporary_files());
@@ -3179,6 +3314,10 @@ fn step_cold(
     func_id: usize,
     chunk: &bsl_bytecode::Chunk,
 ) -> Result<Option<TaskId>, RtError> {
+    let security_control = VmSecurityModeControl {
+        modes: modules.security_modes,
+        frame: modules.security_frame,
+    };
     match instr {
         Instr::NewArray { dst, base, count } => {
             let mut dims = Vec::with_capacity(count as usize);
@@ -3351,6 +3490,7 @@ fn step_cold(
                 dynamic_depth: host_dynamic_depth,
                 cancel_flag: host_cancel_flag,
                 file_promises: host_file_promises,
+                security_modes: _,
             } = host;
             let current_module = frames[frame_idx].module;
             let mut function_caller =
@@ -3371,6 +3511,7 @@ fn step_cold(
                         dynamic_depth: host_dynamic_depth,
                         cancel_flag: host_cancel_flag.clone(),
                         file_promises: host_file_promises.as_deref_mut(),
+                        security_modes: modules.security_modes.snapshot(),
                     };
                     match target {
                         bsl_rt::FunctionCall::Current(name) => call_module_function_in_execution(
@@ -3412,6 +3553,7 @@ fn step_cold(
                 message_sink: linked.message_sink.as_ref(),
                 host_promises: None,
                 function_caller: Some(&mut function_caller),
+                security_modes: Some(&security_control),
             });
             if let Some(registry) = temporary_files {
                 context.set_temporary_files(registry);
@@ -3441,6 +3583,7 @@ fn step_cold(
                 message_sink: linked.message_sink.as_ref(),
                 host_promises: None,
                 function_caller: None,
+                security_modes: Some(&security_control),
             });
             if let Some(env) = host.env.as_ref() {
                 context.set_temporary_files(env.temporary_files());
@@ -3528,6 +3671,7 @@ fn step_cold(
                 message_sink: linked.message_sink.as_ref(),
                 host_promises: Some(&mut promises),
                 function_caller: None,
+                security_modes: Some(&security_control),
             });
             if let Some(env) = host.env.as_ref() {
                 context.set_temporary_files(env.temporary_files());
@@ -3648,6 +3792,7 @@ fn step_cold(
                             // Синхронный обратный вызов не переносит очередь
                             // обещаний объемлющего объектного метода.
                             file_promises: None,
+                            security_modes: modules.security_modes.snapshot(),
                         };
                         match target {
                             bsl_rt::FunctionCall::Current(name) => {
@@ -3698,6 +3843,7 @@ fn step_cold(
                     message_sink: linked.message_sink.as_ref(),
                     host_promises: Some(&mut promises),
                     function_caller: Some(&mut function_caller),
+                    security_modes: Some(&security_control),
                 });
                 if let Some(registry) = temporary_files {
                     context.set_temporary_files(registry);
@@ -4256,12 +4402,15 @@ fn unwind_to_handler(
         at_current_pc = frame.module != ROOT_MODULE && frame.func_id == 0 && frame.code.is_none();
         // Состояния уже возвращены в сессию после шага. Изменение аргумента
         // не является транзакцией: исключение не отменяет его запись.
+        let no_security_modes = TaskSecurityModes::default();
         let mut modules = ModulesCtx {
             root_program: program,
             session,
             catalog,
             root_state: None,
             root_catalog_module: None,
+            security_modes: &no_security_modes,
+            security_frame: 0,
         };
         if copy_back_module_arguments(&frame, ROOT_MODULE, stack, module_state, &mut modules)
             .is_err()

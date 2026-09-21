@@ -166,6 +166,7 @@ pub(super) fn register(
             module_copybacks: Vec::new(),
             numeric_for_state: None,
         }],
+        security_modes: super::TaskSecurityModes::default(),
         stack,
         current_exception: None,
         completion: TaskCompletion::Notification(promise_id),
@@ -207,6 +208,7 @@ mod tests {
         let mut state = AsyncState::new(
             Task {
                 frames: Vec::new(),
+                security_modes: crate::TaskSecurityModes::default(),
                 stack: Vec::new(),
                 current_exception: None,
                 completion: TaskCompletion::Root,

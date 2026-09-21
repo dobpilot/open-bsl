@@ -6,6 +6,7 @@ fn state() -> AsyncState {
     AsyncState::new(
         Task {
             frames: Vec::new(),
+            security_modes: TaskSecurityModes::default(),
             stack: Vec::new(),
             current_exception: None,
             completion: TaskCompletion::Root,

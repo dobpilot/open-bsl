@@ -15,6 +15,7 @@ mod state;
 pub use instance::ModuleInstance;
 
 pub use bsl_rt::BslValue as Value;
+pub use bsl_rt::SecurityModeControl;
 pub use bsl_rt::{
     ApplicationCompletionSink, ApplicationErrorMapper, ApplicationExit, ApplicationLauncher,
     ApplicationRequest, ApplicationResponseMapper, ApplicationResult, ApplicationTarget, Arity,

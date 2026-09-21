@@ -207,6 +207,36 @@ pub enum FunctionCall<'call> {
     },
 }
 
+/// Управление режимами безопасности текущего кадра BSL.
+///
+/// Реализация принадлежит исполнителю, поскольку только он знает границы
+/// обычного возврата и размотки исключения. Компонент получает узкий
+/// интерфейс и не видит стек VM.
+pub trait SecurityModeControl {
+    /// Проверяет, действует ли безопасный режим.
+    fn safe_mode(&self) -> bool;
+
+    /// Включает или выключает безопасный режим текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, если текущий кадр пытается снять чужое включение
+    /// или если счётчик переполнен.
+    fn set_safe_mode(&self, enabled: bool) -> RtResult<()>;
+
+    /// Проверяет, действует ли привилегированный режим с учётом подавления
+    /// безопасным режимом.
+    fn privileged_mode(&self) -> bool;
+
+    /// Включает или выключает привилегированный режим текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, если текущий кадр пытается снять чужое включение
+    /// или если счётчик переполнен.
+    fn set_privileged_mode(&self, enabled: bool) -> RtResult<()>;
+}
+
 /// Возможность прогона, которой может не быть на конкретном пути
 /// исполнения. Наличие возможности — это данные контекста, а не отдельный
 /// тип контекста: сокращённый контекст просто не несёт внешних возможностей.
@@ -224,6 +254,8 @@ pub enum Capability {
     Random,
     Network,
     HostPromises,
+    /// Режимы безопасности текущего кадра BSL.
+    SecurityModes,
     /// Данные хоста текущего сеанса.
     HostData,
     TemporaryFiles,
@@ -258,6 +290,7 @@ pub struct InterpreterServices<'a> {
     pub background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
     pub temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
     pub message_sink: Option<&'a Rc<dyn crate::UserMessageSink>>,
+    pub security_modes: Option<&'a dyn SecurityModeControl>,
 }
 
 /// Сервисы конкретного состояния исполнения, доступные компоненту.
@@ -298,6 +331,7 @@ pub struct CallContext<'a> {
     background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
     temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
     message_sink: Option<&'a Rc<dyn crate::UserMessageSink>>,
+    security_modes: Option<&'a dyn SecurityModeControl>,
     temporary_files: Option<crate::TemporaryFileRegistry>,
 }
 
@@ -320,6 +354,7 @@ impl<'a> CallContext<'a> {
             background_jobs: services.background_jobs,
             temp_storage: services.temp_storage,
             message_sink: services.message_sink,
+            security_modes: services.security_modes,
             temporary_files: None,
         }
     }
@@ -346,8 +381,56 @@ impl<'a> CallContext<'a> {
             background_jobs: None,
             temp_storage: None,
             message_sink: None,
+            security_modes: None,
             temporary_files: None,
         }
+    }
+
+    /// Проверяет безопасный режим текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает [`RtError::CapabilityMissing`], если вызов не принадлежит
+    /// исполняемому кадру BSL.
+    pub fn safe_mode(&self) -> RtResult<bool> {
+        Ok(self.security_modes()?.safe_mode())
+    }
+
+    /// Изменяет безопасный режим текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку отсутствующей возможности, снятия режима чужого
+    /// кадра или переполнения счётчика.
+    pub fn set_safe_mode(&self, enabled: bool) -> RtResult<()> {
+        self.security_modes()?.set_safe_mode(enabled)
+    }
+
+    /// Проверяет привилегированный режим текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает [`RtError::CapabilityMissing`], если вызов не принадлежит
+    /// исполняемому кадру BSL.
+    pub fn privileged_mode(&self) -> RtResult<bool> {
+        Ok(self.security_modes()?.privileged_mode())
+    }
+
+    /// Изменяет привилегированный режим текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку отсутствующей возможности, снятия режима чужого
+    /// кадра или переполнения счётчика.
+    pub fn set_privileged_mode(&self, enabled: bool) -> RtResult<()> {
+        self.security_modes()?.set_privileged_mode(enabled)
+    }
+
+    fn security_modes(&self) -> RtResult<&dyn SecurityModeControl> {
+        self.security_modes.ok_or(RtError::CapabilityMissing {
+            capability: Capability::SecurityModes,
+            path: self.path,
+        })
     }
 
     /// Данные хоста текущего сеанса. Объект вправе сохранить клон `Rc`;

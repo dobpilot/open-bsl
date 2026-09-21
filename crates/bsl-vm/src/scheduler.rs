@@ -1,4 +1,6 @@
-use super::{CatalogContext, Frame, Program, SessionModules, reg_store, unwind_to_handler};
+use super::{
+    CatalogContext, Frame, Program, SessionModules, TaskSecurityModes, reg_store, unwind_to_handler,
+};
 use bsl_rt::{BslValue, ExecutionToken, PromiseId, RtError};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -31,6 +33,7 @@ impl Default for SchedulerConfig {
 
 pub(super) struct Task {
     pub(super) frames: Vec<Frame>,
+    pub(super) security_modes: TaskSecurityModes,
     pub(super) stack: Vec<BslValue>,
     pub(super) current_exception: Option<BslValue>,
     pub(super) completion: TaskCompletion,
