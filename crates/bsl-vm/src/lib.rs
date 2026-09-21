@@ -1422,6 +1422,190 @@ fn drive_linked(
     result
 }
 
+/// Исполняет экспорт каталожного модуля из компонентного обработчика.
+/// Состояние целевого модуля на время вложенного запуска изымается из той
+/// же сессии и возвращается при любом результате.
+#[allow(clippy::too_many_arguments)]
+fn call_configuration_module_in_execution(
+    module_name: &str,
+    export: &str,
+    args: Vec<BslValue>,
+    this_object: BslValue,
+    current_module: u32,
+    current_state: &mut ModuleState,
+    modules: &mut ModulesCtx<'_, '_>,
+    host: &mut HostIo<'_, '_>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let catalog = modules.catalog.ok_or(RtError::CapabilityMissing {
+        capability: bsl_rt::Capability::ConfigurationModuleCaller,
+        path: bsl_rt::ContextKind::Full,
+    })?;
+    let target = catalog
+        .catalog
+        .modules
+        .iter()
+        .position(|module| bsl_rt::folded_eq(&module.name, module_name))
+        .ok_or_else(|| {
+            RtError::DynamicError(format!("Модуль конфигурации «{module_name}» не найден"))
+        })?;
+    let target_u32 = u32::try_from(target)
+        .map_err(|_| RtError::InvalidBytecode("номер модуля не помещается в u32"))?;
+    let target_program = catalog.program(target_u32)?;
+    let target_linked = catalog.linked(target_u32)?;
+
+    let function = target_program
+        .function_names
+        .iter()
+        .position(|candidate| bsl_rt::folded_eq(candidate, export))
+        .ok_or_else(|| {
+            RtError::DynamicError(format!(
+                "Процедура или функция «{export}» в модуле «{module_name}» не найдена"
+            ))
+        })?;
+    if !target_program
+        .exported_functions
+        .get(function)
+        .copied()
+        .unwrap_or(false)
+    {
+        return Err(RtError::DynamicError(format!(
+            "Процедура или функция «{export}» модуля «{module_name}» не экспортируется"
+        )));
+    }
+    let chunk = at(
+        &target_program.chunks,
+        function + 1,
+        "номер чанка вне таблицы функций",
+    )?;
+    if args.len() != chunk.n_params as usize {
+        return Err(RtError::DynamicError(format!(
+            "Неверное число аргументов при вызове «{module_name}.{export}»: передано {}, а параметров {}",
+            args.len(),
+            chunk.n_params
+        )));
+    }
+
+    // Текущий каталожный модуль на время шага находится вне сессии. Перед
+    // вложенным запуском чужого модуля возвращаем его в ячейку, чтобы весь
+    // граф видел ровно те же экземпляры. После вызова изымаем обратно.
+    let current_was_parked = current_module != ROOT_MODULE && current_module != target_u32;
+    if current_was_parked {
+        let current = modules
+            .session
+            .instances
+            .get_mut(current_module as usize)
+            .ok_or(RtError::InvalidBytecode(
+                "текущий модуль вне сессии конфигурации",
+            ))?;
+        std::mem::swap(&mut current.state, current_state);
+    }
+
+    let mut target_state = if current_module == target_u32 {
+        current_state.take_for_execution()
+    } else {
+        let target_instance =
+            modules
+                .session
+                .instances
+                .get_mut(target)
+                .ok_or(RtError::InvalidBytecode(
+                    "целевой модуль вне сессии конфигурации",
+                ))?;
+        std::mem::replace(&mut target_instance.state, ModuleState::empty())
+    };
+    let previous_reference = target_state.replace_reference(this_object);
+
+    let run = (|| {
+        if modules.session.instances[target].init == ModuleInitState::NotStarted {
+            modules.session.instances[target].init = ModuleInitState::Initializing;
+            let body = at(&target_program.chunks, 0, "у модуля каталога нет тела")?;
+            let mut stack = Vec::new();
+            push_own_registers(&mut stack, body);
+            let mut execution = ProgramExecution::new_linked(
+                target_program,
+                0,
+                stack,
+                target_linked,
+                target_state.take_for_execution(),
+                SchedulerConfig::default(),
+            );
+            execution.attach_catalog(catalog.catalog);
+            execution.swap_session_modules(modules.session);
+            let result: Result<(), RtError> = loop {
+                match execution.poll_linked(
+                    target_program,
+                    target_linked,
+                    Some(catalog),
+                    host,
+                    usize::MAX,
+                    None,
+                ) {
+                    Ok(ProgramPoll::Complete(_, _)) => break Ok(()),
+                    Ok(ProgramPoll::Runnable | ProgramPoll::Waiting) => {}
+                    Err(error) => break Err(error),
+                }
+            };
+            execution.swap_session_modules(modules.session);
+            target_state = execution.take_module_memory().0;
+            result?;
+            modules.session.instances[target].init = ModuleInitState::Ready;
+        }
+        if modules.session.instances[target].init != ModuleInitState::Ready {
+            return Err(RtError::DynamicError(format!(
+                "модуль конфигурации «{module_name}» не готов к вызову"
+            )));
+        }
+
+        let mut stack = args;
+        push_own_registers(&mut stack, chunk);
+        let mut execution = ProgramExecution::new_linked(
+            target_program,
+            function + 1,
+            stack,
+            target_linked,
+            target_state.take_for_execution(),
+            SchedulerConfig::default(),
+        );
+        execution.attach_catalog(catalog.catalog);
+        execution.swap_session_modules(modules.session);
+        let result: Result<(BslValue, Vec<BslValue>), RtError> = loop {
+            match execution.poll_linked(
+                target_program,
+                target_linked,
+                Some(catalog),
+                host,
+                usize::MAX,
+                None,
+            ) {
+                Ok(ProgramPoll::Complete(value, stack)) => break Ok((value, stack)),
+                Ok(ProgramPoll::Runnable | ProgramPoll::Waiting) => {}
+                Err(error) => break Err(error),
+            }
+        };
+        execution.swap_session_modules(modules.session);
+        target_state = execution.take_module_memory().0;
+        let (value, stack) = result?;
+        Ok((value, stack[..chunk.n_params as usize].to_vec()))
+    })();
+
+    if let Some(reference) = previous_reference {
+        target_state.replace_reference(reference);
+    }
+    if current_module == target_u32 {
+        current_state.slots = target_state.slots;
+    } else {
+        modules.session.instances[target].state = target_state;
+    }
+    if current_was_parked {
+        let current = &mut modules.session.instances[current_module as usize];
+        std::mem::swap(&mut current.state, current_state);
+    }
+    if run.is_err() && modules.session.instances[target].init == ModuleInitState::Initializing {
+        modules.session.instances[target].init = ModuleInitState::Failed;
+    }
+    run
+}
+
 enum Step {
     Continue,
     Yield,
@@ -3063,8 +3247,9 @@ fn step_cold(
                 cancel_flag: host_cancel_flag,
                 file_promises: host_file_promises,
             } = host;
+            let current_module = frames[frame_idx].module;
             let mut function_caller =
-                |name: &str,
+                |target: bsl_rt::FunctionCall<'_>,
                  call_args: Vec<BslValue>,
                  stdout: &mut dyn Write,
                  stderr: &mut dyn Write| {
@@ -3082,14 +3267,30 @@ fn step_cold(
                         cancel_flag: host_cancel_flag.clone(),
                         file_promises: host_file_promises.as_deref_mut(),
                     };
-                    call_module_function_in_execution(
-                        program,
-                        name,
-                        call_args,
-                        linked,
-                        &mut nested_host,
-                        module_state,
-                    )
+                    match target {
+                        bsl_rt::FunctionCall::Current(name) => call_module_function_in_execution(
+                            program,
+                            name,
+                            call_args,
+                            linked,
+                            &mut nested_host,
+                            module_state,
+                        ),
+                        bsl_rt::FunctionCall::Configuration {
+                            module,
+                            export,
+                            this_object,
+                        } => call_configuration_module_in_execution(
+                            module,
+                            export,
+                            call_args,
+                            this_object,
+                            current_module,
+                            module_state,
+                            modules,
+                            &mut nested_host,
+                        ),
+                    }
                 };
             let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                 runtime_shapes,
@@ -3325,6 +3526,51 @@ fn step_cold(
             let property_output = site.property_output;
             let mut output_argument = None;
             let value = if let Some(object) = ov.object_ref() {
+                let temporary_files = host.env.as_ref().map(|env| env.temporary_files());
+                let current_module = frames[frame_idx].module;
+                let mut function_caller =
+                    |target: bsl_rt::FunctionCall<'_>,
+                     call_args: Vec<BslValue>,
+                     stdout: &mut dyn Write,
+                     stderr: &mut dyn Write| {
+                        let mut nested_host = HostIo {
+                            stdout,
+                            stderr,
+                            env: host.env.as_deref_mut(),
+                            dynamic: host.dynamic.as_deref_mut(),
+                            dynamic_depth: host.dynamic_depth,
+                            cancel_flag: host.cancel_flag.clone(),
+                            // Синхронный обратный вызов не переносит очередь
+                            // обещаний объемлющего объектного метода.
+                            file_promises: None,
+                        };
+                        match target {
+                            bsl_rt::FunctionCall::Current(name) => {
+                                call_module_function_in_execution(
+                                    program,
+                                    name,
+                                    call_args,
+                                    linked,
+                                    &mut nested_host,
+                                    module_state,
+                                )
+                            }
+                            bsl_rt::FunctionCall::Configuration {
+                                module,
+                                export,
+                                this_object,
+                            } => call_configuration_module_in_execution(
+                                module,
+                                export,
+                                call_args,
+                                this_object,
+                                current_module,
+                                module_state,
+                                modules,
+                                &mut nested_host,
+                            ),
+                        }
+                    };
                 let mut promises = scheduler::ComponentPromises {
                     local: async_state,
                     files: host.file_promises.as_deref_mut(),
@@ -3346,10 +3592,10 @@ fn step_cold(
                     temp_storage: linked.temp_storage.as_ref(),
                     message_sink: linked.message_sink.as_ref(),
                     host_promises: Some(&mut promises),
-                    function_caller: None,
+                    function_caller: Some(&mut function_caller),
                 });
-                if let Some(env) = host.env.as_ref() {
-                    context.set_temporary_files(env.temporary_files());
+                if let Some(registry) = temporary_files {
+                    context.set_temporary_files(registry);
                 }
                 // Тип со статической таблицей методов идёт кэшем ячейки
                 // этой инструкции поверх мемоизированного моста «номер

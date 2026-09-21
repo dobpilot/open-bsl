@@ -1,7 +1,7 @@
 # Tasks
 
-- [ ] 1. Specify and implement the facade-only component-to-module call bridge using existing State module instances.
-- [ ] 2. Test nested calls, `ЭтотОбъект`, by-reference parameters, errors, and separation between States.
+- [x] 1. Specify and implement the facade-only component-to-module call bridge using existing State module instances.
+- [x] 2. Test nested calls, `ЭтотОбъект`, by-reference parameters, errors, and separation between States.
 - [ ] 3. Link ORM manager objects to their manager modules and implement platform-first, export-second dispatch.
 - [ ] 4. Implement and test the measured unset, nested initialization, cycle, retry, clear, and non-rollback session-parameter behavior.
 - [ ] 5. Connect query, manager, register, and constant reads to the current principal, session parameters, rights, and RLS.

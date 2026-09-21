@@ -186,13 +186,26 @@ pub type ValueFormatter = fn(&BslValue, Option<&str>) -> RtResult<String>;
 /// Потоки передаются в сам вызов, чтобы замыканию не приходилось
 /// владеть `HostIo` VM и одновременно заимствовать его для
 /// [`CallContext::stdout`] и [`CallContext::stderr`].
-pub type FunctionCaller<'a> = dyn FnMut(
-        &str,
+pub type FunctionCaller<'a> = dyn for<'call> FnMut(
+        FunctionCall<'call>,
         Vec<BslValue>,
         &mut dyn Write,
         &mut dyn Write,
     ) -> RtResult<(BslValue, Vec<BslValue>)>
     + 'a;
+
+/// Цель обратного вызова из runtime-компонента в BSL.
+pub enum FunctionCall<'call> {
+    /// Функция того модуля, из которого вызван компонент.
+    Current(&'call str),
+    /// Экспорт именованного модуля текущей конфигурации с явным
+    /// `ЭтотОбъект`.
+    Configuration {
+        module: &'call str,
+        export: &'call str,
+        this_object: BslValue,
+    },
+}
 
 /// Возможность прогона, которой может не быть на конкретном пути
 /// исполнения. Наличие возможности — это данные контекста, а не отдельный
@@ -207,6 +220,7 @@ pub enum Capability {
     Zone,
     FileSystem,
     FunctionCaller,
+    ConfigurationModuleCaller,
     Random,
     Network,
     HostPromises,
@@ -346,6 +360,58 @@ impl<'a> CallContext<'a> {
             capability: Capability::HostData,
             path: self.path,
         })
+    }
+
+    /// Вызывает экспорт модуля текущей конфигурации в этом же сеансе.
+    ///
+    /// `module` — имя модуля в каталоге, `this_object` становится значением
+    /// `ЭтотОбъект` на время вызова. Возвращаемый вектор содержит конечные
+    /// значения параметров в порядке объявления.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает [`RtError::CapabilityMissing`] вне конфигурационного
+    /// исполнения, а также ошибку поиска, проверки арности или исполнения
+    /// вызываемого экспорта.
+    pub fn call_configuration_module(
+        &mut self,
+        module: &str,
+        export: &str,
+        args: Vec<BslValue>,
+        this_object: BslValue,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        let path = self.path;
+        let caller = self
+            .function_caller
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::ConfigurationModuleCaller,
+                path,
+            })?;
+        let stdout = self
+            .stdout
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Stdout,
+                path,
+            })?;
+        let stderr = self
+            .stderr
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Stderr,
+                path,
+            })?;
+        caller(
+            FunctionCall::Configuration {
+                module,
+                export,
+                this_object,
+            },
+            args,
+            stdout,
+            stderr,
+        )
     }
 
     /// Подключает учёт временных файлов исходного сеанса без изменения

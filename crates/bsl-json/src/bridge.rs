@@ -1185,7 +1185,12 @@ pub(crate) fn component_read_json(
             let stdout = parts.stdout;
             let stderr = parts.stderr;
             let mut call = |name: &str, values: Vec<BslValue>| {
-                caller(name, values, &mut *stdout, &mut *stderr)
+                caller(
+                    bsl_rt::FunctionCall::Current(name),
+                    values,
+                    &mut *stdout,
+                    &mut *stderr,
+                )
             };
             read_json_builtin(arguments, parts.runtime_shapes, parts.zone, Some(&mut call))
         }
@@ -1202,7 +1207,12 @@ pub(crate) fn component_write_json(
             let stdout = parts.stdout;
             let stderr = parts.stderr;
             let mut call = |name: &str, values: Vec<BslValue>| {
-                caller(name, values, &mut *stdout, &mut *stderr)
+                caller(
+                    bsl_rt::FunctionCall::Current(name),
+                    values,
+                    &mut *stdout,
+                    &mut *stderr,
+                )
             };
             write_json_builtin(arguments, parts.runtime_shapes, parts.zone, Some(&mut call))
         }

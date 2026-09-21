@@ -5,7 +5,7 @@ use super::*;
 
 /// Переменные и идентичность модуля между вызовами хоста.
 /// Состояние применимо только к неизменённой программе, создавшей его.
-pub struct ModuleMemory(ModuleState);
+pub struct ModuleMemory(pub(super) ModuleState);
 
 impl ProgramExecution {
     /// Создаёт запуск экспортной процедуры или функции без исполнения тела

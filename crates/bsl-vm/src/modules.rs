@@ -48,6 +48,12 @@ impl ModuleState {
         }
     }
 
+    /// Подменяет значение `ЭтотОбъект` на время вызова, инициированного
+    /// компонентом, и возвращает прежнее значение для восстановления.
+    pub(super) fn replace_reference(&mut self, value: BslValue) -> Option<BslValue> {
+        self.identity.replace(value)
+    }
+
     pub(super) fn reference(&self) -> Result<BslValue, RtError> {
         let identity = self.identity.as_ref().ok_or(RtError::InvalidBytecode(
             "ссылка на модуль запрошена у временного пустого состояния",

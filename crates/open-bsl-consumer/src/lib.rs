@@ -296,3 +296,7 @@ mod global_tests;
 #[cfg(test)]
 #[path = "instance_tests.rs"]
 mod instance_tests;
+
+#[cfg(test)]
+#[path = "configuration_call_tests.rs"]
+mod configuration_call_tests;

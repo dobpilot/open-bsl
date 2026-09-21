@@ -359,6 +359,9 @@ impl fmt::Display for RtError {
                     crate::component::Capability::Zone => "часовой пояс",
                     crate::component::Capability::FileSystem => "файловая система",
                     crate::component::Capability::FunctionCaller => "вызов функции модуля",
+                    crate::component::Capability::ConfigurationModuleCaller => {
+                        "вызов модуля конфигурации"
+                    }
                     crate::component::Capability::Random => "источник случайности",
                     crate::component::Capability::Network => "сеть",
                     crate::component::Capability::HostData => "данные хоста",
