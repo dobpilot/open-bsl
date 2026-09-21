@@ -44,6 +44,17 @@ A non-empty `v8users` catalog SHALL expose only users with at least one enabled 
 - **WHEN** configuration code calls `ТекущийРежимЗапуска()` in a background-job session
 - **THEN** it receives `Неопределено`
 
+### Requirement: Platform version snapshot
+`SessionFactory` SHALL require one non-empty host-supplied platform version and SHALL reuse it for every session it opens. `bsl-session` SHALL provide the zero-argument `СистемнаяИнформация` and `SystemInfo` constructors. Their `ВерсияПриложения` and `AppVersion` read-only property SHALL return the factory's platform version.
+
+#### Scenario: Version is available during startup
+- **WHEN** the session handler constructs `СистемнаяИнформация` during startup
+- **THEN** `ВерсияПриложения` returns the version supplied to its factory
+
+#### Scenario: Missing version
+- **WHEN** a caller tries to construct a session factory with an empty platform version
+- **THEN** factory construction fails before any session starts
+
 ### Requirement: Role availability
 The ORM library SHALL provide `РольДоступна` and `IsInRole` with one argument. A string role name or metadata role object SHALL answer whether that role belongs to the current principal. An unknown role, an invalid value, or an invalid argument type SHALL raise an error.
 

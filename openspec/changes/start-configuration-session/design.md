@@ -6,6 +6,8 @@ Each `Session` owns one open-bsl `State`, session module instances, session para
 
 `ТекущийРежимЗапуска()` is derived from the explicit session kind. Web-client and thin-client sessions execute managed application code and return `РежимЗапускаКлиентскогоПриложения.УправляемоеПриложение`. A background-job session returns `Неопределено`; this result was measured inside a real background job on platform 8.3.27.2342 by `measure-session-current-run-mode.bsl`.
 
+The host supplies one non-empty platform version when it constructs `SessionFactory`. The factory stores the string once and every session exposes it through a newly constructed `СистемнаяИнформация` value. The runtime does not substitute the open-bsl crate version or query the database on every session open.
+
 The principal is selected from `v8users` by case-insensitive name or GUID. Only a user with at least one enabled authentication method is selectable. With one selectable user the CLI may choose it automatically; with several it requires `--principal`; with no `v8users` rows it constructs the platform empty user and applies the configuration's main roles. The description is frozen at session creation. Temporary authentication locks are outside this testing host.
 
 The required upstream `open-sdbl` user model must decode every authentication method supported by the selected platform family and expose whether at least one method is enabled. `AdmRole` remains separate from object roles and does not grant unrestricted application data access.
