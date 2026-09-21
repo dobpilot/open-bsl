@@ -79,6 +79,18 @@ The session runtime SHALL expose `СтрокаСоединенияИнформа
 - **WHEN** configuration code calls the function in a Session whose host did not supply a string
 - **THEN** the call fails explicitly instead of returning an empty or synthetic string
 
+### Requirement: Session connection number
+The session runtime SHALL expose `НомерСоединенияИнформационнойБазы()`/`InfoBaseConnectionNumber()` as the positive number supplied by the host for the concrete connection owned by that Session. The number SHALL remain stable for the Session lifetime. A background Session SHALL receive the number of its separate connection and SHALL NOT inherit the parent's number.
+
+#### Scenario: Two sessions of one factory
+- **WHEN** the host opens two Sessions from one factory with distinct connection numbers
+- **THEN** each Session returns its own number through both language names
+
+#### Scenario: Background connection
+- **WHEN** the host opens a background Session with a new connection number
+- **THEN** the background Session returns the new number
+- **AND** the parent continues to return its original number
+
 ### Requirement: Stored value snapshot
 The ORM component SHALL provide `ХранилищеЗначения`/`ValueStorage` and `СжатиеДанных`/`Deflation` constructors with the platform arities. `СжатиеДанных` SHALL accept an optional integral level from `-1` through `9`. Constructing a stored value SHALL snapshot the supplied serializable value. Every `Получить`/`Get` call SHALL return a newly materialized value, and source aliases reached through separate collection entries SHALL become independent restored values. Unsupported values and invalid compression arguments SHALL fail explicitly.
 

@@ -1,0 +1,5 @@
+file.begin	infobase-connection-number-1
+SESSION.CONNECTION_NUMBER.TYPE	Number
+SESSION.CONNECTION_NUMBER.POSITIVE	Yes
+SESSION.CONNECTION_NUMBER.STABLE	Yes
+file.end	infobase-connection-number-1
