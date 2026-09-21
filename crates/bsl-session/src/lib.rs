@@ -19,7 +19,7 @@ use open_bsl::{
     Error as OpenBslError, FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor,
     LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe, ModuleInstance, ModuleRecipe,
     ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, State,
-    TypeDescriptor, Value, folded_eq,
+    TypeDescriptor, Value, background_job_type_descriptor, folded_eq,
 };
 
 #[derive(Debug, Clone)]
@@ -244,6 +244,7 @@ pub struct SessionRuntime {
     kind: SessionKind,
     platform_version: Arc<str>,
     connection_string: Option<Arc<str>>,
+    background_method: Option<Arc<str>>,
 }
 
 impl SessionRuntime {
@@ -252,12 +253,14 @@ impl SessionRuntime {
         kind: SessionKind,
         platform_version: Arc<str>,
         connection_string: Option<Arc<str>>,
+        background_method: Option<Arc<str>>,
     ) -> Self {
         Self {
             parameters,
             kind,
             platform_version,
             connection_string,
+            background_method,
         }
     }
 
@@ -277,6 +280,12 @@ impl SessionRuntime {
     #[must_use]
     pub fn connection_string(&self) -> Option<&str> {
         self.connection_string.as_deref()
+    }
+
+    /// Возвращает полное имя метода текущего фонового задания.
+    #[must_use]
+    pub fn background_method(&self) -> Option<&str> {
+        self.background_method.as_deref()
     }
 }
 
@@ -561,7 +570,7 @@ impl SessionFactory {
         principal: Principal,
         connection: Box<dyn std::any::Any>,
     ) -> Result<Session, SessionError> {
-        self.open_with_resources(principal, connection, None, None)
+        self.open_with_resources(principal, connection, None, None, None)
     }
 
     /// Открывает изолированный сеанс с адаптером данных конфигурации.
@@ -577,7 +586,7 @@ impl SessionFactory {
         connection: Box<dyn std::any::Any>,
         data_access: Rc<dyn DataAccess>,
     ) -> Result<Session, SessionError> {
-        self.open_with_resources(principal, connection, Some(data_access), None)
+        self.open_with_resources(principal, connection, Some(data_access), None, None)
     }
 
     /// Открывает фоновый сеанс с копией параметров родителя.
@@ -591,16 +600,21 @@ impl SessionFactory {
         &self,
         principal: Principal,
         connection: Box<dyn std::any::Any>,
+        method_name: &str,
         parent: &Session,
     ) -> Result<Session, SessionError> {
         if self.kind != SessionKind::BackgroundJob {
             return Err(SessionError::NotBackgroundFactory);
+        }
+        if method_name.is_empty() {
+            return Err(SessionError::EmptyBackgroundMethod);
         }
         self.open_with_resources(
             principal,
             connection,
             None,
             Some(Rc::new(parent.parameters.copy_for_background())),
+            Some(Arc::from(method_name)),
         )
     }
 
@@ -615,16 +629,21 @@ impl SessionFactory {
         principal: Principal,
         connection: Box<dyn std::any::Any>,
         data_access: Rc<dyn DataAccess>,
+        method_name: &str,
         parent: &Session,
     ) -> Result<Session, SessionError> {
         if self.kind != SessionKind::BackgroundJob {
             return Err(SessionError::NotBackgroundFactory);
+        }
+        if method_name.is_empty() {
+            return Err(SessionError::EmptyBackgroundMethod);
         }
         self.open_with_resources(
             principal,
             connection,
             Some(data_access),
             Some(Rc::new(parent.parameters.copy_for_background())),
+            Some(Arc::from(method_name)),
         )
     }
 
@@ -634,6 +653,7 @@ impl SessionFactory {
         connection: Box<dyn std::any::Any>,
         data_access: Option<Rc<dyn DataAccess>>,
         parameters: Option<Rc<SessionParameters>>,
+        background_method: Option<Arc<str>>,
     ) -> Result<Session, SessionError> {
         let parameters = match parameters {
             Some(parameters) => parameters,
@@ -648,6 +668,7 @@ impl SessionFactory {
                 self.kind,
                 Arc::clone(&self.platform_version),
                 self.connection_string.clone(),
+                background_method,
             )));
         if let Some(data_access) = data_access {
             data = data.with_data_access(data_access);
@@ -785,6 +806,8 @@ pub enum SessionError {
     },
     /// Фабрика собрана не для фонового задания.
     NotBackgroundFactory,
+    /// Имя метода фонового задания пусто.
+    EmptyBackgroundMethod,
     /// Ошибка объявления параметров.
     Parameters(ParameterError),
     /// Ошибка open-bsl.
@@ -822,6 +845,7 @@ impl fmt::Display for SessionError {
             Self::NotBackgroundFactory => {
                 formatter.write_str("фабрика не предназначена для фонового задания")
             }
+            Self::EmptyBackgroundMethod => formatter.write_str("имя метода фонового задания пусто"),
             Self::Parameters(error) => error.fmt(formatter),
             Self::OpenBsl(error) => error.fmt(formatter),
         }
@@ -882,9 +906,25 @@ struct SystemInformationObject {
     platform_version: Arc<str>,
 }
 
+#[derive(Debug)]
+struct InfoBaseSessionObject {
+    background_method: Option<Arc<str>>,
+}
+
+#[derive(Debug)]
+struct CurrentBackgroundJobObject {
+    method_name: Arc<str>,
+}
+
 static PARAMETERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-session", "ПараметрыСеанса");
 static SYSTEM_INFORMATION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-session", "СистемнаяИнформация");
+static INFOBASE_SESSION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "СеансИнформационнойБазы",
+    type_display: "Active session",
+    type_names: &["InfoBaseSession"],
+};
 
 impl ObjectProtocol for ParametersObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -913,6 +953,26 @@ impl ObjectProtocol for SystemInformationObject {
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         SYSTEM_INFORMATION_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for InfoBaseSessionObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &INFOBASE_SESSION_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        INFOBASE_SESSION_METHODS
+    }
+}
+
+impl ObjectProtocol for CurrentBackgroundJobObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        background_job_type_descriptor()
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        CURRENT_BACKGROUND_JOB_PROPERTIES
     }
 }
 
@@ -965,6 +1025,40 @@ fn infobase_connection_string(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResul
     Ok(Value::Str(value.into()))
 }
 
+fn current_infobase_session(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(InfoBaseSessionObject {
+        background_method: runtime(ctx)?.background_method.clone(),
+    }))
+}
+
+fn current_background_job(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let session = receiver
+        .downcast_ref::<InfoBaseSessionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(session
+        .background_method
+        .as_ref()
+        .map_or(Value::Undefined, |name| {
+            Value::new_object(CurrentBackgroundJobObject {
+                method_name: Arc::clone(name),
+            })
+        }))
+}
+
+fn current_background_job_method_name(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let job = receiver
+        .downcast_ref::<CurrentBackgroundJobObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(job.method_name.as_ref().into()))
+}
+
 fn construct_system_information(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     let platform_version = runtime(ctx)?.platform_version.clone();
     Ok(Value::new_object(SystemInformationObject {
@@ -998,6 +1092,18 @@ static SYSTEM_INFORMATION_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescript
     set: None,
 }];
 
+static INFOBASE_SESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["ПолучитьФоновоеЗадание", "GetBackgroundJob"],
+    Arity::exact(0),
+    current_background_job,
+)];
+
+static CURRENT_BACKGROUND_JOB_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["ИмяМетода", "MethodName"],
+    get: current_background_job_method_name,
+    set: None,
+}];
+
 const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
         code: FunctionCode::new(1),
@@ -1023,6 +1129,16 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: infobase_connection_string,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(4),
+        names: &[
+            "ПолучитьТекущийСеансИнформационнойБазы",
+            "GetCurrentInfoBaseSession",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: current_infobase_session,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
@@ -1030,7 +1146,11 @@ const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
     function: FunctionCode::new(1),
 }];
 
-const TYPES: &[&TypeDescriptor] = &[&PARAMETERS_TYPE, &SYSTEM_INFORMATION_TYPE];
+const TYPES: &[&TypeDescriptor] = &[
+    &PARAMETERS_TYPE,
+    &SYSTEM_INFORMATION_TYPE,
+    &INFOBASE_SESSION_TYPE,
+];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&PARAMETERS_TYPE)
@@ -1038,6 +1158,7 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
         .with_dynamic_properties(),
     ObjectMembersDescriptor::new(&SYSTEM_INFORMATION_TYPE)
         .with_properties(SYSTEM_INFORMATION_PROPERTIES),
+    ObjectMembersDescriptor::new(&INFOBASE_SESSION_TYPE).with_methods(INFOBASE_SESSION_METHODS),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];

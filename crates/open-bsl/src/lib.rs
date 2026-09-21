@@ -31,8 +31,8 @@ pub use bsl_rt::{
     RequestHandle, RtError, RtResult, RuntimeRegistry, RuntimeShapes, SecretString,
     SerializedValueGraph, StagingBudget, SystemApplicationLauncher, SystemClock, SystemRandom,
     SystemTimeZone, TimeZone, TlsConfig, TransferableTemporaryFile, TypeDescriptor, TypeRef,
-    UserMessageDto, UserMessageSink, call_method_from_table, folded_eq, get_property_from_table,
-    set_property_from_table,
+    UserMessageDto, UserMessageSink, background_job_type_descriptor, call_method_from_table,
+    folded_eq, get_property_from_table, set_property_from_table,
 };
 pub use bsl_rt::{
     FileNotificationOperation, HostPromiseSpawner, HttpClient, HttpClientConfig, HttpClientFactory,

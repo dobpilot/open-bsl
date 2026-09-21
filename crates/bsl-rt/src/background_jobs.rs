@@ -125,6 +125,16 @@ pub(crate) static BACKGROUND_JOB_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["BackgroundJob"],
 };
 
+/// Возвращает дескриптор платформенного типа `ФоновоеЗадание`.
+///
+/// Верхний слой сеанса использует тот же тип для краткого представления
+/// задания, создавшего текущий сеанс, и тем самым не объявляет второй тип с
+/// тем же BSL-именем.
+#[must_use]
+pub const fn background_job_type_descriptor() -> &'static TypeDescriptor {
+    &BACKGROUND_JOB_TYPE
+}
+
 /// Менеджер: голое имя `ФоновыеЗадания` строит его заново при каждом
 /// обращении — как `ФайловыеПотоки`.
 struct BackgroundJobsManager {

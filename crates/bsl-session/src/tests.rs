@@ -16,6 +16,7 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
             SessionKind::ThinClient,
             Arc::from(PLATFORM_VERSION),
             None,
+            None,
         ))),
     )
 }
@@ -491,7 +492,12 @@ fn connection_string_is_exact_session_data_and_missing_value_fails() {
     .with_connection_string(BACKGROUND)
     .unwrap();
     let mut background = background_factory
-        .open_background(principal(), Box::new(()), &foreground)
+        .open_background(
+            principal(),
+            Box::new(()),
+            "Обработка.ФоновыйМетод",
+            &foreground,
+        )
         .unwrap();
     let probe = background
         .instantiate("Функция Значение() Экспорт Возврат InfoBaseConnectionString(); КонецФункции")
@@ -607,7 +613,7 @@ fn every_supported_session_kind_runs_full_startup() {
     )
     .unwrap();
     let session = factory
-        .open_background(principal(), Box::new(()), &parent)
+        .open_background(principal(), Box::new(()), "Обработка.Запустить", &parent)
         .unwrap();
     assert_eq!(session.kind(), SessionKind::BackgroundJob);
     assert_eq!(
@@ -662,9 +668,82 @@ fn current_run_mode_matches_every_session_kind() {
     )
     .unwrap();
     let mut session = background
-        .open_background(principal(), Box::new(()), &parent)
+        .open_background(principal(), Box::new(()), "Обработка.Режим", &parent)
         .unwrap();
     assert_eq!(session_run_mode(&mut session), Value::Undefined);
+}
+
+#[test]
+fn current_infobase_session_exposes_only_the_current_background_job() {
+    let foreground_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut foreground = foreground_factory.open(principal(), Box::new(())).unwrap();
+    let foreground_probe = foreground
+        .instantiate(
+            r#"
+            Функция Контекст() Экспорт
+                Сеанс = ПолучитьТекущийСеансИнформационнойБазы();
+                Возврат Строка(ТипЗнч(Сеанс)) + "|"
+                    + Строка(ТипЗнч(Сеанс.ПолучитьФоновоеЗадание()));
+            КонецФункции
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        foreground
+            .call(&foreground_probe, "Контекст", vec![])
+            .unwrap()
+            .0,
+        Value::Str("Active session|Не определено".into())
+    );
+
+    let background_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut background = background_factory
+        .open_background(
+            principal(),
+            Box::new(()),
+            "Обработка.ФоновыйМетод",
+            &foreground,
+        )
+        .unwrap();
+    let background_probe = background
+        .instantiate(
+            r#"
+            Функция Контекст() Экспорт
+                Сеанс = GetCurrentInfoBaseSession();
+                Задание = Сеанс.GetBackgroundJob();
+                Возврат Строка(ТипЗнч(Сеанс)) + "|"
+                    + Строка(ТипЗнч(Задание)) + "|" + Задание.MethodName;
+            КонецФункции
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        background
+            .call(&background_probe, "Контекст", vec![])
+            .unwrap()
+            .0,
+        Value::Str("Active session|Background job|Обработка.ФоновыйМетод".into())
+    );
+
+    let error = background_factory
+        .open_background(principal(), Box::new(()), "", &foreground)
+        .err()
+        .unwrap();
+    assert!(matches!(error, SessionError::EmptyBackgroundMethod));
 }
 
 #[test]
@@ -691,7 +770,7 @@ fn background_session_copies_parent_parameters_and_then_diverges() {
         .set("Копируемый", Value::number_from_i64(7))
         .unwrap();
     let child = background
-        .open_background(principal(), Box::new(()), &parent)
+        .open_background(principal(), Box::new(()), "Обработка.Копия", &parent)
         .unwrap();
     assert_eq!(
         child.parameters().peek("Копируемый").unwrap(),

@@ -54,7 +54,7 @@ mod value_graph;
 mod value_list;
 mod value_table_indexes;
 mod vstr;
-pub use background_jobs::{BackgroundJobService, JobWaitOutcome};
+pub use background_jobs::{BackgroundJobService, JobWaitOutcome, background_job_type_descriptor};
 pub use error::{ComponentError, RtError, RtResult};
 pub use host_error::{HostError, HostErrorCode};
 pub use job_dto::{JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto, UserMessageDto};
