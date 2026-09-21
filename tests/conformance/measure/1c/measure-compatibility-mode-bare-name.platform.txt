@@ -1,0 +1,4 @@
+file.begin	compatibility-mode-bare-name-1
+COMPATIBILITY.BARE_NAME	UNDEFINED
+COMPATIBILITY.BARE_MEMBER	UNDEFINED
+file.end	compatibility-mode-bare-name-1

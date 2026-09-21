@@ -600,6 +600,30 @@ gateway разумно и правдиво возвращать `Неопред�
 сразу объявить поддержкой весь реестр скрыла бы динамические зависимости и не
 дала бы воспроизводимого теста.
 
+### Измерение режима совместимости
+
+Синтакс-помощник 8.3.27.2342 описывает свойство
+`ОбъектМетаданныхКонфигурация.РежимСовместимости` и полный состав типа от
+`Версия8_1` до `Версия8_3_26` вместе с `НеИспользовать` [SP-35], [SP-36].
+Отдельная проба на той же платформе установила, что значение свойства имеет
+представление типа `Compatibility mode`, а конфигурация измерительной базы
+возвращает `DontUse`. Все члены типа печатаются английскими идентификаторами.
+`Метаданные.СвойстваОбъектов.РежимСовместимости` возвращает индексируемое
+значение типа `Metadata object enumerated property` с представлением
+`MetadataObjectsPropertyEnumed`. Вывод сохранён в
+`tests/conformance/measure/1c/measure-compatibility-mode.platform.txt`.
+
+Попытки вычислить голое имя `РежимСовместимости` завершились ошибкой
+«Переменная не определена» и в форме, и в серверном общем модуле. Поэтому
+runtime предоставляет значения через `Метаданные.РежимСовместимости` и
+`Метаданные.СвойстваОбъектов.РежимСовместимости`, как описывает модель
+метаданных платформы, и не регистрирует новое глобальное имя библиотеки.
+Воспроизводимая проба голого имени сохранена в
+`tests/conformance/measure/1c/measure-compatibility-mode-bare-name.bsl`.
+Оба поиска типа — `Тип("РежимСовместимости")` и
+`Тип("CompatibilityMode")` — также завершаются ошибкой; эти строки входят в
+основной oracle режима совместимости.
+
 ## Ограничения результата
 
 - Карта API статическая: значения констант, наличие подсистем и реальные ветки
@@ -655,3 +679,5 @@ gateway разумно и правдиво возвращать `Неопред�
 | SP-32 | `РезультатЗапроса.Выгрузить` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResult/methods/Unload563.html` |
 | SP-33 | `ВыборкаИзРезультатаЗапроса.Следующий` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResultSelection/methods/Next556.html` |
 | SP-34 | `ВыборкаИзРезультатаЗапроса.Получить` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResultSelection/methods/Get1375.html` |
+| SP-35 | `ОбъектМетаданныхКонфигурация.РежимСовместимости` | `platform-syntax-help:syntax-context:objects/catalog63/catalog272/ConfigurationMetadataObject/properties/CompatibilityMode8209.html` |
+| SP-36 | `РежимСовместимости` и его члены | `platform-syntax-help:syntax-context:objects/catalog2/catalog370/CompatibilityMode.html` |

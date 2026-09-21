@@ -71,6 +71,24 @@ The ORM library SHALL provide `РольДоступна` and `IsInRole` with one
 - **WHEN** code asks for a role absent from the configuration
 - **THEN** the call raises an error
 
+### Requirement: Configuration compatibility mode
+The immutable ORM catalog SHALL store the configuration compatibility mode. `Метаданные.РежимСовместимости` and `Metadata.CompatibilityMode` SHALL return that value with the measured `Compatibility mode` value type. `Метаданные.СвойстваОбъектов.РежимСовместимости` and `Metadata.ObjectProperties.CompatibilityMode` SHALL return a value whose measured type is `Metadata object enumerated property` and whose presentation is `MetadataObjectsPropertyEnumed`; that value SHALL provide case-insensitive indexed access to the compatibility-mode member names documented for the supported platform version. The ORM library SHALL NOT declare a separate bare global named `РежимСовместимости`.
+
+#### Scenario: Read the configured mode
+- **WHEN** the catalog records the `DontUse` compatibility mode
+- **THEN** `Строка(ТипЗнч(Метаданные.РежимСовместимости))` returns `Compatibility mode`
+- **AND** `Строка(Метаданные.РежимСовместимости)` returns `DontUse`
+
+#### Scenario: Compare through metadata object properties
+- **WHEN** code indexes `Метаданные.СвойстваОбъектов.РежимСовместимости` by the documented name of the configured mode in either letter case
+- **THEN** it receives the same compatibility-mode value
+- **AND** the indexed property's type and presentation match the measured platform values
+
+#### Scenario: Bare name remains unavailable
+- **WHEN** no other library declares a global named `РежимСовместимости`
+- **THEN** a bare reference retains the existing undefined-variable diagnostic
+- **AND** `Тип("РежимСовместимости")` and `Тип("CompatibilityMode")` remain unavailable
+
 ### Requirement: Configuration extension snapshot
 The ORM library SHALL provide the global `РасширенияКонфигурации` and `ConfigurationExtensions` manager. Its `Получить` and `Get` method SHALL accept an optional filter structure containing `УникальныйИдентификатор`/`UUID` and/or `Имя`/`Name`, plus an optional `ИсточникРасширенийКонфигурации`/`ConfigurationExtensionsSource`. The source enum SHALL contain `БазаДанных`/`Database`, `СеансАктивные`/`SessionApplied`, and `СеансОтключенные`/`SessionDisabled`; the default SHALL be `БазаДанных`/`Database`. Returned extension objects SHALL expose the properties needed by the surveyed startup paths, including identity, version, hash, active and safety flags, distributed-infobase use, and scope. The scope enum SHALL contain `ИнформационнаяБаза`/`InfoBase` and `РазделениеДанных`/`DataSeparation`.
 
