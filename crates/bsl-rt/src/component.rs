@@ -203,7 +203,7 @@ pub enum FunctionCall<'call> {
     Configuration {
         module: &'call str,
         export: &'call str,
-        this_object: BslValue,
+        this_object: Option<BslValue>,
     },
 }
 
@@ -364,9 +364,10 @@ impl<'a> CallContext<'a> {
 
     /// Вызывает экспорт модуля текущей конфигурации в этом же сеансе.
     ///
-    /// `module` — имя модуля в каталоге, `this_object` становится значением
-    /// `ЭтотОбъект` на время вызова. Возвращаемый вектор содержит конечные
-    /// значения параметров в порядке объявления.
+    /// `module` — имя модуля в каталоге. `Some(this_object)` становится
+    /// значением `ЭтотОбъект` на время вызова; `None` сохраняет обычную
+    /// идентичность модуля. Возвращаемый вектор содержит конечные значения
+    /// параметров в порядке объявления.
     ///
     /// # Errors
     ///
@@ -378,7 +379,7 @@ impl<'a> CallContext<'a> {
         module: &str,
         export: &str,
         args: Vec<BslValue>,
-        this_object: BslValue,
+        this_object: Option<BslValue>,
     ) -> RtResult<(BslValue, Vec<BslValue>)> {
         let path = self.path;
         let caller = self

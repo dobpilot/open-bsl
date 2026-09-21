@@ -7,7 +7,7 @@ fn bridge(ctx: &mut CallContext<'_>, args: &[Value]) -> RtResult<Value> {
         MANAGER_MODULE,
         "Изменить",
         args.to_vec(),
-        Value::new_object(TestManager),
+        Some(Value::new_object(TestManager)),
     )?;
     Ok(final_args[0].clone())
 }
@@ -47,7 +47,7 @@ impl ObjectProtocol for TestManager {
             MANAGER_MODULE,
             name,
             args.to_vec(),
-            Value::new_object(TestManager),
+            Some(Value::new_object(TestManager)),
         )
         .map(|(value, _)| value)
     }
@@ -189,7 +189,7 @@ fn component_and_dynamic_object_call_the_same_configuration_module_instance() {
 #[test]
 fn missing_configuration_module_is_an_execution_error() {
     fn missing(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
-        ctx.call_configuration_module("НетТакогоМодуля", "Метод", Vec::new(), Value::Undefined)
+        ctx.call_configuration_module("НетТакогоМодуля", "Метод", Vec::new(), None)
             .map(|(value, _)| value)
     }
     const FUNCTION: FunctionDescriptor = FunctionDescriptor {

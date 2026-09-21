@@ -181,6 +181,9 @@ pub(super) struct ModulesCtx<'a, 'b> {
     /// Корневое состояние, когда текущий кадр — модульный (его собственное
     /// состояние на время шага изъято из сессии); `None` у корневого кадра.
     pub(super) root_state: Option<&'a mut ModuleState>,
+    /// Номер каталожного модуля, который временно исполняется как корневая
+    /// программа вложенного компонентного вызова.
+    pub(super) root_catalog_module: Option<u32>,
 }
 
 impl<'a> CatalogContext<'a> {
