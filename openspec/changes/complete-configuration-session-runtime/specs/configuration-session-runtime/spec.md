@@ -140,6 +140,10 @@ For web-client and thin-client Sessions, the runtime SHALL expose `Хранил�
 - **WHEN** the adapter returns matching settings rows and configuration code advances the selection
 - **THEN** the selection exposes each row through the documented properties in adapter order
 
+#### Scenario: Read outside a selected row
+- **WHEN** configuration code reads a selection property before the first successful `Следующий` or after it returns `Ложь`
+- **THEN** the read fails explicitly as measured on platform 8.3.27.2342
+
 ### Requirement: Home-page settings values
 The session runtime SHALL provide the zero-argument `НастройкиНачальнойСтраницы`/`HomePageSettings` and `СоставФормНачальнойСтраницы`/`HomePageForms` constructors. A home-page settings value SHALL return and accept the current form composition through `ПолучитьСоставФорм`/`GetForms` and `УстановитьСоставФорм`/`SetForms`. A form composition SHALL expose read-only `ЛеваяКолонка`/`LeftColumn` and `ПраваяКолонка`/`RightColumn` array properties. Initial and updated compositions SHALL cross the same principal-bound client-settings adapter instead of being shared between Sessions.
 
