@@ -9,8 +9,11 @@ Full session-parameter initialization calls manager modules, performs live queri
 - Implement the measured lazy session-parameter state machine.
 - Provide the measured stored-value objects used by managed-client startup code.
 - Expose the current information-base session and its explicit background-job identity.
+- Forward configuration event-log records to a writer owned by the current Session.
 - Execute data reads under the current principal's rights and RLS.
 - Start background jobs as separate sessions for an explicitly selected principal while copying the parent session parameters.
 
 ## Impact
 The bridge extends the public open-bsl facade and existing call context but reuses the current compiler, VM, scheduler, State, and module instances. It adds no database knowledge to the interpreter and no second BSL dispatcher.
+
+`МенеджерПользователейИнформационнойБазы.ТекущийПользователь()` is not part of this change. Its syntax-helper description remains research input and does not authorize an implementation task.

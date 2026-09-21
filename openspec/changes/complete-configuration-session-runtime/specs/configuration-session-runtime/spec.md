@@ -108,6 +108,17 @@ The session runtime SHALL provide `ПолучитьСоединенияИнфо�
 - **WHEN** a host attempts to open a Session with a connection snapshot that omits its concrete connection number
 - **THEN** startup fails before configuration code executes
 
+### Requirement: Session event-log writer
+The configuration-session runtime SHALL provide `ЗаписьЖурналаРегистрации`/`WriteLogEvent` with the platform arity of one through six arguments and the `УровеньЖурналаРегистрации`/`EventLogLevel` values `Примечание`/`Note`, `Информация`/`Information`, `Предупреждение`/`Warning`, and `Ошибка`/`Error`. It SHALL also provide the sixth-argument `РежимТранзакцииЗаписиЖурналаРегистрации`/`EventLogEntryTransactionMode` values `Независимая`/`Independent` and `Транзакционная`/`Transactional`. A call SHALL be delivered to an event-log writer owned by the current Session. If the host has not supplied a writer, the call SHALL fail explicitly instead of discarding the event.
+
+#### Scenario: Configuration records a startup error
+- **WHEN** configuration code writes an event with an error level and a comment
+- **THEN** the current Session's writer receives that event and its supplied values
+
+#### Scenario: Event logging is unavailable
+- **WHEN** configuration code writes an event and the current Session has no event-log writer
+- **THEN** the call fails explicitly
+
 ### Requirement: Stored value snapshot
 The ORM component SHALL provide `ХранилищеЗначения`/`ValueStorage` and `СжатиеДанных`/`Deflation` constructors with the platform arities. `СжатиеДанных` SHALL accept an optional integral level from `-1` through `9`. Constructing a stored value SHALL snapshot the supplied serializable value. Every `Получить`/`Get` call SHALL return a newly materialized value, and source aliases reached through separate collection entries SHALL become independent restored values. Unsupported values and invalid compression arguments SHALL fail explicitly.
 
