@@ -18,6 +18,7 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
             None,
             1,
             None,
+            None,
         ))),
     )
 }
@@ -272,6 +273,10 @@ fn principal() -> Principal {
     Principal::new("user", "Тест", Vec::new())
 }
 
+fn resources<T: 'static>(connection: T, connection_number: u64) -> SessionResources {
+    SessionResources::new(Box::new(connection), connection_number)
+}
+
 #[derive(Debug)]
 struct ConstantAccess;
 
@@ -388,10 +393,10 @@ fn factory_validates_once_and_opens_isolated_started_sessions() {
     )
     .unwrap();
     let mut first = factory
-        .open(principal(), Box::new(Connection(1)), 101)
+        .open(principal(), resources(Connection(1), 101))
         .unwrap();
     let second = factory
-        .open(principal(), Box::new(Connection(2)), 102)
+        .open(principal(), resources(Connection(2), 102))
         .unwrap();
 
     assert_eq!(
@@ -432,7 +437,10 @@ fn startup_reads_configuration_data_through_its_session_adapter() {
     .unwrap();
 
     let session = factory
-        .open_with_data_access(principal(), Box::new(()), 1, Rc::new(ConstantAccess))
+        .open(
+            principal(),
+            resources((), 1).with_data_access(Rc::new(ConstantAccess)),
+        )
         .unwrap();
     assert_eq!(
         session.parameters().peek("Запущен").unwrap(),
@@ -453,7 +461,7 @@ fn startup_reads_the_factory_platform_version() {
     )
     .unwrap();
 
-    let session = factory.open(principal(), Box::new(()), 1).unwrap();
+    let session = factory.open(principal(), resources((), 1)).unwrap();
     assert_eq!(
         session.parameters().peek("Запущен").unwrap(),
         Some(Value::Str(PLATFORM_VERSION.into()))
@@ -476,7 +484,7 @@ fn connection_string_is_exact_session_data_and_missing_value_fails() {
     .with_connection_string(FOREGROUND)
     .unwrap();
     let mut foreground = foreground_factory
-        .open(principal(), Box::new(()), 1)
+        .open(principal(), resources((), 1))
         .unwrap();
     let probe = foreground
         .instantiate(
@@ -501,8 +509,7 @@ fn connection_string_is_exact_session_data_and_missing_value_fails() {
     let mut background = background_factory
         .open_background(
             principal(),
-            Box::new(()),
-            2,
+            resources((), 2),
             "Обработка.ФоновыйМетод",
             &foreground,
         )
@@ -523,7 +530,7 @@ fn connection_string_is_exact_session_data_and_missing_value_fails() {
         PLATFORM_VERSION,
     )
     .unwrap();
-    let mut missing = missing_factory.open(principal(), Box::new(()), 1).unwrap();
+    let mut missing = missing_factory.open(principal(), resources((), 1)).unwrap();
     let probe = missing
         .instantiate(
             "Функция Значение() Экспорт Возврат СтрокаСоединенияИнформационнойБазы(); КонецФункции",
@@ -560,10 +567,10 @@ fn connection_number_belongs_to_the_concrete_session_connection() {
     )
     .unwrap();
     let mut first = foreground_factory
-        .open(principal(), Box::new(()), 41)
+        .open(principal(), resources((), 41))
         .unwrap();
     let mut second = foreground_factory
-        .open(principal(), Box::new(()), 42)
+        .open(principal(), resources((), 42))
         .unwrap();
 
     for (session, expected) in [(&mut first, 41), (&mut second, 42)] {
@@ -591,8 +598,7 @@ fn connection_number_belongs_to_the_concrete_session_connection() {
     let background = background_factory
         .open_background(
             principal(),
-            Box::new(()),
-            43,
+            resources((), 43),
             "Обработка.ФоновыйМетод",
             &first,
         )
@@ -620,7 +626,7 @@ fn connection_number_must_be_positive_and_representable_in_bsl() {
 
     for number in [0, i64::MAX as u64 + 1] {
         let error = factory
-            .open(principal(), Box::new(()), number)
+            .open(principal(), resources((), number))
             .err()
             .unwrap();
         assert!(matches!(
@@ -628,6 +634,195 @@ fn connection_number_must_be_positive_and_representable_in_bsl() {
             SessionError::InvalidConnectionNumber(value) if value == number
         ));
     }
+}
+
+#[test]
+fn authorized_connection_snapshot_is_exposed_with_both_language_names() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 41).with_connections([
+                InfoBaseConnection::new(7, "BackgroundJob", "server"),
+                InfoBaseConnection::new(41, "ThinClient", "client"),
+            ]),
+        )
+        .unwrap();
+    let module = session
+        .instantiate(
+            r#"
+            Функция Сведения() Экспорт
+                Соединения = ПолучитьСоединенияИнформационнойБазы();
+                Текущее = Соединения[1];
+                Возврат Строка(ТипЗнч(Текущее)) + "|"
+                    + Строка(Текущее.НомерСоединения) + "|"
+                    + Текущее.ApplicationName + "|"
+                    + Текущее.ИмяКомпьютера + "|"
+                    + Строка(GetInfoBaseConnections().Count());
+            КонецФункции
+
+            Функция НовыйМассив() Экспорт
+                Соединения = ПолучитьСоединенияИнформационнойБазы();
+                Соединения.Очистить();
+                Возврат GetInfoBaseConnections().Количество();
+            КонецФункции
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        session.call(&module, "Сведения", vec![]).unwrap().0,
+        Value::Str("Active connection|41|ThinClient|client|2".into())
+    );
+    assert_eq!(
+        session.call(&module, "НовыйМассив", vec![]).unwrap().0,
+        Value::number_from_i64(2)
+    );
+}
+
+#[test]
+fn unavailable_connection_snapshot_fails_explicitly() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut session = factory.open(principal(), resources((), 41)).unwrap();
+    let module = session
+        .instantiate(
+            "Функция Соединения() Экспорт Возврат ПолучитьСоединенияИнформационнойБазы(); КонецФункции",
+        )
+        .unwrap();
+
+    let error = session.call(&module, "Соединения", vec![]).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("снимок соединений информационной базы недоступен")
+    );
+}
+
+#[test]
+fn invalid_connection_snapshots_fail_before_configuration_startup() {
+    let factory = SessionFactory::new(
+        code_snapshot(
+            "Процедура УстановкаПараметровСеанса(Требуемые) Экспорт ВызватьИсключение \"startup ran\"; КонецПроцедуры",
+        ),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+
+    let missing = factory
+        .open(
+            principal(),
+            resources((), 41).with_connections([InfoBaseConnection::new(
+                7,
+                "BackgroundJob",
+                "server",
+            )]),
+        )
+        .err()
+        .unwrap();
+    assert!(matches!(
+        missing,
+        SessionError::MissingCurrentConnection(41)
+    ));
+
+    for number in [0, i64::MAX as u64 + 1] {
+        let invalid = factory
+            .open(
+                principal(),
+                resources((), 41).with_connections([
+                    InfoBaseConnection::new(41, "ThinClient", "client"),
+                    InfoBaseConnection::new(number, "BackgroundJob", "server"),
+                ]),
+            )
+            .err()
+            .unwrap();
+        assert!(matches!(
+            invalid,
+            SessionError::InvalidListedConnectionNumber(value) if value == number
+        ));
+    }
+}
+
+#[test]
+fn background_session_uses_its_own_connection_snapshot() {
+    let foreground_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut foreground = foreground_factory
+        .open(
+            principal(),
+            resources((), 41).with_connections([InfoBaseConnection::new(
+                41,
+                "ThinClient",
+                "client",
+            )]),
+        )
+        .unwrap();
+    let background_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut background = background_factory
+        .open_background(
+            principal(),
+            resources((), 43).with_connections([
+                InfoBaseConnection::new(41, "ThinClient", "client"),
+                InfoBaseConnection::new(43, "BackgroundJob", "server"),
+            ]),
+            "Обработка.ФоновыйМетод",
+            &foreground,
+        )
+        .unwrap();
+    let foreground_probe = foreground
+        .instantiate(
+            "Функция Количество() Экспорт Возврат ПолучитьСоединенияИнформационнойБазы().Количество(); КонецФункции",
+        )
+        .unwrap();
+    let background_probe = background
+        .instantiate(
+            "Функция ПоследнийНомер() Экспорт С = ПолучитьСоединенияИнформационнойБазы(); Возврат С[1].НомерСоединения; КонецФункции",
+        )
+        .unwrap();
+
+    assert_eq!(
+        foreground
+            .call(&foreground_probe, "Количество", vec![])
+            .unwrap()
+            .0,
+        Value::number_from_i64(1)
+    );
+    assert_eq!(
+        background
+            .call(&background_probe, "ПоследнийНомер", vec![])
+            .unwrap()
+            .0,
+        Value::number_from_i64(43)
+    );
 }
 
 #[test]
@@ -640,7 +835,7 @@ fn safe_and_privileged_modes_follow_the_measured_frame_scope() {
         PLATFORM_VERSION,
     )
     .unwrap();
-    let mut session = factory.open(principal(), Box::new(()), 1).unwrap();
+    let mut session = factory.open(principal(), resources((), 1)).unwrap();
     let module = session
         .instantiate(
             r#"
@@ -858,7 +1053,7 @@ fn factory_rejects_incompatible_metadata_and_startup_failure() {
         PLATFORM_VERSION,
     )
     .unwrap();
-    let error = factory.open(principal(), Box::new(()), 1).err().unwrap();
+    let error = factory.open(principal(), resources((), 1)).err().unwrap();
     assert!(error.to_string().contains("старт не выполнен"));
 }
 
@@ -872,7 +1067,7 @@ fn every_supported_session_kind_runs_full_startup() {
         PLATFORM_VERSION,
     )
     .unwrap();
-    let parent = foreground.open(principal(), Box::new(()), 1).unwrap();
+    let parent = foreground.open(principal(), resources((), 1)).unwrap();
 
     for kind in [SessionKind::WebClient, SessionKind::ThinClient] {
         let factory = SessionFactory::new(
@@ -883,7 +1078,7 @@ fn every_supported_session_kind_runs_full_startup() {
             PLATFORM_VERSION,
         )
         .unwrap();
-        let session = factory.open(principal(), Box::new(()), 2).unwrap();
+        let session = factory.open(principal(), resources((), 2)).unwrap();
         assert_eq!(session.kind(), kind);
         assert_eq!(
             session.parameters().peek("Запущен").unwrap(),
@@ -900,7 +1095,12 @@ fn every_supported_session_kind_runs_full_startup() {
     )
     .unwrap();
     let session = factory
-        .open_background(principal(), Box::new(()), 3, "Обработка.Запустить", &parent)
+        .open_background(
+            principal(),
+            resources((), 3),
+            "Обработка.Запустить",
+            &parent,
+        )
         .unwrap();
     assert_eq!(session.kind(), SessionKind::BackgroundJob);
     assert_eq!(
@@ -930,7 +1130,7 @@ fn current_run_mode_matches_every_session_kind() {
             PLATFORM_VERSION,
         )
         .unwrap();
-        let mut session = factory.open(principal(), Box::new(()), 1).unwrap();
+        let mut session = factory.open(principal(), resources((), 1)).unwrap();
         assert_eq!(
             session_run_mode(&mut session),
             Value::Enum(EnumValue::ClientRunModeManagedApplication)
@@ -945,7 +1145,7 @@ fn current_run_mode_matches_every_session_kind() {
         PLATFORM_VERSION,
     )
     .unwrap();
-    let parent = foreground.open(principal(), Box::new(()), 1).unwrap();
+    let parent = foreground.open(principal(), resources((), 1)).unwrap();
     let background = SessionFactory::new(
         code_snapshot(START_HANDLER),
         metadata_catalog("configuration"),
@@ -955,7 +1155,7 @@ fn current_run_mode_matches_every_session_kind() {
     )
     .unwrap();
     let mut session = background
-        .open_background(principal(), Box::new(()), 2, "Обработка.Режим", &parent)
+        .open_background(principal(), resources((), 2), "Обработка.Режим", &parent)
         .unwrap();
     assert_eq!(session_run_mode(&mut session), Value::Undefined);
 }
@@ -971,7 +1171,7 @@ fn current_infobase_session_exposes_only_the_current_background_job() {
     )
     .unwrap();
     let mut foreground = foreground_factory
-        .open(principal(), Box::new(()), 1)
+        .open(principal(), resources((), 1))
         .unwrap();
     let foreground_probe = foreground
         .instantiate(
@@ -1003,8 +1203,7 @@ fn current_infobase_session_exposes_only_the_current_background_job() {
     let mut background = background_factory
         .open_background(
             principal(),
-            Box::new(()),
-            2,
+            resources((), 2),
             "Обработка.ФоновыйМетод",
             &foreground,
         )
@@ -1030,7 +1229,7 @@ fn current_infobase_session_exposes_only_the_current_background_job() {
     );
 
     let error = background_factory
-        .open_background(principal(), Box::new(()), 3, "", &foreground)
+        .open_background(principal(), resources((), 3), "", &foreground)
         .err()
         .unwrap();
     assert!(matches!(error, SessionError::EmptyBackgroundMethod));
@@ -1054,13 +1253,13 @@ fn background_session_copies_parent_parameters_and_then_diverges() {
         PLATFORM_VERSION,
     )
     .unwrap();
-    let parent = foreground.open(principal(), Box::new(()), 1).unwrap();
+    let parent = foreground.open(principal(), resources((), 1)).unwrap();
     parent
         .parameters()
         .set("Копируемый", Value::number_from_i64(7))
         .unwrap();
     let child = background
-        .open_background(principal(), Box::new(()), 2, "Обработка.Копия", &parent)
+        .open_background(principal(), resources((), 2), "Обработка.Копия", &parent)
         .unwrap();
     assert_eq!(
         child.parameters().peek("Копируемый").unwrap(),

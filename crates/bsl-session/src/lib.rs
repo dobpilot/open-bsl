@@ -237,6 +237,87 @@ fn parameter_access_error(name: &str) -> RtError {
     RtError::DynamicError(format!("Error getting value of context attribute ({name})"))
 }
 
+/// Снимок одного активного соединения информационной базы.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InfoBaseConnection {
+    number: u64,
+    application_name: Arc<str>,
+    computer_name: Arc<str>,
+}
+
+impl InfoBaseConnection {
+    /// Создаёт описание соединения из значений, полученных хостом.
+    #[must_use]
+    pub fn new(
+        number: u64,
+        application_name: impl Into<String>,
+        computer_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            number,
+            application_name: Arc::from(application_name.into()),
+            computer_name: Arc::from(computer_name.into()),
+        }
+    }
+
+    /// Возвращает номер соединения.
+    #[must_use]
+    pub const fn number(&self) -> u64 {
+        self.number
+    }
+
+    /// Возвращает имя клиентского приложения.
+    #[must_use]
+    pub fn application_name(&self) -> &str {
+        &self.application_name
+    }
+
+    /// Возвращает имя компьютера.
+    #[must_use]
+    pub fn computer_name(&self) -> &str {
+        &self.computer_name
+    }
+}
+
+/// Ресурсы одного открываемого сеанса.
+pub struct SessionResources {
+    connection: Box<dyn std::any::Any>,
+    connection_number: u64,
+    data_access: Option<Rc<dyn DataAccess>>,
+    connections: Option<Arc<[InfoBaseConnection]>>,
+}
+
+impl SessionResources {
+    /// Создаёт набор с отдельным соединением и его номером.
+    #[must_use]
+    pub fn new(connection: Box<dyn std::any::Any>, connection_number: u64) -> Self {
+        Self {
+            connection,
+            connection_number,
+            data_access: None,
+            connections: None,
+        }
+    }
+
+    /// Подключает адаптер данных этого сеанса.
+    #[must_use]
+    pub fn with_data_access(mut self, data_access: Rc<dyn DataAccess>) -> Self {
+        self.data_access = Some(data_access);
+        self
+    }
+
+    /// Подключает полный снимок соединений, разрешённый выбранному
+    /// пользователю хостом.
+    #[must_use]
+    pub fn with_connections(
+        mut self,
+        connections: impl IntoIterator<Item = InfoBaseConnection>,
+    ) -> Self {
+        self.connections = Some(connections.into_iter().collect());
+        self
+    }
+}
+
 /// Дополнение [`bsl_orm::SessionData`] для runtime сеанса.
 #[derive(Debug)]
 pub struct SessionRuntime {
@@ -245,6 +326,7 @@ pub struct SessionRuntime {
     platform_version: Arc<str>,
     connection_string: Option<Arc<str>>,
     connection_number: u64,
+    connections: Option<Arc<[InfoBaseConnection]>>,
     background_method: Option<Arc<str>>,
 }
 
@@ -255,6 +337,7 @@ impl SessionRuntime {
         platform_version: Arc<str>,
         connection_string: Option<Arc<str>>,
         connection_number: u64,
+        connections: Option<Arc<[InfoBaseConnection]>>,
         background_method: Option<Arc<str>>,
     ) -> Self {
         Self {
@@ -263,6 +346,7 @@ impl SessionRuntime {
             platform_version,
             connection_string,
             connection_number,
+            connections,
             background_method,
         }
     }
@@ -289,6 +373,12 @@ impl SessionRuntime {
     #[must_use]
     pub const fn connection_number(&self) -> u64 {
         self.connection_number
+    }
+
+    /// Возвращает разрешённый текущему пользователю снимок соединений.
+    #[must_use]
+    pub fn connections(&self) -> Option<&[InfoBaseConnection]> {
+        self.connections.as_deref()
     }
 
     /// Возвращает полное имя метода текущего фонового задания.
@@ -578,34 +668,9 @@ impl SessionFactory {
     pub fn open(
         &self,
         principal: Principal,
-        connection: Box<dyn std::any::Any>,
-        connection_number: u64,
+        resources: SessionResources,
     ) -> Result<Session, SessionError> {
-        self.open_with_resources(principal, connection, connection_number, None, None, None)
-    }
-
-    /// Открывает изолированный сеанс с адаптером данных конфигурации.
-    /// Адаптер принадлежит создаваемому сеансу и вызывается объектами
-    /// `bsl-orm` с его пользователем и параметрами.
-    ///
-    /// # Errors
-    ///
-    /// Те же ошибки, что у [`SessionFactory::open`].
-    pub fn open_with_data_access(
-        &self,
-        principal: Principal,
-        connection: Box<dyn std::any::Any>,
-        connection_number: u64,
-        data_access: Rc<dyn DataAccess>,
-    ) -> Result<Session, SessionError> {
-        self.open_with_resources(
-            principal,
-            connection,
-            connection_number,
-            Some(data_access),
-            None,
-            None,
-        )
+        self.open_with_resources(principal, resources, None, None)
     }
 
     /// Открывает фоновый сеанс с копией параметров родителя.
@@ -618,8 +683,7 @@ impl SessionFactory {
     pub fn open_background(
         &self,
         principal: Principal,
-        connection: Box<dyn std::any::Any>,
-        connection_number: u64,
+        resources: SessionResources,
         method_name: &str,
         parent: &Session,
     ) -> Result<Session, SessionError> {
@@ -631,40 +695,7 @@ impl SessionFactory {
         }
         self.open_with_resources(
             principal,
-            connection,
-            connection_number,
-            None,
-            Some(Rc::new(parent.parameters.copy_for_background())),
-            Some(Arc::from(method_name)),
-        )
-    }
-
-    /// Открывает фоновый сеанс с отдельным адаптером данных и копией
-    /// параметров родителя.
-    ///
-    /// # Errors
-    ///
-    /// Те же ошибки, что у [`SessionFactory::open_background`].
-    pub fn open_background_with_data_access(
-        &self,
-        principal: Principal,
-        connection: Box<dyn std::any::Any>,
-        connection_number: u64,
-        data_access: Rc<dyn DataAccess>,
-        method_name: &str,
-        parent: &Session,
-    ) -> Result<Session, SessionError> {
-        if self.kind != SessionKind::BackgroundJob {
-            return Err(SessionError::NotBackgroundFactory);
-        }
-        if method_name.is_empty() {
-            return Err(SessionError::EmptyBackgroundMethod);
-        }
-        self.open_with_resources(
-            principal,
-            connection,
-            connection_number,
-            Some(data_access),
+            resources,
             Some(Rc::new(parent.parameters.copy_for_background())),
             Some(Arc::from(method_name)),
         )
@@ -673,14 +704,33 @@ impl SessionFactory {
     fn open_with_resources(
         &self,
         principal: Principal,
-        connection: Box<dyn std::any::Any>,
-        connection_number: u64,
-        data_access: Option<Rc<dyn DataAccess>>,
+        resources: SessionResources,
         parameters: Option<Rc<SessionParameters>>,
         background_method: Option<Arc<str>>,
     ) -> Result<Session, SessionError> {
+        let SessionResources {
+            connection,
+            connection_number,
+            data_access,
+            connections,
+        } = resources;
         if connection_number == 0 || connection_number > i64::MAX as u64 {
             return Err(SessionError::InvalidConnectionNumber(connection_number));
+        }
+        if let Some(connections) = connections.as_deref() {
+            for connection in connections {
+                if connection.number == 0 || connection.number > i64::MAX as u64 {
+                    return Err(SessionError::InvalidListedConnectionNumber(
+                        connection.number,
+                    ));
+                }
+            }
+            if !connections
+                .iter()
+                .any(|connection| connection.number == connection_number)
+            {
+                return Err(SessionError::MissingCurrentConnection(connection_number));
+            }
         }
         let parameters = match parameters {
             Some(parameters) => parameters,
@@ -696,6 +746,7 @@ impl SessionFactory {
                 Arc::clone(&self.platform_version),
                 self.connection_string.clone(),
                 connection_number,
+                connections,
                 background_method,
             )));
         if let Some(data_access) = data_access {
@@ -806,6 +857,10 @@ pub enum SessionError {
     EmptyConnectionString,
     /// Номер соединения не является положительным числом, представимым в BSL.
     InvalidConnectionNumber(u64),
+    /// Номер соединения из снимка не представим в BSL.
+    InvalidListedConnectionNumber(u64),
+    /// В снимке отсутствует соединение создаваемого сеанса.
+    MissingCurrentConnection(u64),
     /// Код и метаданные относятся к разным конфигурациям.
     ConfigurationIdentityMismatch {
         /// Идентичность снимка кода.
@@ -854,6 +909,14 @@ impl fmt::Display for SessionError {
             Self::InvalidConnectionNumber(number) => write!(
                 formatter,
                 "номер соединения с информационной базой недопустим: {number}"
+            ),
+            Self::InvalidListedConnectionNumber(number) => write!(
+                formatter,
+                "снимок содержит недопустимый номер соединения: {number}"
+            ),
+            Self::MissingCurrentConnection(number) => write!(
+                formatter,
+                "текущее соединение `{number}` отсутствует в снимке соединений"
             ),
             Self::ConfigurationIdentityMismatch { code, metadata } => write!(
                 formatter,
@@ -950,6 +1013,11 @@ struct CurrentBackgroundJobObject {
     method_name: Arc<str>,
 }
 
+#[derive(Debug)]
+struct InfoBaseConnectionObject {
+    connection: InfoBaseConnection,
+}
+
 static PARAMETERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-session", "ПараметрыСеанса");
 static SYSTEM_INFORMATION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-session", "СистемнаяИнформация");
@@ -958,6 +1026,12 @@ static INFOBASE_SESSION_TYPE: TypeDescriptor = TypeDescriptor {
     name: "СеансИнформационнойБазы",
     type_display: "Active session",
     type_names: &["InfoBaseSession"],
+};
+static INFOBASE_CONNECTION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "СоединениеИнформационнойБазы",
+    type_display: "Active connection",
+    type_names: &["InfoBaseConnection"],
 };
 
 impl ObjectProtocol for ParametersObject {
@@ -1007,6 +1081,16 @@ impl ObjectProtocol for CurrentBackgroundJobObject {
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         CURRENT_BACKGROUND_JOB_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for InfoBaseConnectionObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &INFOBASE_CONNECTION_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        INFOBASE_CONNECTION_PROPERTIES
     }
 }
 
@@ -1062,6 +1146,55 @@ fn infobase_connection_string(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResul
 fn infobase_connection_number(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::number_from_i64(
         runtime(ctx)?.connection_number() as i64
+    ))
+}
+
+fn infobase_connections(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let connections = runtime(ctx)?.connections().ok_or_else(|| {
+        RtError::DynamicError(
+            "снимок соединений информационной базы недоступен текущему пользователю".into(),
+        )
+    })?;
+    Ok(Value::new_array(
+        connections
+            .iter()
+            .cloned()
+            .map(|connection| Value::new_object(InfoBaseConnectionObject { connection }))
+            .collect(),
+    ))
+}
+
+fn infobase_connection_number_property(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let connection = receiver
+        .downcast_ref::<InfoBaseConnectionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::number_from_i64(connection.connection.number as i64))
+}
+
+fn infobase_connection_application_name(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let connection = receiver
+        .downcast_ref::<InfoBaseConnectionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(
+        connection.connection.application_name.as_ref().into(),
+    ))
+}
+
+fn infobase_connection_computer_name(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let connection = receiver
+        .downcast_ref::<InfoBaseConnectionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(
+        connection.connection.computer_name.as_ref().into(),
     ))
 }
 
@@ -1178,6 +1311,24 @@ static CURRENT_BACKGROUND_JOB_PROPERTIES: &[PropertyDescriptor] = &[PropertyDesc
     set: None,
 }];
 
+static INFOBASE_CONNECTION_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["НомерСоединения", "ConnectionNumber"],
+        get: infobase_connection_number_property,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ИмяПриложения", "ApplicationName"],
+        get: infobase_connection_application_name,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ИмяКомпьютера", "ComputerName"],
+        get: infobase_connection_computer_name,
+        set: None,
+    },
+];
+
 const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
         code: FunctionCode::new(1),
@@ -1251,6 +1402,16 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: privileged_mode,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(10),
+        names: &[
+            "ПолучитьСоединенияИнформационнойБазы",
+            "GetInfoBaseConnections",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: infobase_connections,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
@@ -1262,6 +1423,7 @@ const TYPES: &[&TypeDescriptor] = &[
     &PARAMETERS_TYPE,
     &SYSTEM_INFORMATION_TYPE,
     &INFOBASE_SESSION_TYPE,
+    &INFOBASE_CONNECTION_TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -1271,6 +1433,8 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&SYSTEM_INFORMATION_TYPE)
         .with_properties(SYSTEM_INFORMATION_PROPERTIES),
     ObjectMembersDescriptor::new(&INFOBASE_SESSION_TYPE).with_methods(INFOBASE_SESSION_METHODS),
+    ObjectMembersDescriptor::new(&INFOBASE_CONNECTION_TYPE)
+        .with_properties(INFOBASE_CONNECTION_PROPERTIES),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
