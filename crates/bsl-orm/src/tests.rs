@@ -1,4 +1,5 @@
 use super::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -14,6 +15,45 @@ impl DataAccess for DataAccessStub {
         assert_eq!(metadata.id(), "constant-answer");
         assert_eq!(principal.id(), "user");
         Ok(Value::number_from_i64(42))
+    }
+}
+
+#[derive(Debug, Default)]
+struct QueryAccessStub {
+    calls: RefCell<Vec<QueryCall>>,
+}
+
+type QueryCall = (String, Vec<(String, Value)>);
+
+impl DataAccess for QueryAccessStub {
+    fn constant_value(
+        &self,
+        _: &MetadataObject,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError("константы не поддерживаются".into()))
+    }
+
+    fn execute_query(
+        &self,
+        request: &QueryRequest,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<QueryResultData> {
+        assert_eq!(principal.id(), "user");
+        self.calls.borrow_mut().push((
+            request.text().to_string(),
+            request
+                .parameters()
+                .map(|(name, value)| (name.to_string(), value.clone()))
+                .collect(),
+        ));
+        Ok(QueryResultData::new(
+            vec!["Значение".into()],
+            vec![vec![Value::number_from_i64(42)]],
+        )
+        .unwrap())
     }
 }
 
@@ -133,6 +173,109 @@ fn state_with_data_access(
         session = session.with_data_access(data_access);
     }
     engine.state_builder().host_data(Rc::new(session)).build()
+}
+
+#[test]
+fn query_uses_the_session_adapter_and_exposes_a_measured_linear_result() {
+    let engine = engine();
+    let access = Rc::new(QueryAccessStub::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                ЗапросПробы = Новый Запрос;
+                Если Строка(ТипЗнч(ЗапросПробы)) <> "Query"
+                    ИЛИ ЗапросПробы.Текст <> "" Тогда
+                    Возврат Ложь;
+                КонецЕсли;
+                ЗапросПробы.Текст = "ВЫБРАТЬ &Значение КАК Значение";
+                ЗапросПробы.УстановитьПараметр("Значение", 1);
+                ЗапросПробы.УстановитьПараметр("зНаЧеНиЕ", 42);
+                Результат = ЗапросПробы.Выполнить();
+                Если Строка(ТипЗнч(Результат)) <> "Query result"
+                    ИЛИ Результат.Пустой() Тогда
+                    Возврат Ложь;
+                КонецЕсли;
+                Выборка = Результат.Выбрать();
+                Если Строка(ТипЗнч(Выборка)) <> "Selected data from query result"
+                    ИЛИ Выборка.Значение <> Неопределено
+                    ИЛИ НЕ Выборка.Следующий()
+                    ИЛИ Выборка.Значение <> 42
+                    ИЛИ Выборка.Получить(0) <> 42
+                    ИЛИ Выборка[0] <> 42
+                    ИЛИ Выборка.Следующий()
+                    ИЛИ Выборка.Значение <> 42 Тогда
+                    Возврат Ложь;
+                КонецЕсли;
+                Таблица = Результат.Выгрузить();
+                Возврат Строка(ТипЗнч(Таблица)) = "ТаблицаЗначений"
+                    И Таблица.Количество() = 1
+                    И Таблица[0].Значение = 42;
+                "#,
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+
+    assert_eq!(
+        access.calls.borrow().as_slice(),
+        [(
+            "ВЫБРАТЬ &Значение КАК Значение".into(),
+            vec![("Значение".into(), Value::number_from_i64(42))],
+        )]
+    );
+}
+
+#[test]
+fn query_fails_closed_without_support_and_rejects_non_linear_traversal() {
+    let engine = engine();
+    let mut without_access = state(&engine);
+    let error = without_access
+        .exec("Возврат Новый Запрос(\"ВЫБРАТЬ 1\").Выполнить();")
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("доступ к данным конфигурации не подключён")
+    );
+
+    let mut unsupported = state_with_data_access(&engine, Some(Rc::new(DataAccessStub)));
+    let error = unsupported
+        .exec("Возврат Новый Запрос(\"ВЫБРАТЬ 1\").Выполнить();")
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("выполнение запросов не поддерживается адаптером данных")
+    );
+
+    let mut state = state_with_data_access(&engine, Some(Rc::new(QueryAccessStub::default())));
+    let error = state
+        .exec("Возврат Новый Запрос(\"ВЫБРАТЬ 1\").Выполнить().Выбрать(1);")
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("поддерживается только прямой обход по умолчанию")
+    );
+}
+
+#[test]
+fn query_result_data_rejects_ambiguous_or_misaligned_rows() {
+    assert!(matches!(
+        QueryResultData::new(vec!["Поле".into(), "пОлЕ".into()], Vec::<Vec<Value>>::new()),
+        Err(QueryResultDataError::DuplicateColumnName { name }) if name == "пОлЕ"
+    ));
+    assert!(matches!(
+        QueryResultData::new(vec!["Поле".into()], vec![Vec::new()]),
+        Err(QueryResultDataError::RowWidth {
+            row: 0,
+            expected: 1,
+            actual: 0,
+        })
+    ));
 }
 
 #[test]

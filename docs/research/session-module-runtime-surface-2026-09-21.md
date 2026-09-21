@@ -363,8 +363,10 @@ SESSION.CURRENT_RUN_MODE.BACKGROUND	Не определено:
 одноимённого параметра заменила его значение; выборка вернула то же значение
 через свойство и `Получить(0)`, а выгрузка — через строку
 `ТаблицаЗначений`. Строковые представления типов равны `Query`,
-`Query result` и `Selected data from query result`. Проба и полный вывод
-сохранены в `tests/conformance/measure/1c/measure-query-linear-result.bsl` и
+`Query result` и `Selected data from query result`. До первого
+`Следующий()` поле имеет значение `Неопределено`; после первого ответа
+`Ложь` выборка сохраняет последнюю строку. Проба и полный вывод сохранены в
+`tests/conformance/measure/1c/measure-query-linear-result.bsl` и
 `measure-query-linear-result.platform.txt`.
 
 ### Параметры сеанса, которые устанавливает ядро БСП

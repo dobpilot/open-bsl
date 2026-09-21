@@ -8,6 +8,7 @@
 #![warn(missing_docs)]
 
 use std::any::Any;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
@@ -15,10 +16,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use open_bsl::{
-    Arity, BslObject, CallContext, EnumKind, EnumValue, FunctionCode, FunctionDescriptor,
-    FunctionKind, GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ObjectMembersDescriptor,
-    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor, Value,
-    call_method_from_table, folded_eq, get_property_from_table,
+    Arity, BslObject, CallContext, ConstructorCode, ConstructorDescriptor, EnumKind, EnumValue,
+    FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor, LibraryDescriptor,
+    MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
+    RtResult, TypeDescriptor, Value, call_method_from_table, folded_eq, get_property_from_table,
 };
 
 /// Основной язык программирования конфигурации.
@@ -576,6 +577,139 @@ impl Principal {
     }
 }
 
+/// Неизменяемый запрос к адаптеру данных текущего сеанса.
+#[derive(Debug, Clone)]
+pub struct QueryRequest {
+    text: Rc<str>,
+    parameters: Rc<[(Rc<str>, Value)]>,
+}
+
+impl QueryRequest {
+    /// Возвращает текст запроса BSL.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Перечисляет окончательные значения параметров в порядке их первой
+    /// установки.
+    pub fn parameters(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.parameters
+            .iter()
+            .map(|(name, value)| (name.as_ref(), value))
+    }
+}
+
+/// Именованные строки, которые адаптер данных вернул для одного запроса.
+#[derive(Debug, Clone)]
+pub struct QueryResultData {
+    columns: Rc<[Rc<str>]>,
+    rows: Rc<[Rc<[Value]>]>,
+}
+
+impl QueryResultData {
+    /// Проверяет и создаёт линейный результат запроса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку для пустого или повторного имени колонки и строки,
+    /// ширина которой не совпадает с числом колонок.
+    pub fn new(
+        columns: impl IntoIterator<Item = String>,
+        rows: impl IntoIterator<Item = Vec<Value>>,
+    ) -> Result<Self, QueryResultDataError> {
+        let columns = columns.into_iter().map(Rc::<str>::from).collect::<Vec<_>>();
+        for (index, name) in columns.iter().enumerate() {
+            if name.is_empty() {
+                return Err(QueryResultDataError::EmptyColumnName { index });
+            }
+            if columns[..index]
+                .iter()
+                .any(|candidate| folded_eq(candidate, name))
+            {
+                return Err(QueryResultDataError::DuplicateColumnName {
+                    name: name.to_string(),
+                });
+            }
+        }
+        let rows = rows
+            .into_iter()
+            .enumerate()
+            .map(|(index, row)| {
+                if row.len() != columns.len() {
+                    return Err(QueryResultDataError::RowWidth {
+                        row: index,
+                        expected: columns.len(),
+                        actual: row.len(),
+                    });
+                }
+                Ok(Rc::<[Value]>::from(row))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            columns: columns.into(),
+            rows: rows.into(),
+        })
+    }
+
+    /// Возвращает имена колонок в порядке результата.
+    #[must_use]
+    pub fn columns(&self) -> &[Rc<str>] {
+        &self.columns
+    }
+
+    /// Возвращает строки в порядке результата.
+    #[must_use]
+    pub fn rows(&self) -> &[Rc<[Value]>] {
+        &self.rows
+    }
+}
+
+/// Ошибка формы результата, возвращённого адаптером данных.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryResultDataError {
+    /// Имя колонки пусто.
+    EmptyColumnName {
+        /// Номер колонки.
+        index: usize,
+    },
+    /// Имя колонки повторяется без учёта регистра.
+    DuplicateColumnName {
+        /// Повторившееся имя.
+        name: String,
+    },
+    /// Число значений строки не совпадает с числом колонок.
+    RowWidth {
+        /// Номер строки.
+        row: usize,
+        /// Ожидаемое число значений.
+        expected: usize,
+        /// Фактическое число значений.
+        actual: usize,
+    },
+}
+
+impl fmt::Display for QueryResultDataError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyColumnName { index } => write!(formatter, "имя колонки {index} пусто"),
+            Self::DuplicateColumnName { name } => {
+                write!(formatter, "имя колонки `{name}` повторяется")
+            }
+            Self::RowWidth {
+                row,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "строка {row} содержит {actual} значений вместо {expected}"
+            ),
+        }
+    }
+}
+
+impl Error for QueryResultDataError {}
+
 /// Доступ к данным конфигурации в пределах одного сеанса.
 ///
 /// Реализация принадлежит адаптеру источника данных. `bsl-orm` передаёт ей
@@ -594,6 +728,27 @@ pub trait DataAccess {
         principal: &Principal,
         context: &mut CallContext<'_>,
     ) -> RtResult<Value>;
+
+    /// Выполняет запрос с учётом прав и RLS текущего пользователя.
+    ///
+    /// Реализация получает текущий [`CallContext`], чтобы чтение требуемого
+    /// параметра сеанса прошло через его обычную ленивую инициализацию.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, проверки прав, RLS, компиляции
+    /// запроса или инициализации параметра сеанса. Реализация по умолчанию
+    /// явно отвергает запросы.
+    fn execute_query(
+        &self,
+        _request: &QueryRequest,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<QueryResultData> {
+        Err(RtError::DynamicError(
+            "выполнение запросов не поддерживается адаптером данных".into(),
+        ))
+    }
 }
 
 /// Данные ORM, принадлежащие ровно одному `open_bsl::State`.
@@ -839,6 +994,30 @@ struct ExtensionApplicationIssueValue {
     index: usize,
 }
 
+#[derive(Debug)]
+struct QueryValue {
+    state: RefCell<QueryState>,
+}
+
+#[derive(Debug)]
+struct QueryState {
+    text: Rc<str>,
+    parameters: Vec<(Rc<str>, Value)>,
+}
+
+#[derive(Debug)]
+struct QueryResultValue {
+    data: Rc<QueryResultData>,
+}
+
+#[derive(Debug)]
+struct QuerySelectionValue {
+    data: Rc<QueryResultData>,
+    /// Ноль означает позицию до первой строки; после конца остаётся номер
+    /// последней выбранной строки, как в измерении платформы.
+    cursor: Cell<usize>,
+}
+
 static METADATA_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-orm", "ОбъектМетаданныхКонфигурация");
 static METADATA_COLLECTION_TYPE: TypeDescriptor =
@@ -859,6 +1038,24 @@ static EXTENSION_APPLICATION_ISSUE_TYPE: TypeDescriptor = TypeDescriptor::new(
     "bsl-orm",
     "ИнформацияОПроблемеПримененияРасширенияКонфигурации",
 );
+static QUERY_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "Запрос",
+    type_display: "Query",
+    type_names: &["Query"],
+};
+static QUERY_RESULT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "РезультатЗапроса",
+    type_display: "Query result",
+    type_names: &["QueryResult"],
+};
+static QUERY_SELECTION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "ВыборкаИзРезультатаЗапроса",
+    type_display: "Selected data from query result",
+    type_names: &["QueryResultSelection"],
+};
 
 impl ObjectProtocol for MetadataRoot {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -1128,6 +1325,55 @@ impl ObjectProtocol for ExtensionApplicationIssueValue {
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         EXTENSION_APPLICATION_ISSUE_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for QueryValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &QUERY_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        QUERY_METHODS
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        QUERY_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for QueryResultValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &QUERY_RESULT_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        QUERY_RESULT_METHODS
+    }
+}
+
+impl ObjectProtocol for QuerySelectionValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &QUERY_SELECTION_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        QUERY_SELECTION_METHODS
+    }
+
+    fn get_property(&self, name: &str, _: &mut CallContext<'_>) -> RtResult<Value> {
+        query_selection_field(self, name)
+    }
+
+    fn get_index(&self, index: &Value) -> RtResult<Value> {
+        let Value::Number(index) = index else {
+            return Err(RtError::BadIndex);
+        };
+        let index = index
+            .to_i64_exact()
+            .and_then(|index| usize::try_from(index).ok())
+            .ok_or(RtError::BadIndex)?;
+        query_selection_value(self, index)
     }
 }
 
@@ -1566,6 +1812,277 @@ fn extension_issue_severity(
     Ok(extension_issue(receiver)?.1.severity.value())
 }
 
+fn new_query(_: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let text = match arguments {
+        [] => Rc::from(""),
+        [Value::Str(text)] => Rc::from(text.to_string()),
+        [_] => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый Запрос",
+            });
+        }
+        _ => {
+            return Err(RtError::DynamicError(
+                "Новый Запрос ожидает не больше одного аргумента".into(),
+            ));
+        }
+    };
+    Ok(Value::new_object(QueryValue {
+        state: RefCell::new(QueryState {
+            text,
+            parameters: Vec::new(),
+        }),
+    }))
+}
+
+fn query_text(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    let query = receiver
+        .downcast_ref::<QueryValue>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(query.state.borrow().text.as_ref().into()))
+}
+
+fn set_query_text(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let query = receiver
+        .downcast_ref::<QueryValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let Value::Str(value) = value else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "Запрос.Текст",
+        });
+    };
+    query.state.borrow_mut().text = Rc::from(value.to_string());
+    Ok(())
+}
+
+fn query_set_parameter(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let query = receiver
+        .downcast_ref::<QueryValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let [Value::Str(name), value] = arguments else {
+        return Err(RtError::TypeError {
+            expected: "Строка, Произвольный",
+            op: "Запрос.УстановитьПараметр",
+        });
+    };
+    let name = name.to_string();
+    let mut state = query.state.borrow_mut();
+    if let Some((_, current)) = state
+        .parameters
+        .iter_mut()
+        .find(|(candidate, _)| folded_eq(candidate, &name))
+    {
+        *current = value.clone();
+    } else {
+        state.parameters.push((Rc::from(name), value.clone()));
+    }
+    Ok(Value::Undefined)
+}
+
+fn query_execute(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let query = receiver
+        .downcast_ref::<QueryValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let request = {
+        let state = query.state.borrow();
+        QueryRequest {
+            text: Rc::clone(&state.text),
+            parameters: state.parameters.clone().into(),
+        }
+    };
+    let (principal, data_access) = {
+        let session = session(context)?;
+        let data_access = session.data_access.as_ref().ok_or_else(|| {
+            RtError::DynamicError("доступ к данным конфигурации не подключён".into())
+        })?;
+        (session.principal.clone(), Rc::clone(data_access))
+    };
+    let data = data_access.execute_query(&request, &principal, context)?;
+    Ok(Value::new_object(QueryResultValue {
+        data: Rc::new(data),
+    }))
+}
+
+fn query_result(receiver: &dyn ObjectProtocol) -> RtResult<&QueryResultValue> {
+    receiver
+        .downcast_ref::<QueryResultValue>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn query_result_is_empty(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Boolean(query_result(receiver)?.data.rows.is_empty()))
+}
+
+fn require_default_traversal(arguments: &[Value], operation: &str) -> RtResult<()> {
+    if arguments.is_empty() {
+        return Ok(());
+    }
+    Err(RtError::DynamicError(format!(
+        "{operation}: поддерживается только прямой обход по умолчанию"
+    )))
+}
+
+fn query_result_select(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    require_default_traversal(arguments, "РезультатЗапроса.Выбрать")?;
+    Ok(Value::new_object(QuerySelectionValue {
+        data: Rc::clone(&query_result(receiver)?.data),
+        cursor: Cell::new(0),
+    }))
+}
+
+fn query_result_unload(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    require_default_traversal(arguments, "РезультатЗапроса.Выгрузить")?;
+    let result = query_result(receiver)?;
+    let table = Value::new_table();
+    let columns = table.get_field_by_name("Колонки")?;
+    for name in result.data.columns.iter() {
+        columns.table_add_column(&Value::Str(name.as_ref().into()), &Value::Undefined)?;
+    }
+    for values in result.data.rows.iter() {
+        let row = table.table_add_row()?;
+        for (name, value) in result.data.columns.iter().zip(values.iter()) {
+            row.set_field_by_name(name, value.clone())?;
+        }
+    }
+    Ok(table)
+}
+
+fn query_selection(receiver: &dyn ObjectProtocol) -> RtResult<&QuerySelectionValue> {
+    receiver
+        .downcast_ref::<QuerySelectionValue>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn query_selection_next(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let selection = query_selection(receiver)?;
+    let cursor = selection.cursor.get();
+    if cursor < selection.data.rows.len() {
+        selection.cursor.set(cursor + 1);
+        Ok(Value::Boolean(true))
+    } else {
+        Ok(Value::Boolean(false))
+    }
+}
+
+fn query_selection_current_row(selection: &QuerySelectionValue) -> Option<&[Value]> {
+    selection
+        .cursor
+        .get()
+        .checked_sub(1)
+        .and_then(|index| selection.data.rows.get(index))
+        .map(AsRef::as_ref)
+}
+
+fn query_selection_value(selection: &QuerySelectionValue, index: usize) -> RtResult<Value> {
+    let Some(row) = query_selection_current_row(selection) else {
+        return Ok(Value::Undefined);
+    };
+    row.get(index).cloned().ok_or(RtError::IndexOutOfBounds {
+        index: index as i64,
+        len: row.len(),
+    })
+}
+
+fn query_selection_field(selection: &QuerySelectionValue, name: &str) -> RtResult<Value> {
+    let index = selection
+        .data
+        .columns
+        .iter()
+        .position(|candidate| folded_eq(candidate, name))
+        .ok_or_else(|| RtError::UnknownProperty(name.into()))?;
+    query_selection_value(selection, index)
+}
+
+fn query_selection_get(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let [Value::Number(index)] = arguments else {
+        return Err(RtError::TypeError {
+            expected: "Число",
+            op: "ВыборкаИзРезультатаЗапроса.Получить",
+        });
+    };
+    let index = index
+        .to_i64_exact()
+        .and_then(|index| usize::try_from(index).ok())
+        .ok_or(RtError::BadIndex)?;
+    query_selection_value(query_selection(receiver)?, index)
+}
+
+static QUERY_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["Текст", "Text"],
+    get: query_text,
+    set: Some(set_query_text),
+}];
+
+static QUERY_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["УстановитьПараметр", "SetParameter"],
+        Arity::exact(2),
+        query_set_parameter,
+    ),
+    MethodDescriptor::new(&["Выполнить", "Execute"], Arity::exact(0), query_execute),
+];
+
+static QUERY_RESULT_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["Пустой", "IsEmpty"],
+        Arity::exact(0),
+        query_result_is_empty,
+    ),
+    MethodDescriptor::new(
+        &["Выбрать", "Select"],
+        Arity::range(0, 3),
+        query_result_select,
+    ),
+    MethodDescriptor::new(
+        &["Выгрузить", "Unload"],
+        Arity::range(0, 1),
+        query_result_unload,
+    ),
+];
+
+static QUERY_SELECTION_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["Следующий", "Next"],
+        Arity::exact(0),
+        query_selection_next,
+    ),
+    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), query_selection_get),
+];
+
 static METADATA_COLLECTION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     &["Найти", "Find"],
     Arity::exact(1),
@@ -1830,6 +2347,16 @@ fn role_available(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Va
     Ok(Value::Boolean(session.principal.has_role(role.id())))
 }
 
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
+    code: ConstructorCode::new(1),
+    names: &["Запрос", "Query"],
+    arity: Arity::range(0, 1),
+    call: new_query,
+}];
+
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] =
+    &[(ConstructorCode::new(1), &QUERY_TYPE)];
+
 const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
         code: FunctionCode::new(1),
@@ -1909,6 +2436,9 @@ const TYPES: &[&TypeDescriptor] = &[
     &CONFIGURATION_EXTENSIONS_MANAGER_TYPE,
     &CONFIGURATION_EXTENSION_TYPE,
     &EXTENSION_APPLICATION_ISSUE_TYPE,
+    &QUERY_TYPE,
+    &QUERY_RESULT_TYPE,
+    &QUERY_SELECTION_TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -1934,6 +2464,13 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
         .with_properties(CONFIGURATION_EXTENSION_PROPERTIES),
     ObjectMembersDescriptor::new(&EXTENSION_APPLICATION_ISSUE_TYPE)
         .with_properties(EXTENSION_APPLICATION_ISSUE_PROPERTIES),
+    ObjectMembersDescriptor::new(&QUERY_TYPE)
+        .with_methods(QUERY_METHODS)
+        .with_properties(QUERY_PROPERTIES),
+    ObjectMembersDescriptor::new(&QUERY_RESULT_TYPE).with_methods(QUERY_RESULT_METHODS),
+    ObjectMembersDescriptor::new(&QUERY_SELECTION_TYPE)
+        .with_methods(QUERY_SELECTION_METHODS)
+        .with_dynamic_properties(),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
@@ -1941,6 +2478,8 @@ const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
 const LIBRARY: LibraryDescriptor = LibraryDescriptor::new("bsl-orm", env!("CARGO_PKG_VERSION"))
     .with_functions(FUNCTIONS)
     .with_globals(GLOBALS)
+    .with_constructors(CONSTRUCTORS)
+    .with_constructor_types(CONSTRUCTOR_TYPES)
     .with_types(TYPES)
     .with_object_member_groups(OBJECT_MEMBER_GROUPS);
 
