@@ -49,6 +49,7 @@ pub enum TypeId {
 
     /// Перечисления платформы. Тип члена — само перечисление.
     ScriptVariant,
+    ClientRunMode,
     JsonValueType,
     JsonLineBreak,
     JsonEscapeCharacters,
@@ -189,6 +190,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::ScriptVariant,
         "ВариантВстроенногоЯзыка",
         "ScriptVariant",
+    ),
+    (
+        TypeId::ClientRunMode,
+        "РежимЗапускаКлиентскогоПриложения",
+        "ClientRunMode",
     ),
     // Тип с пробелом, как и остальные объектные типы JSON выше; значение
     // («Строка(Новый НастройкиСериализацииJSON)») — без, см. `lib.rs`.

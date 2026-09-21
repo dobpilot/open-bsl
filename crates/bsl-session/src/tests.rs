@@ -498,6 +498,54 @@ fn every_supported_session_kind_runs_full_startup() {
     );
 }
 
+fn session_run_mode(session: &mut Session) -> Value {
+    let module = session
+        .instantiate("Функция Режим() Экспорт Возврат CurrentRunMode(); КонецФункции")
+        .unwrap();
+    module
+        .call(&mut session.state, "Режим", Vec::new())
+        .unwrap()
+        .0
+}
+
+#[test]
+fn current_run_mode_matches_every_session_kind() {
+    for kind in [SessionKind::WebClient, SessionKind::ThinClient] {
+        let factory = SessionFactory::new(
+            code_snapshot(START_HANDLER),
+            metadata_catalog("configuration"),
+            "МодульСеанса",
+            kind,
+        )
+        .unwrap();
+        let mut session = factory.open(principal(), Box::new(())).unwrap();
+        assert_eq!(
+            session_run_mode(&mut session),
+            Value::Enum(EnumValue::ClientRunModeManagedApplication)
+        );
+    }
+
+    let foreground = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+    )
+    .unwrap();
+    let parent = foreground.open(principal(), Box::new(())).unwrap();
+    let background = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::BackgroundJob,
+    )
+    .unwrap();
+    let mut session = background
+        .open_background(principal(), Box::new(()), &parent)
+        .unwrap();
+    assert_eq!(session_run_mode(&mut session), Value::Undefined);
+}
+
 #[test]
 fn background_session_copies_parent_parameters_and_then_diverges() {
     let foreground = SessionFactory::new(

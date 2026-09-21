@@ -15,7 +15,7 @@ use std::sync::Arc;
 use bsl_config::{ConfigurationCodeSnapshot, ModuleKind};
 use bsl_orm::{DataAccess, MetadataCatalog, MetadataKind, Principal, SessionData};
 use open_bsl::{
-    Arity, CallContext, Engine, Error as OpenBslError, FunctionCode, FunctionDescriptor,
+    Arity, CallContext, Engine, EnumValue, Error as OpenBslError, FunctionCode, FunctionDescriptor,
     FunctionKind, GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe,
     ModuleInstance, ModuleRecipe, ObjectMembersDescriptor, ObjectProtocol, RtError, RtResult,
     State, TypeDescriptor, Value, folded_eq,
@@ -874,13 +874,33 @@ fn parameters(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     }))
 }
 
-const FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
-    code: FunctionCode::new(1),
-    names: &["ПолучитьПараметрыСеанса"],
-    arity: Arity::exact(0),
-    kind: FunctionKind::Function,
-    call: parameters,
-}];
+fn current_run_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    match runtime(ctx)?.kind() {
+        SessionKind::WebClient | SessionKind::ThinClient => {
+            Ok(Value::Enum(EnumValue::ClientRunModeManagedApplication))
+        }
+        // Измерено на платформе 8.3.27 настоящим фоновым заданием:
+        // `measure-session-current-run-mode.bsl`.
+        SessionKind::BackgroundJob => Ok(Value::Undefined),
+    }
+}
+
+const FUNCTIONS: &[FunctionDescriptor] = &[
+    FunctionDescriptor {
+        code: FunctionCode::new(1),
+        names: &["ПолучитьПараметрыСеанса"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: parameters,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(2),
+        names: &["ТекущийРежимЗапуска", "CurrentRunMode"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: current_run_mode,
+    },
+];
 
 const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
     names: &["ПараметрыСеанса", "SessionParameters"],

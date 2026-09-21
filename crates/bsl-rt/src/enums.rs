@@ -23,6 +23,11 @@ pub enum EnumValue {
     ScriptVariantEnglish,
     ScriptVariantRussian,
 
+    // --- РежимЗапускаКлиентскогоПриложения ---------------------------
+    ClientRunModeAuto,
+    ClientRunModeOrdinaryApplication,
+    ClientRunModeManagedApplication,
+
     // --- ТипЗначенияJSON ---------------------------------------------
     JsonString,
     JsonNumber,
@@ -393,6 +398,8 @@ pub enum EnumValue {
 pub enum EnumKind {
     /// Основной язык программирования конфигурации.
     ScriptVariant,
+    /// Режим запуска клиентского приложения.
+    ClientRunMode,
     JsonValueType,
     JsonLineBreak,
     /// Способ перевода Unicode-символов в `\uXXXX` при записи JSON.
@@ -539,6 +546,7 @@ impl EnumKind {
     const fn names(self) -> (&'static str, &'static str) {
         match self {
             EnumKind::ScriptVariant => ("ВариантВстроенногоЯзыка", "ScriptVariant"),
+            EnumKind::ClientRunMode => ("РежимЗапускаКлиентскогоПриложения", "ClientRunMode"),
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonEscapeCharacters => {
@@ -617,6 +625,8 @@ impl EnumKind {
     pub const fn meta_ru_name(self) -> &'static str {
         match self {
             EnumKind::ScriptVariant => "ПеречислениеВариантВстроенногоЯзыка",
+            // ИЗМЕРЕНО на 8.3.27 вместе с членами перечисления.
+            EnumKind::ClientRunMode => "EnumClientRunMode",
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
             EnumKind::JsonLineBreak => "ПеречислениеПереносСтрокJSON",
             EnumKind::JsonEscapeCharacters => "ПеречислениеЭкранированиеСимволовJSON",
@@ -712,6 +722,27 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Русский",
         "Russian",
         "Русский",
+    ),
+    (
+        EnumKind::ClientRunMode,
+        EnumValue::ClientRunModeAuto,
+        "Авто",
+        "Auto",
+        "Авто",
+    ),
+    (
+        EnumKind::ClientRunMode,
+        EnumValue::ClientRunModeOrdinaryApplication,
+        "ОбычноеПриложение",
+        "OrdinaryApplication",
+        "Обычное приложение",
+    ),
+    (
+        EnumKind::ClientRunMode,
+        EnumValue::ClientRunModeManagedApplication,
+        "УправляемоеПриложение",
+        "ManagedApplication",
+        "Управляемое приложение",
     ),
     (
         EnumKind::JsonValueType,
@@ -2379,6 +2410,8 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
 pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("ВариантВстроенногоЯзыка", EnumKind::ScriptVariant),
     ("ScriptVariant", EnumKind::ScriptVariant),
+    ("РежимЗапускаКлиентскогоПриложения", EnumKind::ClientRunMode),
+    ("ClientRunMode", EnumKind::ClientRunMode),
     ("ТипЗначенияJSON", EnumKind::JsonValueType),
     ("JSONValueType", EnumKind::JsonValueType),
     ("ПереносСтрокJSON", EnumKind::JsonLineBreak),
@@ -2575,6 +2608,24 @@ mod tests {
         assert_eq!(EnumValue::JsonNothing.display_text(), "Нет");
         assert_eq!(EnumValue::JsonNull.display_text(), "Значение Null");
         assert_eq!(EnumValue::LineBreakAuto.display_text(), "Автоматически");
+    }
+
+    #[test]
+    fn client_run_mode_matches_the_measured_platform_surface() {
+        assert_eq!(
+            lookup_member(EnumKind::ClientRunMode, "ManagedApplication"),
+            Some(EnumValue::ClientRunModeManagedApplication)
+        );
+        assert_eq!(EnumValue::ClientRunModeAuto.display_text(), "Авто");
+        assert_eq!(
+            EnumValue::ClientRunModeOrdinaryApplication.display_text(),
+            "Обычное приложение"
+        );
+        assert_eq!(
+            EnumValue::ClientRunModeManagedApplication.display_text(),
+            "Управляемое приложение"
+        );
+        assert_eq!(EnumKind::ClientRunMode.meta_ru_name(), "EnumClientRunMode");
     }
 
     /// Составные члены потоковых перечислений печатаются раздельно и со

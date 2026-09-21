@@ -1,3 +1,7 @@
 file.begin	session-current-run-mode-1
-SESSION.CURRENT_RUN_MODE.BACKGROUND	Undefined:
+SESSION.CURRENT_RUN_MODE.ENUM.AUTO	ClientRunMode:Авто
+SESSION.CURRENT_RUN_MODE.ENUM.ORDINARY	ClientRunMode:Обычное приложение
+SESSION.CURRENT_RUN_MODE.ENUM.MANAGED	ClientRunMode:Управляемое приложение
+SESSION.CURRENT_RUN_MODE.ENUM.META	EnumClientRunMode:EnumClientRunMode
+SESSION.CURRENT_RUN_MODE.BACKGROUND	Не определено:
 file.end	session-current-run-mode-1

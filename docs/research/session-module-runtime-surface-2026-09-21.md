@@ -194,7 +194,11 @@ SESSION.FAILURE.NESTED_THEN_THROW.TRACE  startup|required:ПробаА|required:
 представление результата во временное хранилище родительского сеанса:
 
 ```text
-SESSION.CURRENT_RUN_MODE.BACKGROUND	Undefined:
+SESSION.CURRENT_RUN_MODE.ENUM.AUTO	ClientRunMode:Авто
+SESSION.CURRENT_RUN_MODE.ENUM.ORDINARY	ClientRunMode:Обычное приложение
+SESSION.CURRENT_RUN_MODE.ENUM.MANAGED	ClientRunMode:Управляемое приложение
+SESSION.CURRENT_RUN_MODE.ENUM.META	EnumClientRunMode:EnumClientRunMode
+SESSION.CURRENT_RUN_MODE.BACKGROUND	Не определено:
 ```
 
 Проба и результат сохранены в
