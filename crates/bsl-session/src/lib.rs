@@ -243,6 +243,7 @@ pub struct SessionRuntime {
     parameters: Rc<SessionParameters>,
     kind: SessionKind,
     platform_version: Arc<str>,
+    connection_string: Option<Arc<str>>,
 }
 
 impl SessionRuntime {
@@ -250,11 +251,13 @@ impl SessionRuntime {
         parameters: Rc<SessionParameters>,
         kind: SessionKind,
         platform_version: Arc<str>,
+        connection_string: Option<Arc<str>>,
     ) -> Self {
         Self {
             parameters,
             kind,
             platform_version,
+            connection_string,
         }
     }
 
@@ -268,6 +271,12 @@ impl SessionRuntime {
     #[must_use]
     pub const fn kind(&self) -> SessionKind {
         self.kind
+    }
+
+    /// Возвращает переданную хостом строку регистрации информационной базы.
+    #[must_use]
+    pub fn connection_string(&self) -> Option<&str> {
+        self.connection_string.as_deref()
     }
 }
 
@@ -410,6 +419,7 @@ pub struct SessionFactory {
     startup: open_bsl::Module,
     kind: SessionKind,
     platform_version: Arc<str>,
+    connection_string: Option<Arc<str>>,
 }
 
 impl SessionFactory {
@@ -515,7 +525,26 @@ impl SessionFactory {
             startup,
             kind,
             platform_version: platform_version.into(),
+            connection_string: None,
         })
+    }
+
+    /// Задаёт строку регистрации информационной базы для создаваемых сеансов.
+    /// Строка сохраняется без разбора и преобразования.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, если передана пустая строка.
+    pub fn with_connection_string(
+        mut self,
+        connection_string: impl Into<String>,
+    ) -> Result<Self, SessionError> {
+        let connection_string = connection_string.into();
+        if connection_string.is_empty() {
+            return Err(SessionError::EmptyConnectionString);
+        }
+        self.connection_string = Some(Arc::from(connection_string));
+        Ok(self)
     }
 
     /// Открывает изолированный сеанс на уже созданном отдельном соединении.
@@ -618,6 +647,7 @@ impl SessionFactory {
                 Rc::clone(&parameters),
                 self.kind,
                 Arc::clone(&self.platform_version),
+                self.connection_string.clone(),
             )));
         if let Some(data_access) = data_access {
             data = data.with_data_access(data_access);
@@ -723,6 +753,8 @@ impl Session {
 pub enum SessionError {
     /// Версия платформы не задана.
     EmptyPlatformVersion,
+    /// Строка регистрации информационной базы пуста.
+    EmptyConnectionString,
     /// Код и метаданные относятся к разным конфигурациям.
     ConfigurationIdentityMismatch {
         /// Идентичность снимка кода.
@@ -763,6 +795,9 @@ impl fmt::Display for SessionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyPlatformVersion => formatter.write_str("версия платформы пуста"),
+            Self::EmptyConnectionString => {
+                formatter.write_str("строка соединения с информационной базой пуста")
+            }
             Self::ConfigurationIdentityMismatch { code, metadata } => write!(
                 formatter,
                 "код конфигурации `{code}` не совпадает с метаданными `{metadata}`"
@@ -923,6 +958,13 @@ fn current_run_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     }
 }
 
+fn infobase_connection_string(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let value = runtime(ctx)?.connection_string().ok_or_else(|| {
+        RtError::DynamicError("строка соединения с информационной базой не передана хостом".into())
+    })?;
+    Ok(Value::Str(value.into()))
+}
+
 fn construct_system_information(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     let platform_version = runtime(ctx)?.platform_version.clone();
     Ok(Value::new_object(SystemInformationObject {
@@ -970,6 +1012,16 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
         call: current_run_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(3),
+        names: &[
+            "СтрокаСоединенияИнформационнойБазы",
+            "InfoBaseConnectionString",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: infobase_connection_string,
     },
 ];
 

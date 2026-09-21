@@ -15,6 +15,7 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
             parameters,
             SessionKind::ThinClient,
             Arc::from(PLATFORM_VERSION),
+            None,
         ))),
     )
 }
@@ -451,6 +452,84 @@ fn startup_reads_the_factory_platform_version() {
         session.parameters().peek("Запущен").unwrap(),
         Some(Value::Str(PLATFORM_VERSION.into()))
     );
+}
+
+#[test]
+fn connection_string_is_exact_session_data_and_missing_value_fails() {
+    const FOREGROUND: &str = "File=/srv/1c/demo;Usr=Тест;";
+    const BACKGROUND: &str = "Srvr=cluster;Ref=demo;";
+
+    let foreground_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap()
+    .with_connection_string(FOREGROUND)
+    .unwrap();
+    let mut foreground = foreground_factory.open(principal(), Box::new(())).unwrap();
+    let probe = foreground
+        .instantiate(
+            "Функция Значение() Экспорт Возврат СтрокаСоединенияИнформационнойБазы(); КонецФункции",
+        )
+        .unwrap();
+    assert_eq!(
+        foreground.call(&probe, "Значение", vec![]).unwrap().0,
+        Value::Str(FOREGROUND.into())
+    );
+
+    let background_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
+    )
+    .unwrap()
+    .with_connection_string(BACKGROUND)
+    .unwrap();
+    let mut background = background_factory
+        .open_background(principal(), Box::new(()), &foreground)
+        .unwrap();
+    let probe = background
+        .instantiate("Функция Значение() Экспорт Возврат InfoBaseConnectionString(); КонецФункции")
+        .unwrap();
+    assert_eq!(
+        background.call(&probe, "Значение", vec![]).unwrap().0,
+        Value::Str(BACKGROUND.into())
+    );
+
+    let missing_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::WebClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut missing = missing_factory.open(principal(), Box::new(())).unwrap();
+    let probe = missing
+        .instantiate(
+            "Функция Значение() Экспорт Возврат СтрокаСоединенияИнформационнойБазы(); КонецФункции",
+        )
+        .unwrap();
+    let error = missing.call(&probe, "Значение", vec![]).unwrap_err();
+    assert!(error.to_string().contains("не передана хостом"));
+
+    assert!(matches!(
+        SessionFactory::new(
+            code_snapshot(START_HANDLER),
+            metadata_catalog("configuration"),
+            "МодульСеанса",
+            SessionKind::WebClient,
+            PLATFORM_VERSION,
+        )
+        .unwrap()
+        .with_connection_string(""),
+        Err(SessionError::EmptyConnectionString)
+    ));
 }
 
 #[test]
