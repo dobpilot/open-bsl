@@ -205,6 +205,19 @@ SESSION.CURRENT_RUN_MODE.BACKGROUND	Не определено:
 `tests/conformance/measure/1c/measure-session-current-run-mode.bsl` и
 `measure-session-current-run-mode.platform.txt`.
 
+Связь сеанса с фоновым заданием измерена тем же способом скриптом
+`measure-current-infobase-session.bsl`. И в клиентском, и в фоновом контексте
+`ПолучитьТекущийСеансИнформационнойБазы()` имеет тип `Active session`. В
+клиентском сеансе `ПолучитьФоновоеЗадание()` возвращает `Undefined`; внутри
+фонового задания он возвращает `Background job` с полным именем фактически
+запущенной цели в свойстве `ИмяМетода`:
+
+```text
+SESSION.INFOBASE.TYPE              Active session
+SESSION.INFOBASE.FOREGROUND_JOB    Undefined
+SESSION.INFOBASE.BACKGROUND_JOB    Active session|Background job|ЗамерыФоновыхЗаданий.КонтекстСеансаВХранилище
+```
+
 ### Безопасный и привилегированный режимы
 
 `УстановитьБезопасныйРежим()` принимает `Булево` или строковое имя профиля

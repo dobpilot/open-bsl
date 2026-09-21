@@ -94,6 +94,18 @@ The ORM component SHALL provide `ХранилищеЗначения`/`ValueStora
 - **WHEN** two collection entries refer to the same mutable object before storage
 - **THEN** mutating the first restored entry does not change the second restored entry
 
+### Requirement: Current information-base session
+The session component SHALL provide `ПолучитьТекущийСеансИнформационнойБазы`/`GetCurrentInfoBaseSession`. Its result SHALL have the measured `Active session` type and provide `ПолучитьФоновоеЗадание`/`GetBackgroundJob`. A foreground session SHALL return `Неопределено`. A background Session SHALL return a `Background job` value whose `ИмяМетода`/`MethodName` is the exact job target explicitly supplied when that Session is opened. The session layer SHALL fail explicitly for unsupported job members rather than fabricate a complete job-service snapshot.
+
+#### Scenario: Foreground session
+- **WHEN** foreground configuration code requests the background job of its current information-base session
+- **THEN** it receives `Неопределено`
+
+#### Scenario: Background session
+- **WHEN** a background Session is opened for `Модуль.Метод`
+- **THEN** its current information-base session returns a `Background job`
+- **AND** that job's `ИмяМетода` is `Модуль.Метод`
+
 ### Requirement: Background session isolation and parameter inheritance
 A background job SHALL run in a new Session for an explicitly supplied selectable principal. It SHALL use a separate database connection and module instances. Its initial session parameters SHALL be copied from the parent session, and later changes in either session SHALL not change the other.
 

@@ -1,0 +1,5 @@
+file.begin	current-infobase-session-1
+SESSION.INFOBASE.TYPE	Active session
+SESSION.INFOBASE.FOREGROUND_JOB	Undefined
+SESSION.INFOBASE.BACKGROUND_JOB	Active session|Background job|ЗамерыФоновыхЗаданий.КонтекстСеансаВХранилище
+file.end	current-infobase-session-1

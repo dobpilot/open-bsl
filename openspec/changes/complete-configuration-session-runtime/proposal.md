@@ -8,6 +8,7 @@ Full session-parameter initialization calls manager modules, performs live queri
 - Combine platform manager methods with exports of the linked BSL manager module.
 - Implement the measured lazy session-parameter state machine.
 - Provide the measured stored-value objects used by managed-client startup code.
+- Expose the current information-base session and its explicit background-job identity.
 - Execute data reads under the current principal's rights and RLS.
 - Start background jobs as separate sessions for an explicitly selected principal while copying the parent session parameters.
 
