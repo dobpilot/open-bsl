@@ -244,6 +244,7 @@ pub struct SessionRuntime {
     kind: SessionKind,
     platform_version: Arc<str>,
     connection_string: Option<Arc<str>>,
+    connection_number: u64,
     background_method: Option<Arc<str>>,
 }
 
@@ -253,6 +254,7 @@ impl SessionRuntime {
         kind: SessionKind,
         platform_version: Arc<str>,
         connection_string: Option<Arc<str>>,
+        connection_number: u64,
         background_method: Option<Arc<str>>,
     ) -> Self {
         Self {
@@ -260,6 +262,7 @@ impl SessionRuntime {
             kind,
             platform_version,
             connection_string,
+            connection_number,
             background_method,
         }
     }
@@ -280,6 +283,12 @@ impl SessionRuntime {
     #[must_use]
     pub fn connection_string(&self) -> Option<&str> {
         self.connection_string.as_deref()
+    }
+
+    /// Возвращает номер соединения текущего сеанса.
+    #[must_use]
+    pub const fn connection_number(&self) -> u64 {
+        self.connection_number
     }
 
     /// Возвращает полное имя метода текущего фонового задания.
@@ -562,15 +571,17 @@ impl SessionFactory {
     ///
     /// # Errors
     ///
-    /// Возвращает ошибку создания контейнера, инициализации модуля или
-    /// стартового `УстановкаПараметровСеанса(Неопределено)`. Частичный
-    /// [`Session`] при ошибке не возвращается.
+    /// Возвращает ошибку недопустимого номера соединения, создания контейнера,
+    /// инициализации модуля или стартового
+    /// `УстановкаПараметровСеанса(Неопределено)`. Частичный [`Session`] при
+    /// ошибке не возвращается.
     pub fn open(
         &self,
         principal: Principal,
         connection: Box<dyn std::any::Any>,
+        connection_number: u64,
     ) -> Result<Session, SessionError> {
-        self.open_with_resources(principal, connection, None, None, None)
+        self.open_with_resources(principal, connection, connection_number, None, None, None)
     }
 
     /// Открывает изолированный сеанс с адаптером данных конфигурации.
@@ -584,9 +595,17 @@ impl SessionFactory {
         &self,
         principal: Principal,
         connection: Box<dyn std::any::Any>,
+        connection_number: u64,
         data_access: Rc<dyn DataAccess>,
     ) -> Result<Session, SessionError> {
-        self.open_with_resources(principal, connection, Some(data_access), None, None)
+        self.open_with_resources(
+            principal,
+            connection,
+            connection_number,
+            Some(data_access),
+            None,
+            None,
+        )
     }
 
     /// Открывает фоновый сеанс с копией параметров родителя.
@@ -600,6 +619,7 @@ impl SessionFactory {
         &self,
         principal: Principal,
         connection: Box<dyn std::any::Any>,
+        connection_number: u64,
         method_name: &str,
         parent: &Session,
     ) -> Result<Session, SessionError> {
@@ -612,6 +632,7 @@ impl SessionFactory {
         self.open_with_resources(
             principal,
             connection,
+            connection_number,
             None,
             Some(Rc::new(parent.parameters.copy_for_background())),
             Some(Arc::from(method_name)),
@@ -628,6 +649,7 @@ impl SessionFactory {
         &self,
         principal: Principal,
         connection: Box<dyn std::any::Any>,
+        connection_number: u64,
         data_access: Rc<dyn DataAccess>,
         method_name: &str,
         parent: &Session,
@@ -641,6 +663,7 @@ impl SessionFactory {
         self.open_with_resources(
             principal,
             connection,
+            connection_number,
             Some(data_access),
             Some(Rc::new(parent.parameters.copy_for_background())),
             Some(Arc::from(method_name)),
@@ -651,10 +674,14 @@ impl SessionFactory {
         &self,
         principal: Principal,
         connection: Box<dyn std::any::Any>,
+        connection_number: u64,
         data_access: Option<Rc<dyn DataAccess>>,
         parameters: Option<Rc<SessionParameters>>,
         background_method: Option<Arc<str>>,
     ) -> Result<Session, SessionError> {
+        if connection_number == 0 || connection_number > i64::MAX as u64 {
+            return Err(SessionError::InvalidConnectionNumber(connection_number));
+        }
         let parameters = match parameters {
             Some(parameters) => parameters,
             None => Rc::new(SessionParameters::new(
@@ -668,6 +695,7 @@ impl SessionFactory {
                 self.kind,
                 Arc::clone(&self.platform_version),
                 self.connection_string.clone(),
+                connection_number,
                 background_method,
             )));
         if let Some(data_access) = data_access {
@@ -776,6 +804,8 @@ pub enum SessionError {
     EmptyPlatformVersion,
     /// Строка регистрации информационной базы пуста.
     EmptyConnectionString,
+    /// Номер соединения не является положительным числом, представимым в BSL.
+    InvalidConnectionNumber(u64),
     /// Код и метаданные относятся к разным конфигурациям.
     ConfigurationIdentityMismatch {
         /// Идентичность снимка кода.
@@ -821,6 +851,10 @@ impl fmt::Display for SessionError {
             Self::EmptyConnectionString => {
                 formatter.write_str("строка соединения с информационной базой пуста")
             }
+            Self::InvalidConnectionNumber(number) => write!(
+                formatter,
+                "номер соединения с информационной базой недопустим: {number}"
+            ),
             Self::ConfigurationIdentityMismatch { code, metadata } => write!(
                 formatter,
                 "код конфигурации `{code}` не совпадает с метаданными `{metadata}`"
@@ -1025,6 +1059,12 @@ fn infobase_connection_string(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResul
     Ok(Value::Str(value.into()))
 }
 
+fn infobase_connection_number(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::number_from_i64(
+        runtime(ctx)?.connection_number() as i64
+    ))
+}
+
 fn current_infobase_session(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::new_object(InfoBaseSessionObject {
         background_method: runtime(ctx)?.background_method.clone(),
@@ -1138,6 +1178,16 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
         call: current_infobase_session,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(5),
+        names: &[
+            "НомерСоединенияИнформационнойБазы",
+            "InfoBaseConnectionNumber",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: infobase_connection_number,
     },
 ];
 
