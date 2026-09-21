@@ -11,6 +11,7 @@
 - [x] 5d. Implement the measured current information-base session and its foreground/background job association.
 - [ ] 5e. Add only the remaining metadata, manager, register, constant, connection, security-mode, and diagnostic members reached by the recorded `demo`, `buh`, and `unf` startup scenarios, measuring platform semantics before implementation.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
+- [ ] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [ ] 6. Reject missing rights and unsupported runtime members explicitly instead of returning permissive placeholders.
 - [x] 7. Create background-job sessions with an explicit principal, copied parent parameters, a separate connection, and isolated module state.
 - [ ] 8. Run the full-start and selected-parameter `demo`, `buh`, and `unf` scenarios without changing existing regression expectations.

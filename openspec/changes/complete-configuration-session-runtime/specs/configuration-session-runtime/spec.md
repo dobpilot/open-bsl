@@ -118,6 +118,23 @@ The session component SHALL provide `ПолучитьТекущийСеансИ�
 - **THEN** its current information-base session returns a `Background job`
 - **AND** that job's `ИмяМетода` is `Модуль.Метод`
 
+### Requirement: Frame-scoped security modes
+The session runtime SHALL provide the boolean startup surface `УстановитьБезопасныйРежим`/`SetSafeMode`, `БезопасныйРежим`/`SafeMode`, `УстановитьПривилегированныйРежим`/`SetPrivilegedMode`, and `ПривилегированныйРежим`/`PrivilegedMode` with the behavior measured on platform 8.3.27. Each enabling call SHALL increment a counter owned by the current BSL call frame. A disabling call SHALL decrement only that frame's counter and SHALL fail if the frame has no matching enable. Leaving a frame normally or by exception SHALL remove its remaining enables. An active safe mode SHALL make the privileged-mode query false without discarding privileged enables. Unsupported named security profiles SHALL fail explicitly until a profile catalog is supplied by the host.
+
+#### Scenario: Nested frame cannot disable its caller
+- **WHEN** a caller enables a mode and a nested function attempts to disable it without enabling it itself
+- **THEN** the nested disable raises an error
+- **AND** the caller's mode remains enabled
+
+#### Scenario: Frame exits with a mode enabled
+- **WHEN** a function enables a mode and returns or raises an exception without disabling it
+- **THEN** the mode is disabled after that frame is left
+
+#### Scenario: Safe mode suppresses privilege
+- **WHEN** one frame enables safe mode and privileged mode
+- **THEN** `ПривилегированныйРежим()` returns false while safe mode is active
+- **AND** it returns true after safe mode is disabled in that frame
+
 ### Requirement: Background session isolation and parameter inheritance
 A background job SHALL run in a new Session for an explicitly supplied selectable principal. It SHALL use a separate database connection and module instances. Its initial session parameters SHALL be copied from the parent session, and later changes in either session SHALL not change the other.
 
