@@ -1509,6 +1509,32 @@ impl<'a> Resolver<'a> {
                 Some(slot) => Ok(RExpr::Local(slot)),
                 None => match self.module_index.get(&name.to_uppercase()) {
                     Some(&slot) => Ok(RExpr::ModuleVar(slot)),
+                    // Глобальное свойство библиотеки — вызов её функции без
+                    // аргументов при каждом чтении. Локальные и модульные
+                    // переменные выше побеждают; заглушка `Метаданные` ниже
+                    // заменяется библиотекой. Остальные особые имена реестр
+                    // запрещает объявлять глобальными свойствами.
+                    None if self.registry.and_then(|r| r.lookup_global(name)).is_some() => {
+                        let registry = self.registry.expect("глобал найден в реестре");
+                        let (library_index, function) =
+                            registry.lookup_global(name).expect("проверено выше");
+                        let descriptor = registry
+                            .function(library_index, function)
+                            .expect("реестр проверил функцию глобала");
+                        let library = bsl_rt::LibraryKey::new(
+                            registry
+                                .library(library_index)
+                                .expect("индекс из реестра")
+                                .package(),
+                        );
+                        self.used_libraries.insert(library.clone());
+                        Ok(RExpr::CallComponent {
+                            library,
+                            function,
+                            kind: descriptor.kind,
+                            args: Vec::new(),
+                        })
+                    }
                     // `АргументыКоманднойСтроки` пишется и без скобок — как
                     // свойство глобального контекста в OneScript, откуда
                     // это расширение и взято. Переменная с тем же именем

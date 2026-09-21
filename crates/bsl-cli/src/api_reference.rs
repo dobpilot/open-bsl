@@ -63,6 +63,27 @@ fn render(registry: &RuntimeRegistry) -> String {
             out.push_str(".\n\n");
         }
 
+        if !library.globals().is_empty() {
+            out.push_str(
+                "#### Глобальные свойства\n\n| Имя и псевдонимы | Функция получения |\n|---|---|\n",
+            );
+            for global in library.globals() {
+                let function = library
+                    .functions()
+                    .iter()
+                    .find(|f| f.code == global.function)
+                    .expect("реестр проверил функцию глобала");
+                writeln!(
+                    out,
+                    "| {} | {} |",
+                    names(global.names),
+                    names(function.names)
+                )
+                .unwrap();
+            }
+            out.push('\n');
+        }
+
         out.push_str("#### Глобальные функции\n\n");
         if library.functions().is_empty() {
             out.push_str("Нет.\n\n");
@@ -347,3 +368,7 @@ mod tests {
         assert_eq!(type_aliases(&TYPE), ["Type"]);
     }
 }
+
+#[cfg(test)]
+#[path = "api_reference_global_tests.rs"]
+mod global_tests;

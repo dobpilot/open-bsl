@@ -86,11 +86,11 @@ pub use builtin::{
 pub use component::{
     Arity, ByteStreamFactory, CallContext, CallOutcome, Capability, ComponentCall, ConstructorCode,
     ConstructorDescriptor, ContextKind, ExecutionParts, FunctionCode, FunctionDescriptor,
-    FunctionKind, InterpreterServices, LibraryDependency, LibraryDescriptor, LibraryKey,
-    LibraryRequirement, MethodCall, MethodDescriptor, ObjectMembersDescriptor, PendingHostCall,
-    PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
-    SuspendingMethodCall, call_method_from_table, core_library, find_method_from_table,
-    get_property_from_table, set_property_from_table,
+    FunctionKind, GlobalDescriptor, InterpreterServices, LibraryDependency, LibraryDescriptor,
+    LibraryKey, LibraryRequirement, MethodCall, MethodDescriptor, ObjectMembersDescriptor,
+    PendingHostCall, PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder,
+    RuntimeRegistry, SuspendingMethodCall, call_method_from_table, core_library,
+    find_method_from_table, get_property_from_table, set_property_from_table,
 };
 pub use date::{
     BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,

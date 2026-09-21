@@ -1,0 +1,3 @@
+# Design
+
+Use GlobalDescriptor { names, function } and a const LibraryDescriptor::with_globals builder. Resolve reads to the existing CallComponent representation, with no bytecode or VM opcode changes. The registry validates targets and collisions. Variables win; library globals precede the Metadata fallback; all other special global names are reserved. Imported module aliases retain their existing precedence. Each read calls the getter; the library owns caching and identity. This is a host extension contract, not a claim about platform getter identity. Keep the standalone metadata implementation intact. Export descriptors through open-bsl.

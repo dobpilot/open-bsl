@@ -6,6 +6,12 @@ use std::sync::Arc;
 
 use crate::{BslValue, RtError, RtResult, RuntimeShapes};
 
+// Проверка глобалов отделена от сборки таблиц функций: псевдонимы
+// сравниваются тем же правилом, которым затем ищет резолвер.
+#[path = "component/globals.rs"]
+mod globals;
+use globals::build_globals;
+
 /// Фабрика потока чтения над неизменяемыми `ДвоичныеДанные`.
 ///
 /// Указатель на функцию сохраняет реестр `Send + Sync`: замыкание с
@@ -1124,6 +1130,14 @@ pub enum FunctionKind {
     Intrinsic,
 }
 
+/// Глобальное свойство библиотеки: каждое чтение вызывает функцию той же
+/// библиотеки без аргументов. Первое имя — русское, остальные — псевдонимы.
+#[derive(Debug, Clone, Copy)]
+pub struct GlobalDescriptor {
+    pub names: &'static [&'static str],
+    pub function: FunctionCode,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct FunctionDescriptor {
     pub code: FunctionCode,
@@ -1212,6 +1226,7 @@ pub struct LibraryDescriptor {
     version: &'static str,
     dependencies: &'static [LibraryDependency],
     functions: &'static [FunctionDescriptor],
+    globals: &'static [GlobalDescriptor],
     constructors: &'static [ConstructorDescriptor],
     constructor_types: &'static [(ConstructorCode, &'static crate::TypeDescriptor)],
     /// Типы объектов, которые компонент вводит в язык. По ним `Тип("Имя")`
@@ -1240,6 +1255,7 @@ impl LibraryDescriptor {
             version,
             dependencies: &[],
             functions: &[],
+            globals: &[],
             constructors: &[],
             constructor_types: &[],
             types: &[],
@@ -1254,6 +1270,17 @@ impl LibraryDescriptor {
     pub const fn with_dependencies(mut self, d: &'static [LibraryDependency]) -> Self {
         self.dependencies = d;
         self
+    }
+
+    /// Объявляет глобальные свойства, вычисляемые функциями библиотеки.
+    pub const fn with_globals(mut self, globals: &'static [GlobalDescriptor]) -> Self {
+        self.globals = globals;
+        self
+    }
+
+    /// Глобальные свойства библиотеки и их функции получения значения.
+    pub const fn globals(&self) -> &'static [GlobalDescriptor] {
+        self.globals
     }
 
     /// Глобальные функции библиотеки.
@@ -1579,6 +1606,16 @@ const CORE_FUNCTION_TABLE: &[FunctionDescriptor] = &[
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistryError {
+    /// Имя или псевдоним глобального свойства объявлены повторно.
+    DuplicateGlobalName(String),
+    /// Глобальное свойство пытается заменить зарезервированное имя.
+    ReservedGlobalName(String),
+    /// Получатель значения отсутствует или не допускает чтение без аргументов.
+    InvalidGlobalFunction {
+        package: String,
+        code: FunctionCode,
+    },
+
     MissingCore,
     TooManyLibraries,
     EmptyIdentity,
@@ -1673,6 +1710,16 @@ pub enum RegistryError {
 impl fmt::Display for RegistryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::DuplicateGlobalName(name) => {
+                write!(f, "глобальное имя «{name}» объявлено повторно")
+            }
+            Self::ReservedGlobalName(name) => write!(f, "глобальное имя «{name}» зарезервировано"),
+            Self::InvalidGlobalFunction { package, code } => write!(
+                f,
+                "неверная функция {} глобального свойства библиотеки «{package}»",
+                code.get()
+            ),
+
             Self::MissingCore => write!(f, "компонент bsl-rt не зарегистрирован"),
             Self::TooManyLibraries => write!(f, "число компонентов не помещается в индекс u8"),
             Self::EmptyIdentity => write!(f, "имя пакета и версия не могут быть пустыми"),
@@ -2099,6 +2146,7 @@ impl RuntimeBuilder {
             }
         }
 
+        let globals = build_globals(&self.libraries)?;
         let type_catalog = Arc::new(build_type_catalog(&self.libraries)?);
         let mut byte_stream_factories = self
             .libraries
@@ -2112,6 +2160,7 @@ impl RuntimeBuilder {
         Ok(RuntimeRegistry {
             libraries: self.libraries,
             function_names,
+            globals,
             constructor_names,
             type_catalog,
             byte_stream_factory,
@@ -2123,6 +2172,7 @@ impl RuntimeBuilder {
 pub struct RuntimeRegistry {
     libraries: Vec<LibraryDescriptor>,
     function_names: HashMap<String, (u8, FunctionCode)>,
+    globals: Vec<(&'static str, u8, FunctionCode)>,
     constructor_names: HashMap<String, (u8, ConstructorCode)>,
     type_catalog: Arc<TypeCatalog>,
     byte_stream_factory: Option<ByteStreamFactory>,
@@ -2141,6 +2191,14 @@ impl RuntimeRegistry {
         self.libraries
             .iter()
             .find(|library| library.package == package)
+    }
+
+    /// Ищет глобальное свойство по общему правилу сравнения имён runtime.
+    pub fn lookup_global(&self, name: &str) -> Option<(u8, FunctionCode)> {
+        self.globals
+            .iter()
+            .find(|(alias, _, _)| crate::folded_eq(alias, name))
+            .map(|(_, library, function)| (*library, *function))
     }
 
     pub fn lookup_function(&self, name: &str) -> Option<(u8, FunctionCode)> {
@@ -2582,9 +2640,9 @@ mod descriptor_sizes {
 
     /// Размеры дескрипторов зафиксированы намеренно (ABI-E плана
     /// `docs/archive/refactors/component-abi-f.md`). `LibraryDescriptor`
-    /// содержит толстые указатели на `type_aliases`, группы объектных членов и
-    /// типы результатов конструкторов плюс обычный указатель
-    /// `byte_stream_factory` — всего 152 байта на x86-64. Записи статические,
+    /// содержит толстые указатели на `globals`, `type_aliases`, группы объектных
+    /// членов и типы результатов конструкторов плюс обычный указатель
+    /// `byte_stream_factory` — всего 168 байт на x86-64. Записи статические,
     /// так что рост платится один раз на
     /// библиотеку, а не на объект. Удалённая вместе с JIT пометка требований
     /// к контексту освободила 8 байт. `MethodDescriptor` — 64 байта:
@@ -2601,7 +2659,7 @@ mod descriptor_sizes {
     /// ловит незамеченный рост.
     #[test]
     fn descriptors_have_the_expected_size() {
-        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 152);
+        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 168);
         assert_eq!(std::mem::size_of::<MethodDescriptor>(), 64);
     }
 }
