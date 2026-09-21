@@ -1,0 +1,3 @@
+file.begin	session-current-run-mode-1
+SESSION.CURRENT_RUN_MODE.BACKGROUND	Undefined:
+file.end	session-current-run-mode-1

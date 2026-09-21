@@ -7,6 +7,7 @@ A loaded configuration needs a host object that combines the existing open-bsl e
 - Add `bsl-orm` for the measured metadata, role, query, manager, register, and constant surface.
 - Add `bsl-session` with `SessionFactory` and `Session`.
 - Start each session by invoking `УстановкаПараметровСеанса(Неопределено)` and publish it only after successful startup.
+- Expose the platform launch mode that corresponds to the selected session kind.
 - Add an optional `bsl-cli --config-db` mode while preserving every existing invocation when the option is absent.
 
 ## Impact

@@ -33,6 +33,17 @@ A non-empty `v8users` catalog SHALL expose only users with at least one enabled 
 - **WHEN** the CLI starts a configuration session without `--principal` and several users are selectable
 - **THEN** it fails and lists the selectable names
 
+### Requirement: Session launch mode
+`bsl-session` SHALL expose `ТекущийРежимЗапуска` and `CurrentRunMode` with no arguments. A web-client or thin-client session SHALL return `РежимЗапускаКлиентскогоПриложения.УправляемоеПриложение`. A background-job session SHALL return `Неопределено`, as measured on platform 8.3.27.2342.
+
+#### Scenario: Managed client session
+- **WHEN** configuration code calls `ТекущийРежимЗапуска()` in a web-client or thin-client session
+- **THEN** it receives `РежимЗапускаКлиентскогоПриложения.УправляемоеПриложение`
+
+#### Scenario: Background session
+- **WHEN** configuration code calls `ТекущийРежимЗапуска()` in a background-job session
+- **THEN** it receives `Неопределено`
+
 ### Requirement: Role availability
 The ORM library SHALL provide `РольДоступна` and `IsInRole` with one argument. A string role name or metadata role object SHALL answer whether that role belongs to the current principal. An unknown role, an invalid value, or an invalid argument type SHALL raise an error.
 

@@ -4,6 +4,8 @@
 
 Each `Session` owns one open-bsl `State`, session module instances, session parameters, execution modes, a frozen principal description, and one live database connection. Database statements use the existing bounded read-only `READ COMMITTED` operations of `open-sdbl-db`; no transaction spans the lifetime of the BSL session. A failed connection, compatibility check, or startup handler returns an error and no usable partial session.
 
+`ТекущийРежимЗапуска()` is derived from the explicit session kind. Web-client and thin-client sessions execute managed application code and return `РежимЗапускаКлиентскогоПриложения.УправляемоеПриложение`. A background-job session returns `Неопределено`; this result was measured inside a real background job on platform 8.3.27.2342 by `measure-session-current-run-mode.bsl`.
+
 The principal is selected from `v8users` by case-insensitive name or GUID. Only a user with at least one enabled authentication method is selectable. With one selectable user the CLI may choose it automatically; with several it requires `--principal`; with no `v8users` rows it constructs the platform empty user and applies the configuration's main roles. The description is frozen at session creation. Temporary authentication locks are outside this testing host.
 
 The required upstream `open-sdbl` user model must decode every authentication method supported by the selected platform family and expose whether at least one method is enabled. `AdmRole` remains separate from object roles and does not grant unrestricted application data access.
