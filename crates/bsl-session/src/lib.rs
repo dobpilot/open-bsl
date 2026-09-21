@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use bsl_config::{ConfigurationCodeSnapshot, ModuleKind};
-use bsl_orm::{MetadataCatalog, MetadataKind, Principal, SessionData};
+use bsl_orm::{DataAccess, MetadataCatalog, MetadataKind, Principal, SessionData};
 use open_bsl::{
     Arity, CallContext, Engine, Error as OpenBslError, FunctionCode, FunctionDescriptor,
     FunctionKind, GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe,
@@ -516,7 +516,23 @@ impl SessionFactory {
         principal: Principal,
         connection: Box<dyn std::any::Any>,
     ) -> Result<Session, SessionError> {
-        self.open_with_parameters(principal, connection, None)
+        self.open_with_resources(principal, connection, None, None)
+    }
+
+    /// Открывает изолированный сеанс с адаптером данных конфигурации.
+    /// Адаптер принадлежит создаваемому сеансу и вызывается объектами
+    /// `bsl-orm` с его пользователем и параметрами.
+    ///
+    /// # Errors
+    ///
+    /// Те же ошибки, что у [`SessionFactory::open`].
+    pub fn open_with_data_access(
+        &self,
+        principal: Principal,
+        connection: Box<dyn std::any::Any>,
+        data_access: Rc<dyn DataAccess>,
+    ) -> Result<Session, SessionError> {
+        self.open_with_resources(principal, connection, Some(data_access), None)
     }
 
     /// Открывает фоновый сеанс с копией параметров родителя.
@@ -535,17 +551,43 @@ impl SessionFactory {
         if self.kind != SessionKind::BackgroundJob {
             return Err(SessionError::NotBackgroundFactory);
         }
-        self.open_with_parameters(
+        self.open_with_resources(
             principal,
             connection,
+            None,
             Some(Rc::new(parent.parameters.copy_for_background())),
         )
     }
 
-    fn open_with_parameters(
+    /// Открывает фоновый сеанс с отдельным адаптером данных и копией
+    /// параметров родителя.
+    ///
+    /// # Errors
+    ///
+    /// Те же ошибки, что у [`SessionFactory::open_background`].
+    pub fn open_background_with_data_access(
         &self,
         principal: Principal,
         connection: Box<dyn std::any::Any>,
+        data_access: Rc<dyn DataAccess>,
+        parent: &Session,
+    ) -> Result<Session, SessionError> {
+        if self.kind != SessionKind::BackgroundJob {
+            return Err(SessionError::NotBackgroundFactory);
+        }
+        self.open_with_resources(
+            principal,
+            connection,
+            Some(data_access),
+            Some(Rc::new(parent.parameters.copy_for_background())),
+        )
+    }
+
+    fn open_with_resources(
+        &self,
+        principal: Principal,
+        connection: Box<dyn std::any::Any>,
+        data_access: Option<Rc<dyn DataAccess>>,
         parameters: Option<Rc<SessionParameters>>,
     ) -> Result<Session, SessionError> {
         let parameters = match parameters {
@@ -555,9 +597,13 @@ impl SessionFactory {
                 self.parameter_names.iter().cloned(),
             )?),
         };
-        let data = SessionData::new(Arc::clone(&self.catalog), principal.clone()).with_extension(
-            Rc::new(SessionRuntime::new(Rc::clone(&parameters), self.kind)),
-        );
+        let mut data =
+            SessionData::new(Arc::clone(&self.catalog), principal.clone()).with_extension(Rc::new(
+                SessionRuntime::new(Rc::clone(&parameters), self.kind),
+            ));
+        if let Some(data_access) = data_access {
+            data = data.with_data_access(data_access);
+        }
         let mut state = self.engine.state_builder().host_data(Rc::new(data)).build();
         let startup = state.instantiate(&self.startup)?;
         startup.call(&mut state, "ЗапуститьСеанс", Vec::new())?;

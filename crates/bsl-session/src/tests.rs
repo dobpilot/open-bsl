@@ -2,7 +2,7 @@ use super::*;
 use std::sync::Arc;
 
 use bsl_config::{ConfigurationCodeSnapshot, ConfigurationModule, ModuleExecution, ModuleKind};
-use bsl_orm::{MetadataCatalog, Principal};
+use bsl_orm::{DataAccess, MetadataCatalog, MetadataObject, Principal};
 use open_bsl::{Engine, Error};
 
 fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
@@ -253,6 +253,11 @@ fn metadata_catalog(identity: &str) -> Arc<MetadataCatalog> {
                     "Копируемый",
                     bsl_orm::MetadataKind::SessionParameter,
                 ),
+                bsl_orm::MetadataObject::new(
+                    "constant-answer",
+                    "Ответ",
+                    bsl_orm::MetadataKind::Constant,
+                ),
             ],
         )
         .unwrap(),
@@ -261,6 +266,22 @@ fn metadata_catalog(identity: &str) -> Arc<MetadataCatalog> {
 
 fn principal() -> Principal {
     Principal::new("user", "Тест", Vec::new())
+}
+
+#[derive(Debug)]
+struct ConstantAccess;
+
+impl DataAccess for ConstantAccess {
+    fn constant_value(
+        &self,
+        metadata: &MetadataObject,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        assert_eq!(metadata.id(), "constant-answer");
+        assert_eq!(principal.id(), "user");
+        Ok(Value::number_from_i64(42))
+    }
 }
 
 fn candidate(id: &str, name: &str, can_authenticate: bool) -> PrincipalCandidate {
@@ -384,6 +405,27 @@ fn factory_validates_once_and_opens_isolated_started_sessions() {
     assert_eq!(
         first.call(&module, "Значение", vec![]).unwrap().0,
         Value::number_from_i64(9)
+    );
+}
+
+#[test]
+fn startup_reads_configuration_data_through_its_session_adapter() {
+    let factory = SessionFactory::new(
+        code_snapshot(
+            "Процедура УстановкаПараметровСеанса(Требуемые) Экспорт ПараметрыСеанса.Запущен = Константы.Ответ.Получить(); КонецПроцедуры",
+        ),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+    )
+    .unwrap();
+
+    let session = factory
+        .open_with_data_access(principal(), Box::new(()), Rc::new(ConstantAccess))
+        .unwrap();
+    assert_eq!(
+        session.parameters().peek("Запущен").unwrap(),
+        Some(Value::number_from_i64(42))
     );
 }
 
