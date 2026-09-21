@@ -598,6 +598,23 @@ gateway разумно и правдиво возвращать `Неопред�
 Эта поверхность не нужна первому серверному вертикальному срезу, но нужна для
 обещания совместимости с клиентским стартом.
 
+Синтакс-помощник 8.3.27.2342 уточняет границу этой поверхности. Оба глобальных
+хранилища возвращают `СтандартноеХранилищеНастроекМенеджер`, если для общего
+хранилища конфигурация не назначила собственный объект. `Загрузить` принимает
+от одного до четырёх параметров, `Сохранить` — от трёх до пяти с необязательным
+ключом настроек во второй позиции, а `Выбрать` — необязательную структуру
+отбора. Доступ к чужому пользователю и выборка без отбора по текущему
+пользователю требуют `АдминистрированиеДанных`; сохранение требует
+`СохранениеДанныхПользователя` [SP-20], [SP-21], [SP-40]–[SP-42].
+
+`НастройкиНачальнойСтраницы` и `СоставФормНачальнойСтраницы` имеют
+нульаргументные конструкторы. Первый объект читает и устанавливает состав
+форм, второй предоставляет доступные только для чтения массивы
+`ЛеваяКолонка` и `ПраваяКолонка`; элементы массивов — полные имена форм
+[SP-43]–[SP-48]. Физические значения и проверку прав должен предоставлять
+контекст конкретного сеанса: пустой процесс-глобальный словарь не является
+эквивалентом платформенного хранилища.
+
 ### Измерение `ХранилищеЗначения`
 
 Минимальная семантика измерена на платформе 8.3.27.2342 скриптом
@@ -723,3 +740,12 @@ runtime предоставляет значения через `Метаданн
 | SP-37 | `ЗаписьЖурналаРегистрации` | `platform-syntax-help:syntax-context:objects/Global context/methods/catalog3403/WriteLogEvent1234.html` |
 | SP-38 | `УровеньЖурналаРегистрации` | `platform-syntax-help:syntax-context:objects/catalog2/catalog1449/EventLogLevel.html` |
 | SP-39 | `РежимТранзакцииЗаписиЖурналаРегистрации` | `platform-syntax-help:syntax-context:objects/catalog2/catalog1449/EventLogEntryTransactionMode.html` |
+| SP-40 | `Глобальный контекст.ХранилищеОбщихНастроек` | `platform-syntax-help:syntax-context:objects/Global context/properties/CommonSettingsStorage7457.html` |
+| SP-41 | `Глобальный контекст.ХранилищеСистемныхНастроек` | `platform-syntax-help:syntax-context:objects/Global context/properties/SystemSettingsStorage7456.html` |
+| SP-42 | `СтандартноеХранилищеНастроекМенеджер.Выбрать` | `platform-syntax-help:syntax-context:objects/catalog125/catalog1705/StandardSettingsStorageManager/methods/Select4174.html` |
+| SP-43 | конструктор `НастройкиНачальнойСтраницы` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageSettings/ctors/ctor_Auto.html` |
+| SP-44 | `НастройкиНачальнойСтраницы.ПолучитьСоставФорм` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageSettings/methods/GetForms4477.html` |
+| SP-45 | `НастройкиНачальнойСтраницы.УстановитьСоставФорм` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageSettings/methods/SetForms4478.html` |
+| SP-46 | конструктор `СоставФормНачальнойСтраницы` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageForms/ctors/ctor_Auto.html` |
+| SP-47 | `СоставФормНачальнойСтраницы.ЛеваяКолонка` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageForms/properties/LeftColumn10010.html` |
+| SP-48 | `СоставФормНачальнойСтраницы.ПраваяКолонка` | `platform-syntax-help:syntax-context:objects/catalog1649/catalog1920/HomePageForms/properties/RightColumn10011.html` |

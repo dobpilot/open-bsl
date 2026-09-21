@@ -119,6 +119,33 @@ The configuration-session runtime SHALL provide `ЗаписьЖурналаРе�
 - **WHEN** configuration code writes an event and the current Session has no event-log writer
 - **THEN** the call fails explicitly
 
+### Requirement: Principal-bound client settings
+For web-client and thin-client Sessions, the runtime SHALL expose `ХранилищеОбщихНастроек`/`CommonSettingsStorage` and `ХранилищеСистемныхНастроек`/`SystemSettingsStorage` through a client-settings adapter explicitly supplied for that Session. The standard manager SHALL provide `Загрузить`/`Load` with one through four arguments, `Сохранить`/`Save` with three through five arguments, and `Выбрать`/`Select` with zero or one argument. The adapter SHALL receive the selected principal and SHALL enforce the documented user-data-save and data-administration rights. Missing storage data, denied access, and an absent adapter SHALL remain distinguishable and SHALL NOT become an unrestricted or process-global store.
+
+#### Scenario: Load current-user settings
+- **WHEN** managed-client code loads an existing setting without an explicit user name
+- **THEN** the adapter reads the setting for the current Session principal
+
+#### Scenario: Access another user's settings
+- **WHEN** code requests another user's setting without data-administration permission
+- **THEN** the operation fails instead of reading or writing that user's value
+
+#### Scenario: Client settings are unavailable
+- **WHEN** managed-client code uses a settings store without a client-settings adapter
+- **THEN** the operation fails explicitly
+
+### Requirement: Home-page settings values
+The session runtime SHALL provide the zero-argument `НастройкиНачальнойСтраницы`/`HomePageSettings` and `СоставФормНачальнойСтраницы`/`HomePageForms` constructors. A home-page settings value SHALL return and accept the current form composition through `ПолучитьСоставФорм`/`GetForms` and `УстановитьСоставФорм`/`SetForms`. A form composition SHALL expose read-only `ЛеваяКолонка`/`LeftColumn` and `ПраваяКолонка`/`RightColumn` array properties. Initial and updated compositions SHALL cross the same principal-bound client-settings adapter instead of being shared between Sessions.
+
+#### Scenario: Read and update the form composition
+- **WHEN** managed-client code reads the current composition, supplies a valid replacement, and reads it again
+- **THEN** the adapter observes the replacement for that Session principal
+- **AND** another Session does not acquire the value without its own adapter result
+
+#### Scenario: Invalid form composition
+- **WHEN** code passes a value other than `СоставФормНачальнойСтраницы` to `УстановитьСоставФорм`
+- **THEN** the call fails before the adapter is changed
+
 ### Requirement: Stored value snapshot
 The ORM component SHALL provide `ХранилищеЗначения`/`ValueStorage` and `СжатиеДанных`/`Deflation` constructors with the platform arities. `СжатиеДанных` SHALL accept an optional integral level from `-1` through `9`. Constructing a stored value SHALL snapshot the supplied serializable value. Every `Получить`/`Get` call SHALL return a newly materialized value, and source aliases reached through separate collection entries SHALL become independent restored values. Unsupported values and invalid compression arguments SHALL fail explicitly.
 
