@@ -351,6 +351,22 @@ SESSION.CURRENT_RUN_MODE.BACKGROUND	Не определено:
 сохранены в `tests/conformance/measure/1c/measure-configuration-extension-enums.bsl`
 и `measure-configuration-extension-enums.platform.txt`.
 
+### Минимальный линейный результат запроса
+
+Синтакс-помощник задаёт конструктор `Новый Запрос([Текст])`, изменяемое
+строковое свойство `Текст`, методы `УстановитьПараметр()` и `Выполнить()`
+[SP-26]–[SP-29]. У результата линейному пути нужны `Пустой()`, `Выбрать()` и
+`Выгрузить()`, а у выборки — `Следующий()` и `Получить()` [SP-30]–[SP-34].
+
+Эта поверхность дополнительно измерена на платформе 8.3.27.2342 запросом без
+таблиц конфигурации `ВЫБРАТЬ &Значение КАК Значение`. Повторная установка
+одноимённого параметра заменила его значение; выборка вернула то же значение
+через свойство и `Получить(0)`, а выгрузка — через строку
+`ТаблицаЗначений`. Строковые представления типов равны `Query`,
+`Query result` и `Selected data from query result`. Проба и полный вывод
+сохранены в `tests/conformance/measure/1c/measure-query-linear-result.bsl` и
+`measure-query-linear-result.platform.txt`.
+
 ### Параметры сеанса, которые устанавливает ядро БСП
 
 На полном старте:
@@ -605,3 +621,12 @@ gateway разумно и правдиво возвращать `Неопред�
 | SP-23 | `ОбъектМетаданныхКонфигурация.ОсновныеРоли` | `platform-syntax-help:syntax-context:objects/catalog63/catalog272/ConfigurationMetadataObject/properties/DefaultRoles9893.html` |
 | SP-24 | `ПользовательИнформационнойБазы.ПарольУстановлен` | `platform-syntax-help:syntax-context:objects/catalog63/catalog732/InfoBaseUser/properties/PasswordIsSet3171.html` |
 | SP-25 | `СтрокаСоединенияИнформационнойБазы` | `platform-syntax-help:syntax-context:objects/Global context/methods/catalog33/InfoBaseConnectionString1998.html` |
+| SP-26 | конструктор `Запрос` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/Query/ctors/ctor29.html` |
+| SP-27 | `Запрос.Текст` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/Query/properties/Text1019.html` |
+| SP-28 | `Запрос.УстановитьПараметр` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/Query/methods/SetParameter565.html` |
+| SP-29 | `Запрос.Выполнить` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/Query/methods/Execute564.html` |
+| SP-30 | `РезультатЗапроса.Пустой` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResult/methods/IsEmpty1043.html` |
+| SP-31 | `РезультатЗапроса.Выбрать` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResult/methods/Select562.html` |
+| SP-32 | `РезультатЗапроса.Выгрузить` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResult/methods/Unload563.html` |
+| SP-33 | `ВыборкаИзРезультатаЗапроса.Следующий` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResultSelection/methods/Next556.html` |
+| SP-34 | `ВыборкаИзРезультатаЗапроса.Получить` | `platform-syntax-help:syntax-context:objects/catalog213/catalog393/QueryResultSelection/methods/Get1375.html` |

@@ -50,6 +50,24 @@ Every ORM query, manager read, register read, and constant read SHALL use the se
 - **WHEN** rights for one of the principal's roles are unavailable
 - **THEN** the read fails instead of running without that role's restrictions
 
+### Requirement: Linear query result surface
+The ORM component SHALL provide the measured `Запрос` constructor with its writable `Текст` property and the `УстановитьПараметр` and `Выполнить` methods. Query execution SHALL delegate the text and the final case-insensitive parameter values to the current Session's data-access adapter. A tabular result SHALL support `Пустой`, direct `Выбрать`, direct `Выгрузить`, and a selection's `Следующий`, `Получить`, numeric indexing, and named fields. Unsupported traversal modes and unavailable data access SHALL fail explicitly.
+
+#### Scenario: Execute with the current Session
+- **WHEN** BSL executes a query after assigning a parameter more than once
+- **THEN** the current Session's adapter receives the final parameter value, selected principal, and current call context
+- **AND** another Session cannot observe that query object's mutable state
+
+#### Scenario: Read a linear result
+- **WHEN** the adapter returns named columns and rows
+- **THEN** a direct selection exposes each current row by field name, zero-based index, and `Получить`
+- **AND** direct unload returns an independent `ТаблицаЗначений` with the same columns and rows
+
+#### Scenario: Query access is unavailable
+- **WHEN** a query is executed without a data-access adapter or the adapter rejects incomplete rights or RLS information
+- **THEN** execution raises an explicit error
+- **AND** no empty or unrestricted result is substituted
+
 ### Requirement: Background session isolation and parameter inheritance
 A background job SHALL run in a new Session for an explicitly supplied selectable principal. It SHALL use a separate database connection and module instances. Its initial session parameters SHALL be copied from the parent session, and later changes in either session SHALL not change the other.
 
