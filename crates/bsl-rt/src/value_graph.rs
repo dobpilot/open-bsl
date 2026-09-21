@@ -127,6 +127,10 @@ struct Capture<'a> {
     /// `BslObject`, у таблиц — их `ValueTableData` (несколько обёрток
     /// делят одни данные, и алиас считается по данным).
     seen: HashMap<usize, NodeId>,
+    /// Оставлять ли завершённые объекты в `seen`. Для переноса между
+    /// сеансами алиасы сохраняются; снимок `ХранилищеЗначения` удаляет
+    /// завершённый объект, чтобы следующее вхождение стало отдельной копией.
+    preserve_completed_aliases: bool,
     /// Уже взятые, но ещё не потраченные байты.
     remaining: usize,
     /// Всего списано — это и есть размер снимка.
@@ -163,6 +167,26 @@ impl SerializedValueGraph {
         Self::capture_with(values, rt, GraphBudget::Fixed(limits.max_bytes))
     }
 
+    /// Снимает значения так, чтобы повторные ссылки на завершённые
+    /// изменяемые объекты материализовались независимыми копиями.
+    ///
+    /// Ссылки на объект, который ещё находится на пути обхода, остаются
+    /// ссылками на тот же узел: это ограничивает рекурсию на циклическом
+    /// графе. Метод предназначен для измеренной семантики
+    /// `ХранилищеЗначения`; обычный [`SerializedValueGraph::capture`]
+    /// сохраняет все алиасы при переносе между сеансами.
+    ///
+    /// # Errors
+    ///
+    /// Те же, что у [`SerializedValueGraph::capture`].
+    pub fn capture_detached(
+        values: &[BslValue],
+        rt: &RuntimeShapes,
+        limits: &GraphLimits,
+    ) -> RtResult<Self> {
+        Self::capture_with_policy(values, rt, GraphBudget::Fixed(limits.max_bytes), false)
+    }
+
     /// Снимок под произвольным источником кредита.
     ///
     /// # Errors
@@ -173,7 +197,16 @@ impl SerializedValueGraph {
         rt: &'a RuntimeShapes,
         budget: GraphBudget<'a>,
     ) -> RtResult<Self> {
-        let mut capture = Capture::new(rt, budget, false);
+        Self::capture_with_policy(values, rt, budget, true)
+    }
+
+    fn capture_with_policy<'a>(
+        values: &[BslValue],
+        rt: &'a RuntimeShapes,
+        budget: GraphBudget<'a>,
+        preserve_completed_aliases: bool,
+    ) -> RtResult<Self> {
+        let mut capture = Capture::new(rt, budget, false, preserve_completed_aliases);
         // Корни классифицируются до всякого списания: непереносимое
         // значение обязано назвать свой тип, а не упереться в бюджет.
         for value in values {
@@ -223,7 +256,7 @@ impl SerializedValueGraph {
         rt: &'a RuntimeShapes,
         budget: GraphBudget<'a>,
     ) -> RtResult<usize> {
-        let mut capture = Capture::new(rt, budget, true);
+        let mut capture = Capture::new(rt, budget, true, true);
         for value in values {
             check_portable(value)?;
         }
@@ -451,7 +484,12 @@ fn collection_cost<T>(len: usize) -> RtResult<usize> {
 }
 
 impl<'a> Capture<'a> {
-    fn new(rt: &'a RuntimeShapes, budget: GraphBudget<'a>, dry: bool) -> Self {
+    fn new(
+        rt: &'a RuntimeShapes,
+        budget: GraphBudget<'a>,
+        dry: bool,
+        preserve_completed_aliases: bool,
+    ) -> Self {
         // Фиксированный предел берётся сразу целиком: докупать нечего.
         let remaining = match &budget {
             GraphBudget::Fixed(max_bytes) => *max_bytes,
@@ -461,6 +499,7 @@ impl<'a> Capture<'a> {
             rt,
             nodes: Vec::new(),
             seen: HashMap::new(),
+            preserve_completed_aliases,
             remaining,
             spent: 0,
             peak: 0,
@@ -518,6 +557,17 @@ impl<'a> Capture<'a> {
         if !self.dry {
             self.nodes[id as usize] = node;
         }
+    }
+
+    /// Завершает объект и, для отделённого снимка, оставляет в карте только
+    /// ещё активные узлы. Удаление после обхода сохраняет защиту от циклов,
+    /// но следующее независимое вхождение того же объекта сериализуется снова.
+    fn finish_object(&mut self, key: usize, id: NodeId, node: GraphNode) -> NodeId {
+        self.store(id, node);
+        if !self.preserve_completed_aliases {
+            self.seen.remove(&key);
+        }
+        id
     }
 
     /// Возвращает бюджету излишек предварительной оценки.
@@ -667,8 +717,7 @@ impl<'a> Capture<'a> {
                         children.push(node);
                     }
                 }
-                self.store(id, GraphNode::Array(children));
-                Ok(id)
+                Ok(self.finish_object(key, id, GraphNode::Array(children)))
             }
             BslObject::Structure(storage) => {
                 self.charge(NODE_COST)?;
@@ -701,8 +750,7 @@ impl<'a> Capture<'a> {
                         children.push((name, node));
                     }
                 }
-                self.store(id, GraphNode::Structure(children));
-                Ok(id)
+                Ok(self.finish_object(key, id, GraphNode::Structure(children)))
             }
             BslObject::Map(data) => {
                 self.charge(NODE_COST)?;
@@ -726,8 +774,7 @@ impl<'a> Capture<'a> {
                         children.push((key_node, value_node));
                     }
                 }
-                self.store(id, GraphNode::Map(children));
-                Ok(id)
+                Ok(self.finish_object(key, id, GraphNode::Map(children)))
             }
             BslObject::ValueTable(data) => {
                 self.charge(NODE_COST)?;
@@ -818,8 +865,7 @@ impl<'a> Capture<'a> {
                         rows.push(ids);
                     }
                 }
-                self.store(id, GraphNode::ValueTable { columns, rows });
-                Ok(id)
+                Ok(self.finish_object(key, id, GraphNode::ValueTable { columns, rows }))
             }
             _ => Err(RtError::ResourceLimit(format!(
                 "объект типа «{}» не переносится между сеансами",

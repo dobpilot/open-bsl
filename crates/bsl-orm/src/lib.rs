@@ -17,9 +17,10 @@ use std::sync::Arc;
 
 use open_bsl::{
     Arity, BslObject, CallContext, ConstructorCode, ConstructorDescriptor, EnumKind, EnumValue,
-    FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor, LibraryDescriptor,
-    MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
-    RtResult, TypeDescriptor, Value, call_method_from_table, folded_eq, get_property_from_table,
+    FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor, GraphLimits,
+    LibraryDescriptor, MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, SerializedValueGraph, TypeDescriptor, Value,
+    call_method_from_table, folded_eq, get_property_from_table,
 };
 
 /// Основной язык программирования конфигурации.
@@ -1018,6 +1019,17 @@ struct QuerySelectionValue {
     cursor: Cell<usize>,
 }
 
+#[derive(Debug)]
+struct DeflationValue {
+    level: i8,
+}
+
+#[derive(Debug)]
+struct ValueStorageValue {
+    graph: SerializedValueGraph,
+    _compression_level: Option<i8>,
+}
+
 static METADATA_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-orm", "ОбъектМетаданныхКонфигурация");
 static METADATA_COLLECTION_TYPE: TypeDescriptor =
@@ -1055,6 +1067,18 @@ static QUERY_SELECTION_TYPE: TypeDescriptor = TypeDescriptor {
     name: "ВыборкаИзРезультатаЗапроса",
     type_display: "Selected data from query result",
     type_names: &["QueryResultSelection"],
+};
+static DEFLATION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "СжатиеДанных",
+    type_display: "Compress Data",
+    type_names: &["Deflation"],
+};
+static VALUE_STORAGE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "ХранилищеЗначения",
+    type_display: "Value storage",
+    type_names: &["ValueStorage"],
 };
 
 impl ObjectProtocol for MetadataRoot {
@@ -1374,6 +1398,22 @@ impl ObjectProtocol for QuerySelectionValue {
             .and_then(|index| usize::try_from(index).ok())
             .ok_or(RtError::BadIndex)?;
         query_selection_value(self, index)
+    }
+}
+
+impl ObjectProtocol for DeflationValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DEFLATION_TYPE
+    }
+}
+
+impl ObjectProtocol for ValueStorageValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &VALUE_STORAGE_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        VALUE_STORAGE_METHODS
     }
 }
 
@@ -1836,6 +1876,78 @@ fn new_query(_: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
     }))
 }
 
+fn new_deflation(_: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let level = match arguments {
+        [] => -1,
+        [Value::Number(level)] => level
+            .to_i64_exact()
+            .and_then(|level| i8::try_from(level).ok())
+            .filter(|level| (-1..=9).contains(level))
+            .ok_or_else(|| {
+                RtError::DynamicError("степень сжатия должна быть целым числом от -1 до 9".into())
+            })?,
+        [_] => {
+            return Err(RtError::TypeError {
+                expected: "Число",
+                op: "Новый СжатиеДанных",
+            });
+        }
+        _ => {
+            return Err(RtError::DynamicError(
+                "Новый СжатиеДанных ожидает не больше одного аргумента".into(),
+            ));
+        }
+    };
+    Ok(Value::new_object(DeflationValue { level }))
+}
+
+fn new_value_storage(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let (value, compression_level) = match arguments {
+        [value] => (value, None),
+        [value, compression] => {
+            let compression = compression
+                .object_ref()
+                .and_then(|object| object.downcast_ref::<DeflationValue>())
+                .ok_or(RtError::TypeError {
+                    expected: "СжатиеДанных",
+                    op: "Новый ХранилищеЗначения",
+                })?;
+            (value, Some(compression.level))
+        }
+        _ => {
+            return Err(RtError::DynamicError(
+                "Новый ХранилищеЗначения ожидает один или два аргумента".into(),
+            ));
+        }
+    };
+    let graph = SerializedValueGraph::capture_detached(
+        std::slice::from_ref(value),
+        context.runtime_shapes(),
+        &GraphLimits::default(),
+    )?;
+    Ok(Value::new_object(ValueStorageValue {
+        graph,
+        _compression_level: compression_level,
+    }))
+}
+
+fn value_storage_get(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let storage = receiver
+        .downcast_ref::<ValueStorageValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let mut values = storage.graph.materialize(context.runtime_shapes())?;
+    if values.len() != 1 {
+        return Err(RtError::DynamicError(
+            "снимок ХранилищеЗначения содержит неверное число корней".into(),
+        ));
+    }
+    Ok(values.remove(0))
+}
+
 fn query_text(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
     let query = receiver
         .downcast_ref::<QueryValue>()
@@ -2082,6 +2194,12 @@ static QUERY_SELECTION_METHODS: &[MethodDescriptor] = &[
     ),
     MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), query_selection_get),
 ];
+
+static VALUE_STORAGE_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Получить", "Get"],
+    Arity::exact(0),
+    value_storage_get,
+)];
 
 static METADATA_COLLECTION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     &["Найти", "Find"],
@@ -2347,15 +2465,32 @@ fn role_available(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Va
     Ok(Value::Boolean(session.principal.has_role(role.id())))
 }
 
-const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
-    code: ConstructorCode::new(1),
-    names: &["Запрос", "Query"],
-    arity: Arity::range(0, 1),
-    call: new_query,
-}];
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[
+    ConstructorDescriptor {
+        code: ConstructorCode::new(1),
+        names: &["Запрос", "Query"],
+        arity: Arity::range(0, 1),
+        call: new_query,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(2),
+        names: &["СжатиеДанных", "Deflation"],
+        arity: Arity::range(0, 1),
+        call: new_deflation,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(3),
+        names: &["ХранилищеЗначения", "ValueStorage"],
+        arity: Arity::range(1, 2),
+        call: new_value_storage,
+    },
+];
 
-const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] =
-    &[(ConstructorCode::new(1), &QUERY_TYPE)];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (ConstructorCode::new(1), &QUERY_TYPE),
+    (ConstructorCode::new(2), &DEFLATION_TYPE),
+    (ConstructorCode::new(3), &VALUE_STORAGE_TYPE),
+];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
@@ -2439,6 +2574,8 @@ const TYPES: &[&TypeDescriptor] = &[
     &QUERY_TYPE,
     &QUERY_RESULT_TYPE,
     &QUERY_SELECTION_TYPE,
+    &DEFLATION_TYPE,
+    &VALUE_STORAGE_TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -2471,6 +2608,7 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&QUERY_SELECTION_TYPE)
         .with_methods(QUERY_SELECTION_METHODS)
         .with_dynamic_properties(),
+    ObjectMembersDescriptor::new(&VALUE_STORAGE_TYPE).with_methods(VALUE_STORAGE_METHODS),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];

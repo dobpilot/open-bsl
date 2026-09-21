@@ -279,6 +279,58 @@ fn query_result_data_rejects_ambiguous_or_misaligned_rows() {
 }
 
 #[test]
+fn value_storage_snapshots_and_detaches_mutable_values() {
+    let engine = engine();
+    let mut state = state(&engine);
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Сжатие = Новый СжатиеДанных;
+                Исходный = Новый Массив;
+                Исходный.Добавить(1);
+                Хранилище = Новый ХранилищеЗначения(Исходный, Сжатие);
+                Исходный[0] = 2;
+                Первое = Хранилище.Получить();
+                Первое[0] = 3;
+                Второе = Хранилище.Получить();
+
+                Общий = Новый Массив;
+                Общий.Добавить(4);
+                САлиасом = Новый Массив;
+                САлиасом.Добавить(Общий);
+                САлиасом.Добавить(Общий);
+                Извлеченный = Новый ХранилищеЗначения(
+                    САлиасом, Новый Deflation(6)).Get();
+                Извлеченный[0][0] = 5;
+
+                Возврат Строка(ТипЗнч(Сжатие)) = "Compress Data"
+                    И Строка(ТипЗнч(Хранилище)) = "Value storage"
+                    И Второе[0] = 1
+                    И Извлеченный[1][0] = 4;
+                "#,
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+}
+
+#[test]
+fn value_storage_rejects_invalid_compression_and_nonportable_values() {
+    let engine = engine();
+    let mut state = state(&engine);
+    for source in [
+        "Возврат Новый СжатиеДанных(-2);",
+        "Возврат Новый СжатиеДанных(10);",
+        "Возврат Новый СжатиеДанных(1.5);",
+        "Возврат Новый ХранилищеЗначения(1, 1);",
+        "Возврат Новый ХранилищеЗначения(Новый Запрос);",
+    ] {
+        assert!(state.exec(source).is_err(), "должен быть отказ: {source}");
+    }
+}
+
+#[test]
 fn role_available_accepts_a_name_and_a_metadata_role() {
     let engine = engine();
     let mut state = state(&engine);
