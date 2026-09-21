@@ -19,6 +19,7 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
             connection_number: 1,
             connections: None,
             event_log_writer: None,
+            client_settings: None,
             background_method: None,
         })),
     )
@@ -1380,4 +1381,390 @@ fn event_log_fails_explicitly_without_a_session_writer() {
             .to_string()
             .contains("журнал регистрации не подключён")
     );
+}
+
+#[derive(Debug, Default)]
+struct RecordingClientSettings {
+    loads: RefCell<Vec<RecordedSettingsLoad>>,
+    saves: RefCell<Vec<RecordedSettingsSave>>,
+    selections: RefCell<Vec<(String, ClientSettingsStorage, bool)>>,
+    forms: RefCell<HomePageFormsData>,
+}
+
+#[derive(Debug)]
+struct RecordedSettingsLoad {
+    principal: String,
+    storage: ClientSettingsStorage,
+    object_key: String,
+    settings_key: String,
+    user_name: Option<String>,
+}
+
+#[derive(Debug)]
+struct RecordedSettingsSave {
+    principal: String,
+    storage: ClientSettingsStorage,
+    object_key: String,
+    settings_key: String,
+    settings: Value,
+}
+
+impl ClientSettingsAdapter for RecordingClientSettings {
+    fn load(
+        &self,
+        principal: &Principal,
+        request: &ClientSettingsLoadRequest,
+    ) -> RtResult<Option<Value>> {
+        self.loads.borrow_mut().push(RecordedSettingsLoad {
+            principal: principal.name().to_string(),
+            storage: request.storage(),
+            object_key: request.object_key().to_string(),
+            settings_key: request.settings_key().to_string(),
+            user_name: request.user_name().map(str::to_string),
+        });
+        Ok((request.object_key() == "present").then(|| Value::number_from_i64(41)))
+    }
+
+    fn save(&self, principal: &Principal, request: &ClientSettingsSaveRequest) -> RtResult<()> {
+        self.saves.borrow_mut().push(RecordedSettingsSave {
+            principal: principal.name().to_string(),
+            storage: request.storage(),
+            object_key: request.object_key().to_string(),
+            settings_key: request.settings_key().to_string(),
+            settings: request.settings().clone(),
+        });
+        Ok(())
+    }
+
+    fn select(
+        &self,
+        principal: &Principal,
+        request: &ClientSettingsSelectRequest,
+    ) -> RtResult<Vec<ClientSettingsEntry>> {
+        self.selections
+            .borrow_mut()
+            .push((
+                principal.name().to_string(),
+                request.storage(),
+                matches!(request.filter(), Value::Object(object) if matches!(object.as_ref(), BslObject::Structure(_))),
+            ));
+        Ok(vec![ClientSettingsEntry::new(
+            "object",
+            "settings",
+            principal.name(),
+            Value::number_from_i64(42),
+        )])
+    }
+
+    fn home_page_forms(&self, _: &Principal) -> RtResult<HomePageFormsData> {
+        Ok(self.forms.borrow().clone())
+    }
+
+    fn set_home_page_forms(&self, _: &Principal, forms: &HomePageFormsData) -> RtResult<()> {
+        *self.forms.borrow_mut() = forms.clone();
+        Ok(())
+    }
+}
+
+#[test]
+fn client_settings_use_the_current_principal_and_distinguish_stores() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let adapter = Rc::new(RecordingClientSettings::default());
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 1).with_client_settings_adapter(adapter.clone()),
+        )
+        .unwrap();
+    let probe = session
+        .instantiate(
+            r#"
+            Функция ЗагрузитьПрисутствующую() Экспорт
+                Возврат commonsettingsstorage.LOAD("present");
+            КонецФункции
+
+            Функция ЗагрузитьОтсутствующую() Экспорт
+                Возврат ХранилищеОбщихНастроек.Загрузить("missing");
+            КонецФункции
+
+            Функция ЗагрузитьДляПользователя() Экспорт
+                Возврат ХранилищеОбщихНастроек.Загрузить(
+                    "present", "key", , "Другой");
+            КонецФункции
+
+            Процедура СохранитьНастройку() Экспорт
+                ХранилищеСистемныхНастроек.Сохранить("object", , 7);
+            КонецПроцедуры
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        session
+            .call(&probe, "ЗагрузитьПрисутствующую", vec![])
+            .unwrap()
+            .0,
+        Value::number_from_i64(41)
+    );
+    assert_eq!(
+        session
+            .call(&probe, "ЗагрузитьОтсутствующую", vec![])
+            .unwrap()
+            .0,
+        Value::Undefined
+    );
+    assert_eq!(
+        session
+            .call(&probe, "ЗагрузитьДляПользователя", vec![])
+            .unwrap()
+            .0,
+        Value::number_from_i64(41)
+    );
+    session.call(&probe, "СохранитьНастройку", vec![]).unwrap();
+
+    let loads = adapter.loads.borrow();
+    assert_eq!(loads.len(), 3);
+    assert_eq!(loads[0].principal, "Тест");
+    assert_eq!(loads[0].storage, ClientSettingsStorage::Common);
+    assert_eq!(loads[0].object_key, "present");
+    assert_eq!(loads[0].settings_key, "");
+    assert_eq!(loads[0].user_name, None);
+    assert_eq!(loads[2].settings_key, "key");
+    assert_eq!(loads[2].user_name.as_deref(), Some("Другой"));
+    let saves = adapter.saves.borrow();
+    assert_eq!(saves.len(), 1);
+    assert_eq!(saves[0].principal, "Тест");
+    assert_eq!(saves[0].storage, ClientSettingsStorage::System);
+    assert_eq!(saves[0].object_key, "object");
+    assert_eq!(saves[0].settings_key, "");
+    assert_eq!(saves[0].settings, Value::number_from_i64(7));
+}
+
+#[test]
+fn client_settings_selection_matches_the_measured_cursor() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::WebClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let adapter = Rc::new(RecordingClientSettings::default());
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 1).with_client_settings_adapter(adapter.clone()),
+        )
+        .unwrap();
+    let probe = session
+        .instantiate(
+            r#"
+            Функция Пройти() Экспорт
+                Отбор = Новый Структура("КлючОбъекта", "object");
+                Выборка = ХранилищеСистемныхНастроек.Выбрать(Отбор);
+                ОшибкаДо = Ложь;
+                Попытка
+                    Значение = Выборка.КлючОбъекта;
+                Исключение
+                    ОшибкаДо = Истина;
+                КонецПопытки;
+                Первый = Выборка.Следующий();
+                СтрокаДанных = Выборка.ObjectKey + "|" + Выборка.SettingsKey
+                    + "|" + Выборка.User + "|" + Строка(Выборка.Settings);
+                Конец = Выборка.Next();
+                ОшибкаПосле = Ложь;
+                Попытка
+                    Значение = Выборка.КлючОбъекта;
+                Исключение
+                    ОшибкаПосле = Истина;
+                КонецПопытки;
+                Возврат Строка(ОшибкаДо) + "|" + Строка(Первый) + "|"
+                    + СтрокаДанных + "|" + Строка(Конец) + "|" + Строка(ОшибкаПосле);
+            КонецФункции
+
+            Функция Типы() Экспорт
+                Возврат Строка(ТипЗнч(ХранилищеСистемныхНастроек)) + "|"
+                    + Строка(ТипЗнч(ХранилищеСистемныхНастроек.Выбрать())) + "|"
+                    + Строка(ТипЗнч(Новый НастройкиНачальнойСтраницы)) + "|"
+                    + Строка(ТипЗнч(Новый СоставФормНачальнойСтраницы));
+            КонецФункции
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        session.call(&probe, "Пройти", vec![]).unwrap().0,
+        Value::Str("Да|Да|object|settings|Тест|42|Нет|Да".into())
+    );
+    assert_eq!(
+        session.call(&probe, "Типы", vec![]).unwrap().0,
+        Value::Str(
+            "Standard settings storage|Standard settings storage Selected data|Home page settings|Home page forms"
+                .into()
+        )
+    );
+    assert_eq!(
+        adapter.selections.borrow().as_slice(),
+        &[
+            ("Тест".to_string(), ClientSettingsStorage::System, true,),
+            ("Тест".to_string(), ClientSettingsStorage::System, false,),
+        ]
+    );
+}
+
+#[test]
+fn home_page_forms_round_trip_through_the_session_adapter() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let adapter = Rc::new(RecordingClientSettings::default());
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 1).with_client_settings_adapter(adapter.clone()),
+        )
+        .unwrap();
+    let probe = session
+        .instantiate(
+            r#"
+            Процедура Записать() Экспорт
+                Состав = Новый СоставФормНачальнойСтраницы;
+                Состав.ЛеваяКолонка.Добавить("ОбщаяФорма.Левая");
+                Состав.RightColumn.Add("ОбщаяФорма.Правая");
+                Настройки = Новый HomePageSettings;
+                Настройки.SetForms(Состав);
+            КонецПроцедуры
+
+            Функция Прочитать() Экспорт
+                Состав = Новый НастройкиНачальнойСтраницы;
+                Формы = Состав.ПолучитьСоставФорм();
+                Возврат Формы.LeftColumn[0] + "|" + Формы.ПраваяКолонка[0];
+            КонецФункции
+            "#,
+        )
+        .unwrap();
+
+    session.call(&probe, "Записать", vec![]).unwrap();
+    assert_eq!(
+        adapter.forms.borrow().left(),
+        &[Arc::<str>::from("ОбщаяФорма.Левая")]
+    );
+    assert_eq!(
+        adapter.forms.borrow().right(),
+        &[Arc::<str>::from("ОбщаяФорма.Правая")]
+    );
+    assert_eq!(
+        session.call(&probe, "Прочитать", vec![]).unwrap().0,
+        Value::Str("ОбщаяФорма.Левая|ОбщаяФорма.Правая".into())
+    );
+}
+
+#[test]
+fn client_settings_are_not_implicitly_shared_between_sessions() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let adapter = Rc::new(RecordingClientSettings::default());
+    let first = factory
+        .open(
+            principal(),
+            resources((), 1).with_client_settings_adapter(adapter),
+        )
+        .unwrap();
+    let mut second = factory.open(principal(), resources((), 2)).unwrap();
+    let probe = second
+        .instantiate(
+            "Функция Прочитать() Экспорт Возврат ХранилищеОбщихНастроек.Загрузить(\"present\"); КонецФункции",
+        )
+        .unwrap();
+    let error = second.call(&probe, "Прочитать", vec![]).unwrap_err();
+    assert!(error.to_string().contains("провайдер клиентских настроек"));
+    drop(first);
+}
+
+#[test]
+fn background_session_does_not_inherit_the_parent_client_settings_adapter() {
+    let foreground_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let background_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let parent = foreground_factory
+        .open(
+            principal(),
+            resources((), 1)
+                .with_client_settings_adapter(Rc::new(RecordingClientSettings::default())),
+        )
+        .unwrap();
+    let mut child = background_factory
+        .open_background(
+            principal(),
+            resources((), 2),
+            "Обработка.ФоновыйМетод",
+            &parent,
+        )
+        .unwrap();
+    let probe = child
+        .instantiate(
+            "Функция Прочитать() Экспорт Возврат ХранилищеОбщихНастроек.Загрузить(\"present\"); КонецФункции",
+        )
+        .unwrap();
+
+    let error = child.call(&probe, "Прочитать", vec![]).unwrap_err();
+    assert!(error.to_string().contains("провайдер клиентских настроек"));
+}
+
+#[test]
+fn invalid_home_page_forms_do_not_reach_the_adapter() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let adapter = Rc::new(RecordingClientSettings::default());
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 1).with_client_settings_adapter(adapter.clone()),
+        )
+        .unwrap();
+    let probe = session
+        .instantiate(
+            "Процедура Записать() Экспорт (Новый НастройкиНачальнойСтраницы).УстановитьСоставФорм(42); КонецПроцедуры",
+        )
+        .unwrap();
+    assert!(session.call(&probe, "Записать", vec![]).is_err());
+    assert_eq!(*adapter.forms.borrow(), HomePageFormsData::default());
 }

@@ -6,7 +6,7 @@
 
 #![warn(missing_docs)]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -15,7 +15,7 @@ use std::sync::Arc;
 use bsl_config::{ConfigurationCodeSnapshot, ModuleKind};
 use bsl_orm::{DataAccess, MetadataCatalog, MetadataKind, Principal, SessionData};
 use open_bsl::{
-    Arity, CallContext, ConstructorCode, ConstructorDescriptor, Engine, EnumValue,
+    Arity, BslObject, CallContext, ConstructorCode, ConstructorDescriptor, Engine, EnumValue,
     Error as OpenBslError, FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor,
     LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe, ModuleInstance, ModuleRecipe,
     ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, State,
@@ -360,6 +360,258 @@ pub trait EventLogWriter: fmt::Debug {
     fn write(&self, entry: EventLogEntry) -> RtResult<()>;
 }
 
+/// Вид стандартного хранилища настроек.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientSettingsStorage {
+    /// Общее хранилище настроек конфигурации.
+    Common,
+    /// Системное хранилище настроек платформы.
+    System,
+}
+
+/// Запрос чтения значения из стандартного хранилища настроек.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsLoadRequest {
+    storage: ClientSettingsStorage,
+    object_key: Arc<str>,
+    settings_key: Arc<str>,
+    description: Value,
+    user_name: Option<Arc<str>>,
+}
+
+impl ClientSettingsLoadRequest {
+    /// Возвращает выбранное хранилище.
+    #[must_use]
+    pub const fn storage(&self) -> ClientSettingsStorage {
+        self.storage
+    }
+
+    /// Возвращает ключ объекта.
+    #[must_use]
+    pub fn object_key(&self) -> &str {
+        &self.object_key
+    }
+
+    /// Возвращает ключ настроек.
+    #[must_use]
+    pub fn settings_key(&self) -> &str {
+        &self.settings_key
+    }
+
+    /// Возвращает переданное значение описания настроек.
+    #[must_use]
+    pub const fn description(&self) -> &Value {
+        &self.description
+    }
+
+    /// Возвращает явно указанное имя пользователя.
+    #[must_use]
+    pub fn user_name(&self) -> Option<&str> {
+        self.user_name.as_deref()
+    }
+}
+
+/// Запрос записи значения в стандартное хранилище настроек.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsSaveRequest {
+    storage: ClientSettingsStorage,
+    object_key: Arc<str>,
+    settings_key: Arc<str>,
+    settings: Value,
+    description: Value,
+    user_name: Option<Arc<str>>,
+}
+
+impl ClientSettingsSaveRequest {
+    /// Возвращает выбранное хранилище.
+    #[must_use]
+    pub const fn storage(&self) -> ClientSettingsStorage {
+        self.storage
+    }
+
+    /// Возвращает ключ объекта.
+    #[must_use]
+    pub fn object_key(&self) -> &str {
+        &self.object_key
+    }
+
+    /// Возвращает ключ настроек.
+    #[must_use]
+    pub fn settings_key(&self) -> &str {
+        &self.settings_key
+    }
+
+    /// Возвращает сохраняемое значение.
+    #[must_use]
+    pub const fn settings(&self) -> &Value {
+        &self.settings
+    }
+
+    /// Возвращает описание настроек.
+    #[must_use]
+    pub const fn description(&self) -> &Value {
+        &self.description
+    }
+
+    /// Возвращает явно указанное имя пользователя.
+    #[must_use]
+    pub fn user_name(&self) -> Option<&str> {
+        self.user_name.as_deref()
+    }
+}
+
+/// Запрос выборки строк стандартного хранилища настроек.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsSelectRequest {
+    storage: ClientSettingsStorage,
+    filter: Value,
+}
+
+impl ClientSettingsSelectRequest {
+    /// Возвращает выбранное хранилище.
+    #[must_use]
+    pub const fn storage(&self) -> ClientSettingsStorage {
+        self.storage
+    }
+
+    /// Возвращает структуру отбора либо `Неопределено`.
+    #[must_use]
+    pub const fn filter(&self) -> &Value {
+        &self.filter
+    }
+}
+
+/// Одна строка выборки стандартного хранилища настроек.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsEntry {
+    object_key: Arc<str>,
+    settings_key: Arc<str>,
+    user: Arc<str>,
+    settings: Value,
+}
+
+impl ClientSettingsEntry {
+    /// Создаёт строку из значений, полученных от провайдера.
+    #[must_use]
+    pub fn new(
+        object_key: impl Into<String>,
+        settings_key: impl Into<String>,
+        user: impl Into<String>,
+        settings: Value,
+    ) -> Self {
+        Self {
+            object_key: Arc::from(object_key.into()),
+            settings_key: Arc::from(settings_key.into()),
+            user: Arc::from(user.into()),
+            settings,
+        }
+    }
+
+    /// Возвращает ключ объекта.
+    #[must_use]
+    pub fn object_key(&self) -> &str {
+        &self.object_key
+    }
+
+    /// Возвращает ключ настроек.
+    #[must_use]
+    pub fn settings_key(&self) -> &str {
+        &self.settings_key
+    }
+
+    /// Возвращает имя пользователя.
+    #[must_use]
+    pub fn user(&self) -> &str {
+        &self.user
+    }
+
+    /// Возвращает сохранённое значение.
+    #[must_use]
+    pub const fn settings(&self) -> &Value {
+        &self.settings
+    }
+}
+
+/// Состав форм начальной страницы одного пользователя.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HomePageFormsData {
+    left: Arc<[Arc<str>]>,
+    right: Arc<[Arc<str>]>,
+}
+
+impl HomePageFormsData {
+    /// Создаёт состав из полных имён форм в левой и правой колонках.
+    #[must_use]
+    pub fn new(
+        left: impl IntoIterator<Item = String>,
+        right: impl IntoIterator<Item = String>,
+    ) -> Self {
+        Self {
+            left: left.into_iter().map(Arc::<str>::from).collect(),
+            right: right.into_iter().map(Arc::<str>::from).collect(),
+        }
+    }
+
+    /// Возвращает полные имена форм левой колонки.
+    #[must_use]
+    pub fn left(&self) -> &[Arc<str>] {
+        &self.left
+    }
+
+    /// Возвращает полные имена форм правой колонки.
+    #[must_use]
+    pub fn right(&self) -> &[Arc<str>] {
+        &self.right
+    }
+}
+
+/// Провайдер клиентских настроек одного конкретного сеанса.
+pub trait ClientSettingsAdapter: fmt::Debug {
+    /// Загружает настройку. `None` означает отсутствие сохранённого значения.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав, доступа или декодирования значения.
+    fn load(
+        &self,
+        principal: &Principal,
+        request: &ClientSettingsLoadRequest,
+    ) -> RtResult<Option<Value>>;
+
+    /// Сохраняет настройку.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав, доступа или кодирования значения.
+    fn save(&self, principal: &Principal, request: &ClientSettingsSaveRequest) -> RtResult<()>;
+
+    /// Возвращает неизменяемый снимок строк, подходящих под отбор.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав, доступа или недопустимого отбора.
+    fn select(
+        &self,
+        principal: &Principal,
+        request: &ClientSettingsSelectRequest,
+    ) -> RtResult<Vec<ClientSettingsEntry>>;
+
+    /// Читает состав форм начальной страницы текущего пользователя.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав или доступа.
+    fn home_page_forms(&self, principal: &Principal) -> RtResult<HomePageFormsData>;
+
+    /// Сохраняет состав форм начальной страницы текущего пользователя.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав или доступа.
+    fn set_home_page_forms(&self, principal: &Principal, forms: &HomePageFormsData)
+    -> RtResult<()>;
+}
+
 /// Ресурсы одного открываемого сеанса.
 pub struct SessionResources {
     connection: Box<dyn std::any::Any>,
@@ -367,6 +619,7 @@ pub struct SessionResources {
     data_access: Option<Rc<dyn DataAccess>>,
     connections: Option<Arc<[InfoBaseConnection]>>,
     event_log_writer: Option<Rc<dyn EventLogWriter>>,
+    client_settings: Option<Rc<dyn ClientSettingsAdapter>>,
 }
 
 impl SessionResources {
@@ -379,6 +632,7 @@ impl SessionResources {
             data_access: None,
             connections: None,
             event_log_writer: None,
+            client_settings: None,
         }
     }
 
@@ -406,6 +660,13 @@ impl SessionResources {
         self.event_log_writer = Some(writer);
         self
     }
+
+    /// Подключает провайдер клиентских настроек этого сеанса.
+    #[must_use]
+    pub fn with_client_settings_adapter(mut self, adapter: Rc<dyn ClientSettingsAdapter>) -> Self {
+        self.client_settings = Some(adapter);
+        self
+    }
 }
 
 /// Дополнение [`bsl_orm::SessionData`] для runtime сеанса.
@@ -418,6 +679,7 @@ pub struct SessionRuntime {
     connection_number: u64,
     connections: Option<Arc<[InfoBaseConnection]>>,
     event_log_writer: Option<Rc<dyn EventLogWriter>>,
+    client_settings: Option<Rc<dyn ClientSettingsAdapter>>,
     background_method: Option<Arc<str>>,
 }
 
@@ -456,6 +718,12 @@ impl SessionRuntime {
     #[must_use]
     pub fn event_log_writer(&self) -> Option<&Rc<dyn EventLogWriter>> {
         self.event_log_writer.as_ref()
+    }
+
+    /// Возвращает провайдер клиентских настроек текущего сеанса.
+    #[must_use]
+    pub fn client_settings(&self) -> Option<&Rc<dyn ClientSettingsAdapter>> {
+        self.client_settings.as_ref()
     }
 
     /// Возвращает полное имя метода текущего фонового задания.
@@ -791,6 +1059,7 @@ impl SessionFactory {
             data_access,
             connections,
             event_log_writer,
+            client_settings,
         } = resources;
         if connection_number == 0 || connection_number > i64::MAX as u64 {
             return Err(SessionError::InvalidConnectionNumber(connection_number));
@@ -825,6 +1094,7 @@ impl SessionFactory {
             connection_number,
             connections,
             event_log_writer,
+            client_settings,
             background_method,
         };
         let mut data = SessionData::new(Arc::clone(&self.catalog), principal.clone())
@@ -1098,6 +1368,26 @@ struct InfoBaseConnectionObject {
     connection: InfoBaseConnection,
 }
 
+#[derive(Debug)]
+struct StandardSettingsStorageObject {
+    storage: ClientSettingsStorage,
+}
+
+#[derive(Debug)]
+struct StandardSettingsSelectionObject {
+    rows: Rc<[ClientSettingsEntry]>,
+    position: Cell<usize>,
+}
+
+#[derive(Debug)]
+struct HomePageSettingsObject;
+
+#[derive(Debug)]
+struct HomePageFormsObject {
+    left: Value,
+    right: Value,
+}
+
 static PARAMETERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-session", "ПараметрыСеанса");
 static SYSTEM_INFORMATION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-session", "СистемнаяИнформация");
@@ -1112,6 +1402,30 @@ static INFOBASE_CONNECTION_TYPE: TypeDescriptor = TypeDescriptor {
     name: "СоединениеИнформационнойБазы",
     type_display: "Active connection",
     type_names: &["InfoBaseConnection"],
+};
+static STANDARD_SETTINGS_STORAGE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "СтандартноеХранилищеНастроекМенеджер",
+    type_display: "Standard settings storage",
+    type_names: &["StandardSettingsStorageManager"],
+};
+static STANDARD_SETTINGS_SELECTION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "СтандартноеХранилищеНастроекВыборка",
+    type_display: "Standard settings storage Selected data",
+    type_names: &["StandardSettingsStorageSelection"],
+};
+static HOME_PAGE_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "НастройкиНачальнойСтраницы",
+    type_display: "Home page settings",
+    type_names: &["HomePageSettings"],
+};
+static HOME_PAGE_FORMS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "СоставФормНачальнойСтраницы",
+    type_display: "Home page forms",
+    type_names: &["HomePageForms"],
 };
 
 impl ObjectProtocol for ParametersObject {
@@ -1174,6 +1488,50 @@ impl ObjectProtocol for InfoBaseConnectionObject {
     }
 }
 
+impl ObjectProtocol for StandardSettingsStorageObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &STANDARD_SETTINGS_STORAGE_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        STANDARD_SETTINGS_STORAGE_METHODS
+    }
+}
+
+impl ObjectProtocol for StandardSettingsSelectionObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &STANDARD_SETTINGS_SELECTION_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        STANDARD_SETTINGS_SELECTION_METHODS
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        STANDARD_SETTINGS_SELECTION_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for HomePageSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &HOME_PAGE_SETTINGS_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        HOME_PAGE_SETTINGS_METHODS
+    }
+}
+
+impl ObjectProtocol for HomePageFormsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &HOME_PAGE_FORMS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        HOME_PAGE_FORMS_PROPERTIES
+    }
+}
+
 fn clear_parameters(
     receiver: &dyn ObjectProtocol,
     _: &[Value],
@@ -1192,10 +1550,15 @@ static PARAMETERS_METHODS: &[MethodDescriptor] =
             .as_procedure(),
     ];
 
-fn runtime<'a>(ctx: &'a CallContext<'_>) -> RtResult<&'a SessionRuntime> {
+fn session_data<'a>(ctx: &'a CallContext<'_>) -> RtResult<&'a SessionData> {
     ctx.host_data()?
         .downcast_ref::<SessionData>()
-        .and_then(SessionData::extension::<SessionRuntime>)
+        .ok_or_else(|| RtError::DynamicError("данные сеанса не переданы".into()))
+}
+
+fn runtime<'a>(ctx: &'a CallContext<'_>) -> RtResult<&'a SessionRuntime> {
+    session_data(ctx)?
+        .extension::<SessionRuntime>()
         .ok_or_else(|| RtError::DynamicError("runtime сеанса не передан".into()))
 }
 
@@ -1307,6 +1670,299 @@ fn write_log_event(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<V
     })?);
     writer.write(entry)?;
     Ok(Value::Undefined)
+}
+
+fn client_settings_context<'a>(
+    ctx: &'a CallContext<'_>,
+) -> RtResult<(&'a Principal, Rc<dyn ClientSettingsAdapter>)> {
+    let data = session_data(ctx)?;
+    let adapter = data
+        .extension::<SessionRuntime>()
+        .and_then(SessionRuntime::client_settings)
+        .cloned()
+        .ok_or_else(|| {
+            RtError::DynamicError(
+                "провайдер клиентских настроек не подключён для текущего сеанса".into(),
+            )
+        })?;
+    Ok((data.principal(), adapter))
+}
+
+fn settings_storage(receiver: &dyn ObjectProtocol) -> RtResult<&StandardSettingsStorageObject> {
+    receiver
+        .downcast_ref::<StandardSettingsStorageObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn settings_text(value: &Value, operation: &'static str) -> RtResult<Arc<str>> {
+    match value {
+        Value::Str(value) => Ok(Arc::from(value.to_string())),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op: operation,
+        }),
+    }
+}
+
+fn optional_settings_key(arguments: &[Value], operation: &'static str) -> RtResult<Arc<str>> {
+    match arguments.get(1).unwrap_or(&Value::Undefined) {
+        Value::Undefined => Ok(Arc::from("")),
+        value => settings_text(value, operation),
+    }
+}
+
+fn optional_user_name(
+    arguments: &[Value],
+    index: usize,
+    operation: &'static str,
+) -> RtResult<Option<Arc<str>>> {
+    match arguments.get(index).unwrap_or(&Value::Undefined) {
+        Value::Undefined => Ok(None),
+        value => settings_text(value, operation).map(Some),
+    }
+}
+
+fn load_client_setting(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    const OPERATION: &str = "Загрузить";
+    let request = ClientSettingsLoadRequest {
+        storage: settings_storage(receiver)?.storage,
+        object_key: settings_text(&arguments[0], OPERATION)?,
+        settings_key: optional_settings_key(arguments, OPERATION)?,
+        description: arguments.get(2).cloned().unwrap_or(Value::Undefined),
+        user_name: optional_user_name(arguments, 3, OPERATION)?,
+    };
+    let (principal, adapter) = client_settings_context(ctx)?;
+    Ok(adapter
+        .load(principal, &request)?
+        .unwrap_or(Value::Undefined))
+}
+
+fn save_client_setting(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    const OPERATION: &str = "Сохранить";
+    let request = ClientSettingsSaveRequest {
+        storage: settings_storage(receiver)?.storage,
+        object_key: settings_text(&arguments[0], OPERATION)?,
+        settings_key: optional_settings_key(arguments, OPERATION)?,
+        settings: arguments[2].clone(),
+        description: arguments.get(3).cloned().unwrap_or(Value::Undefined),
+        user_name: optional_user_name(arguments, 4, OPERATION)?,
+    };
+    let (principal, adapter) = client_settings_context(ctx)?;
+    adapter.save(principal, &request)?;
+    Ok(Value::Undefined)
+}
+
+fn select_client_settings(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let filter = arguments.first().cloned().unwrap_or(Value::Undefined);
+    if !matches!(filter, Value::Undefined)
+        && !matches!(&filter, Value::Object(object) if matches!(object.as_ref(), BslObject::Structure(_)))
+    {
+        return Err(RtError::TypeError {
+            expected: "Структура",
+            op: "Выбрать",
+        });
+    }
+    let request = ClientSettingsSelectRequest {
+        storage: settings_storage(receiver)?.storage,
+        filter,
+    };
+    let (principal, adapter) = client_settings_context(ctx)?;
+    Ok(Value::new_object(StandardSettingsSelectionObject {
+        rows: adapter.select(principal, &request)?.into(),
+        position: Cell::new(usize::MAX),
+    }))
+}
+
+fn next_client_setting(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let selection = receiver
+        .downcast_ref::<StandardSettingsSelectionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    let next = if selection.position.get() == usize::MAX {
+        0
+    } else {
+        selection.position.get().saturating_add(1)
+    };
+    if next < selection.rows.len() {
+        selection.position.set(next);
+        Ok(Value::Boolean(true))
+    } else {
+        selection.position.set(selection.rows.len());
+        Ok(Value::Boolean(false))
+    }
+}
+
+fn current_client_setting(receiver: &dyn ObjectProtocol) -> RtResult<&ClientSettingsEntry> {
+    let selection = receiver
+        .downcast_ref::<StandardSettingsSelectionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    selection
+        .rows
+        .get(selection.position.get())
+        .ok_or_else(|| RtError::DynamicError("выборка находится вне набора данных".into()))
+}
+
+fn selected_object_key(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(Value::Str(
+        current_client_setting(receiver)?.object_key().into(),
+    ))
+}
+
+fn selected_settings_key(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Str(
+        current_client_setting(receiver)?.settings_key().into(),
+    ))
+}
+
+fn selected_user(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(Value::Str(current_client_setting(receiver)?.user().into()))
+}
+
+fn selected_settings(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(current_client_setting(receiver)?.settings().clone())
+}
+
+fn construct_home_page_settings(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(HomePageSettingsObject))
+}
+
+fn home_page_forms_value(forms: &HomePageFormsData) -> Value {
+    Value::new_object(HomePageFormsObject {
+        left: Value::new_array(
+            forms
+                .left()
+                .iter()
+                .map(|name| Value::Str(name.as_ref().into()))
+                .collect(),
+        ),
+        right: Value::new_array(
+            forms
+                .right()
+                .iter()
+                .map(|name| Value::Str(name.as_ref().into()))
+                .collect(),
+        ),
+    })
+}
+
+fn construct_home_page_forms(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(home_page_forms_value(&HomePageFormsData::default()))
+}
+
+fn get_home_page_forms(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<HomePageSettingsObject>()
+        .ok_or(RtError::NotAnObject)?;
+    let (principal, adapter) = client_settings_context(ctx)?;
+    Ok(home_page_forms_value(&adapter.home_page_forms(principal)?))
+}
+
+fn form_names(value: &Value) -> RtResult<Vec<String>> {
+    let Value::Object(object) = value else {
+        return Err(RtError::TypeError {
+            expected: "Массив",
+            op: "УстановитьСоставФорм",
+        });
+    };
+    let BslObject::Array(items) = object.as_ref() else {
+        return Err(RtError::TypeError {
+            expected: "Массив",
+            op: "УстановитьСоставФорм",
+        });
+    };
+    items
+        .borrow()
+        .iter()
+        .map(|item| match item {
+            Value::Str(value) => Ok(value.to_string()),
+            _ => Err(RtError::TypeError {
+                expected: "Строка",
+                op: "УстановитьСоставФорм",
+            }),
+        })
+        .collect()
+}
+
+fn set_home_page_forms(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<HomePageSettingsObject>()
+        .ok_or(RtError::NotAnObject)?;
+    let Value::Object(object) = &arguments[0] else {
+        return Err(RtError::TypeError {
+            expected: "СоставФормНачальнойСтраницы",
+            op: "УстановитьСоставФорм",
+        });
+    };
+    let BslObject::Extension(object) = object.as_ref() else {
+        return Err(RtError::TypeError {
+            expected: "СоставФормНачальнойСтраницы",
+            op: "УстановитьСоставФорм",
+        });
+    };
+    let forms = object
+        .downcast_ref::<HomePageFormsObject>()
+        .ok_or(RtError::TypeError {
+            expected: "СоставФормНачальнойСтраницы",
+            op: "УстановитьСоставФорм",
+        })?;
+    let forms = HomePageFormsData::new(form_names(&forms.left)?, form_names(&forms.right)?);
+    let (principal, adapter) = client_settings_context(ctx)?;
+    adapter.set_home_page_forms(principal, &forms)?;
+    Ok(Value::Undefined)
+}
+
+fn home_page_left(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(receiver
+        .downcast_ref::<HomePageFormsObject>()
+        .ok_or(RtError::NotAnObject)?
+        .left
+        .clone())
+}
+
+fn home_page_right(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(receiver
+        .downcast_ref::<HomePageFormsObject>()
+        .ok_or(RtError::NotAnObject)?
+        .right
+        .clone())
+}
+
+fn common_settings_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(StandardSettingsStorageObject {
+        storage: ClientSettingsStorage::Common,
+    }))
+}
+
+fn system_settings_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(StandardSettingsStorageObject {
+        storage: ClientSettingsStorage::System,
+    }))
 }
 
 fn infobase_connection_number_property(
@@ -1428,15 +2084,32 @@ fn system_information_app_version(
     Ok(Value::Str(information.platform_version.as_ref().into()))
 }
 
-const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
-    code: ConstructorCode::new(1),
-    names: &["СистемнаяИнформация", "SystemInfo"],
-    arity: Arity::exact(0),
-    call: construct_system_information,
-}];
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[
+    ConstructorDescriptor {
+        code: ConstructorCode::new(1),
+        names: &["СистемнаяИнформация", "SystemInfo"],
+        arity: Arity::exact(0),
+        call: construct_system_information,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(2),
+        names: &["НастройкиНачальнойСтраницы", "HomePageSettings"],
+        arity: Arity::exact(0),
+        call: construct_home_page_settings,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(3),
+        names: &["СоставФормНачальнойСтраницы", "HomePageForms"],
+        arity: Arity::exact(0),
+        call: construct_home_page_forms,
+    },
+];
 
-const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] =
-    &[(ConstructorCode::new(1), &SYSTEM_INFORMATION_TYPE)];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (ConstructorCode::new(1), &SYSTEM_INFORMATION_TYPE),
+    (ConstructorCode::new(2), &HOME_PAGE_SETTINGS_TYPE),
+    (ConstructorCode::new(3), &HOME_PAGE_FORMS_TYPE),
+];
 
 static SYSTEM_INFORMATION_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
     names: &["ВерсияПриложения", "AppVersion"],
@@ -1470,6 +2143,81 @@ static INFOBASE_CONNECTION_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
         names: &["ИмяКомпьютера", "ComputerName"],
         get: infobase_connection_computer_name,
+        set: None,
+    },
+];
+
+static STANDARD_SETTINGS_STORAGE_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["Загрузить", "Load"],
+        Arity::range(1, 4),
+        load_client_setting,
+    ),
+    MethodDescriptor::new(
+        &["Сохранить", "Save"],
+        Arity::range(3, 5),
+        save_client_setting,
+    )
+    .as_procedure(),
+    MethodDescriptor::new(
+        &["Выбрать", "Select"],
+        Arity::range(0, 1),
+        select_client_settings,
+    ),
+];
+
+static STANDARD_SETTINGS_SELECTION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Следующий", "Next"],
+    Arity::exact(0),
+    next_client_setting,
+)];
+
+static STANDARD_SETTINGS_SELECTION_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["КлючОбъекта", "ObjectKey"],
+        get: selected_object_key,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["КлючНастроек", "SettingsKey"],
+        get: selected_settings_key,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Пользователь", "User"],
+        get: selected_user,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Настройки", "Settings"],
+        get: selected_settings,
+        set: None,
+    },
+];
+
+static HOME_PAGE_SETTINGS_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["ПолучитьСоставФорм", "GetForms"],
+        Arity::exact(0),
+        get_home_page_forms,
+    ),
+    MethodDescriptor::new(
+        &["УстановитьСоставФорм", "SetForms"],
+        Arity::exact(1),
+        set_home_page_forms,
+    )
+    .as_procedure(),
+];
+
+static HOME_PAGE_FORMS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["ЛеваяКолонка", "LeftColumn"],
+        get: home_page_left,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ПраваяКолонка", "RightColumn"],
+        get: home_page_right,
         set: None,
     },
 ];
@@ -1564,18 +2312,46 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Procedure,
         call: write_log_event,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(12),
+        names: &["ПолучитьХранилищеОбщихНастроек"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: common_settings_storage,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(13),
+        names: &["ПолучитьХранилищеСистемныхНастроек"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: system_settings_storage,
+    },
 ];
 
-const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
-    names: &["ПараметрыСеанса", "SessionParameters"],
-    function: FunctionCode::new(1),
-}];
+const GLOBALS: &[GlobalDescriptor] = &[
+    GlobalDescriptor {
+        names: &["ПараметрыСеанса", "SessionParameters"],
+        function: FunctionCode::new(1),
+    },
+    GlobalDescriptor {
+        names: &["ХранилищеОбщихНастроек", "CommonSettingsStorage"],
+        function: FunctionCode::new(12),
+    },
+    GlobalDescriptor {
+        names: &["ХранилищеСистемныхНастроек", "SystemSettingsStorage"],
+        function: FunctionCode::new(13),
+    },
+];
 
 const TYPES: &[&TypeDescriptor] = &[
     &PARAMETERS_TYPE,
     &SYSTEM_INFORMATION_TYPE,
     &INFOBASE_SESSION_TYPE,
     &INFOBASE_CONNECTION_TYPE,
+    &STANDARD_SETTINGS_STORAGE_TYPE,
+    &STANDARD_SETTINGS_SELECTION_TYPE,
+    &HOME_PAGE_SETTINGS_TYPE,
+    &HOME_PAGE_FORMS_TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -1587,6 +2363,13 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&INFOBASE_SESSION_TYPE).with_methods(INFOBASE_SESSION_METHODS),
     ObjectMembersDescriptor::new(&INFOBASE_CONNECTION_TYPE)
         .with_properties(INFOBASE_CONNECTION_PROPERTIES),
+    ObjectMembersDescriptor::new(&STANDARD_SETTINGS_STORAGE_TYPE)
+        .with_methods(STANDARD_SETTINGS_STORAGE_METHODS),
+    ObjectMembersDescriptor::new(&STANDARD_SETTINGS_SELECTION_TYPE)
+        .with_methods(STANDARD_SETTINGS_SELECTION_METHODS)
+        .with_properties(STANDARD_SETTINGS_SELECTION_PROPERTIES),
+    ObjectMembersDescriptor::new(&HOME_PAGE_SETTINGS_TYPE).with_methods(HOME_PAGE_SETTINGS_METHODS),
+    ObjectMembersDescriptor::new(&HOME_PAGE_FORMS_TYPE).with_properties(HOME_PAGE_FORMS_PROPERTIES),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];

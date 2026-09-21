@@ -7,6 +7,7 @@
 КонецПроцедуры
 
 М("file.begin", "client-settings-selection-1");
+М("CLIENT_SETTINGS.MANAGER.TYPE", ТипЗнч(ХранилищеСистемныхНастроек));
 
 ХранилищеСистемныхНастроек.Сохранить(
 	"open-bsl.measure", "selection", 42);
@@ -34,5 +35,12 @@
 	ПослеКонца = "error:" + КраткоеПредставлениеОшибки(ИнформацияОбОшибке());
 КонецПопытки;
 М("CLIENT_SETTINGS.SELECTION.AFTER_END", ПослеКонца);
+
+НастройкиНачальнойСтраницыПробы = Новый НастройкиНачальнойСтраницы;
+СоставФормПробы = Новый СоставФормНачальнойСтраницы;
+М("CLIENT_SETTINGS.HOME_PAGE_SETTINGS.TYPE", ТипЗнч(НастройкиНачальнойСтраницыПробы));
+М("CLIENT_SETTINGS.HOME_PAGE_FORMS.TYPE", ТипЗнч(СоставФормПробы));
+М("CLIENT_SETTINGS.HOME_PAGE_FORMS.EMPTY_LEFT", СоставФормПробы.ЛеваяКолонка.Количество());
+М("CLIENT_SETTINGS.HOME_PAGE_FORMS.EMPTY_RIGHT", СоставФормПробы.ПраваяКолонка.Количество());
 
 М("file.end", "client-settings-selection-1");
