@@ -12,6 +12,11 @@ The system SHALL represent configuration code as an immutable snapshot containin
 - **WHEN** a configuration snapshot is loaded
 - **THEN** every module comes from the same selected database, XML, or EDT loader
 
+#### Scenario: Code source differs from metadata source
+- **WHEN** a future XML or EDT loader supplies the complete code snapshot and matching ORM metadata is acquired from an information base
+- **THEN** the two inputs remain independently sourced
+- **AND** no module from the database code store is mixed into that code snapshot
+
 ### Requirement: Database configuration loader
 `bsl-config-db` SHALL build the neutral snapshot from the configuration resources acquired through `open-sdbl-db`. It SHALL reuse the database adapter's provider handling, limits, resource-part assembly, metadata acquisition, and extension resource acquisition. It SHALL NOT implement SQL provider access independently.
 

@@ -9,5 +9,6 @@
 - [x] 7. Expose the host-supplied platform version through `СистемнаяИнформация` during startup.
 - [x] 8. Add the complete configuration-extension snapshot, source and scope enums, manager methods, extension objects, and session application issues to `bsl-orm`.
 - [ ] 9. Add the optional `bsl-cli --config-db` and `--principal` path while keeping existing CLI tests byte-for-byte unchanged where applicable.
-- [ ] 10. Exercise full startup against the `demo`, `buh`, and `unf` configurations and preserve the evidence outside confidential fixtures.
-- [ ] 11. Document every public Rust API in Russian, regenerate the BSL API reference, and build `open-bsl-consumer`.
+- [ ] 10. Exercise full startup for web-client, thin-client, and background-job sessions against the `demo`, `buh`, and `unf` configurations and preserve non-confidential evidence.
+- [ ] 11. Document every public Rust API in Russian, regenerate the BSL API reference, and build `open-bsl-consumer` using facade names only.
+- [ ] 12. Run the complete workspace checks, verify the `bsl-rt` and `bsl-vm` normal dependency trees, validate with `openspec validate start-configuration-session --strict`, and archive the change after every gate passes.

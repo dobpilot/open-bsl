@@ -7,6 +7,11 @@
 - **WHEN** code and metadata identify the same configuration and every linked object exists
 - **THEN** the factory is created once and may open multiple isolated sessions
 
+#### Scenario: Matching snapshots from different providers
+- **WHEN** a code snapshot and an ORM metadata catalog come from different physical providers but identify the same configuration and linked objects
+- **THEN** factory construction applies the same compatibility checks
+- **AND** it does not require the providers to match
+
 #### Scenario: Incompatible manager owner
 - **WHEN** a code snapshot links a manager module to an object absent from the metadata catalog
 - **THEN** factory construction fails before any session starts

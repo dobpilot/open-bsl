@@ -1,6 +1,6 @@
 # Design
 
-`SessionFactory` owns a compiled open-bsl engine, one `ConfigurationCodeSnapshot`, and the immutable ORM metadata catalog produced at acquisition time. It performs compatibility checks once: the code and metadata identify the same configuration, and every linked manager module names an object present in the metadata catalog. Extra database metadata is allowed. The factory does not re-read or hash `Config` for every session; after a configuration update the host builds a new factory.
+`SessionFactory` owns a compiled open-bsl engine, one `ConfigurationCodeSnapshot`, and an immutable ORM metadata catalog produced at acquisition time. The two snapshots may come from different physical sources. It performs compatibility checks once: the code and metadata identify the same configuration, and every linked manager module names an object present in the metadata catalog. Extra database metadata is allowed. The factory does not re-read or hash `Config` for every session; after a configuration update the host builds a new factory.
 
 Each `Session` owns one open-bsl `State`, session module instances, session parameters, execution modes, a frozen principal description, and one live database connection. Database statements use the existing bounded read-only `READ COMMITTED` operations of `open-sdbl-db`; no transaction spans the lifetime of the BSL session. A failed connection, compatibility check, or startup handler returns an error and no usable partial session.
 
@@ -13,6 +13,8 @@ The principal is selected from `v8users` by case-insensitive name or GUID. Only 
 The required upstream `open-sdbl` user model must decode every authentication method supported by the selected platform family and expose whether at least one method is enabled. `AdmRole` remains separate from object roles and does not grant unrestricted application data access.
 
 `bsl-orm` owns configuration metadata and data-facing platform objects; it does not load BSL source. The initial surface is the one recorded in `docs/research/session-module-runtime-surface-2026-09-21.md`. It includes the global `РольДоступна`/`IsInRole` function, accepting a role name or metadata role object and answering from the frozen principal's roles. Unknown roles and invalid argument types are errors. Unsupported platform members fail explicitly with their BSL name.
+
+`bsl-session` owns the session-parameter container and session lifecycle. It composes `bsl-orm` with the existing open-bsl engine; neither crate implements a second parser, resolver, compiler, VM, or BSL object model already supplied by the facade. Only names and members required by the measured `demo`, `buh`, and `unf` startup paths enter this change.
 
 The immutable ORM catalog also records the complete configuration-extension view obtained during configuration acquisition: database extensions, the applied and disabled subsets for the session, and application issues. `РасширенияКонфигурации` reads only that snapshot. An explicitly complete empty snapshot produces empty arrays; absent or incomplete extension information is an error, so unavailable acquisition data cannot masquerade as a base without extensions. The source and scope system enums remain runtime values supplied by `bsl-rt`, while the extension objects and manager belong to `bsl-orm`.
 
