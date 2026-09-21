@@ -50,6 +50,9 @@ pub enum TypeId {
     /// Перечисления платформы. Тип члена — само перечисление.
     ScriptVariant,
     ClientRunMode,
+    ConfigurationExtensionsSource,
+    ConfigurationExtensionScope,
+    ConfigurationExtensionApplicationIssueSeverity,
     JsonValueType,
     JsonLineBreak,
     JsonEscapeCharacters,
@@ -195,6 +198,21 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::ClientRunMode,
         "РежимЗапускаКлиентскогоПриложения",
         "ClientRunMode",
+    ),
+    (
+        TypeId::ConfigurationExtensionsSource,
+        "ИсточникРасширенийКонфигурации",
+        "ConfigurationExtensionsSource",
+    ),
+    (
+        TypeId::ConfigurationExtensionScope,
+        "ОбластьДействияРасширенияКонфигурации",
+        "ConfigurationExtensionScope",
+    ),
+    (
+        TypeId::ConfigurationExtensionApplicationIssueSeverity,
+        "ВажностьПроблемыПримененияРасширенияКонфигурации",
+        "ConfigurationExtensionApplicationIssueSeverity",
     ),
     // Тип с пробелом, как и остальные объектные типы JSON выше; значение
     // («Строка(Новый НастройкиСериализацииJSON)») — без, см. `lib.rs`.
@@ -386,16 +404,23 @@ const NAMES: &[(TypeId, &str, &str)] = &[
 
 /// Типы, чьё ПРЕДСТАВЛЕНИЕ не совпадает с именем, по которому тип ищется.
 ///
-/// Единственный такой случай — два потока: ИЗМЕРЕНО на 8.3.27, что
-/// `Строка(Тип("ПотокВПамяти"))` и `Строка(Тип("ФайловыйПоток"))` оба дают
-/// «Файловый поток», хотя сами типы РАЗНЫЕ (`Тип("ПотокВПамяти") =
-/// Тип("ФайловыйПоток")` — «Нет»). Одно имя на два типа в [`NAMES`] не
-/// помещается: там русская колонка служит и поиском, и печатью. Обратная
-/// сторона совпадения — `Тип("Файловый поток")` находит `FileStream`
-/// (пробелы при поиске не значимы), а `MemoryStream` через своё
-/// представление уже не находится; так же несимметрично ведёт себя и
-/// платформа.
-const DISPLAY: &[(TypeId, &str)] = &[];
+/// У перечислений режима запуска и расширений платформа печатает английское
+/// имя типа даже в русском интерфейсе. Значения измерены на 8.3.27.2342.
+const DISPLAY: &[(TypeId, &str)] = &[
+    (TypeId::ClientRunMode, "ClientRunMode"),
+    (
+        TypeId::ConfigurationExtensionsSource,
+        "ConfigurationExtensionsSource",
+    ),
+    (
+        TypeId::ConfigurationExtensionScope,
+        "ConfigurationExtensionScope",
+    ),
+    (
+        TypeId::ConfigurationExtensionApplicationIssueSeverity,
+        "ConfigurationExtensionApplicationIssueSeverity",
+    ),
+];
 
 /// Второе русское написание — ИДЕНТИФИКАТОР — для типов, у которых
 /// представление и имя в коде не совпадают.

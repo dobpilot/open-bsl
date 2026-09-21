@@ -17,6 +17,46 @@ impl DataAccess for DataAccessStub {
     }
 }
 
+const APPLIED_EXTENSION_ID: [u8; 16] = [0x11; 16];
+const DISABLED_EXTENSION_ID: [u8; 16] = [0x22; 16];
+
+fn extensions() -> ConfigurationExtensionsSnapshot {
+    ConfigurationExtensionsSnapshot::new(
+        vec![
+            ConfigurationExtension::new(
+                APPLIED_EXTENSION_ID,
+                "Исправление",
+                "1.2",
+                "hash-one",
+                ExtensionSafeMode::Enabled(true),
+                false,
+                true,
+                ConfigurationExtensionScope::InfoBase,
+            )
+            .unwrap(),
+            ConfigurationExtension::new(
+                DISABLED_EXTENSION_ID,
+                "Адаптация",
+                "2.0",
+                "hash-two",
+                ExtensionSafeMode::profile("ПрофильРасширения"),
+                true,
+                false,
+                ConfigurationExtensionScope::DataSeparation,
+            )
+            .unwrap(),
+        ],
+        [APPLIED_EXTENSION_ID],
+        [DISABLED_EXTENSION_ID],
+        vec![ExtensionApplicationIssue::new(
+            DISABLED_EXTENSION_ID,
+            "конфликт метода",
+            ExtensionApplicationIssueSeverity::Critical,
+        )],
+    )
+    .unwrap()
+}
+
 fn catalog() -> Arc<MetadataCatalog> {
     Arc::new(
         MetadataCatalog::new(
@@ -43,7 +83,8 @@ fn catalog() -> Arc<MetadataCatalog> {
             ScriptVariant::Russian,
             ["role-user".into()],
         )
-        .unwrap(),
+        .unwrap()
+        .with_configuration_extensions(extensions()),
     )
 }
 
@@ -283,5 +324,158 @@ fn unknown_manager_member_fails_explicitly() {
             .unwrap_err()
             .to_string()
             .contains("НетТакогоМетода")
+    );
+}
+
+#[test]
+fn configuration_extensions_filter_each_complete_source() {
+    let engine = engine();
+    let mut state = state(&engine);
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Активные = РасширенияКонфигурации.Получить(
+                    Новый Структура("Имя", "иСпРаВлЕнИе"),
+                    ИсточникРасширенийКонфигурации.СеансАктивные);
+                Если Активные.Количество() <> 1 Тогда
+                    Возврат "wrong applied count";
+                КонецЕсли;
+                Расширение = Активные[0];
+                ПоИдентификатору = ConfigurationExtensions.Get(
+                    Новый Структура("UUID", Расширение.UUID),
+                    ConfigurationExtensionsSource.Database);
+                Возврат Расширение.Name + ":" + Расширение.Version + ":"
+                    + Расширение.HashSum + ":" + Строка(Расширение.SafeMode) + ":"
+                    + Строка(Расширение.UsedInDistributedInfoBase) + ":"
+                    + Строка(Расширение.Active) + ":" + Строка(Расширение.Scope)
+                    + ":" + Строка(ПоИдентификатору.Количество());
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Исправление:1.2:hash-one:Да:Нет:Да:Infobase:1".into())
+    );
+
+    assert_eq!(
+        state
+            .exec(
+                "Возврат РасширенияКонфигурации.Получить(, ИсточникРасширенийКонфигурации.СеансОтключенные).Количество();"
+            )
+            .unwrap(),
+        Value::number_from_i64(1)
+    );
+}
+
+#[test]
+fn configuration_extension_issues_refer_to_the_same_extension_snapshot() {
+    let engine = engine();
+    let mut state = state(&engine);
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Проблема = РасширенияКонфигурации
+                    .ПолучитьИнформациюОПроблемахПримененияВСеансе()[0];
+                Отключенное = РасширенияКонфигурации.Получить(
+                    , ИсточникРасширенийКонфигурации.СеансОтключенные)[0];
+                Возврат Проблема.Расширение = Отключенное
+                    И Проблема.Описание = "конфликт метода"
+                    И Проблема.Важность = ВажностьПроблемыПримененияРасширенияКонфигурации.Критичная;
+                "#,
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+}
+
+#[test]
+fn complete_empty_and_missing_extension_snapshots_are_distinct() {
+    let empty_catalog = Arc::new(
+        MetadataCatalog::new("configuration", Vec::new())
+            .unwrap()
+            .with_configuration_extensions(
+                ConfigurationExtensionsSnapshot::new(
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                )
+                .unwrap(),
+            ),
+    );
+    let missing_catalog = Arc::new(MetadataCatalog::new("configuration", Vec::new()).unwrap());
+    let engine = engine();
+    let make_state = |catalog| {
+        engine
+            .state_builder()
+            .host_data(Rc::new(SessionData::new(
+                catalog,
+                Principal::new("user", "Тест", Vec::new()),
+            )))
+            .build()
+    };
+
+    let mut empty_state = make_state(empty_catalog);
+    assert_eq!(
+        empty_state
+            .exec("Возврат РасширенияКонфигурации.Получить().Количество();")
+            .unwrap(),
+        Value::number_from_i64(0)
+    );
+    assert_eq!(
+        empty_state
+            .exec(
+                "Возврат РасширенияКонфигурации.ПолучитьИнформациюОПроблемахПримененияВСеансе().Количество();"
+            )
+            .unwrap(),
+        Value::number_from_i64(0)
+    );
+
+    let mut missing_state = make_state(missing_catalog);
+    assert!(
+        missing_state
+            .exec("Возврат РасширенияКонфигурации.Получить();")
+            .unwrap_err()
+            .to_string()
+            .contains("не загружены для текущего сеанса")
+    );
+}
+
+#[test]
+fn extension_snapshot_rejects_dangling_references() {
+    let extension = ConfigurationExtension::new(
+        APPLIED_EXTENSION_ID,
+        "Исправление",
+        "1",
+        "hash",
+        ExtensionSafeMode::Enabled(false),
+        false,
+        true,
+        ConfigurationExtensionScope::InfoBase,
+    )
+    .unwrap();
+    assert_eq!(
+        ConfigurationExtensionsSnapshot::new(
+            vec![extension.clone()],
+            [DISABLED_EXTENSION_ID],
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap_err(),
+        CatalogError::UnknownExtensionIdentity
+    );
+    assert_eq!(
+        ConfigurationExtensionsSnapshot::new(
+            vec![extension],
+            Vec::new(),
+            Vec::new(),
+            vec![ExtensionApplicationIssue::new(
+                DISABLED_EXTENSION_ID,
+                "нет расширения",
+                ExtensionApplicationIssueSeverity::Low,
+            )],
+        )
+        .unwrap_err(),
+        CatalogError::UnknownIssueExtension
     );
 }

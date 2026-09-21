@@ -28,6 +28,16 @@ pub enum EnumValue {
     ClientRunModeOrdinaryApplication,
     ClientRunModeManagedApplication,
 
+    // --- Расширения конфигурации --------------------------------------
+    ConfigurationExtensionsSourceDatabase,
+    ConfigurationExtensionsSourceSessionApplied,
+    ConfigurationExtensionsSourceSessionDisabled,
+    ConfigurationExtensionScopeInfoBase,
+    ConfigurationExtensionScopeDataSeparation,
+    ConfigurationExtensionApplicationIssueSeverityCritical,
+    ConfigurationExtensionApplicationIssueSeverityLow,
+    ConfigurationExtensionApplicationIssueSeverityModerate,
+
     // --- ТипЗначенияJSON ---------------------------------------------
     JsonString,
     JsonNumber,
@@ -400,6 +410,12 @@ pub enum EnumKind {
     ScriptVariant,
     /// Режим запуска клиентского приложения.
     ClientRunMode,
+    /// Источник списка расширений конфигурации.
+    ConfigurationExtensionsSource,
+    /// Область действия расширения конфигурации.
+    ConfigurationExtensionScope,
+    /// Важность проблемы применения расширения конфигурации.
+    ConfigurationExtensionApplicationIssueSeverity,
     JsonValueType,
     JsonLineBreak,
     /// Способ перевода Unicode-символов в `\uXXXX` при записи JSON.
@@ -547,6 +563,18 @@ impl EnumKind {
         match self {
             EnumKind::ScriptVariant => ("ВариантВстроенногоЯзыка", "ScriptVariant"),
             EnumKind::ClientRunMode => ("РежимЗапускаКлиентскогоПриложения", "ClientRunMode"),
+            EnumKind::ConfigurationExtensionsSource => (
+                "ИсточникРасширенийКонфигурации",
+                "ConfigurationExtensionsSource",
+            ),
+            EnumKind::ConfigurationExtensionScope => (
+                "ОбластьДействияРасширенияКонфигурации",
+                "ConfigurationExtensionScope",
+            ),
+            EnumKind::ConfigurationExtensionApplicationIssueSeverity => (
+                "ВажностьПроблемыПримененияРасширенияКонфигурации",
+                "ConfigurationExtensionApplicationIssueSeverity",
+            ),
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonEscapeCharacters => {
@@ -627,6 +655,12 @@ impl EnumKind {
             EnumKind::ScriptVariant => "ПеречислениеВариантВстроенногоЯзыка",
             // ИЗМЕРЕНО на 8.3.27 вместе с членами перечисления.
             EnumKind::ClientRunMode => "EnumClientRunMode",
+            // ИЗМЕРЕНО на 8.3.27 пробой `measure-configuration-extension-enums.bsl`.
+            EnumKind::ConfigurationExtensionsSource => "EnumConfigurationExtensionsSource",
+            EnumKind::ConfigurationExtensionScope => "EnumConfigurationExtensionScope",
+            EnumKind::ConfigurationExtensionApplicationIssueSeverity => {
+                "EnumConfigurationExtensionApplicationIssueSeverity"
+            }
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
             EnumKind::JsonLineBreak => "ПеречислениеПереносСтрокJSON",
             EnumKind::JsonEscapeCharacters => "ПеречислениеЭкранированиеСимволовJSON",
@@ -743,6 +777,64 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "УправляемоеПриложение",
         "ManagedApplication",
         "Управляемое приложение",
+    ),
+    // Строковые представления и метатипы трёх перечислений расширений
+    // измерены на платформе 8.3.27.2342 отдельной воспроизводимой пробой.
+    (
+        EnumKind::ConfigurationExtensionsSource,
+        EnumValue::ConfigurationExtensionsSourceDatabase,
+        "БазаДанных",
+        "Database",
+        "Database",
+    ),
+    (
+        EnumKind::ConfigurationExtensionsSource,
+        EnumValue::ConfigurationExtensionsSourceSessionApplied,
+        "СеансАктивные",
+        "SessionApplied",
+        "SessionApplied",
+    ),
+    (
+        EnumKind::ConfigurationExtensionsSource,
+        EnumValue::ConfigurationExtensionsSourceSessionDisabled,
+        "СеансОтключенные",
+        "SessionDisabled",
+        "SessionDisabled",
+    ),
+    (
+        EnumKind::ConfigurationExtensionScope,
+        EnumValue::ConfigurationExtensionScopeInfoBase,
+        "ИнформационнаяБаза",
+        "InfoBase",
+        "Infobase",
+    ),
+    (
+        EnumKind::ConfigurationExtensionScope,
+        EnumValue::ConfigurationExtensionScopeDataSeparation,
+        "РазделениеДанных",
+        "DataSeparation",
+        "Data separation",
+    ),
+    (
+        EnumKind::ConfigurationExtensionApplicationIssueSeverity,
+        EnumValue::ConfigurationExtensionApplicationIssueSeverityCritical,
+        "Критичная",
+        "Critical",
+        "Critical",
+    ),
+    (
+        EnumKind::ConfigurationExtensionApplicationIssueSeverity,
+        EnumValue::ConfigurationExtensionApplicationIssueSeverityLow,
+        "Низкая",
+        "Low",
+        "Low",
+    ),
+    (
+        EnumKind::ConfigurationExtensionApplicationIssueSeverity,
+        EnumValue::ConfigurationExtensionApplicationIssueSeverityModerate,
+        "Обычная",
+        "Moderate",
+        "Moderate",
     ),
     (
         EnumKind::JsonValueType,
@@ -2412,6 +2504,30 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("ScriptVariant", EnumKind::ScriptVariant),
     ("РежимЗапускаКлиентскогоПриложения", EnumKind::ClientRunMode),
     ("ClientRunMode", EnumKind::ClientRunMode),
+    (
+        "ИсточникРасширенийКонфигурации",
+        EnumKind::ConfigurationExtensionsSource,
+    ),
+    (
+        "ConfigurationExtensionsSource",
+        EnumKind::ConfigurationExtensionsSource,
+    ),
+    (
+        "ОбластьДействияРасширенияКонфигурации",
+        EnumKind::ConfigurationExtensionScope,
+    ),
+    (
+        "ConfigurationExtensionScope",
+        EnumKind::ConfigurationExtensionScope,
+    ),
+    (
+        "ВажностьПроблемыПримененияРасширенияКонфигурации",
+        EnumKind::ConfigurationExtensionApplicationIssueSeverity,
+    ),
+    (
+        "ConfigurationExtensionApplicationIssueSeverity",
+        EnumKind::ConfigurationExtensionApplicationIssueSeverity,
+    ),
     ("ТипЗначенияJSON", EnumKind::JsonValueType),
     ("JSONValueType", EnumKind::JsonValueType),
     ("ПереносСтрокJSON", EnumKind::JsonLineBreak),
@@ -2626,6 +2742,34 @@ mod tests {
             "Управляемое приложение"
         );
         assert_eq!(EnumKind::ClientRunMode.meta_ru_name(), "EnumClientRunMode");
+    }
+
+    #[test]
+    fn configuration_extension_enums_match_the_measured_platform_surface() {
+        assert_eq!(
+            lookup_member(EnumKind::ConfigurationExtensionsSource, "SessionApplied"),
+            Some(EnumValue::ConfigurationExtensionsSourceSessionApplied)
+        );
+        assert_eq!(
+            EnumValue::ConfigurationExtensionScopeDataSeparation.display_text(),
+            "Data separation"
+        );
+        assert_eq!(
+            EnumValue::ConfigurationExtensionApplicationIssueSeverityModerate.display_text(),
+            "Moderate"
+        );
+        assert_eq!(
+            EnumKind::ConfigurationExtensionsSource.meta_ru_name(),
+            "EnumConfigurationExtensionsSource"
+        );
+        assert_eq!(
+            EnumKind::ConfigurationExtensionScope.meta_ru_name(),
+            "EnumConfigurationExtensionScope"
+        );
+        assert_eq!(
+            EnumKind::ConfigurationExtensionApplicationIssueSeverity.meta_ru_name(),
+            "EnumConfigurationExtensionApplicationIssueSeverity"
+        );
     }
 
     /// Составные члены потоковых перечислений печатаются раздельно и со

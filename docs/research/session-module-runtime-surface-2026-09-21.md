@@ -342,6 +342,15 @@ SESSION.CURRENT_RUN_MODE.BACKGROUND	Не определено:
 Это не пустая совместимость «на будущее»: в обследованных снимках у `demo`
 зарегистрировано одно расширение, у `buh` — два, у `unf` — ни одного.
 
+Состав и строковые представления трёх системных перечислений дополнительно
+измерены на платформе 8.3.27.2342. Типы членов печатаются как
+`ConfigurationExtensionsSource`, `ConfigurationExtensionScope` и
+`ConfigurationExtensionApplicationIssueSeverity`, а метатипы голых имён —
+как `EnumConfigurationExtensionsSource`, `EnumConfigurationExtensionScope` и
+`EnumConfigurationExtensionApplicationIssueSeverity`. Проба и полный вывод
+сохранены в `tests/conformance/measure/1c/measure-configuration-extension-enums.bsl`
+и `measure-configuration-extension-enums.platform.txt`.
+
 ### Параметры сеанса, которые устанавливает ядро БСП
 
 На полном старте:

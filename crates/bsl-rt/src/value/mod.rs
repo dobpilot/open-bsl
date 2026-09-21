@@ -59,6 +59,11 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
     match kind {
         EnumKind::ScriptVariant => TypeId::ScriptVariant,
         EnumKind::ClientRunMode => TypeId::ClientRunMode,
+        EnumKind::ConfigurationExtensionsSource => TypeId::ConfigurationExtensionsSource,
+        EnumKind::ConfigurationExtensionScope => TypeId::ConfigurationExtensionScope,
+        EnumKind::ConfigurationExtensionApplicationIssueSeverity => {
+            TypeId::ConfigurationExtensionApplicationIssueSeverity
+        }
         EnumKind::JsonValueType => TypeId::JsonValueType,
         EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
         EnumKind::JsonEscapeCharacters => TypeId::JsonEscapeCharacters,
