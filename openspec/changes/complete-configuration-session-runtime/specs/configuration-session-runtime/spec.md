@@ -68,6 +68,17 @@ The ORM component SHALL provide the measured `Запрос` constructor with its
 - **THEN** execution raises an explicit error
 - **AND** no empty or unrestricted result is substituted
 
+### Requirement: Session connection string
+The session runtime SHALL expose `СтрокаСоединенияИнформационнойБазы()` from a connection string supplied by the host for that Session factory. It SHALL return the registration string appropriate to the represented session kind. The runtime SHALL NOT derive credentials from, normalize, or fabricate the string.
+
+#### Scenario: Configured connection string
+- **WHEN** configuration code calls `СтрокаСоединенияИнформационнойБазы()` in a Session whose factory has a host-supplied string
+- **THEN** it receives that exact string
+
+#### Scenario: Missing connection string
+- **WHEN** configuration code calls the function in a Session whose host did not supply a string
+- **THEN** the call fails explicitly instead of returning an empty or synthetic string
+
 ### Requirement: Background session isolation and parameter inheritance
 A background job SHALL run in a new Session for an explicitly supplied selectable principal. It SHALL use a separate database connection and module instances. Its initial session parameters SHALL be copied from the parent session, and later changes in either session SHALL not change the other.
 

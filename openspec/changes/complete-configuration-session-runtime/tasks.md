@@ -6,6 +6,7 @@
 - [x] 4. Implement and test the measured unset, nested initialization, cycle, retry, clear, and non-rollback session-parameter behavior.
 - [ ] 5. Connect query, manager, register, and constant reads to the current principal, session parameters, rights, and RLS.
 - [x] 5a. Implement the measured linear `Запрос`, result, selection, and unload surface through the Session-owned `DataAccess` boundary.
+- [ ] 5b. Expose the host-supplied information-base connection string through the current Session and fail explicitly when it is absent.
 - [ ] 6. Reject missing rights and unsupported runtime members explicitly instead of returning permissive placeholders.
 - [x] 7. Create background-job sessions with an explicit principal, copied parent parameters, a separate connection, and isolated module state.
 - [ ] 8. Run the `demo`, `buh`, and `unf` selected-parameter scenarios and the complete workspace verification gates without changing existing tests.
