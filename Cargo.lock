@@ -251,6 +251,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsl-orm"
+version = "0.1.0"
+dependencies = [
+ "open-bsl",
+]
+
+[[package]]
 name = "bsl-pdf"
 version = "0.2.0"
 dependencies = [
@@ -281,6 +288,15 @@ dependencies = [
  "bsl-number",
  "bsl-rt",
  "bsl-syntax",
+]
+
+[[package]]
+name = "bsl-session"
+version = "0.1.0"
+dependencies = [
+ "bsl-config",
+ "bsl-orm",
+ "open-bsl",
 ]
 
 [[package]]

@@ -1,0 +1,10 @@
+[package]
+name = "bsl-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bsl-config = { path = "../bsl-config" }
+bsl-orm = { path = "../bsl-orm" }
+open-bsl = { path = "../open-bsl", default-features = false }

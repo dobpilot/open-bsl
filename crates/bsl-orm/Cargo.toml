@@ -1,0 +1,8 @@
+[package]
+name = "bsl-orm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+open-bsl = { path = "../open-bsl", default-features = false }
