@@ -1241,6 +1241,18 @@ fn current_infobase_session_exposes_only_the_current_background_job() {
             .0,
         Value::Str("Active session|Background job|Обработка.ФоновыйМетод".into())
     );
+    let unsupported_probe = background
+        .instantiate(
+            "Функция Состояние() Экспорт Возврат ПолучитьТекущийСеансИнформационнойБазы().ПолучитьФоновоеЗадание().Состояние; КонецФункции",
+        )
+        .unwrap();
+    assert!(
+        background
+            .call(&unsupported_probe, "Состояние", vec![])
+            .unwrap_err()
+            .to_string()
+            .contains("Состояние")
+    );
 
     let error = background_factory
         .open_background(principal(), resources((), 3), "", &foreground)

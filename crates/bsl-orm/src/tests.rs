@@ -57,6 +57,33 @@ impl DataAccess for QueryAccessStub {
     }
 }
 
+#[derive(Debug)]
+struct DeniedDataAccess;
+
+impl DataAccess for DeniedDataAccess {
+    fn constant_value(
+        &self,
+        _: &MetadataObject,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError(
+            "права роли для чтения константы недоступны".into(),
+        ))
+    }
+
+    fn execute_query(
+        &self,
+        _: &QueryRequest,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<QueryResultData> {
+        Err(RtError::DynamicError(
+            "ограничение доступа запроса не раскрыто".into(),
+        ))
+    }
+}
+
 const APPLIED_EXTENSION_ID: [u8; 16] = [0x11; 16];
 const DISABLED_EXTENSION_ID: [u8; 16] = [0x22; 16];
 
@@ -260,6 +287,30 @@ fn query_fails_closed_without_support_and_rejects_non_linear_traversal() {
         error
             .to_string()
             .contains("поддерживается только прямой обход по умолчанию")
+    );
+}
+
+#[test]
+fn denied_or_incomplete_data_access_is_not_replaced_with_a_value() {
+    let engine = engine();
+    let mut state = state_with_data_access(&engine, Some(Rc::new(DeniedDataAccess)));
+
+    let query_error = state
+        .exec("Возврат Новый Запрос(\"ВЫБРАТЬ 1\").Выполнить();")
+        .unwrap_err();
+    assert!(
+        query_error
+            .to_string()
+            .contains("ограничение доступа запроса не раскрыто")
+    );
+
+    let constant_error = state
+        .exec("Возврат Константы.Ответ.Получить();")
+        .unwrap_err();
+    assert!(
+        constant_error
+            .to_string()
+            .contains("права роли для чтения константы недоступны")
     );
 }
 
