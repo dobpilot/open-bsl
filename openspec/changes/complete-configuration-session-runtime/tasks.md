@@ -18,5 +18,5 @@
 - [x] 6. Reject missing rights and unsupported runtime members explicitly instead of returning permissive placeholders.
 - [x] 7. Create background-job sessions with an explicit principal, copied parent parameters, a separate connection, and isolated module state.
 - [ ] 8. Run the full-start and selected-parameter `demo`, `buh`, and `unf` scenarios without changing existing regression expectations.
-- [ ] 9. Run formatting, Clippy, workspace tests, rustdoc, API-reference generation, facade-consumer compilation, and dependency-tree checks.
+- [x] 9. Run formatting, Clippy, workspace tests, rustdoc, API-reference generation, facade-consumer compilation, and dependency-tree checks.
 - [ ] 10. Validate with `openspec validate complete-configuration-session-runtime --strict` and archive the change only after every runtime and workspace gate passes.
