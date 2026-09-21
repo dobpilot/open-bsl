@@ -220,6 +220,8 @@ pub enum BuiltinFn {
     ConcatBinaryData,
     /// `Base64Значение(Строка)` — двоичные данные из Base64.
     Base64Value,
+    /// `Base64Строка(ДвоичныеДанные)` — исходная функция платформы.
+    Base64String,
     /// Стандартный Base64 без переносов строк.
     GetBase64StringFromBinaryData,
     /// Обратное преобразование Base64 в `ДвоичныеДанные`.
@@ -522,6 +524,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ConcatBinaryData", BuiltinFn::ConcatBinaryData),
     ("Base64Значение", BuiltinFn::Base64Value),
     ("Base64Value", BuiltinFn::Base64Value),
+    ("Base64Строка", BuiltinFn::Base64String),
+    ("Base64String", BuiltinFn::Base64String),
     (
         "ПолучитьBase64СтрокуИзДвоичныхДанных",
         BuiltinFn::GetBase64StringFromBinaryData,
@@ -1323,10 +1327,14 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
             let bytes = crate::encoding::decode_base64(&text).unwrap_or_default();
             Ok(BslValue::binary_data_of(bytes))
         }
-        BuiltinFn::GetBase64StringFromBinaryData => {
+        BuiltinFn::Base64String | BuiltinFn::GetBase64StringFromBinaryData => {
             let bytes = args[0].binary_data_bytes().ok_or(RtError::TypeError {
                 expected: "ДвоичныеДанные",
-                op: "ПолучитьBase64СтрокуИзДвоичныхДанных",
+                op: if f == BuiltinFn::Base64String {
+                    "Base64Строка"
+                } else {
+                    "ПолучитьBase64СтрокуИзДвоичныхДанных"
+                },
             })?;
             Ok(BslValue::Str(BslString::from_utf8_string(
                 crate::encoding::encode_base64(bytes),
@@ -2241,6 +2249,21 @@ mod name_table_tests {
         let alias = call_builtin_fn(BuiltinFn::GetBinaryDataFromBase64String, &[bad])
             .expect("алиас возвращает пустые двоичные данные");
         assert_eq!(alias.binary_data_bytes(), Some([].as_slice()));
+    }
+
+    #[test]
+    fn original_base64_string_function_has_its_own_name_and_existing_encoding() {
+        assert_eq!(
+            BuiltinFn::lookup("Base64Строка"),
+            Some(BuiltinFn::Base64String)
+        );
+        assert_ne!(
+            BuiltinFn::Base64String,
+            BuiltinFn::GetBase64StringFromBinaryData
+        );
+        let bytes = BslValue::binary_data_of(b"open-bsl".to_vec());
+        let value = call_builtin_fn(BuiltinFn::Base64String, &[bytes]).unwrap();
+        assert_eq!(value.to_string(), "b3Blbi1ic2w=");
     }
 
     #[test]

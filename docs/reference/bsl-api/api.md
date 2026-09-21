@@ -96,6 +96,7 @@
 | `РазделитьДвоичныеДанные`, `SplitBinaryData` | функция | 2 |
 | `СоединитьДвоичныеДанные`, `ConcatBinaryData` | функция | 1 |
 | `Base64Значение`, `Base64Value` | функция | 1 |
+| `Base64Строка`, `Base64String` | функция | 1 |
 | `ПолучитьBase64СтрокуИзДвоичныхДанных`, `GetBase64StringFromBinaryData` | функция | 1 |
 | `ПолучитьДвоичныеДанныеИзBase64Строки`, `GetBinaryDataFromBase64String` | функция | 1 |
 | `ПолучитьHexСтрокуИзДвоичныхДанных`, `GetHexStringFromBinaryData` | функция | 1 |
