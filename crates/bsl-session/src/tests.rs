@@ -14,6 +14,7 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
         .with_extension(Rc::new(SessionRuntime::new(
             parameters,
             SessionKind::ThinClient,
+            Arc::from(PLATFORM_VERSION),
         ))),
     )
 }
@@ -368,6 +369,7 @@ const START_HANDLER: &str = r#"
         КонецЕсли;
     КонецПроцедуры
 "#;
+const PLATFORM_VERSION: &str = "8.3.27.2342";
 
 #[test]
 fn factory_validates_once_and_opens_isolated_started_sessions() {
@@ -379,6 +381,7 @@ fn factory_validates_once_and_opens_isolated_started_sessions() {
         metadata_catalog("configuration"),
         "мОдУлЬсЕаНсА",
         SessionKind::ThinClient,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let mut first = factory.open(principal(), Box::new(Connection(1))).unwrap();
@@ -417,6 +420,7 @@ fn startup_reads_configuration_data_through_its_session_adapter() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::ThinClient,
+        PLATFORM_VERSION,
     )
     .unwrap();
 
@@ -430,13 +434,44 @@ fn startup_reads_configuration_data_through_its_session_adapter() {
 }
 
 #[test]
+fn startup_reads_the_factory_platform_version() {
+    let factory = SessionFactory::new(
+        code_snapshot(
+            "Процедура УстановкаПараметровСеанса(Требуемые) Экспорт Инфо = Новый СистемнаяИнформация; ПараметрыСеанса.Запущен = Инфо.ВерсияПриложения; КонецПроцедуры",
+        ),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+
+    let session = factory.open(principal(), Box::new(())).unwrap();
+    assert_eq!(
+        session.parameters().peek("Запущен").unwrap(),
+        Some(Value::Str(PLATFORM_VERSION.into()))
+    );
+}
+
+#[test]
 fn factory_rejects_incompatible_metadata_and_startup_failure() {
+    assert!(matches!(
+        SessionFactory::new(
+            code_snapshot(START_HANDLER),
+            metadata_catalog("configuration"),
+            "МодульСеанса",
+            SessionKind::WebClient,
+            "",
+        ),
+        Err(SessionError::EmptyPlatformVersion)
+    ));
     assert!(matches!(
         SessionFactory::new(
             code_snapshot(START_HANDLER),
             metadata_catalog("other"),
             "МодульСеанса",
             SessionKind::WebClient,
+            PLATFORM_VERSION,
         ),
         Err(SessionError::ConfigurationIdentityMismatch { .. })
     ));
@@ -448,6 +483,7 @@ fn factory_rejects_incompatible_metadata_and_startup_failure() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::WebClient,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let error = factory.open(principal(), Box::new(())).err().unwrap();
@@ -461,6 +497,7 @@ fn every_supported_session_kind_runs_full_startup() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::ThinClient,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let parent = foreground.open(principal(), Box::new(())).unwrap();
@@ -471,6 +508,7 @@ fn every_supported_session_kind_runs_full_startup() {
             metadata_catalog("configuration"),
             "МодульСеанса",
             kind,
+            PLATFORM_VERSION,
         )
         .unwrap();
         let session = factory.open(principal(), Box::new(())).unwrap();
@@ -486,6 +524,7 @@ fn every_supported_session_kind_runs_full_startup() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let session = factory
@@ -516,6 +555,7 @@ fn current_run_mode_matches_every_session_kind() {
             metadata_catalog("configuration"),
             "МодульСеанса",
             kind,
+            PLATFORM_VERSION,
         )
         .unwrap();
         let mut session = factory.open(principal(), Box::new(())).unwrap();
@@ -530,6 +570,7 @@ fn current_run_mode_matches_every_session_kind() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::ThinClient,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let parent = foreground.open(principal(), Box::new(())).unwrap();
@@ -538,6 +579,7 @@ fn current_run_mode_matches_every_session_kind() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let mut session = background
@@ -553,6 +595,7 @@ fn background_session_copies_parent_parameters_and_then_diverges() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::ThinClient,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let background = SessionFactory::new(
@@ -560,6 +603,7 @@ fn background_session_copies_parent_parameters_and_then_diverges() {
         metadata_catalog("configuration"),
         "МодульСеанса",
         SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
     )
     .unwrap();
     let parent = foreground.open(principal(), Box::new(())).unwrap();

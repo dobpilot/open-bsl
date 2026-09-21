@@ -15,10 +15,11 @@ use std::sync::Arc;
 use bsl_config::{ConfigurationCodeSnapshot, ModuleKind};
 use bsl_orm::{DataAccess, MetadataCatalog, MetadataKind, Principal, SessionData};
 use open_bsl::{
-    Arity, CallContext, Engine, EnumValue, Error as OpenBslError, FunctionCode, FunctionDescriptor,
-    FunctionKind, GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe,
-    ModuleInstance, ModuleRecipe, ObjectMembersDescriptor, ObjectProtocol, RtError, RtResult,
-    State, TypeDescriptor, Value, folded_eq,
+    Arity, CallContext, ConstructorCode, ConstructorDescriptor, Engine, EnumValue,
+    Error as OpenBslError, FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor,
+    LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe, ModuleInstance, ModuleRecipe,
+    ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, State,
+    TypeDescriptor, Value, folded_eq,
 };
 
 #[derive(Debug, Clone)]
@@ -241,13 +242,20 @@ fn parameter_access_error(name: &str) -> RtError {
 pub struct SessionRuntime {
     parameters: Rc<SessionParameters>,
     kind: SessionKind,
+    platform_version: Arc<str>,
 }
 
 impl SessionRuntime {
-    /// Создаёт runtime с контейнером параметров.
-    #[must_use]
-    pub fn new(parameters: Rc<SessionParameters>, kind: SessionKind) -> Self {
-        Self { parameters, kind }
+    fn new(
+        parameters: Rc<SessionParameters>,
+        kind: SessionKind,
+        platform_version: Arc<str>,
+    ) -> Self {
+        Self {
+            parameters,
+            kind,
+            platform_version,
+        }
     }
 
     /// Возвращает контейнер параметров текущего сеанса.
@@ -401,6 +409,7 @@ pub struct SessionFactory {
     parameter_names: Arc<[String]>,
     startup: open_bsl::Module,
     kind: SessionKind,
+    platform_version: Arc<str>,
 }
 
 impl SessionFactory {
@@ -409,14 +418,20 @@ impl SessionFactory {
     ///
     /// # Errors
     ///
-    /// Возвращает ошибку несовпадающей идентичности, отсутствующего объекта
-    /// владельца или модуля сеанса, а также ошибку сборки open-bsl.
+    /// Возвращает ошибку пустой версии платформы, несовпадающей идентичности,
+    /// отсутствующего объекта владельца или модуля сеанса, а также ошибку
+    /// сборки open-bsl.
     pub fn new(
         code: ConfigurationCodeSnapshot,
         catalog: Arc<MetadataCatalog>,
         session_module: &str,
         kind: SessionKind,
+        platform_version: impl Into<String>,
     ) -> Result<Self, SessionError> {
+        let platform_version = platform_version.into();
+        if platform_version.is_empty() {
+            return Err(SessionError::EmptyPlatformVersion);
+        }
         if code.identity() != catalog.identity() {
             return Err(SessionError::ConfigurationIdentityMismatch {
                 code: code.identity().into(),
@@ -499,6 +514,7 @@ impl SessionFactory {
             parameter_names,
             startup,
             kind,
+            platform_version: platform_version.into(),
         })
     }
 
@@ -597,10 +613,12 @@ impl SessionFactory {
                 self.parameter_names.iter().cloned(),
             )?),
         };
-        let mut data =
-            SessionData::new(Arc::clone(&self.catalog), principal.clone()).with_extension(Rc::new(
-                SessionRuntime::new(Rc::clone(&parameters), self.kind),
-            ));
+        let mut data = SessionData::new(Arc::clone(&self.catalog), principal.clone())
+            .with_extension(Rc::new(SessionRuntime::new(
+                Rc::clone(&parameters),
+                self.kind,
+                Arc::clone(&self.platform_version),
+            )));
         if let Some(data_access) = data_access {
             data = data.with_data_access(data_access);
         }
@@ -703,6 +721,8 @@ impl Session {
 /// Ошибка построения или запуска конфигурационного сеанса.
 #[derive(Debug)]
 pub enum SessionError {
+    /// Версия платформы не задана.
+    EmptyPlatformVersion,
     /// Код и метаданные относятся к разным конфигурациям.
     ConfigurationIdentityMismatch {
         /// Идентичность снимка кода.
@@ -742,6 +762,7 @@ pub enum SessionError {
 impl fmt::Display for SessionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::EmptyPlatformVersion => formatter.write_str("версия платформы пуста"),
             Self::ConfigurationIdentityMismatch { code, metadata } => write!(
                 formatter,
                 "код конфигурации `{code}` не совпадает с метаданными `{metadata}`"
@@ -821,7 +842,14 @@ struct ParametersObject {
     parameters: Rc<SessionParameters>,
 }
 
+#[derive(Debug)]
+struct SystemInformationObject {
+    platform_version: Arc<str>,
+}
+
 static PARAMETERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-session", "ПараметрыСеанса");
+static SYSTEM_INFORMATION_TYPE: TypeDescriptor =
+    TypeDescriptor::new("bsl-session", "СистемнаяИнформация");
 
 impl ObjectProtocol for ParametersObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -840,6 +868,16 @@ impl ObjectProtocol for ParametersObject {
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
         PARAMETERS_METHODS
+    }
+}
+
+impl ObjectProtocol for SystemInformationObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &SYSTEM_INFORMATION_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        SYSTEM_INFORMATION_PROPERTIES
     }
 }
 
@@ -885,6 +923,39 @@ fn current_run_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     }
 }
 
+fn construct_system_information(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let platform_version = runtime(ctx)?.platform_version.clone();
+    Ok(Value::new_object(SystemInformationObject {
+        platform_version,
+    }))
+}
+
+fn system_information_app_version(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let information = receiver
+        .downcast_ref::<SystemInformationObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(information.platform_version.as_ref().into()))
+}
+
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
+    code: ConstructorCode::new(1),
+    names: &["СистемнаяИнформация", "SystemInfo"],
+    arity: Arity::exact(0),
+    call: construct_system_information,
+}];
+
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] =
+    &[(ConstructorCode::new(1), &SYSTEM_INFORMATION_TYPE)];
+
+static SYSTEM_INFORMATION_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["ВерсияПриложения", "AppVersion"],
+    get: system_information_app_version,
+    set: None,
+}];
+
 const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
         code: FunctionCode::new(1),
@@ -907,16 +978,22 @@ const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
     function: FunctionCode::new(1),
 }];
 
-const TYPES: &[&TypeDescriptor] = &[&PARAMETERS_TYPE];
+const TYPES: &[&TypeDescriptor] = &[&PARAMETERS_TYPE, &SYSTEM_INFORMATION_TYPE];
 
-const API_MEMBERS: &[ObjectMembersDescriptor] = &[ObjectMembersDescriptor::new(&PARAMETERS_TYPE)
-    .with_methods(PARAMETERS_METHODS)
-    .with_dynamic_properties()];
+const API_MEMBERS: &[ObjectMembersDescriptor] = &[
+    ObjectMembersDescriptor::new(&PARAMETERS_TYPE)
+        .with_methods(PARAMETERS_METHODS)
+        .with_dynamic_properties(),
+    ObjectMembersDescriptor::new(&SYSTEM_INFORMATION_TYPE)
+        .with_properties(SYSTEM_INFORMATION_PROPERTIES),
+];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
 
 const LIBRARY: LibraryDescriptor = LibraryDescriptor::new("bsl-session", env!("CARGO_PKG_VERSION"))
     .with_functions(FUNCTIONS)
+    .with_constructors(CONSTRUCTORS)
+    .with_constructor_types(CONSTRUCTOR_TYPES)
     .with_globals(GLOBALS)
     .with_types(TYPES)
     .with_object_member_groups(OBJECT_MEMBER_GROUPS);
