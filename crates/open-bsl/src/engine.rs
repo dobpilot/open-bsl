@@ -114,6 +114,7 @@ impl Engine {
         };
         Ok(Module {
             id: self.next_module_id(),
+            owner: Arc::downgrade(&self.inner),
             program,
         })
     }
@@ -152,6 +153,7 @@ impl Engine {
         )?;
         Ok(Module {
             id: self.next_module_id(),
+            owner: Arc::downgrade(&self.inner),
             program,
         })
     }
@@ -172,6 +174,7 @@ impl Engine {
         bsl_bytecode::image::verify_configuration(catalog, Some(&entry)).map_err(Error::Runtime)?;
         Ok(Module {
             id: self.next_module_id(),
+            owner: Arc::downgrade(&self.inner),
             program: entry.program,
         })
     }
@@ -285,8 +288,13 @@ impl Engine {
     pub fn load_bytecode(&self, source: &str) -> Result<Module, Error> {
         Ok(Module {
             id: self.next_module_id(),
+            owner: Arc::downgrade(&self.inner),
             program: bsl_bytecode::parse_program(source)?,
         })
+    }
+
+    pub(crate) fn owns_module(&self, module: &Module) -> bool {
+        std::sync::Weak::ptr_eq(&module.owner, &Arc::downgrade(&self.inner))
     }
 
     /// Номер очередного модуля. `Relaxed` достаточно: от счётчика нужна
@@ -645,6 +653,7 @@ pub struct Module {
     /// отличала области ОДНОГО модуля от областей другого, запущенного той
     /// же сессией. Клон модуля номер сохраняет — это тот же модуль.
     pub(crate) id: u64,
+    owner: std::sync::Weak<EngineInner>,
     pub(crate) program: bsl_bytecode::Program,
 }
 

@@ -219,6 +219,7 @@ impl StateBuilder {
             engine: self.engine,
             host,
             scheduler: self.scheduler,
+            instances: super::instance::SessionInstances::default(),
         }
     }
 }
@@ -280,6 +281,7 @@ pub struct State {
     /// каждой сессии, поэтому и кэш фрагментов у сессий раздельный.
     pub(crate) dynamic: DynamicCode,
     pub(crate) scheduler: bsl_vm::SchedulerConfig,
+    pub(crate) instances: super::instance::SessionInstances,
 }
 
 impl Drop for State {

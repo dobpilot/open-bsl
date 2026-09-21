@@ -11,6 +11,8 @@
 
 mod debug;
 mod entry;
+mod instance;
+pub use instance::ModuleMemory;
 
 use entry::call_module_function_in_execution;
 pub use entry::{

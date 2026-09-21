@@ -367,9 +367,11 @@ flowchart LR
     catalog["ConfigurationProgram<br/>общий immutable"]
 
     subgraph state_a["State A"]
-        sessions_a["SessionModules"]
+        roots_a["Явные корневые экземпляры<br/>ModuleId → ModuleState"]
+        sessions_a["Общие SessionModules"]
         a1["ModuleInstance 1<br/>ModuleState + ModuleInitState"]
         a2["ModuleInstance 2<br/>ModuleState + ModuleInitState"]
+        roots_a --> sessions_a
         sessions_a --> a1
         sessions_a --> a2
     end
@@ -401,6 +403,14 @@ CLI-расширение сохраняет eager post-order инициализ�
 Серверный общий модуль job использует ту же state machine, но момент запуска и
 retry определяет `JOB.MODULE.INIT`. Ни один `ModuleState` не переходит между
 `State` или OS-потоками.
+
+Встраивающий host может явно инициализировать корневой `Module` в `State` и
+получить `ModuleInstance`. Тело корневого модуля исполняется один раз, а его
+`ModuleState` возвращается в тот же `State` после каждого экспортного вызова,
+в том числе после ловимой ошибки. Все явные корневые экземпляры одного
+`State` используют показанный выше общий `SessionModules`; другой `State`
+получает независимые корневые и общие состояния. Обычные `State::start` и
+`State::run` сохраняют прежнюю семантику отдельного запуска.
 
 ### ARCH-08 — Динамический код в конфигурации
 
@@ -481,8 +491,11 @@ CPU-bound задания против того же скрипта в foreground
 транспорта. `State::run` остаётся run-to-completion, а pollable API
 возвращает `Runnable`, `Waiting` или `Complete`. Роль `OwnedExecution`
 исполняет `RunningJob` worker-драйвера (владеет `State`, `Module` и
-`ProgramExecution`); отдельного публичного владеющего типа фасад не завёл —
-у него уже есть заимствующий `Execution`.
+`ProgramExecution`). `ModuleInstance` фасада — дескриптор сохранённого
+модульного состояния, а не незавершённое исполнение: каждый его вызов создаёт
+новый `ProgramExecution` с отдельными задачами и кэшами запуска. Pollable API
+для такого вызова не вводился; существующий `Execution` по-прежнему описывает
+заимствующий отдельный запуск.
 
 ### ARCH-10 — Worker driver и пробуждения
 

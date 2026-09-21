@@ -292,3 +292,7 @@ mod host_data_tests;
 #[cfg(test)]
 #[path = "global_tests.rs"]
 mod global_tests;
+
+#[cfg(test)]
+#[path = "instance_tests.rs"]
+mod instance_tests;

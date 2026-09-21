@@ -7,9 +7,12 @@
 mod dynamic;
 mod engine;
 mod error;
+mod instance;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod jobs;
 mod state;
+
+pub use instance::ModuleInstance;
 
 pub use bsl_rt::BslValue as Value;
 pub use bsl_rt::{
