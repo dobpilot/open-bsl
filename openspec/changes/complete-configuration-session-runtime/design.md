@@ -1,0 +1,11 @@
+# Design
+
+The facade exposes one narrow reentrant operation through the component call context: invoke an export of a module already linked into the current configuration and instantiated in the current State. The VM remains the only executor. The nested call preserves `ЭтотОбъект`, by-reference arguments, host services, the current session's common modules, and the BSL call stack. Facade types required by `bsl-orm` and `bsl-session` are re-exported through `open-bsl`; those crates do not import private interpreter crates.
+
+A configuration manager object links its metadata object identity to one manager module key and one session module instance. Dispatch checks a static platform method implemented by `bsl-orm`, then an exported method of the linked BSL manager module, then reports an unknown-method error. The same manager object is passed as `ЭтотОбъект` to its BSL module.
+
+Session parameters keep explicit unset, initializing, and set states. The startup call receives `Неопределено`. Reading an unset parameter synchronously calls the session handler with an array containing its name. A different unset parameter may initialize recursively; reading a name already on the initialization stack fails immediately. Returning without setting the requested value fails. Failed initialization restores only the requested unset state: values written before the error and successfully initialized nested parameters remain. `Очистить()` returns parameters to unset. These rules are the measured 8.3.27 behavior recorded in the research document.
+
+Before compiling or executing a data read, `bsl-orm` uses the current session parameter values and the selected principal's roles. A restriction that needs an unset parameter triggers the same lazy initialization path. Missing role data, an unexpanded restriction, or a failed parameter initialization denies execution rather than widening access. Ordinary queries and `ВЫБРАТЬ РАЗРЕШЕННЫЕ` retain the distinct access behavior supplied by `open-sdbl`.
+
+A background job is a new Session with an explicitly supplied selectable principal and a separate database connection and module state. Its parameter container starts as a copy of the parent session parameters; subsequent mutations are isolated. There are no scheduled jobs in this scope.
