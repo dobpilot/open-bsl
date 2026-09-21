@@ -190,6 +190,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsl-config"
+version = "0.1.0"
+
+[[package]]
+name = "bsl-config-db"
+version = "0.1.0"
+
+[[package]]
+name = "bsl-config-edt"
+version = "0.1.0"
+
+[[package]]
+name = "bsl-config-xml"
+version = "0.1.0"
+
+[[package]]
 name = "bsl-crypto"
 version = "0.2.0"
 dependencies = [

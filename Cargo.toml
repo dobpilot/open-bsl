@@ -21,6 +21,10 @@ members = [
     "crates/bsl-compiler",
     "crates/bsl-vm",
     "crates/bsl-cli",
+    "crates/bsl-config",
+    "crates/bsl-config-db",
+    "crates/bsl-config-edt",
+    "crates/bsl-config-xml",
     "crates/open-bsl",
     "crates/open-bsl-consumer",
 ]
