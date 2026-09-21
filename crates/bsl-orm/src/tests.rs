@@ -10,7 +10,20 @@ fn catalog() -> Arc<MetadataCatalog> {
                 MetadataObject::new("role-admin", "Администратор", MetadataKind::Role),
                 MetadataObject::new("catalog-versions", "Версии", MetadataKind::Catalog)
                     .with_manager_module("ВерсииМенеджер"),
+                MetadataObject::new(
+                    "scheduled-job-cleanup",
+                    "ОчисткаДанных",
+                    MetadataKind::ScheduledJob,
+                )
+                .with_string_property("ИмяМетода", "Обслуживание.ОчиститьДанные"),
             ],
+        )
+        .unwrap()
+        .with_configuration(
+            "Демонстрационная",
+            "1.2.3",
+            ScriptVariant::Russian,
+            ["role-user".into()],
         )
         .unwrap(),
     )
@@ -70,6 +83,107 @@ fn role_available_accepts_a_name_and_a_metadata_role() {
             .to_string()
             .contains("роль конфигурации не найдена")
     );
+}
+
+#[test]
+fn configuration_metadata_exposes_name_version_language_and_main_roles() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    assert_eq!(
+        state
+            .exec("Возврат Метаданные.Имя + \" \" + Метаданные.Версия;")
+            .unwrap(),
+        Value::Str("Демонстрационная 1.2.3".into())
+    );
+    assert_eq!(
+        state
+            .exec(
+                "Возврат Метаданные.ВариантВстроенногоЯзыка = ВариантВстроенногоЯзыка.Русский И Метаданные.ВариантВстроенногоЯзыка = Метаданные.СвойстваОбъектов.ВариантВстроенногоЯзыка[\"Russian\"] ;"
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+    assert_eq!(
+        state
+            .exec("Возврат Метаданные.ОсновныеРоли.Содержит(Метаданные.Роли.Пользователь);")
+            .unwrap(),
+        Value::Boolean(true)
+    );
+    assert_eq!(
+        state
+            .exec("Возврат Метаданные.DefaultRoles.Contains(Метаданные.Roles.Администратор);")
+            .unwrap(),
+        Value::Boolean(false)
+    );
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Имена = "";
+                Для Каждого Задание Из Метаданные.РегламентныеЗадания Цикл
+                    Имена = Имена + Задание.Имя + ":" + Задание.ИмяМетода;
+                КонецЦикла;
+                Возврат Имена;
+                "#,
+            )
+            .unwrap(),
+        Value::Str("ОчисткаДанных:Обслуживание.ОчиститьДанные".into())
+    );
+    assert_eq!(
+        state
+            .exec("Возврат Метаданные.Роли[0] = Метаданные.Роли.Пользователь;")
+            .unwrap(),
+        Value::Boolean(true)
+    );
+}
+
+#[test]
+fn missing_configuration_properties_and_invalid_main_roles_fail_explicitly() {
+    let missing = Arc::new(
+        MetadataCatalog::new(
+            "configuration",
+            vec![MetadataObject::new(
+                "role-user",
+                "Пользователь",
+                MetadataKind::Role,
+            )],
+        )
+        .unwrap(),
+    );
+    let engine = engine();
+    let mut state = engine
+        .state_builder()
+        .host_data(Rc::new(SessionData::new(
+            missing,
+            Principal::new("user", "Тест", Vec::new()),
+        )))
+        .build();
+    assert!(
+        state
+            .exec("Возврат Метаданные.Имя;")
+            .unwrap_err()
+            .to_string()
+            .contains("свойства конфигурации отсутствуют")
+    );
+
+    let error = MetadataCatalog::new(
+        "configuration",
+        vec![MetadataObject::new(
+            "role-user",
+            "Пользователь",
+            MetadataKind::Role,
+        )],
+    )
+    .unwrap()
+    .with_configuration(
+        "Конфигурация",
+        "1",
+        ScriptVariant::Russian,
+        ["missing".into()],
+    )
+    .unwrap_err();
+    assert_eq!(error, CatalogError::UnknownMainRole("missing".into()));
 }
 
 #[test]

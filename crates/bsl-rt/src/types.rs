@@ -48,6 +48,7 @@ pub enum TypeId {
     EnumMeta(crate::EnumKind),
 
     /// Перечисления платформы. Тип члена — само перечисление.
+    ScriptVariant,
     JsonValueType,
     JsonLineBreak,
     JsonEscapeCharacters,
@@ -184,6 +185,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     (TypeId::VstrOpaque, "НепрозрачноеЗначение", "OpaqueValue"),
     (TypeId::KeyAndValue, "КлючИЗначение", "KeyAndValue"),
     (TypeId::Type, "Тип", "Type"),
+    (
+        TypeId::ScriptVariant,
+        "ВариантВстроенногоЯзыка",
+        "ScriptVariant",
+    ),
     // Тип с пробелом, как и остальные объектные типы JSON выше; значение
     // («Строка(Новый НастройкиСериализацииJSON)») — без, см. `lib.rs`.
     (TypeId::JsonValueType, "ТипЗначенияJSON", "JSONValueType"),

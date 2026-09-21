@@ -108,6 +108,17 @@ impl BslValue {
     /// строковые имена рядом с формой.
     pub fn get_index(&self, idx: &BslValue, names: &NameInterner) -> RtResult<BslValue> {
         match self {
+            BslValue::EnumType(kind) => {
+                let BslValue::Str(member) = idx else {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "Перечисление[]",
+                    });
+                };
+                crate::lookup_member(*kind, &member.to_string())
+                    .map(BslValue::Enum)
+                    .ok_or_else(|| RtError::UnknownProperty(member.to_string()))
+            }
             BslValue::Object(o) => match &**o {
                 BslObject::Extension(object) => object.get_index(idx),
                 BslObject::Array(_) => self.get_array_index(idx),

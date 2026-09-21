@@ -15,9 +15,29 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use open_bsl::{
-    Arity, CallContext, FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor,
-    LibraryDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, Value, folded_eq,
+    Arity, CallContext, EnumKind, EnumValue, FunctionCode, FunctionDescriptor, FunctionKind,
+    GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, Value, folded_eq,
+    get_property_from_table,
 };
+
+/// Основной язык программирования конфигурации.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptVariant {
+    /// Русский вариант.
+    Russian,
+    /// Английский вариант.
+    English,
+}
+
+impl ScriptVariant {
+    fn value(self) -> Value {
+        Value::Enum(match self {
+            Self::Russian => EnumValue::ScriptVariantRussian,
+            Self::English => EnumValue::ScriptVariantEnglish,
+        })
+    }
+}
 
 /// Вид объекта метаданных, нужный исполняемому серверному коду.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +49,10 @@ pub enum MetadataKind {
     InformationRegister,
     /// Константа.
     Constant,
+    /// Функциональная опция.
+    FunctionalOption,
+    /// Элемент стиля.
+    StyleItem,
     /// Роль.
     Role,
     /// Параметр сеанса.
@@ -46,6 +70,7 @@ pub struct MetadataObject {
     name: Arc<str>,
     kind: MetadataKind,
     manager_module: Option<Arc<str>>,
+    string_properties: Arc<[(Arc<str>, Arc<str>)]>,
 }
 
 impl MetadataObject {
@@ -57,6 +82,7 @@ impl MetadataObject {
             name: Arc::from(name.into()),
             kind,
             manager_module: None,
+            string_properties: Arc::from([]),
         }
     }
 
@@ -64,6 +90,19 @@ impl MetadataObject {
     #[must_use]
     pub fn with_manager_module(mut self, module: impl Into<String>) -> Self {
         self.manager_module = Some(Arc::from(module.into()));
+        self
+    }
+
+    /// Добавляет строковое свойство объекта метаданных.
+    #[must_use]
+    pub fn with_string_property(
+        mut self,
+        name: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        let mut properties = self.string_properties.to_vec();
+        properties.push((Arc::from(name.into()), Arc::from(value.into())));
+        self.string_properties = properties.into();
         self
     }
 
@@ -97,6 +136,15 @@ impl MetadataObject {
 pub struct MetadataCatalog {
     identity: Arc<str>,
     objects: Arc<[MetadataObject]>,
+    configuration: Option<ConfigurationDescription>,
+}
+
+#[derive(Debug)]
+struct ConfigurationDescription {
+    name: Arc<str>,
+    version: Arc<str>,
+    script_variant: ScriptVariant,
+    main_role_ids: Arc<[Arc<str>]>,
 }
 
 impl MetadataCatalog {
@@ -142,11 +190,65 @@ impl MetadataCatalog {
                     object: object.id.to_string(),
                 });
             }
+            for (property_index, (name, _)) in object.string_properties.iter().enumerate() {
+                if name.is_empty() {
+                    return Err(CatalogError::EmptyPropertyName {
+                        object: object.id.to_string(),
+                    });
+                }
+                if object.string_properties[..property_index]
+                    .iter()
+                    .any(|(known, _)| folded_eq(known, name))
+                {
+                    return Err(CatalogError::DuplicatePropertyName {
+                        object: object.id.to_string(),
+                        property: name.to_string(),
+                    });
+                }
+            }
         }
         Ok(Self {
             identity: identity.into(),
             objects: objects.into(),
+            configuration: None,
         })
+    }
+
+    /// Добавляет свойства корневого объекта метаданных конфигурации.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку для пустого имени, неизвестной основной роли,
+    /// объекта другого вида или повторной роли.
+    pub fn with_configuration(
+        mut self,
+        name: impl Into<String>,
+        version: impl Into<String>,
+        script_variant: ScriptVariant,
+        main_role_ids: impl IntoIterator<Item = String>,
+    ) -> Result<Self, CatalogError> {
+        let name = name.into();
+        if name.is_empty() {
+            return Err(CatalogError::EmptyConfigurationName);
+        }
+        let mut roles = Vec::<Arc<str>>::new();
+        for id in main_role_ids {
+            let role = self
+                .object_by_id(&id)
+                .filter(|object| object.kind == MetadataKind::Role)
+                .ok_or_else(|| CatalogError::UnknownMainRole(id.clone()))?;
+            if roles.iter().any(|known| known.as_ref() == role.id()) {
+                return Err(CatalogError::DuplicateMainRole(id));
+            }
+            roles.push(Arc::clone(&role.id));
+        }
+        self.configuration = Some(ConfigurationDescription {
+            name: name.into(),
+            version: Arc::from(version.into()),
+            script_variant,
+            main_role_ids: roles.into(),
+        });
+        Ok(self)
     }
 
     #[must_use]
@@ -173,6 +275,16 @@ impl MetadataCatalog {
         self.objects
             .iter()
             .find(|object| object.kind == kind && folded_eq(&object.name, name))
+    }
+
+    /// Возвращает идентификаторы основных ролей конфигурации.
+    /// Пустой итератор также означает, что свойства конфигурации ещё не
+    /// переданы загрузчиком.
+    pub fn main_role_ids(&self) -> impl Iterator<Item = &str> {
+        self.configuration
+            .as_ref()
+            .into_iter()
+            .flat_map(|description| description.main_role_ids.iter().map(AsRef::as_ref))
     }
 }
 
@@ -310,6 +422,24 @@ pub enum CatalogError {
         /// Идентификатор объекта.
         object: String,
     },
+    /// Имя дополнительного свойства пусто.
+    EmptyPropertyName {
+        /// Идентификатор объекта.
+        object: String,
+    },
+    /// Имя дополнительного свойства повторяется.
+    DuplicatePropertyName {
+        /// Идентификатор объекта.
+        object: String,
+        /// Повторное имя.
+        property: String,
+    },
+    /// Имя конфигурации пусто.
+    EmptyConfigurationName,
+    /// Основная роль отсутствует или ссылается не на роль.
+    UnknownMainRole(String),
+    /// Основная роль повторяется.
+    DuplicateMainRole(String),
 }
 
 impl fmt::Display for CatalogError {
@@ -330,6 +460,20 @@ impl fmt::Display for CatalogError {
             }
             Self::EmptyManagerModule { object } => {
                 write!(formatter, "имя модуля менеджера объекта `{object}` пусто")
+            }
+            Self::EmptyPropertyName { object } => {
+                write!(formatter, "имя свойства объекта `{object}` пусто")
+            }
+            Self::DuplicatePropertyName { object, property } => write!(
+                formatter,
+                "свойство `{property}` объекта `{object}` повторяется"
+            ),
+            Self::EmptyConfigurationName => formatter.write_str("имя конфигурации пусто"),
+            Self::UnknownMainRole(role) => {
+                write!(formatter, "основная роль `{role}` отсутствует в метаданных")
+            }
+            Self::DuplicateMainRole(role) => {
+                write!(formatter, "основная роль `{role}` повторяется")
             }
         }
     }
@@ -361,6 +505,14 @@ struct MetadataValue {
 }
 
 #[derive(Debug)]
+struct MainRoles {
+    catalog: Arc<MetadataCatalog>,
+}
+
+#[derive(Debug)]
+struct MetadataObjectProperties;
+
+#[derive(Debug)]
 struct ManagersRoot {
     catalog: Arc<MetadataCatalog>,
     kind: MetadataKind,
@@ -372,11 +524,16 @@ struct ManagerValue {
     object_id: Arc<str>,
 }
 
-static METADATA_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-orm", "МетаданныеКонфигурации");
+static METADATA_TYPE: TypeDescriptor =
+    TypeDescriptor::new("bsl-orm", "ОбъектМетаданныхКонфигурация");
 static METADATA_COLLECTION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-orm", "КоллекцияОбъектовМетаданных");
 static METADATA_VALUE_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-orm", "ОбъектМетаданныхКонфигурации");
+static MAIN_ROLES_TYPE: TypeDescriptor =
+    TypeDescriptor::new("bsl-orm", "КоллекцияЗначенийСвойстваОбъектаМетаданных");
+static METADATA_OBJECT_PROPERTIES_TYPE: TypeDescriptor =
+    TypeDescriptor::new("bsl-orm", "ПеречислимыеСвойстваОбъектовМетаданных");
 static MANAGERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-orm", "МенеджерыОбъектов");
 static MANAGER_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-orm", "МенеджерОбъекта");
 
@@ -385,12 +542,24 @@ impl ObjectProtocol for MetadataRoot {
         &METADATA_TYPE
     }
 
-    fn get_property(&self, name: &str, _: &mut CallContext<'_>) -> RtResult<Value> {
-        let kind = collection_kind(name).ok_or_else(|| RtError::UnknownProperty(name.into()))?;
-        Ok(Value::new_object(MetadataCollection {
-            catalog: Arc::clone(&self.catalog),
-            kind,
-        }))
+    fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<Value> {
+        if let Some(kind) = collection_kind(name) {
+            return Ok(Value::new_object(MetadataCollection {
+                catalog: Arc::clone(&self.catalog),
+                kind,
+            }));
+        }
+        get_property_from_table(
+            METADATA_ROOT_PROPERTIES,
+            METADATA_TYPE.name,
+            self,
+            name,
+            context,
+        )
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        METADATA_ROOT_PROPERTIES
     }
 }
 
@@ -403,34 +572,38 @@ impl ObjectProtocol for MetadataCollection {
         metadata_value(&self.catalog, self.kind, name)
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[Value],
-        _: &mut CallContext<'_>,
-    ) -> RtResult<Value> {
-        if !folded_eq(name, "Найти") && !folded_eq(name, "Find") {
-            return Err(RtError::UnknownMethod {
-                method: name.into(),
-                receiver: METADATA_COLLECTION_TYPE.name,
-            });
-        }
-        let [Value::Str(wanted)] = arguments else {
-            return Err(RtError::TypeError {
-                expected: "Строка",
-                op: "Найти",
-            });
-        };
-        let wanted = wanted.to_string();
-        Ok(self
-            .catalog
-            .object(self.kind, &wanted)
-            .map(|object| metadata_object_value(&self.catalog, object))
-            .unwrap_or(Value::Undefined))
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        METADATA_COLLECTION_METHODS
     }
 
-    fn has_method(&self, name: &str) -> bool {
-        folded_eq(name, "Найти") || folded_eq(name, "Find")
+    fn get_index(&self, index: &Value) -> RtResult<Value> {
+        let Value::Number(index) = index else {
+            return Err(RtError::BadIndex);
+        };
+        let index = index
+            .to_i64_exact()
+            .and_then(|index| usize::try_from(index).ok())
+            .ok_or(RtError::BadIndex)?;
+        let object = self
+            .catalog
+            .objects
+            .iter()
+            .filter(|object| object.kind == self.kind)
+            .nth(index)
+            .ok_or(RtError::IndexOutOfBounds {
+                index: index as i64,
+                len: self.collection_len()?,
+            })?;
+        Ok(metadata_object_value(&self.catalog, object))
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self
+            .catalog
+            .objects
+            .iter()
+            .filter(|object| object.kind == self.kind)
+            .count())
     }
 }
 
@@ -439,15 +612,90 @@ impl ObjectProtocol for MetadataValue {
         &METADATA_VALUE_TYPE
     }
 
-    fn get_property(&self, name: &str, _: &mut CallContext<'_>) -> RtResult<Value> {
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        METADATA_VALUE_PROPERTIES
+    }
+
+    fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<Value> {
+        if folded_eq(name, "Имя") || folded_eq(name, "Name") {
+            return get_property_from_table(
+                METADATA_VALUE_PROPERTIES,
+                METADATA_VALUE_TYPE.name,
+                self,
+                name,
+                context,
+            );
+        }
         let object = self.catalog.object_by_id(&self.object_id).ok_or_else(|| {
             RtError::DynamicError("объект метаданных отсутствует в каталоге".into())
         })?;
-        if folded_eq(name, "Имя") || folded_eq(name, "Name") {
-            Ok(Value::Str(object.name().into()))
-        } else {
-            Err(RtError::UnknownProperty(name.into()))
-        }
+        object
+            .string_properties
+            .iter()
+            .find(|(property, _)| folded_eq(property, name))
+            .map(|(_, value)| Value::Str(value.as_ref().into()))
+            .ok_or_else(|| RtError::UnknownProperty(name.into()))
+    }
+
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        let index = self
+            .catalog
+            .objects
+            .iter()
+            .position(|object| object.id == self.object_id)?;
+        Some((Arc::as_ptr(&self.catalog) as usize, index))
+    }
+}
+
+impl ObjectProtocol for MainRoles {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &MAIN_ROLES_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        MAIN_ROLES_METHODS
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self
+            .catalog
+            .configuration
+            .as_ref()
+            .map_or(0, |description| description.main_role_ids.len()))
+    }
+
+    fn get_index(&self, index: &Value) -> RtResult<Value> {
+        let Value::Number(index) = index else {
+            return Err(RtError::BadIndex);
+        };
+        let index = index
+            .to_i64_exact()
+            .and_then(|index| usize::try_from(index).ok())
+            .ok_or(RtError::BadIndex)?;
+        let description = self.catalog.configuration.as_ref().ok_or_else(|| {
+            RtError::DynamicError("свойства конфигурации отсутствуют в каталоге метаданных".into())
+        })?;
+        let id = description
+            .main_role_ids
+            .get(index)
+            .ok_or(RtError::IndexOutOfBounds {
+                index: index as i64,
+                len: description.main_role_ids.len(),
+            })?;
+        let object = self.catalog.object_by_id(id).ok_or_else(|| {
+            RtError::DynamicError("основная роль отсутствует в каталоге метаданных".into())
+        })?;
+        Ok(metadata_object_value(&self.catalog, object))
+    }
+}
+
+impl ObjectProtocol for MetadataObjectProperties {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &METADATA_OBJECT_PROPERTIES_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        METADATA_OBJECT_PROPERTIES
     }
 }
 
@@ -473,15 +721,8 @@ impl ObjectProtocol for ManagerValue {
         &MANAGER_TYPE
     }
 
-    fn get_property(&self, name: &str, _: &mut CallContext<'_>) -> RtResult<Value> {
-        let object = self.catalog.object_by_id(&self.object_id).ok_or_else(|| {
-            RtError::DynamicError("объект менеджера отсутствует в каталоге".into())
-        })?;
-        if folded_eq(name, "Имя") || folded_eq(name, "Name") {
-            Ok(Value::Str(object.name().into()))
-        } else {
-            Err(RtError::UnknownProperty(name.into()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        MANAGER_PROPERTIES
     }
 
     fn call_method(
@@ -519,6 +760,214 @@ impl ObjectProtocol for ManagerValue {
     }
 }
 
+fn metadata_collection_find(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let collection = receiver
+        .downcast_ref::<MetadataCollection>()
+        .ok_or(RtError::NotAnObject)?;
+    let [Value::Str(wanted)] = arguments else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "Найти",
+        });
+    };
+    let wanted = wanted.to_string();
+    Ok(collection
+        .catalog
+        .object(collection.kind, &wanted)
+        .map(|object| metadata_object_value(&collection.catalog, object))
+        .unwrap_or(Value::Undefined))
+}
+
+fn metadata_value_name(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    let value = receiver
+        .downcast_ref::<MetadataValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let object = value
+        .catalog
+        .object_by_id(&value.object_id)
+        .ok_or_else(|| RtError::DynamicError("объект метаданных отсутствует в каталоге".into()))?;
+    Ok(Value::Str(object.name().into()))
+}
+
+fn configuration_description(root: &MetadataRoot) -> RtResult<&ConfigurationDescription> {
+    root.catalog.configuration.as_ref().ok_or_else(|| {
+        RtError::DynamicError("свойства конфигурации отсутствуют в каталоге метаданных".into())
+    })
+}
+
+fn metadata_root_name(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    let root = receiver
+        .downcast_ref::<MetadataRoot>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(
+        configuration_description(root)?.name.as_ref().into(),
+    ))
+}
+
+fn metadata_root_version(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let root = receiver
+        .downcast_ref::<MetadataRoot>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(
+        configuration_description(root)?.version.as_ref().into(),
+    ))
+}
+
+fn metadata_root_script_variant(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let root = receiver
+        .downcast_ref::<MetadataRoot>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(configuration_description(root)?.script_variant.value())
+}
+
+fn metadata_root_main_roles(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let root = receiver
+        .downcast_ref::<MetadataRoot>()
+        .ok_or(RtError::NotAnObject)?;
+    configuration_description(root)?;
+    Ok(Value::new_object(MainRoles {
+        catalog: Arc::clone(&root.catalog),
+    }))
+}
+
+fn metadata_root_object_properties(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<MetadataRoot>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::new_object(MetadataObjectProperties))
+}
+
+fn metadata_object_script_variants(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<MetadataObjectProperties>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::EnumType(EnumKind::ScriptVariant))
+}
+
+fn main_roles_contains(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let roles = receiver
+        .downcast_ref::<MainRoles>()
+        .ok_or(RtError::NotAnObject)?;
+    let [argument] = arguments else {
+        return Err(RtError::MethodNotApplicable {
+            method: "Содержит",
+            receiver: MAIN_ROLES_TYPE.name,
+        });
+    };
+    let Some(role) = argument
+        .object_ref()
+        .and_then(|value| value.downcast_ref::<MetadataValue>())
+        .filter(|value| Arc::ptr_eq(&value.catalog, &roles.catalog))
+        .and_then(|value| roles.catalog.object_by_id(&value.object_id))
+        .filter(|object| object.kind == MetadataKind::Role)
+    else {
+        return Ok(Value::Boolean(false));
+    };
+    let contains = roles
+        .catalog
+        .configuration
+        .as_ref()
+        .is_some_and(|description| {
+            description
+                .main_role_ids
+                .iter()
+                .any(|id| id.as_ref() == role.id())
+        });
+    Ok(Value::Boolean(contains))
+}
+
+fn manager_name(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    let manager = receiver
+        .downcast_ref::<ManagerValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let object = manager
+        .catalog
+        .object_by_id(&manager.object_id)
+        .ok_or_else(|| RtError::DynamicError("объект менеджера отсутствует в каталоге".into()))?;
+    Ok(Value::Str(object.name().into()))
+}
+
+static METADATA_COLLECTION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Найти", "Find"],
+    Arity::exact(1),
+    metadata_collection_find,
+)];
+
+static METADATA_ROOT_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Имя", "Name"],
+        get: metadata_root_name,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Версия", "Version"],
+        get: metadata_root_version,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ВариантВстроенногоЯзыка", "ScriptVariant"],
+        get: metadata_root_script_variant,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ОсновныеРоли", "DefaultRoles"],
+        get: metadata_root_main_roles,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["СвойстваОбъектов", "ObjectProperties"],
+        get: metadata_root_object_properties,
+        set: None,
+    },
+];
+
+static MAIN_ROLES_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Содержит", "Contains"],
+    Arity::exact(1),
+    main_roles_contains,
+)];
+
+static METADATA_OBJECT_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["ВариантВстроенногоЯзыка", "ScriptVariant"],
+    get: metadata_object_script_variants,
+    set: None,
+}];
+
+static METADATA_VALUE_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["Имя", "Name"],
+    get: metadata_value_name,
+    set: None,
+}];
+
+static MANAGER_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["Имя", "Name"],
+    get: manager_name,
+    set: None,
+}];
+
 fn collection_kind(name: &str) -> Option<MetadataKind> {
     [
         ("Справочники", "Catalogs", MetadataKind::Catalog),
@@ -528,6 +977,12 @@ fn collection_kind(name: &str) -> Option<MetadataKind> {
             MetadataKind::InformationRegister,
         ),
         ("Константы", "Constants", MetadataKind::Constant),
+        (
+            "ФункциональныеОпции",
+            "FunctionalOptions",
+            MetadataKind::FunctionalOption,
+        ),
+        ("ЭлементыСтиля", "StyleItems", MetadataKind::StyleItem),
         ("Роли", "Roles", MetadataKind::Role),
         (
             "ПараметрыСеанса",
@@ -672,14 +1127,36 @@ const TYPES: &[&TypeDescriptor] = &[
     &METADATA_TYPE,
     &METADATA_COLLECTION_TYPE,
     &METADATA_VALUE_TYPE,
+    &MAIN_ROLES_TYPE,
+    &METADATA_OBJECT_PROPERTIES_TYPE,
     &MANAGERS_TYPE,
     &MANAGER_TYPE,
 ];
 
+const API_MEMBERS: &[ObjectMembersDescriptor] = &[
+    ObjectMembersDescriptor::new(&METADATA_TYPE)
+        .with_properties(METADATA_ROOT_PROPERTIES)
+        .with_dynamic_properties(),
+    ObjectMembersDescriptor::new(&METADATA_COLLECTION_TYPE)
+        .with_methods(METADATA_COLLECTION_METHODS)
+        .with_dynamic_properties(),
+    ObjectMembersDescriptor::new(&METADATA_VALUE_TYPE)
+        .with_properties(METADATA_VALUE_PROPERTIES)
+        .with_dynamic_properties(),
+    ObjectMembersDescriptor::new(&MAIN_ROLES_TYPE).with_methods(MAIN_ROLES_METHODS),
+    ObjectMembersDescriptor::new(&METADATA_OBJECT_PROPERTIES_TYPE)
+        .with_properties(METADATA_OBJECT_PROPERTIES),
+    ObjectMembersDescriptor::new(&MANAGERS_TYPE).with_dynamic_properties(),
+    ObjectMembersDescriptor::new(&MANAGER_TYPE).with_properties(MANAGER_PROPERTIES),
+];
+
+const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
+
 const LIBRARY: LibraryDescriptor = LibraryDescriptor::new("bsl-orm", env!("CARGO_PKG_VERSION"))
     .with_functions(FUNCTIONS)
     .with_globals(GLOBALS)
-    .with_types(TYPES);
+    .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS);
 
 /// Возвращает runtime-библиотеку ORM для регистрации в `EngineBuilder`.
 #[must_use]

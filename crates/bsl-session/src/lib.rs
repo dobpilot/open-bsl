@@ -16,8 +16,9 @@ use bsl_config::{ConfigurationCodeSnapshot, ModuleKind};
 use bsl_orm::{MetadataCatalog, MetadataKind, Principal, SessionData};
 use open_bsl::{
     Arity, CallContext, Engine, Error as OpenBslError, FunctionCode, FunctionDescriptor,
-    FunctionKind, GlobalDescriptor, LibraryDescriptor, ModuleGraphRecipe, ModuleInstance,
-    ModuleRecipe, ObjectProtocol, RtError, RtResult, State, TypeDescriptor, Value, folded_eq,
+    FunctionKind, GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe,
+    ModuleInstance, ModuleRecipe, ObjectMembersDescriptor, ObjectProtocol, RtError, RtResult,
+    State, TypeDescriptor, Value, folded_eq,
 };
 
 #[derive(Debug, Clone)]
@@ -791,27 +792,28 @@ impl ObjectProtocol for ParametersObject {
             .map_err(|_| parameter_access_error(name))
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[Value],
-        _: &mut CallContext<'_>,
-    ) -> RtResult<Value> {
-        if (!folded_eq(name, "Очистить") && !folded_eq(name, "Clear")) || !arguments.is_empty()
-        {
-            return Err(RtError::UnknownMethod {
-                method: name.into(),
-                receiver: PARAMETERS_TYPE.name,
-            });
-        }
-        self.parameters.clear();
-        Ok(Value::Undefined)
-    }
-
-    fn has_method(&self, name: &str) -> bool {
-        folded_eq(name, "Очистить") || folded_eq(name, "Clear")
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        PARAMETERS_METHODS
     }
 }
+
+fn clear_parameters(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let parameters = receiver
+        .downcast_ref::<ParametersObject>()
+        .ok_or(RtError::NotAnObject)?;
+    parameters.parameters.clear();
+    Ok(Value::Undefined)
+}
+
+static PARAMETERS_METHODS: &[MethodDescriptor] =
+    &[
+        MethodDescriptor::new(&["Очистить", "Clear"], Arity::exact(0), clear_parameters)
+            .as_procedure(),
+    ];
 
 fn runtime<'a>(ctx: &'a CallContext<'_>) -> RtResult<&'a SessionRuntime> {
     ctx.host_data()?
@@ -841,10 +843,17 @@ const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
 
 const TYPES: &[&TypeDescriptor] = &[&PARAMETERS_TYPE];
 
+const API_MEMBERS: &[ObjectMembersDescriptor] = &[ObjectMembersDescriptor::new(&PARAMETERS_TYPE)
+    .with_methods(PARAMETERS_METHODS)
+    .with_dynamic_properties()];
+
+const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
+
 const LIBRARY: LibraryDescriptor = LibraryDescriptor::new("bsl-session", env!("CARGO_PKG_VERSION"))
     .with_functions(FUNCTIONS)
     .with_globals(GLOBALS)
-    .with_types(TYPES);
+    .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS);
 
 /// Возвращает runtime-библиотеку параметров сеанса.
 #[must_use]

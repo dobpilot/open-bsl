@@ -19,6 +19,10 @@
 /// Член платформенного перечисления.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum EnumValue {
+    // --- ВариантВстроенногоЯзыка ---------------------------------------
+    ScriptVariantEnglish,
+    ScriptVariantRussian,
+
     // --- ТипЗначенияJSON ---------------------------------------------
     JsonString,
     JsonNumber,
@@ -387,6 +391,8 @@ pub enum EnumValue {
 /// `TypeId::EnumMeta(EnumKind)`: `TypeId` упорядочен целиком.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum EnumKind {
+    /// Основной язык программирования конфигурации.
+    ScriptVariant,
     JsonValueType,
     JsonLineBreak,
     /// Способ перевода Unicode-символов в `\uXXXX` при записи JSON.
@@ -532,6 +538,7 @@ impl EnumKind {
     /// Написания самого перечисления: `(русское, английское)`.
     const fn names(self) -> (&'static str, &'static str) {
         match self {
+            EnumKind::ScriptVariant => ("ВариантВстроенногоЯзыка", "ScriptVariant"),
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonEscapeCharacters => {
@@ -609,6 +616,7 @@ impl EnumKind {
     /// английское написание метатипа — предположение по образцу.
     pub const fn meta_ru_name(self) -> &'static str {
         match self {
+            EnumKind::ScriptVariant => "ПеречислениеВариантВстроенногоЯзыка",
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
             EnumKind::JsonLineBreak => "ПеречислениеПереносСтрокJSON",
             EnumKind::JsonEscapeCharacters => "ПеречислениеЭкранированиеСимволовJSON",
@@ -691,6 +699,20 @@ impl EnumKind {
 /// ЧЕЛОВЕЧЕСКИМ текстом («Начало объекта»), а не идентификатором
 /// («НачалоОбъекта»). Всё измерено, включая хвостовые пробелы.
 const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
+    (
+        EnumKind::ScriptVariant,
+        EnumValue::ScriptVariantEnglish,
+        "Английский",
+        "English",
+        "Английский",
+    ),
+    (
+        EnumKind::ScriptVariant,
+        EnumValue::ScriptVariantRussian,
+        "Русский",
+        "Russian",
+        "Русский",
+    ),
     (
         EnumKind::JsonValueType,
         EnumValue::JsonString,
@@ -2355,6 +2377,8 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
 /// который по левой части точки решает, перечисление это или переменная.
 pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
+    ("ВариантВстроенногоЯзыка", EnumKind::ScriptVariant),
+    ("ScriptVariant", EnumKind::ScriptVariant),
     ("ТипЗначенияJSON", EnumKind::JsonValueType),
     ("JSONValueType", EnumKind::JsonValueType),
     ("ПереносСтрокJSON", EnumKind::JsonLineBreak),

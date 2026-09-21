@@ -57,6 +57,7 @@ pub enum BslValue {
 /// самом варианте).
 fn enum_kind_type_id(kind: EnumKind) -> TypeId {
     match kind {
+        EnumKind::ScriptVariant => TypeId::ScriptVariant,
         EnumKind::JsonValueType => TypeId::JsonValueType,
         EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
         EnumKind::JsonEscapeCharacters => TypeId::JsonEscapeCharacters,

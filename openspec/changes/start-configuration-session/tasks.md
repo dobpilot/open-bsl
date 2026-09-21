@@ -1,7 +1,7 @@
 # Tasks
 
 - [ ] 1. Add the required `open-sdbl` authentication-method model and test filtering of selectable `v8users` principals.
-- [ ] 2. Add `bsl-orm` metadata and role objects for the measured full-start surface, including `РольДоступна`.
+- [x] 2. Add `bsl-orm` metadata and role objects for the measured full-start surface, including `РольДоступна`.
 - [x] 3. Add `bsl-session::SessionFactory` and validate code/metadata compatibility once at factory construction.
 - [x] 4. Add isolated `Session` creation with one connection, one open-bsl `State`, a frozen principal, and failure-atomic startup.
 - [x] 5. Execute `УстановкаПараметровСеанса(Неопределено)` for web-client, thin-client, and background-job session kinds.
