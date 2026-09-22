@@ -1471,9 +1471,6 @@ impl<'a> Resolver<'a> {
                         found: args.len(),
                     });
                 }
-                // НЕ ИЗМЕРЕНО(ERROR.EXTENDED_RAISE): справка задаёт пять
-                // необязательных позиций; платформенный прогон проверит
-                // их значения по умолчанию и наблюдаемый объект ошибки.
                 let mut resolved = Vec::with_capacity(5);
                 for argument in args {
                     resolved.push(match argument {

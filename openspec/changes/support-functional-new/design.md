@@ -8,4 +8,4 @@ A separate bytecode instruction carries registers for the runtime type and optio
 
 The dynamic result is not classified as a statically known core receiver: the selected type is known only during execution, so subsequent member access follows the existing open-object path.
 
-The exact platform diagnostics and boundary behavior will be checked on 1C 8.3.27.2342. Until that round trip is ingested, the implementation site carries `НЕ ИЗМЕРЕНО(CONSTRUCTOR.FUNCTIONAL_NEW)` together with the registry and measurement-script entries required by the repository.
+The platform round trip on 1C 8.3.27.2342 returned `2|0`: an array containing one constructor argument created an array of length two, while a non-array second argument was ignored and created an empty array. This matches the implemented selection and argument rules. The result is preserved in `tests/conformance/measure/platform.tsv`; the temporary open-question marker and probe were removed together after the measurement.

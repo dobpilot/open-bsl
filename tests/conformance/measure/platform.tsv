@@ -90,3 +90,5 @@ REGEX.CLASSOPS	пересечение=Нет|разность=Да
 ZIP.WRITER.TAIL	строка=Ошибка|перечисление=Ошибка|пусто=Принят|восьмое=Принят
 JSON.WRITE.CLOSE_IO_FAIL	открытие не прошло
 XML.WRITE.CLOSE_IO_FAIL	открытие не прошло
+ERROR.EXTENDED_RAISE	внешняя|||причина|Да
+CONSTRUCTOR.FUNCTIONAL_NEW	2|0

@@ -3334,10 +3334,6 @@ fn step_cold(
         }
         Instr::CreateDynamicObject { dst, ty, params } => {
             let type_value = reg_load(stack, frames[frame_idx].reg_index(ty))?;
-            // НЕ ИЗМЕРЕНО(CONSTRUCTOR.FUNCTIONAL_NEW): точные ошибки типов,
-            // арности и отсутствующего конструктора сверяются отдельной
-            // пробой; правила выбора и игнорирования второго аргумента
-            // взяты из Синтакс-помощника 8.3.27.
             let ty = match type_value {
                 BslValue::Type(ty) => ty,
                 BslValue::Str(name) => runtime_shapes
