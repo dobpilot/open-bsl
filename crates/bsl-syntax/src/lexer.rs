@@ -497,7 +497,8 @@ impl<'src> Lexer<'src> {
 
     /// `"` ... `"`, где `""` — экранированная кавычка. Перенос строки внутри
     /// литерала обязан продолжаться строкой, начинающейся (после пробелов) с
-    /// `|`; сам символ `|` и ведущие пробелы в значение не входят.
+    /// `|`; между частями допустимы полные строки комментариев. Сам символ
+    /// `|`, комментарии и ведущие пробелы в значение не входят.
     fn lex_string(&mut self, start: usize) -> LexResult<Token> {
         self.bump(); // открывающая "
         let mut value = String::new();
@@ -521,14 +522,25 @@ impl<'src> Lexer<'src> {
                 }
                 Some('\n') => {
                     self.bump();
-                    value.push('\n');
-                    while matches!(self.peek(), Some(' ') | Some('\t')) {
-                        self.bump();
+                    loop {
+                        while matches!(self.peek(), Some(' ') | Some('\t')) {
+                            self.bump();
+                        }
+                        if self.peek() != Some('/') || self.peek2() != Some('/') {
+                            break;
+                        }
+                        while !matches!(self.peek(), None | Some('\n')) {
+                            self.bump();
+                        }
+                        if self.peek() == Some('\n') {
+                            self.bump();
+                        }
                     }
                     if self.peek() != Some('|') {
                         return Err(LexError::ExpectedContinuationBar(self.pos as u32));
                     }
                     self.bump(); // '|'
+                    value.push('\n');
                 }
                 Some(c) => {
                     self.bump();
@@ -668,6 +680,22 @@ mod tests {
         );
 
         let err = lex_all("\"Строка1\nСтрока2\"").unwrap_err();
+        assert!(matches!(err, LexError::ExpectedContinuationBar(_)));
+    }
+
+    #[test]
+    fn multiline_string_skips_comment_lines_between_fragments() {
+        let toks =
+            lex_all("\"Строка1\n//| отключённая строка\n\t // комментарий\n|Строка2\"").unwrap();
+        assert_eq!(
+            toks,
+            vec![
+                TokenKind::String("Строка1\nСтрока2".to_string()),
+                TokenKind::Eof
+            ]
+        );
+
+        let err = lex_all("\"Строка1\n// комментарий\nСтрока2\"").unwrap_err();
         assert!(matches!(err, LexError::ExpectedContinuationBar(_)));
     }
 
