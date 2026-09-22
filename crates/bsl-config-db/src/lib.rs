@@ -14,6 +14,7 @@ use open_sdbl::metadata::{Value, inflate_raw_deflate, parse_config_descriptor, p
 use open_sdbl_db::{AcquiredConfiguration, ConfigResource};
 
 const COMMON: &str = "0fe48980-252d-11d6-a3c7-0050bae0a776";
+const CONFIGURATION: &str = "9cd510cd-abfc-11d4-9434-004095e12fc7";
 
 /// Строит снимок исходников из одного результата приобретения.
 ///
@@ -79,13 +80,16 @@ fn apply_source_overlay(
 fn load_base(resources: &[ConfigResource]) -> Result<ConfigurationCodeSnapshot, LoadError> {
     let resources = Resources::new(resources)?;
     let root = parse_serialized(&resources.decoded("root")?).map_err(|e| malformed("root", e))?;
-    let identity = first_guid(&root)
+    let root_resource = first_guid(&root)
         .ok_or_else(|| malformed("root", "нет GUID конфигурации"))?
         .to_ascii_lowercase();
-    let root_value =
-        parse_serialized(&resources.decoded(&identity)?).map_err(|e| malformed(&identity, e))?;
-    let collections =
-        collections(&root_value).ok_or_else(|| malformed(&identity, "нет каталога объектов"))?;
+    let root_value = parse_serialized(&resources.decoded(&root_resource)?)
+        .map_err(|e| malformed(&root_resource, e))?;
+    let identity = configuration_identity(&root_value)
+        .ok_or_else(|| malformed(&root_resource, "нет GUID объекта конфигурации"))?
+        .to_ascii_lowercase();
+    let collections = collections(&root_value)
+        .ok_or_else(|| malformed(&root_resource, "нет каталога объектов"))?;
 
     let mut modules = Vec::new();
     push_module(
@@ -292,6 +296,20 @@ fn collections(value: &Value) -> Option<Vec<&[Value]>> {
         result.push(include);
     }
     (!result.is_empty()).then_some(result)
+}
+
+fn configuration_identity(value: &Value) -> Option<&str> {
+    let root = list(value)?;
+    let count = scalar(root.get(2)?)?.parse::<usize>().ok()?;
+    let group = root.iter().skip(3).take(count).find(|group| {
+        list(group)
+            .and_then(|group| group.first())
+            .and_then(scalar)
+            .is_some_and(|class| class.eq_ignore_ascii_case(CONFIGURATION))
+    })?;
+    let self_reference = list_path(group, &[1, 1, 1, 1, 1])?;
+    let identity = scalar(self_reference.get(2)?)?;
+    guid(identity).then_some(identity)
 }
 
 fn collection_ids(value: &Value) -> Option<(&str, Vec<&str>)> {
