@@ -1766,6 +1766,13 @@ impl<'a> Resolver<'a> {
                 })
             }
             AExpr::New { type_name, args } => self.resolve_new(type_name, args),
+            AExpr::NewDynamic { type_expr, params } => Ok(RExpr::CreateDynamicObject {
+                type_expr: Box::new(self.resolve_expr(type_expr)?),
+                params: params
+                    .as_deref()
+                    .map(|expr| self.resolve_expr(expr).map(Box::new))
+                    .transpose()?,
+            }),
             AExpr::Ternary {
                 cond,
                 then_expr,

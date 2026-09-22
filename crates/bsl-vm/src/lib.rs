@@ -3192,6 +3192,7 @@ fn step(
             // остался исчерпывающим и новый опкод по-прежнему ломал
             // сборку, пока его не расклассифицируют.
             Instr::NewArray { .. }
+            | Instr::CreateDynamicObject { .. }
             | Instr::NewStructure { .. }
             | Instr::NewTable { .. }
             | Instr::NewTypeDescription { .. }
@@ -3329,6 +3330,77 @@ fn step_cold(
             let arr = build_nested_array(&dims);
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, arr)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::CreateDynamicObject { dst, ty, params } => {
+            let type_value = reg_load(stack, frames[frame_idx].reg_index(ty))?;
+            // НЕ ИЗМЕРЕНО(CONSTRUCTOR.FUNCTIONAL_NEW): точные ошибки типов,
+            // арности и отсутствующего конструктора сверяются отдельной
+            // пробой; правила выбора и игнорирования второго аргумента
+            // взяты из Синтакс-помощника 8.3.27.
+            let ty = match type_value {
+                BslValue::Type(ty) => ty,
+                BslValue::Str(name) => runtime_shapes
+                    .resolve_type(&name.to_string())
+                    .ok_or_else(|| RtError::UnknownType(name.to_string()))?,
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Тип или Строка",
+                        op: "Новый(<Тип>)",
+                    });
+                }
+            };
+            let args = params
+                .map(|params| reg_load(stack, frames[frame_idx].reg_index(params)))
+                .transpose()?
+                .and_then(|value| match value {
+                    BslValue::Object(object) => match &*object {
+                        bsl_rt::BslObject::Array(items) => Some(items.borrow().clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .unwrap_or_default();
+
+            let value = if let Some(value) = construct_dynamic_native(ty, &args, runtime_shapes)? {
+                value
+            } else {
+                let descriptor = dynamic_constructor(linked, ty).ok_or_else(|| {
+                    RtError::DynamicError(format!("Для типа «{ty}» конструктор недоступен"))
+                })?;
+                let count = u8::try_from(args.len()).map_err(|_| {
+                    RtError::DynamicError("Слишком много параметров конструктора".to_string())
+                })?;
+                if !descriptor.arity.accepts(count) {
+                    return Err(RtError::DynamicError(format!(
+                        "Неверное число параметров конструктора «{ty}»: {}",
+                        args.len()
+                    )));
+                }
+                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
+                    runtime_shapes,
+                    stdout: &mut *host.stdout,
+                    stderr: &mut *host.stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    files: &linked.files,
+                    random: &linked.random,
+                    network: linked.network.as_ref(),
+                    host_data: linked.host_data.as_ref(),
+                    background_jobs: linked.background_jobs.as_ref(),
+                    temp_storage: linked.temp_storage.as_ref(),
+                    message_sink: linked.message_sink.as_ref(),
+                    host_promises: None,
+                    function_caller: None,
+                    security_modes: Some(&security_control),
+                });
+                if let Some(env) = host.env.as_ref() {
+                    context.set_temporary_files(env.temporary_files());
+                }
+                (descriptor.call)(&mut context, &args)?
+            };
+            let destination = frames[frame_idx].reg_index(dst);
+            reg_store(stack, destination, value)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewStructure {
@@ -4202,6 +4274,95 @@ fn dim_to_usize(v: &BslValue) -> Result<usize, RtError> {
             op: "Новый Массив(...)",
         }),
     }
+}
+
+/// Находит единственный конструктор, который библиотека связала с типом.
+/// Для прогона без реестра доступна только базовая библиотека runtime.
+fn dynamic_constructor(
+    linked: &LinkedComponents<'_>,
+    ty: bsl_rt::TypeRef,
+) -> Option<&'static bsl_rt::ConstructorDescriptor> {
+    if let Some(registry) = linked.registry {
+        return registry.constructor_for_type(ty);
+    }
+    let core = bsl_rt::core_library();
+    match ty {
+        bsl_rt::TypeRef::Object(ty) => core.constructor_for_type(ty),
+        bsl_rt::TypeRef::Native(ty) => core.constructors().iter().find(|constructor| {
+            constructor
+                .names
+                .iter()
+                .any(|name| bsl_rt::TypeId::lookup(name) == Some(ty))
+        }),
+    }
+}
+
+/// Конструкторы нативных коллекций не являются компонентными объектами и
+/// потому остаются теми же операциями `BslValue`, что у статических опкодов.
+/// `None` означает, что тип должен пройти через обычный дескриптор.
+fn construct_dynamic_native(
+    ty: bsl_rt::TypeRef,
+    args: &[BslValue],
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
+) -> Result<Option<BslValue>, RtError> {
+    let bsl_rt::TypeRef::Native(ty) = ty else {
+        return Ok(None);
+    };
+    let value = match ty {
+        bsl_rt::TypeId::Array => {
+            let dims = args
+                .iter()
+                .map(dim_to_usize)
+                .collect::<Result<Vec<_>, _>>()?;
+            build_nested_array(&dims)
+        }
+        bsl_rt::TypeId::Structure => {
+            let structure = BslValue::new_structure(runtime_shapes.shapes.empty(), Vec::new());
+            if let Some(first) = args.first() {
+                let BslValue::Str(names) = first else {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "Новый Структура(...)",
+                    });
+                };
+                let keys: Vec<String> = names
+                    .to_string()
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string)
+                    .collect();
+                let values = &args[1..];
+                if !values.is_empty() && values.len() != keys.len() {
+                    return Err(RtError::DynamicError(format!(
+                        "Неверное число значений конструктора Структура: {} для {} полей",
+                        values.len(),
+                        keys.len()
+                    )));
+                }
+                for (index, key) in keys.iter().enumerate() {
+                    let field = runtime_shapes.names.intern(key);
+                    let value = values.get(index).cloned().unwrap_or(BslValue::Undefined);
+                    structure.structure_insert(field, value, &mut runtime_shapes.shapes)?;
+                }
+            }
+            structure
+        }
+        bsl_rt::TypeId::ValueTable if args.is_empty() => BslValue::new_table(),
+        bsl_rt::TypeId::ValueComparison if args.is_empty() => BslValue::new_value_comparison(),
+        bsl_rt::TypeId::Map if args.is_empty() => BslValue::new_map(),
+        bsl_rt::TypeId::TypeDescription if args.len() == 1 => {
+            BslValue::new_type_description(&args[0], runtime_shapes)?
+        }
+        bsl_rt::TypeId::ValueTable | bsl_rt::TypeId::ValueComparison | bsl_rt::TypeId::Map => {
+            return Err(RtError::DynamicError(format!(
+                "Неверное число параметров конструктора «{ty}»: {}",
+                args.len()
+            )));
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(value))
 }
 
 /// `Новый Массив(3, 4)` — массив из 3 массивов по 4: каждое измерение

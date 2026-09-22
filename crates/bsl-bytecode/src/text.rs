@@ -35,7 +35,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 37;
+pub const FORMAT_VERSION: u32 = 38;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -88,7 +88,7 @@ opcodes! {
     JumpIfFalse, JumpIfTrue, JumpIfNotEqConst, JumpIfNotLtConst, JumpIfNotSkipped, NumericForNext,
     NumericForNextI64, Call, CallImported, Await, Return,
     GetImportedVar, SetImportedVar,
-    GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
+    GetIndex, SetIndex, GetProp, SetProp, CreateObject, CreateDynamicObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
     CollectionLen, Raise, RaiseDetailed, CallBuiltin, CallComponent, CallMethod,
     RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp, CallObjectProcedure,
@@ -729,6 +729,10 @@ fn write_instr(instr: &Instr) -> String {
             base,
             count,
         } => format!("{op} dst={dst} lib={library} ctor={constructor} base={base} count={count}"),
+        Instr::CreateDynamicObject { dst, ty, params } => match params {
+            Some(params) => format!("{op} dst={dst} type={ty} params={params}"),
+            None => format!("{op} dst={dst} type={ty}"),
+        },
         Instr::NewArray { dst, base, count } => {
             format!("{op} dst={dst} base={base} count={count}")
         }
@@ -2088,6 +2092,14 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             constructor: field_u16(&f, no, "ctor")?,
             base: base(&f)?,
             count: count(&f)?,
+        },
+        "CreateDynamicObject" => Instr::CreateDynamicObject {
+            dst: dst(&f)?,
+            ty: field_u8(&f, no, "type")?,
+            params: match field(&f, no, "params") {
+                Ok(_) => Some(field_u8(&f, no, "params")?),
+                Err(_) => None,
+            },
         },
         "NewArray" => Instr::NewArray {
             dst: dst(&f)?,

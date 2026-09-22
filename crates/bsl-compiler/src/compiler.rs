@@ -1752,6 +1752,23 @@ impl<'a> Compiler<'a> {
                     count,
                 });
             }
+            RExpr::CreateDynamicObject { type_expr, params } => {
+                let type_register = self.alloc_temp()?;
+                self.compile_expr(type_expr, type_register)?;
+                let params_register = if let Some(params) = params {
+                    let register = self.alloc_temp()?;
+                    self.compile_expr(params, register)?;
+                    Some(register)
+                } else {
+                    None
+                };
+                self.emit(Instr::CreateDynamicObject {
+                    dst,
+                    ty: type_register,
+                    params: params_register,
+                });
+                self.free_temp(if params_register.is_some() { 2 } else { 1 });
+            }
             RExpr::NewTable => {
                 self.emit(Instr::NewTable { dst });
             }

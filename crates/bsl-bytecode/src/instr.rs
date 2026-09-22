@@ -423,6 +423,15 @@ pub enum Instr {
         base: u8,
         arg_modes: u16,
     },
+    /// `Новый(<Тип>[, <ПараметрыКонструктора>])`: `ty` хранит строку или
+    /// значение `Тип`, а `params` — необязательное значение, которое VM
+    /// разворачивает только когда оно является массивом. Вариант добавлен
+    /// в конец, чтобы не менять внутренние теги существующих инструкций.
+    CreateDynamicObject {
+        dst: u8,
+        ty: u8,
+        params: Option<u8>,
+    },
 }
 
 /// Режим передачи одного аргумента вызова. У `Call` и `CallImported`
@@ -547,6 +556,7 @@ impl Instr {
             | Instr::GetProp { .. }
             | Instr::SetProp { .. }
             | Instr::CreateObject { .. }
+            | Instr::CreateDynamicObject { .. }
             | Instr::NewArray { .. }
             | Instr::NewStructure { .. }
             | Instr::NewTable { .. }
@@ -653,6 +663,12 @@ impl Instr {
             }
             Instr::NewTypeDescription { names, .. } => r(names),
             Instr::NewTextWriter { path, .. } => r(path),
+            Instr::CreateDynamicObject { ty, params, .. } => {
+                r(ty);
+                if let Some(params) = params {
+                    r(params);
+                }
+            }
             // Остальные регистровых чтений вне окон не имеют: либо только
             // пишут, либо читают позиционно, либо не трогают регистры.
             Instr::GetModuleVar { .. }

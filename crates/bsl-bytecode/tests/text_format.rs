@@ -26,7 +26,7 @@ fn one_const() -> bsl_bytecode::Program {
 #[test]
 fn format_without_open_method_argument_modes_is_rejected() {
     let text = write_program(&one_const(), None).unwrap();
-    let old = text.replacen("bslc 37", "bslc 36", 1);
+    let old = text.replacen("bslc 38", "bslc 37", 1);
     assert_ne!(old, text);
     assert!(matches!(parse_program(&old), Err(TextError::BadHeader(_))));
 }
@@ -45,7 +45,7 @@ fn date_constants_round_trip_ticks_and_refuse_the_seconds_format() {
         assert_eq!(parsed.chunks[0].consts, program.chunks[0].consts);
         assert_eq!(write_program(&parsed, None).unwrap(), text);
         assert!(matches!(
-            parse_program(&text.replacen("bslc 37", "bslc 36", 1)),
+            parse_program(&text.replacen("bslc 38", "bslc 37", 1)),
             Err(TextError::BadHeader(_))
         ));
         for invalid in ["-1", "3155378976000000", "18446744073709551615", "1.5"] {

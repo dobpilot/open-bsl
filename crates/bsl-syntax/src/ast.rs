@@ -249,6 +249,12 @@ pub enum Expr {
         type_name: String,
         args: Vec<Expr>,
     },
+    /// `Новый(<Тип>[, <ПараметрыКонструктора>])`: тип и массив параметров
+    /// вычисляются во время исполнения.
+    NewDynamic {
+        type_expr: Box<Expr>,
+        params: Option<Box<Expr>>,
+    },
     /// `?(Условие, ЕслиИстина, ЕслиЛожь)`.
     Ternary {
         cond: Box<Expr>,

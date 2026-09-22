@@ -343,6 +343,12 @@ impl Collector<'_> {
                     self.walk_expr(arg);
                 }
             }
+            Expr::NewDynamic { type_expr, params } => {
+                self.walk_expr(type_expr);
+                if let Some(params) = params {
+                    self.walk_expr(params);
+                }
+            }
             Expr::Ternary {
                 cond,
                 then_expr,

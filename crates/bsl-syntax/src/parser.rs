@@ -782,6 +782,16 @@ impl<'src> Parser<'src> {
 
     fn parse_new(&mut self) -> Result<Expr, ParseError> {
         self.expect_keyword(Keyword::New)?;
+        if self.eat(&TokenKind::LParen) {
+            let type_expr = Box::new(self.parse_expr()?);
+            let params = if self.eat(&TokenKind::Comma) {
+                Some(Box::new(self.parse_expr()?))
+            } else {
+                None
+            };
+            self.expect_rparen()?;
+            return Ok(Expr::NewDynamic { type_expr, params });
+        }
         let type_name = self.expect_ident()?;
         let args = if self.eat(&TokenKind::LParen) {
             self.parse_call_args()?
@@ -1293,6 +1303,33 @@ mod tests {
             ),
             other => panic!("expected Assign, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn functional_new_is_distinct_from_static_constructor_syntax() {
+        let prog = parse_ok("a = Новый(Тип(\"Массив\"), Параметры);");
+        let Item::Stmt(Stmt {
+            kind: StmtKind::Assign { value, .. },
+            ..
+        }) = &prog.items[0]
+        else {
+            panic!("expected Assign");
+        };
+        let Expr::NewDynamic { type_expr, params } = value else {
+            panic!("expected functional New, got {value:?}");
+        };
+        assert!(matches!(&**type_expr, Expr::Call { .. }));
+        assert!(matches!(params.as_deref(), Some(Expr::Ident(name)) if name == "Параметры"));
+
+        let prog = parse_ok("a = Новый(Тип(\"Массив\"));");
+        let Item::Stmt(Stmt {
+            kind: StmtKind::Assign { value, .. },
+            ..
+        }) = &prog.items[0]
+        else {
+            panic!("expected Assign");
+        };
+        assert!(matches!(value, Expr::NewDynamic { params: None, .. }));
     }
 
     #[test]

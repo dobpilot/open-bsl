@@ -1523,6 +1523,21 @@ impl LibraryDescriptor {
             .find_map(|(candidate, ty)| (*candidate == code).then_some(*ty))
     }
 
+    /// Конструктор, явно связанный с указанным типом объекта.
+    #[must_use]
+    pub fn constructor_for_type(
+        &self,
+        ty: &'static crate::TypeDescriptor,
+    ) -> Option<&'static ConstructorDescriptor> {
+        let (code, _) = self
+            .constructor_types
+            .iter()
+            .find(|(_, candidate)| **candidate == *ty)?;
+        self.constructors
+            .iter()
+            .find(|constructor| constructor.code == *code)
+    }
+
     /// Типы, которые библиотека вводит в язык.
     pub const fn types(&self) -> &'static [&'static crate::TypeDescriptor] {
         self.types
@@ -1678,6 +1693,39 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
     },
 ];
 
+const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
+    (
+        ConstructorCode::new(10),
+        &crate::notification::NOTIFICATION_TYPE,
+    ),
+    (ConstructorCode::new(9), &crate::file::FILE_TYPE),
+    (ConstructorCode::new(3), &crate::value_list::VALUE_LIST_TYPE),
+    (
+        ConstructorCode::new(4),
+        &crate::type_description::DATE_QUALIFIERS_TYPE,
+    ),
+    (
+        ConstructorCode::new(6),
+        &crate::background_jobs::BACKGROUND_JOBS_TYPE,
+    ),
+    (
+        ConstructorCode::new(7),
+        &crate::fixed_array::FIXED_ARRAY_TYPE,
+    ),
+    (
+        ConstructorCode::new(8),
+        &crate::user_message::USER_MESSAGE_TYPE,
+    ),
+    (
+        ConstructorCode::new(11),
+        &crate::fixed_collections::FIXED_STRUCTURE_TYPE,
+    ),
+    (
+        ConstructorCode::new(12),
+        &crate::fixed_collections::FIXED_MAP_TYPE,
+    ),
+];
+
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
     &crate::BSL_MODULE_TYPE,
     &crate::notification::NOTIFICATION_TYPE,
@@ -1716,6 +1764,7 @@ pub const fn core_library() -> LibraryDescriptor {
     LibraryDescriptor::new(crate::PACKAGE_NAME, crate::PACKAGE_VERSION)
         .with_functions(CORE_FUNCTION_TABLE)
         .with_constructors(CORE_CONSTRUCTORS)
+        .with_constructor_types(CORE_CONSTRUCTOR_TYPES)
         .with_types(CORE_TYPES)
         .with_object_member_groups(CORE_OBJECT_MEMBER_GROUPS)
 }
@@ -2366,6 +2415,32 @@ impl RuntimeRegistry {
         code: ConstructorCode,
     ) -> Option<&'static crate::TypeDescriptor> {
         self.library(library)?.constructor_type(code)
+    }
+
+    /// Возвращает конструктор, связанный с типом объекта компонента.
+    ///
+    /// Эта связь используется функциональной формой `Новый(<Тип>)`:
+    /// строковые псевдонимы уже разрешены каталогом типов, поэтому повторно
+    /// выбирать конструктор по имени здесь нельзя.
+    #[must_use]
+    pub fn constructor_for_type(
+        &self,
+        ty: crate::TypeRef,
+    ) -> Option<&'static ConstructorDescriptor> {
+        match ty {
+            crate::TypeRef::Object(ty) => self
+                .libraries
+                .iter()
+                .find_map(|library| library.constructor_for_type(ty)),
+            crate::TypeRef::Native(ty) => self.libraries.iter().find_map(|library| {
+                library.constructors.iter().find(|constructor| {
+                    constructor
+                        .names
+                        .iter()
+                        .any(|name| crate::TypeId::lookup(name) == Some(ty))
+                })
+            }),
+        }
     }
 
     /// Все типы, объявленные библиотеками реестра.

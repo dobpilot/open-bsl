@@ -147,6 +147,12 @@ fn expr_reads(e: &RExpr, out: &mut Vec<u32>) {
             expr_reads(obj, out);
             expr_reads(index, out);
         }
+        RExpr::CreateDynamicObject { type_expr, params } => {
+            expr_reads(type_expr, out);
+            if let Some(params) = params {
+                expr_reads(params, out);
+            }
+        }
         RExpr::Ternary {
             cond,
             then_expr,
@@ -386,6 +392,12 @@ fn sub_exprs<'a>(e: &'a RExpr, out: &mut Vec<&'a RExpr>) {
         RExpr::Index { obj, index } => {
             out.push(obj);
             out.push(index);
+        }
+        RExpr::CreateDynamicObject { type_expr, params } => {
+            out.push(type_expr);
+            if let Some(params) = params {
+                out.push(params);
+            }
         }
         RExpr::Ternary {
             cond,

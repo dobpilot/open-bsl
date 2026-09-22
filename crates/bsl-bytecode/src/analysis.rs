@@ -545,6 +545,17 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             e.io = true;
             e.ctl = Ctl::Barrier;
         }
+        Instr::CreateDynamicObject { dst, ty, params } => {
+            read!(ty);
+            if let Some(params) = params {
+                read!(params);
+            }
+            write!(dst);
+            e.heap_read = true;
+            e.heap_write = true;
+            e.io = true;
+            e.ctl = Ctl::Barrier;
+        }
         Instr::NewArray { dst, base, count } => {
             read_range!(base, count);
             write!(dst);

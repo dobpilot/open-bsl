@@ -120,6 +120,12 @@ pub enum RExpr {
         constructor: ConstructorCode,
         args: Vec<RExpr>,
     },
+    /// Функциональная форма `Новый(<Тип>[, <Параметры>])`, разрешаемая
+    /// только во время исполнения.
+    CreateDynamicObject {
+        type_expr: Box<RExpr>,
+        params: Option<Box<RExpr>>,
+    },
     /// `Новый ТаблицаЗначений()` — колонки заводятся отдельно, через
     /// `.Колонки.Добавить(имя)` (см. `CallMethod`), не в конструкторе.
     NewTable,
@@ -481,6 +487,9 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
         RExpr::CreateObject { args, .. } => args.iter().any(expr_uses_dynamic),
+        RExpr::CreateDynamicObject { type_expr, params } => {
+            expr_uses_dynamic(type_expr) || params.as_deref().is_some_and(expr_uses_dynamic)
+        }
         RExpr::EnumMember(_) | RExpr::EnumTypeRef(_) => false,
         RExpr::Ternary {
             cond,
