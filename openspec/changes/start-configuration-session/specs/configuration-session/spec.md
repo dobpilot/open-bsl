@@ -3,6 +3,24 @@
 ### Requirement: Reusable session factory
 `bsl-session` SHALL provide a factory that combines one compiled configuration code snapshot with one immutable ORM metadata catalog. Factory construction SHALL reject a different configuration identity or a manager module linked to an absent metadata object. It SHALL perform no per-session `Config` fingerprint computation.
 
+The factory SHALL compile the session startup graph in the server context. It SHALL include server common modules and SHALL exclude common modules available only in client or external-connection contexts. Duplicate global exports SHALL be checked only among modules selected into that server graph.
+
+The session crate SHALL obtain the standard platform components through the `open-bsl` facade and SHALL NOT depend directly on their implementation crates.
+
+#### Scenario: Existing facade component in a server module
+- **WHEN** a selected server module constructs a type already provided by a standard `open-bsl` component
+- **THEN** factory construction resolves that constructor through the facade registry
+- **AND** `bsl-session` introduces no direct dependency on the component crate
+
+#### Scenario: Client and server globals share an export name
+- **WHEN** a client-only global common module and a server global common module export the same folded name
+- **THEN** factory construction succeeds
+- **AND** server session code resolves the name to the server module
+
+#### Scenario: Two server globals share an export name
+- **WHEN** two server global common modules export the same folded name
+- **THEN** factory construction fails with the existing duplicate-global diagnostic
+
 #### Scenario: Compatible code and metadata
 - **WHEN** code and metadata identify the same configuration and every linked object exists
 - **THEN** the factory is created once and may open multiple isolated sessions

@@ -3,6 +3,8 @@
 - [ ] 1. Add the required `open-sdbl` authentication-method model and test filtering of selectable `v8users` principals.
 - [x] 2. Add the initial `bsl-orm` configuration metadata and role objects, including `РольДоступна`.
 - [x] 3. Add `bsl-session::SessionFactory` and validate code/metadata compatibility once at factory construction.
+- [x] 3a. Build the startup catalog from server-available modules only, retaining duplicate-global rejection inside that context.
+- [x] 3b. Compile selected configuration modules with the standard component set obtained only through the `open-bsl` facade.
 - [x] 4. Add isolated `Session` creation with one connection, one open-bsl `State`, a frozen principal, and failure-atomic startup.
 - [x] 5. Execute `УстановкаПараметровСеанса(Неопределено)` for web-client, thin-client, and background-job session kinds.
 - [x] 6. Expose and test the measured `ТекущийРежимЗапуска()` result for every supported session kind.

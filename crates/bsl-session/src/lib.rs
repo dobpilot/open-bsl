@@ -930,20 +930,20 @@ impl SessionFactory {
         let modules = code
             .modules()
             .iter()
+            .filter(|module| module.kind() != ModuleKind::Common || module.execution().server())
             .map(|module| {
-                let imports = module
-                    .imports()
-                    .iter()
-                    .map(|import| {
-                        let target = code.module(import.module()).ok_or_else(|| {
-                            SessionError::MissingImportedModule {
-                                module: module.name().into(),
-                                imported: import.module().into(),
-                            }
-                        })?;
-                        Ok((import.alias().to_string(), target.name().to_string()))
-                    })
-                    .collect::<Result<Vec<_>, SessionError>>()?;
+                let mut imports = Vec::new();
+                for import in module.imports() {
+                    let target = code.module(import.module()).ok_or_else(|| {
+                        SessionError::MissingImportedModule {
+                            module: module.name().into(),
+                            imported: import.module().into(),
+                        }
+                    })?;
+                    if target.kind() != ModuleKind::Common || target.execution().server() {
+                        imports.push((import.alias().to_string(), target.name().to_string()));
+                    }
+                }
                 Ok(ModuleRecipe {
                     visibility: match module.kind() {
                         ModuleKind::Common if module.execution().global() => {

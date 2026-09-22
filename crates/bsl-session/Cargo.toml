@@ -7,4 +7,4 @@ license.workspace = true
 [dependencies]
 bsl-config = { path = "../bsl-config" }
 bsl-orm = { path = "../bsl-orm" }
-open-bsl = { path = "../open-bsl", default-features = false }
+open-bsl = { path = "../open-bsl" }

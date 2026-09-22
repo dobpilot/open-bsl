@@ -438,6 +438,82 @@ fn factory_validates_once_and_opens_isolated_started_sessions() {
 }
 
 #[test]
+fn factory_selects_only_server_common_modules_for_session_startup() {
+    let code = ConfigurationCodeSnapshot::new(
+        "configuration",
+        vec![
+            ConfigurationModule::new(
+                "session",
+                "МодульСеанса",
+                "Процедура УстановкаПараметровСеанса(Требуемые) Экспорт Если КонтекстноеЗначение() <> 2 Тогда ВызватьИсключение \"не сервер\"; КонецЕсли; КонецПроцедуры",
+                ModuleKind::Session,
+                ModuleExecution::new().with_server(true),
+            ),
+            ConfigurationModule::new(
+                "client",
+                "КлиентскийГлобальный",
+                "Функция КонтекстноеЗначение() Экспорт Возврат 1; КонецФункции",
+                ModuleKind::Common,
+                ModuleExecution::new().with_client(true).with_global(true),
+            ),
+            ConfigurationModule::new(
+                "server",
+                "СерверныйГлобальный",
+                "Функция КонтекстноеЗначение() Экспорт Возврат 2; КонецФункции",
+                ModuleKind::Common,
+                ModuleExecution::new().with_server(true).with_global(true),
+            ),
+        ],
+    )
+    .unwrap();
+    let factory = SessionFactory::new(
+        code,
+        Arc::new(MetadataCatalog::new("configuration", vec![]).unwrap()),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+
+    factory.open(principal(), resources((), 1)).unwrap();
+}
+
+#[test]
+fn factory_still_rejects_duplicate_server_global_exports() {
+    let mut modules = vec![ConfigurationModule::new(
+        "session",
+        "МодульСеанса",
+        "Процедура УстановкаПараметровСеанса(Требуемые) Экспорт КонецПроцедуры",
+        ModuleKind::Session,
+        ModuleExecution::new().with_server(true),
+    )];
+    for (id, name) in [("one", "Первый"), ("two", "Второй")] {
+        modules.push(ConfigurationModule::new(
+            id,
+            name,
+            "Функция ОдинаковыйЭкспорт() Экспорт Возврат 1; КонецФункции",
+            ModuleKind::Common,
+            ModuleExecution::new().with_server(true).with_global(true),
+        ));
+    }
+    let Err(error) = SessionFactory::new(
+        ConfigurationCodeSnapshot::new("configuration", modules).unwrap(),
+        Arc::new(MetadataCatalog::new("configuration", vec![]).unwrap()),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    ) else {
+        panic!("ожидался конфликт серверных глобальных экспортов");
+    };
+
+    assert!(
+        error
+            .to_string()
+            .contains("объявлен несколькими общими модулями")
+    );
+}
+
+#[test]
 fn startup_reads_configuration_data_through_its_session_adapter() {
     let factory = SessionFactory::new(
         code_snapshot(
