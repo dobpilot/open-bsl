@@ -780,16 +780,10 @@ impl<'src> Parser<'src> {
         self.expect_keyword(Keyword::New)?;
         let type_name = self.expect_ident()?;
         let args = if self.eat(&TokenKind::LParen) {
-            if self.eat(&TokenKind::RParen) {
-                Vec::new()
-            } else {
-                let mut args = vec![self.parse_expr()?];
-                while self.eat(&TokenKind::Comma) {
-                    args.push(self.parse_expr()?);
-                }
-                self.expect_rparen()?;
-                args
-            }
+            self.parse_call_args()?
+                .into_iter()
+                .map(|argument| argument.unwrap_or(Expr::Undefined))
+                .collect()
         } else {
             Vec::new()
         };
