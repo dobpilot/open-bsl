@@ -745,8 +745,15 @@ impl<'src> Parser<'src> {
                 self.bump();
                 Ok(Expr::Number(self.text(tok.span).to_string()))
             }
-            TokenKind::String(s) => {
+            TokenKind::String(mut s) => {
                 self.bump();
+                // Вторая платформенная форма многострочной константы —
+                // несколько заключённых в кавычки частей без оператора `+`.
+                while let TokenKind::String(fragment) = self.peek().kind.clone() {
+                    self.bump();
+                    s.push('\n');
+                    s.push_str(&fragment);
+                }
                 Ok(Expr::Str(s))
             }
             TokenKind::Date(d) => {
@@ -1021,6 +1028,25 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn adjacent_quoted_fragments_form_one_multiline_string() {
+        for source in [
+            "А = \"один\" \"два\";",
+            "А = \"один\"\n\"два\";",
+            "А = \"один\"\n// комментарий\n\"два\";",
+        ] {
+            let program = parse_ok(source);
+            let Item::Stmt(Stmt {
+                kind: StmtKind::Assign { value, .. },
+                ..
+            }) = &program.items[0]
+            else {
+                panic!("ожидалось присваивание");
+            };
+            assert_eq!(*value, Expr::Str("один\nдва".into()));
+        }
     }
 
     #[test]
