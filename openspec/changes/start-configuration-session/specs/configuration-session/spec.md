@@ -7,6 +7,20 @@ The factory SHALL compile the session startup graph in the server context. It SH
 
 The session crate SHALL obtain the standard platform components through the `open-bsl` facade and SHALL NOT depend directly on their implementation crates.
 
+The `open-bsl` facade SHALL allow a host to name compilation roots for a configuration recipe. When roots are present, engine construction SHALL compile the transitive static module closure reported by the existing semantic resolver and SHALL retain explicitly declared imports. An empty root selection SHALL preserve whole-catalog compilation. An unknown root SHALL fail engine construction. Global-export conflicts SHALL be checked before unreachable bodies are omitted.
+
+#### Scenario: Unreachable server module has an unresolved body
+- **WHEN** the selected server catalog contains a module outside the session root's static closure whose body has an unresolved name
+- **THEN** session factory construction succeeds without resolving or generating code for that body
+
+#### Scenario: Reachable module dependency
+- **WHEN** the session root calls an export of another selected server module
+- **THEN** that module and its transitive static dependencies are compiled into the session catalog
+
+#### Scenario: Unknown compilation root
+- **WHEN** a host names a compilation root absent from the recipe
+- **THEN** engine construction fails with a configuration error naming that root
+
 #### Scenario: Existing facade component in a server module
 - **WHEN** a selected server module constructs a type already provided by a standard `open-bsl` component
 - **THEN** factory construction resolves that constructor through the facade registry

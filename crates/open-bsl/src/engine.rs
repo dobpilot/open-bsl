@@ -394,6 +394,7 @@ pub struct EngineBuilder {
     runtime: bsl_rt::RuntimeBuilder,
     symbols: bsl_syntax::PreprocSymbols,
     recipe: ModuleGraphRecipe,
+    configuration_roots: Vec<String>,
     image: Option<(bsl_bytecode::ConfigurationProgram, bool)>,
     #[cfg(not(target_arch = "wasm32"))]
     job_config: crate::jobs::BackgroundJobConfig,
@@ -439,6 +440,7 @@ impl EngineBuilder {
             runtime,
             symbols: bsl_syntax::PreprocSymbols::new(),
             recipe: ModuleGraphRecipe::default(),
+            configuration_roots: Vec::new(),
             image: None,
             #[cfg(not(target_arch = "wasm32"))]
             job_config: crate::jobs::BackgroundJobConfig::default(),
@@ -515,6 +517,21 @@ impl EngineBuilder {
         self
     }
 
+    /// Ограничивает компиляцию каталога статическим замыканием указанных
+    /// корневых модулей. Пустой список сохраняет компиляцию всего каталога.
+    ///
+    /// Зависимости определяет штатный семантический резолвер open-bsl;
+    /// вызывающему не нужно разбирать исходный текст самостоятельно.
+    #[must_use]
+    pub fn configuration_roots(
+        mut self,
+        roots: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.configuration_roots
+            .extend(roots.into_iter().map(Into::into));
+        self
+    }
+
     /// Принимает уже разобранный каталог конфигурации — путь
     /// `--run-bytecode` и worker фонового задания. Каталог проходит тот же
     /// периметр `verify_configuration`, что и скомпилированный из рецепта;
@@ -587,7 +604,9 @@ impl EngineBuilder {
     /// версий компонентов.
     pub fn build(self) -> Result<Engine, Error> {
         let registry = self.runtime.build()?;
-        if self.image.is_some() && !self.recipe.modules.is_empty() {
+        if self.image.is_some()
+            && (!self.recipe.modules.is_empty() || !self.configuration_roots.is_empty())
+        {
             return Err(Error::Configuration(
                 "каталог задан и рецептом, и образом — источник должен быть один".to_string(),
             ));
@@ -615,11 +634,12 @@ impl EngineBuilder {
                 init_order,
                 eager_init,
             }))
-        } else if self.recipe.modules.is_empty() {
+        } else if self.recipe.modules.is_empty() && self.configuration_roots.is_empty() {
             None
         } else {
             let (catalog, entry_imports, init_order) = compile_catalog(
                 &self.recipe,
+                &self.configuration_roots,
                 &registry,
                 &self.symbols,
                 bsl_compiler::BuildOptions {
@@ -729,6 +749,7 @@ impl Module {
 /// `verify_configuration` до заморозки.
 fn compile_catalog(
     recipe: &ModuleGraphRecipe,
+    roots: &[String],
     registry: &bsl_rt::RuntimeRegistry,
     symbols: &bsl_syntax::PreprocSymbols,
     build: bsl_compiler::BuildOptions,
@@ -740,7 +761,14 @@ fn compile_catalog(
     ),
     Error,
 > {
-    let modules = &recipe.modules;
+    if roots.is_empty() {
+        return compile_whole_catalog(recipe, registry, symbols, build);
+    }
+    let rooted = rooted_recipe(recipe, roots, registry, symbols)?;
+    compile_whole_catalog(&rooted, registry, symbols, build)
+}
+
+fn validate_module_names(modules: &[ModuleRecipe]) -> Result<(), Error> {
     // Имена каталога уникальны без учёта регистра — правило свёртки то же,
     // что у остальных имён BSL.
     for (i, module) in modules.iter().enumerate() {
@@ -757,6 +785,191 @@ fn compile_catalog(
             )));
         }
     }
+    Ok(())
+}
+
+fn module_surfaces(
+    modules: &[ModuleRecipe],
+    syntax: &[bsl_syntax::Program],
+) -> Result<Vec<bsl_sema::ImportedModule>, Error> {
+    syntax
+        .iter()
+        .enumerate()
+        .map(|(i, syntax)| {
+            imported_module_from_syntax(
+                &modules[i].name,
+                i as u32,
+                &syntax.items,
+                modules[i].visibility == ModuleVisibility::Global,
+            )
+        })
+        .collect()
+}
+
+fn reject_duplicate_global_exports(
+    modules: &[ModuleRecipe],
+    surfaces: &[bsl_sema::ImportedModule],
+) -> Result<(), Error> {
+    for (i, module) in surfaces
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| modules[*i].visibility == ModuleVisibility::Global)
+    {
+        for function in &module.functions {
+            if surfaces[..i].iter().enumerate().any(|(other_i, other)| {
+                modules[other_i].visibility == ModuleVisibility::Global
+                    && other
+                        .functions
+                        .iter()
+                        .any(|candidate| bsl_rt::folded_eq(&candidate.name, &function.name))
+            }) {
+                return Err(Error::Configuration(format!(
+                    "глобальный экспорт «{}» объявлен несколькими общими модулями",
+                    function.name
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn module_imports(
+    modules: &[ModuleRecipe],
+    surfaces: &[bsl_sema::ImportedModule],
+    current: usize,
+    index_of: &dyn Fn(&str) -> Option<usize>,
+) -> Result<Vec<bsl_sema::ImportedModule>, Error> {
+    let module = &modules[current];
+    let mut imports = Vec::new();
+    for (alias, target) in &module.imports {
+        let Some(target_index) = index_of(target) else {
+            return Err(Error::Configuration(format!(
+                "модуль «{}» импортирует неизвестный «{target}»",
+                module.name
+            )));
+        };
+        let mut imported = surfaces[target_index].clone();
+        imported.alias = alias.clone();
+        imported.global = false;
+        imports.push(imported);
+    }
+    for (target_index, target) in modules.iter().enumerate() {
+        if target_index == current
+            || !matches!(
+                target.visibility,
+                ModuleVisibility::Named | ModuleVisibility::Global
+            )
+        {
+            continue;
+        }
+        if let Some(existing) = imports
+            .iter()
+            .find(|import| bsl_rt::folded_eq(&import.alias, &target.name))
+        {
+            if existing.module as usize != target_index {
+                return Err(Error::Configuration(format!(
+                    "псевдоним «{}» модуля «{}» ссылается на два модуля",
+                    target.name, module.name
+                )));
+            }
+            continue;
+        }
+        imports.push(surfaces[target_index].clone());
+    }
+    Ok(imports)
+}
+
+fn rooted_recipe(
+    recipe: &ModuleGraphRecipe,
+    roots: &[String],
+    registry: &bsl_rt::RuntimeRegistry,
+    symbols: &bsl_syntax::PreprocSymbols,
+) -> Result<ModuleGraphRecipe, Error> {
+    let modules = &recipe.modules;
+    validate_module_names(modules)?;
+    let index_of = |name: &str| -> Option<usize> {
+        modules
+            .iter()
+            .position(|module| bsl_rt::folded_eq(&module.name, name))
+    };
+    let syntax = modules
+        .iter()
+        .map(|module| bsl_syntax::parse_with_symbols(&module.source, symbols))
+        .collect::<Result<Vec<_>, _>>()?;
+    let surfaces = module_surfaces(modules, &syntax)?;
+    reject_duplicate_global_exports(modules, &surfaces)?;
+
+    let mut selected = vec![false; modules.len()];
+    let mut pending = Vec::new();
+    for root in roots {
+        let Some(index) = index_of(root) else {
+            return Err(Error::Configuration(format!(
+                "корневой модуль «{root}» отсутствует в каталоге"
+            )));
+        };
+        if !selected[index] {
+            selected[index] = true;
+            pending.push(index);
+        }
+    }
+
+    let mut cursor = 0;
+    while let Some(&current) = pending.get(cursor) {
+        cursor += 1;
+        for (_, target) in &modules[current].imports {
+            let Some(target_index) = index_of(target) else {
+                return Err(Error::Configuration(format!(
+                    "модуль «{}» импортирует неизвестный «{target}»",
+                    modules[current].name
+                )));
+            };
+            if !selected[target_index] {
+                selected[target_index] = true;
+                pending.push(target_index);
+            }
+        }
+        let imports = module_imports(modules, &surfaces, current, &index_of)?;
+        let resolved =
+            bsl_sema::resolve_program_with_imports(&syntax[current].items, registry, &imports)?;
+        for link in &resolved.links {
+            let target = match link {
+                bsl_sema::ResolvedLink::Function { module, .. }
+                | bsl_sema::ResolvedLink::Variable { module, .. } => *module as usize,
+                bsl_sema::ResolvedLink::ObjectMethod { .. } => continue,
+            };
+            if !selected[target] {
+                selected[target] = true;
+                pending.push(target);
+            }
+        }
+    }
+
+    Ok(ModuleGraphRecipe {
+        modules: modules
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| selected[*index])
+            .map(|(_, module)| module.clone())
+            .collect(),
+        eager_init: recipe.eager_init,
+    })
+}
+
+fn compile_whole_catalog(
+    recipe: &ModuleGraphRecipe,
+    registry: &bsl_rt::RuntimeRegistry,
+    symbols: &bsl_syntax::PreprocSymbols,
+    build: bsl_compiler::BuildOptions,
+) -> Result<
+    (
+        bsl_bytecode::ConfigurationProgram,
+        Vec<bsl_sema::ImportedModule>,
+        Vec<u32>,
+    ),
+    Error,
+> {
+    let modules = &recipe.modules;
+    validate_module_names(modules)?;
     let index_of = |name: &str| -> Option<usize> {
         modules
             .iter()
@@ -808,77 +1021,14 @@ fn compile_catalog(
         .iter()
         .map(|module| bsl_syntax::parse_with_symbols(&module.source, symbols))
         .collect::<Result<Vec<_>, _>>()?;
-    let surfaces = syntax
-        .iter()
-        .enumerate()
-        .map(|(i, syntax)| {
-            imported_module_from_syntax(
-                &modules[i].name,
-                i as u32,
-                &syntax.items,
-                modules[i].visibility == ModuleVisibility::Global,
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    for (i, module) in surfaces
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| modules[*i].visibility == ModuleVisibility::Global)
-    {
-        for function in &module.functions {
-            if surfaces[..i].iter().enumerate().any(|(other_i, other)| {
-                modules[other_i].visibility == ModuleVisibility::Global
-                    && other
-                        .functions
-                        .iter()
-                        .any(|candidate| bsl_rt::folded_eq(&candidate.name, &function.name))
-            }) {
-                return Err(Error::Configuration(format!(
-                    "глобальный экспорт «{}» объявлен несколькими общими модулями",
-                    function.name
-                )));
-            }
-        }
-    }
+    let surfaces = module_surfaces(modules, &syntax)?;
+    reject_duplicate_global_exports(modules, &surfaces)?;
 
     let mut resolved = Vec::with_capacity(modules.len());
-    for (i, module) in modules.iter().enumerate() {
-        let mut imports: Vec<bsl_sema::ImportedModule> = module
-            .imports
-            .iter()
-            .map(|(alias, target)| {
-                let target_index = index_of(target).expect("проверено при построении графа выше");
-                let mut imported = surfaces[target_index].clone();
-                imported.alias = alias.clone();
-                imported.global = false;
-                imported
-            })
-            .collect();
-        for (target_index, target) in modules.iter().enumerate() {
-            if target_index == i
-                || !matches!(
-                    target.visibility,
-                    ModuleVisibility::Named | ModuleVisibility::Global
-                )
-            {
-                continue;
-            }
-            if let Some(existing) = imports
-                .iter()
-                .find(|import| bsl_rt::folded_eq(&import.alias, &target.name))
-            {
-                if existing.module as usize != target_index {
-                    return Err(Error::Configuration(format!(
-                        "псевдоним «{}» модуля «{}» ссылается на два модуля",
-                        target.name, module.name
-                    )));
-                }
-                continue;
-            }
-            imports.push(surfaces[target_index].clone());
-        }
+    for (i, parsed) in syntax.iter().enumerate() {
+        let imports = module_imports(modules, &surfaces, i, &index_of)?;
         resolved.push(bsl_sema::resolve_program_with_imports(
-            &syntax[i].items,
+            &parsed.items,
             registry,
             &imports,
         )?);

@@ -968,6 +968,7 @@ impl SessionFactory {
                 modules,
                 eager_init: false,
             })
+            .configuration_roots([session_module.clone()])
             .build()?;
         let startup_source = format!(
             "Процедура ЗапуститьСеанс() Экспорт\n{session_module}.УстановкаПараметровСеанса(Неопределено);\nКонецПроцедуры"

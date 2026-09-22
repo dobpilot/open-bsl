@@ -275,6 +275,117 @@ fn duplicate_global_exports_are_a_build_error() {
     assert!(error.to_string().contains("Ответ"), "не та ошибка: {error}");
 }
 
+#[test]
+fn rooted_catalog_omits_an_unreachable_semantic_error() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Корень".into(),
+                    source: "Функция Запуск() Экспорт Возврат 42; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Explicit,
+                },
+                ModuleRecipe {
+                    name: "Недостижимый".into(),
+                    source: "Функция Сбой() Экспорт Возврат НеизвестноеИмя; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+            ],
+            eager_init: false,
+        })
+        .configuration_roots(["Корень"])
+        .build()
+        .expect("недостижимое тело не резолвится");
+    let entry = engine.compile_entry("Возврат Корень.Запуск();").unwrap();
+
+    assert_eq!(
+        engine.new_state().run(&entry).unwrap(),
+        open_bsl::Value::number_from_i64(42)
+    );
+}
+
+#[test]
+fn rooted_catalog_compiles_transitive_static_dependencies() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Корень".into(),
+                    source: "Функция Запуск() Экспорт Возврат Сервис.Ответ(); КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Explicit,
+                },
+                ModuleRecipe {
+                    name: "Сервис".into(),
+                    source: "Функция Ответ() Экспорт Возврат 7; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+            ],
+            eager_init: false,
+        })
+        .configuration_roots(["Корень"])
+        .build()
+        .unwrap();
+    let entry = engine.compile_entry("Возврат Корень.Запуск();").unwrap();
+
+    assert_eq!(
+        engine.new_state().run(&entry).unwrap(),
+        open_bsl::Value::number_from_i64(7)
+    );
+}
+
+#[test]
+fn rooted_catalog_retains_explicit_imports_for_dynamic_code() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Корень".into(),
+                    source: "Функция Запуск() Экспорт Возврат Вычислить(\"Данные.Ответ()\"); КонецФункции".into(),
+                    imports: vec![("Данные".into(), "Хранилище".into())],
+                    visibility: ModuleVisibility::Explicit,
+                },
+                ModuleRecipe {
+                    name: "Хранилище".into(),
+                    source: "Функция Ответ() Экспорт Возврат 9; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Explicit,
+                },
+            ],
+            eager_init: false,
+        })
+        .configuration_roots(["Корень"])
+        .build()
+        .unwrap();
+    let entry = engine.compile_entry("Возврат Корень.Запуск();").unwrap();
+
+    assert_eq!(
+        engine.new_state().run(&entry).unwrap(),
+        open_bsl::Value::number_from_i64(9)
+    );
+}
+
+#[test]
+fn unknown_configuration_root_is_a_build_error() {
+    let error = Engine::builder()
+        .common_module("Корень", "")
+        .configuration_roots(["НетТакого"])
+        .build()
+        .err()
+        .expect("неизвестный корень отвергается");
+
+    assert!(error.to_string().contains("НетТакого"));
+}
+
 /// Неэкспортный метод не виден снаружи модуля.
 #[test]
 fn a_non_exported_function_is_invisible_to_the_entry() {
