@@ -7,6 +7,8 @@ fn catalog() -> ConfigurationProgram {
         modules: ["Первый", "Второй"]
             .into_iter()
             .map(|name| ModuleProgram {
+                entry_visible: true,
+                global: false,
                 name: name.into(),
                 program: support::program(vec![support::chunk(vec![Instr::Return { src: None }])]),
             })
@@ -18,13 +20,16 @@ fn import(alias: &str, module: u32) -> ModuleImport {
     ModuleImport {
         alias: alias.into(),
         module: ModuleId::new(module),
+        global: false,
     }
 }
 
 #[test]
 fn declared_imports_round_trip_without_static_links() {
     let mut catalog = catalog();
-    catalog.modules[0].program.imports = vec![import("Данные", 1), import("Alias", 1)];
+    let mut global = import("Данные", 1);
+    global.global = true;
+    catalog.modules[0].program.imports = vec![global, import("Alias", 1)];
     image::verify_configuration(&catalog, None).unwrap();
     let text = bsl_bytecode::write_image(
         &bsl_bytecode::BytecodeImage::Configuration {
@@ -34,7 +39,7 @@ fn declared_imports_round_trip_without_static_links() {
         None,
     )
     .unwrap();
-    assert!(text.starts_with("bslc 35\n"));
+    assert!(text.starts_with("bslc 36\n"));
     assert!(text.contains(".imports 2"));
     let bsl_bytecode::BytecodeImage::Configuration {
         catalog: parsed, ..
@@ -46,9 +51,10 @@ fn declared_imports_round_trip_without_static_links() {
         parsed.modules[0].program.imports,
         catalog.modules[0].program.imports
     );
+    assert!(parsed.modules[0].program.imports[0].global);
     assert!(parsed.modules[0].program.links.is_empty());
     assert!(matches!(
-        bsl_bytecode::parse_image(&text.replacen("bslc 35", "bslc 34", 1)),
+        bsl_bytecode::parse_image(&text.replacen("bslc 36", "bslc 35", 1)),
         Err(bsl_bytecode::TextError::BadHeader(_))
     ));
     for (from, to) in [
@@ -75,7 +81,7 @@ fn import_names_targets_and_unused_cycles_are_verified() {
     let mut catalog = catalog();
     catalog.modules[0].program.imports = vec![import("Второй", 1)];
     catalog.modules[1].program.imports = vec![import("Первый", 0)];
-    assert!(image::verify_configuration(&catalog, None).is_err());
+    image::verify_configuration(&catalog, None).expect("цикл объявлений допустим");
 }
 
 #[test]

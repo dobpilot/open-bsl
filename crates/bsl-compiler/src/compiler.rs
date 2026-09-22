@@ -298,6 +298,8 @@ pub fn compile_configuration(
             .map(
                 |((name, resolved), (chunks, lines))| bsl_bytecode::ModuleProgram {
                     name: name.clone(),
+                    entry_visible: true,
+                    global: false,
                     program: assemble_program(
                         resolved,
                         chunks,
@@ -552,9 +554,10 @@ fn assemble_raw(
         imports: resolved
             .imports
             .iter()
-            .map(|(alias, module)| bsl_bytecode::ModuleImport {
+            .map(|(alias, module, global)| bsl_bytecode::ModuleImport {
                 alias: alias.clone(),
                 module: bsl_bytecode::ModuleId::new(*module),
+                global: *global,
             })
             .collect(),
         links,

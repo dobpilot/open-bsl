@@ -270,6 +270,8 @@ pub struct ImportedVariable {
 pub struct ImportedModule {
     pub alias: String,
     pub module: u32,
+    /// Экспортные методы модуля входят в глобальную область импортёра.
+    pub global: bool,
     pub functions: Vec<ImportedFunction>,
     pub variables: Vec<ImportedVariable>,
 }
@@ -307,6 +309,7 @@ impl ImportedModule {
         ImportedModule {
             alias: alias.to_string(),
             module,
+            global: false,
             functions,
             variables,
         }
@@ -537,7 +540,7 @@ fn resolve_program_impl(
         links: links.into_inner().entries,
         imports: imports
             .iter()
-            .map(|module| (module.alias.clone(), module.module))
+            .map(|module| (module.alias.clone(), module.module, module.global))
             .collect(),
     })
 }
@@ -1099,21 +1102,32 @@ impl<'a> Resolver<'a> {
         args: &[Option<AExpr>],
         position: CallPosition,
     ) -> Result<RExpr, SemaError> {
+        self.resolve_imported_call_as(
+            module,
+            name,
+            args,
+            position,
+            &format!("{}.{}", module.alias, name),
+        )
+    }
+
+    fn resolve_imported_call_as(
+        &mut self,
+        module: &ImportedModule,
+        name: &str,
+        args: &[Option<AExpr>],
+        position: CallPosition,
+        shown: &str,
+    ) -> Result<RExpr, SemaError> {
         let Some(function) = module
             .functions
             .iter()
             .find(|f| bsl_rt::folded_eq(&f.name, name))
         else {
-            return Err(SemaError::UndefinedFunction(format!(
-                "{}.{}",
-                module.alias, name
-            )));
+            return Err(SemaError::UndefinedFunction(shown.to_string()));
         };
         if function.is_procedure && position != CallPosition::Statement {
-            return Err(SemaError::ProcedureAsFunction(format!(
-                "{}.{}",
-                module.alias, name
-            )));
+            return Err(SemaError::ProcedureAsFunction(shown.to_string()));
         }
         // Асинхронная цель межмодульного вызова закрыта до замера
         // `JOB.ASYNC.TARGET` — тем же решением, что и в VM.
@@ -1125,7 +1139,7 @@ impl<'a> Resolver<'a> {
         let arity = function.param_has_default.len();
         if args.len() > arity {
             return Err(SemaError::ArgumentCountMismatch {
-                name: format!("{}.{}", module.alias, name),
+                name: shown.to_string(),
                 expected: arity,
                 found: args.len(),
             });
@@ -1137,7 +1151,7 @@ impl<'a> Resolver<'a> {
                 Some(None) | None if *has_default_i => rargs.push(ResolvedArg::Default),
                 Some(None) | None => {
                     return Err(SemaError::MissingRequiredArgument {
-                        name: format!("{}.{}", module.alias, name),
+                        name: shown.to_string(),
                         index: i,
                     });
                 }
@@ -2120,6 +2134,19 @@ impl<'a> Resolver<'a> {
                         func: index,
                         args: rargs,
                     });
+                }
+                // НЕ ИЗМЕРЕНО(MODULE.GLOBAL_EXPORT_PRIORITY): собственное
+                // объявление выше сохраняет прежний приоритет, затем
+                // конфигурационный глобальный экспорт разрешается раньше
+                // библиотечного и встроенного глобального контекста.
+                if let Some(module) = self.imports.iter().find(|module| {
+                    module.global
+                        && module
+                            .functions
+                            .iter()
+                            .any(|function| bsl_rt::folded_eq(&function.name, name))
+                }) {
+                    return self.resolve_imported_call_as(module, name, args, position, name);
                 }
                 if let Some(registry) = self.registry
                     && let Some((library_index, function)) = registry.lookup_function(name)

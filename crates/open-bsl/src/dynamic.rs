@@ -123,6 +123,7 @@ impl DynamicCompiler for DynamicCode {
                     &import.alias,
                     import.module.index() as u32,
                     &target.program,
+                    import.global,
                 ))
             })
             .collect::<Result<Vec<_>, String>>()?;

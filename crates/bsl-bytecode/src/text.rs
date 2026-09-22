@@ -35,7 +35,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 35;
+pub const FORMAT_VERSION: u32 = 36;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -214,7 +214,14 @@ pub fn write_image(image: &crate::BytecodeImage, source: Option<&str>) -> Result
             )
             .unwrap();
             for (i, module) in catalog.modules.iter().enumerate() {
-                writeln!(out, "\n.module {i} {}", quote(&module.name)).unwrap();
+                writeln!(
+                    out,
+                    "\n.module {i} entry={} global={} {}",
+                    u8::from(module.entry_visible),
+                    u8::from(module.global),
+                    quote(&module.name)
+                )
+                .unwrap();
                 write_program_body(&mut out, &module.program)?;
             }
             if let Some(entry) = entry {
@@ -281,8 +288,9 @@ fn write_program_body(out: &mut String, program: &Program) -> Result<()> {
     for (i, import) in program.imports.iter().enumerate() {
         writeln!(
             out,
-            "  {i} module={} {}",
+            "  {i} module={} global={} {}",
             import.module.index(),
+            u8::from(import.global),
             quote(&import.alias)
         )
         .unwrap();
@@ -1048,9 +1056,27 @@ pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
         let (idx, rest) = rest
             .trim()
             .split_once(char::is_whitespace)
-            .ok_or_else(|| TextError::At(no, "ожидалось «.module N \"имя\"»".to_string()))?;
+            .ok_or_else(|| TextError::At(no, "ожидалось описание модуля".to_string()))?;
         parse_index(no, idx, i)?;
-        let (name, tail) = unquote(no, rest.trim())?;
+        let (entry_field, rest) = rest
+            .trim_start()
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидалось поле entry=0|1".into()))?;
+        let entry_visible = match entry_field.strip_prefix("entry=") {
+            Some("0") => false,
+            Some("1") => true,
+            _ => return Err(TextError::At(no, "ожидалось поле entry=0|1".into())),
+        };
+        let (global_field, quoted) = rest
+            .trim_start()
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидалось поле global=0|1".into()))?;
+        let global = match global_field.strip_prefix("global=") {
+            Some("0") => false,
+            Some("1") => true,
+            _ => return Err(TextError::At(no, "ожидалось поле global=0|1".into())),
+        };
+        let (name, tail) = unquote(no, quoted.trim())?;
         if !tail.trim().is_empty() {
             return Err(TextError::At(
                 no,
@@ -1058,7 +1084,12 @@ pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
             ));
         }
         let program = parse_program_body(&mut r)?;
-        modules.push(crate::ModuleProgram { name, program });
+        modules.push(crate::ModuleProgram {
+            name,
+            entry_visible,
+            global,
+            program,
+        });
     }
     let catalog = crate::ConfigurationProgram { modules };
 
@@ -1239,14 +1270,23 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
             .split_once(char::is_whitespace)
             .ok_or_else(|| TextError::At(no, "ожидался номер импорта и module=".into()))?;
         parse_index(no, idx, i)?;
-        let (field, quoted) = rest
+        let (field, rest) = rest
             .trim_start()
             .split_once(char::is_whitespace)
-            .ok_or_else(|| TextError::At(no, "ожидался module= и псевдоним".into()))?;
+            .ok_or_else(|| TextError::At(no, "ожидались module=, global= и псевдоним".into()))?;
         let module = field
             .strip_prefix("module=")
             .and_then(|part| part.parse::<u32>().ok())
             .ok_or_else(|| TextError::At(no, "ожидалось поле module=число".into()))?;
+        let (global_field, quoted) = rest
+            .trim_start()
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидались global= и псевдоним".into()))?;
+        let global = match global_field.strip_prefix("global=") {
+            Some("0") => false,
+            Some("1") => true,
+            _ => return Err(TextError::At(no, "ожидалось поле global=0|1".into())),
+        };
         let (alias, tail) = unquote(no, quoted.trim())?;
         if !tail.trim().is_empty() {
             return Err(TextError::At(no, "лишние поля объявленного импорта".into()));
@@ -1254,6 +1294,7 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         imports.push(crate::ModuleImport {
             alias,
             module: ModuleId::new(module),
+            global,
         });
     }
     let n = r.directive(".links")?;

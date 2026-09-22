@@ -382,7 +382,7 @@ pub struct ResolvedProgram {
     /// повторов; номер записи — операнд `CallImported`/`ImportedVar`.
     pub links: Vec<ResolvedLink>,
     /// Объявленные пары «псевдоним, модуль», в исходном порядке.
-    pub imports: Vec<(String, u32)>,
+    pub imports: Vec<(String, u32, bool)>,
 }
 
 /// Есть ли в теле `Выполнить`/`Вычислить` — обход по разрешённому дереву,

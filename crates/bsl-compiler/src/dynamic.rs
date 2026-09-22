@@ -52,7 +52,9 @@ pub fn compile_dynamic_snippet_with_imports(
             .iter()
             .zip(request.imports)
             .any(|(actual, expected)| {
-                actual.alias != expected.alias || actual.module as usize != expected.module.index()
+                actual.alias != expected.alias
+                    || actual.module as usize != expected.module.index()
+                    || actual.global != expected.global
             })
     {
         return Err("окружение импортов фрагмента не совпадает с исходным модулем".into());

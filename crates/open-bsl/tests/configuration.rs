@@ -54,14 +54,15 @@ fn each_run_gets_fresh_module_instances() {
 /// служебный, entry зовёт клиентский.
 #[test]
 fn common_modules_import_each_other() {
-    let recipe = open_bsl::ModuleGraphRecipe {
-        modules: vec![
-            open_bsl::ModuleRecipe {
+    let recipe =
+        open_bsl::ModuleGraphRecipe {
+            modules: vec![
+            open_bsl::ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit,
                 name: "Служебный".to_string(),
                 source: "Функция База() Экспорт\n Возврат 20;\nКонецФункции".to_string(),
                 imports: Vec::new(),
             },
-            open_bsl::ModuleRecipe {
+            open_bsl::ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit,
                 name: "Клиент".to_string(),
                 source:
                     "Функция Сумма(Знач д) Экспорт\n Возврат Служебный.База() + д;\nКонецФункции"
@@ -69,8 +70,8 @@ fn common_modules_import_each_other() {
                 imports: vec![("Служебный".to_string(), "Служебный".to_string())],
             },
         ],
-        eager_init: false,
-    };
+            eager_init: false,
+        };
     let engine = Engine::builder()
         .configuration(recipe)
         .build()
@@ -106,6 +107,7 @@ fn eager_init_runs_module_bodies_before_the_entry() {
     let run = |eager: bool| -> String {
         let recipe = open_bsl::ModuleGraphRecipe {
             modules: vec![open_bsl::ModuleRecipe {
+                visibility: open_bsl::ModuleVisibility::Explicit,
                 name: "Служебный".to_string(),
                 source: "Сообщить(\"из тела\");".to_string(),
                 imports: Vec::new(),
@@ -138,11 +140,13 @@ fn an_import_cycle_is_a_build_error() {
     let recipe = open_bsl::ModuleGraphRecipe {
         modules: vec![
             open_bsl::ModuleRecipe {
+                visibility: open_bsl::ModuleVisibility::Explicit,
                 name: "А".to_string(),
                 source: "Функция Ф() Экспорт\n Возврат 1;\nКонецФункции".to_string(),
                 imports: vec![("Б".to_string(), "Б".to_string())],
             },
             open_bsl::ModuleRecipe {
+                visibility: open_bsl::ModuleVisibility::Explicit,
                 name: "Б".to_string(),
                 source: "Функция Г() Экспорт\n Возврат 2;\nКонецФункции".to_string(),
                 imports: vec![("А".to_string(), "А".to_string())],
@@ -154,6 +158,121 @@ fn an_import_cycle_is_a_build_error() {
         panic!("цикл импортов должен отвергаться");
     };
     assert!(error.to_string().contains("цикл"), "не та ошибка: {error}");
+}
+
+#[test]
+fn configuration_modules_see_named_and_global_exports_before_bodies_are_resolved() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Второй".into(),
+                    source: "Функция ИзВторого() Экспорт Возврат Первый.Основа(); КонецФункции"
+                        .into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+                ModuleRecipe {
+                    name: "Первый".into(),
+                    source: "Функция Основа() Экспорт Возврат 20; КонецФункции Функция ЧерезВторой() Экспорт Возврат Второй.ИзВторого() + 1; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+                ModuleRecipe {
+                    name: "Глобальный".into(),
+                    source: "Функция ГлобальныйОтвет() Экспорт Возврат 21; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Global,
+                },
+                ModuleRecipe {
+                    name: "Потребитель".into(),
+                    source: "Функция Проверить() Экспорт Возврат Первый.ЧерезВторой() + ГлобальныйОтвет(); КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+            ],
+            eager_init: false,
+        })
+        .build()
+        .expect("полный каталог объявлений разрешается до тел");
+    let module = engine
+        .compile_entry("Возврат Потребитель.Проверить();")
+        .expect("entry");
+    let mut state = engine.new_state();
+    assert_eq!(
+        open_bsl::format_value(&state.run(&module).unwrap(), None).unwrap(),
+        "42"
+    );
+
+    let dynamic = engine
+        .compile_entry("Возврат Вычислить(\"ГлобальныйОтвет()\");")
+        .expect("динамический вызов видит глобальный экспорт");
+    let dynamic = engine
+        .load_bytecode(&dynamic.bytecode().expect("листинг"))
+        .expect("круговой проход байткода");
+    assert_eq!(
+        engine.new_state().run(&dynamic).unwrap(),
+        open_bsl::Value::number_from_i64(21)
+    );
+}
+
+#[test]
+fn own_declaration_wins_over_a_global_module_export() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Глобальный".into(),
+                    source: "Функция Ответ() Экспорт Возврат 1; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Global,
+                },
+                ModuleRecipe {
+                    name: "Потребитель".into(),
+                    source: "Функция Ответ() Возврат 2; КонецФункции Функция Проверить() Экспорт Возврат Ответ(); КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+            ],
+            eager_init: false,
+        })
+        .build()
+        .unwrap();
+    let module = engine
+        .compile_entry("Возврат Потребитель.Проверить();")
+        .unwrap();
+    assert_eq!(
+        engine.new_state().run(&module).unwrap(),
+        open_bsl::Value::number_from_i64(2)
+    );
+}
+
+#[test]
+fn duplicate_global_exports_are_a_build_error() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let modules = ["Первый", "Второй"]
+        .into_iter()
+        .map(|name| ModuleRecipe {
+            name: name.into(),
+            source: "Функция Ответ() Экспорт Возврат 1; КонецФункции".into(),
+            imports: vec![],
+            visibility: ModuleVisibility::Global,
+        })
+        .collect();
+    let error = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules,
+            eager_init: false,
+        })
+        .build()
+        .err()
+        .expect("повторный глобальный экспорт отвергается");
+    assert!(error.to_string().contains("Ответ"), "не та ошибка: {error}");
 }
 
 /// Неэкспортный метод не виден снаружи модуля.

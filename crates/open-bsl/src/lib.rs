@@ -57,6 +57,8 @@ pub use bsl_syntax::{
     Diagnostic, Expectation, FoundToken, LexError, ParseError, ParseErrorKind, PreprocSymbols, Span,
 };
 pub use dynamic::DynamicCode;
-pub use engine::{Engine, EngineBuilder, Module, ModuleGraphRecipe, ModuleRecipe};
+pub use engine::{
+    Engine, EngineBuilder, Module, ModuleGraphRecipe, ModuleRecipe, ModuleVisibility,
+};
 pub use error::Error;
 pub use state::{Execution, ExecutionPoll, State, StateBuilder};

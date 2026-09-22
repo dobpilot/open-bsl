@@ -79,6 +79,7 @@ fn selected_frames_keep_modules_imports_references_and_writes_after_error() {
         .configuration(ModuleGraphRecipe {
             modules: vec![
                 ModuleRecipe {
+                    visibility: open_bsl::ModuleVisibility::Explicit,
                     name: "А".into(),
                     imports: vec![("Б".into(), "Б".into())],
                     source: r#"
@@ -103,6 +104,7 @@ fn selected_frames_keep_modules_imports_references_and_writes_after_error() {
                     .into(),
                 },
                 ModuleRecipe {
+                    visibility: open_bsl::ModuleVisibility::Explicit,
                     name: "Б".into(),
                     imports: vec![],
                     source: r#"
@@ -178,8 +180,8 @@ impl DebugHook for InspectInitialization {
 fn a_lazy_module_body_keeps_the_callers_current_instruction_line() {
     let engine = Engine::builder().debug_info(true).configuration(ModuleGraphRecipe {
         modules: vec![
-            ModuleRecipe { name: "А".into(), imports: vec![("Б".into(), "Б".into())], source: "Функция Запуск() Экспорт\n    Локальная = 1;\n    Возврат Б.Результат();\nКонецФункции".into() },
-            ModuleRecipe { name: "Б".into(), imports: vec![], source: "Перем Значение;\nФункция Результат() Экспорт Возврат Значение; КонецФункции\nЗначение = 42;".into() },
+            ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit, name: "А".into(), imports: vec![("Б".into(), "Б".into())], source: "Функция Запуск() Экспорт\n    Локальная = 1;\n    Возврат Б.Результат();\nКонецФункции".into() },
+            ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit, name: "Б".into(), imports: vec![], source: "Перем Значение;\nФункция Результат() Экспорт Возврат Значение; КонецФункции\nЗначение = 42;".into() },
         ], eager_init: false,
     }).build().unwrap();
     let module = engine.compile_entry("Возврат А.Запуск();").unwrap();

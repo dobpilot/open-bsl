@@ -8,6 +8,7 @@ Configuration sessions need the original module graph and module sources. The in
 - Add `bsl-config-db`, which builds that snapshot from an information base through `open-sdbl-db`.
 - Add documented `bsl-config-xml` and `bsl-config-edt` crate placeholders without loader APIs or CLI switches.
 - Produce one effective source body for every logical module; active extensions may be applied, but base and patch variants never escape the loader.
+- Preserve common-module visibility: a non-global common module is addressed by its module name, while exports of a global common module enter the bare BSL namespace.
 - Keep the code source independent from the metadata and data source, so a future XML or EDT code snapshot can run against matching metadata and data acquired from an information base.
 
 ## Impact

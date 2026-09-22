@@ -5,3 +5,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+bsl-config = { path = "../bsl-config" }
+open-sdbl = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.8.0" }
+open-sdbl-db = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.8.0" }

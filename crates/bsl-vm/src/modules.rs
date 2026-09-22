@@ -301,6 +301,8 @@ mod tests {
                 .into_iter()
                 .enumerate()
                 .map(|(index, source)| bsl_bytecode::ModuleProgram {
+                    entry_visible: true,
+                    global: false,
                     name: format!("Модуль{index}"),
                     program: crate::tests::compile_module(source),
                 })

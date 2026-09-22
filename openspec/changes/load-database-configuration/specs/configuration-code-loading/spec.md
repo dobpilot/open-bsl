@@ -30,6 +30,26 @@ The system SHALL represent configuration code as an immutable snapshot containin
 - **THEN** loading fails with an error identifying the extension
 - **AND** base sources are not presented as the effective configuration
 
+### Requirement: Configuration common-module visibility
+The configuration module catalog SHALL expose a non-global common module under its configuration name and SHALL expose exported procedures and functions of a global common module as bare BSL names. It SHALL use the existing open-bsl resolver, compiler, module instances, and VM without rewriting the acquired BSL source. A declaration in the current module SHALL retain its existing priority over the configuration-wide global surface. Duplicate bare exports from different global common modules SHALL fail engine construction explicitly.
+
+#### Scenario: Named common module
+- **WHEN** one configuration module calls an export as `ModuleName.Method()`
+- **THEN** the call is linked to the non-global common module named `ModuleName`
+
+#### Scenario: Global common module export
+- **WHEN** a configuration module calls an exported method of a global common module by its bare name
+- **THEN** the call is linked to that common module in the same State
+
+#### Scenario: Mutually referring modules
+- **WHEN** two configuration modules refer to each other's exported declarations
+- **THEN** both bodies are resolved against the complete declaration catalog
+- **AND** source order does not make either name undefined
+
+#### Scenario: Duplicate global export
+- **WHEN** two global common modules export the same folded bare name
+- **THEN** engine construction fails with an error naming the conflicting export
+
 ### Requirement: Future source crate placeholders
 The workspace SHALL contain `bsl-config-xml` and `bsl-config-edt` as documented placeholders. Until their respective implementations are specified, they SHALL expose no loading operation and add no CLI option or dependency.
 

@@ -657,6 +657,8 @@ fn service_catalog() -> bsl_bytecode::ConfigurationProgram {
     );
     bsl_bytecode::ConfigurationProgram {
         modules: vec![bsl_bytecode::ModuleProgram {
+            entry_visible: true,
+            global: false,
             name: "Служебный".to_string(),
             program: service,
         }],
@@ -843,6 +845,8 @@ fn a_failed_module_body_poisons_the_instance_for_the_session() {
     };
     let catalog = bsl_bytecode::ConfigurationProgram {
         modules: vec![bsl_bytecode::ModuleProgram {
+            entry_visible: true,
+            global: false,
             name: "Сломанный".to_string(),
             program: broken,
         }],

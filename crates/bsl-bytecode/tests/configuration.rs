@@ -94,10 +94,14 @@ fn catalog() -> ConfigurationProgram {
     ConfigurationProgram {
         modules: vec![
             ModuleProgram {
+                entry_visible: true,
+                global: false,
                 name: "Служебный".to_string(),
                 program: service_module(),
             },
             ModuleProgram {
+                entry_visible: true,
+                global: false,
                 name: "Клиент".to_string(),
                 program: client_module(),
             },
@@ -221,7 +225,7 @@ fn a_self_link_is_rejected() {
 }
 
 #[test]
-fn an_import_cycle_is_rejected() {
+fn a_declaration_cycle_is_valid_bytecode() {
     let mut catalog = catalog();
     // «Служебный» получает связь на функцию «Клиента» — но у «Клиента» нет
     // экспортных функций, поэтому цикл строится через переменную.
@@ -231,8 +235,7 @@ fn an_import_cycle_is_rejected() {
         module: ModuleId::new(1),
         slot: 0,
     }];
-    let error = verify_configuration(&catalog, None).expect_err("цикл импортов");
-    assert!(error.to_string().contains("цикл"), "{error}");
+    verify_configuration(&catalog, None).expect("циклический граф объявлений допустим");
 }
 
 #[test]

@@ -69,27 +69,27 @@ fn dynamic_imports_keep_aliases_visibility_arguments_and_nested_scopes() {
                 })
                 .configuration(ModuleGraphRecipe {
                     modules: vec![
-                        ModuleRecipe {
+                        ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Хранилище".into(),
                             source: store.into(),
                             imports: vec![],
                         },
-                        ModuleRecipe {
+                        ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Работа".into(),
                             source: worker.into(),
                             imports: vec![("Данные".into(), "Хранилище".into())],
                         },
-                        ModuleRecipe {
+                        ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Посторонний".into(),
                             source: "Функция Прочитать() Экспорт Возврат 999; КонецФункции".into(),
                             imports: vec![],
                         },
-                        ModuleRecipe {
+                        ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Затенение".into(),
                             source: "Перем Данные; Функция Прочитать() Экспорт Возврат Вычислить(\"Данные.Ячейка\"); КонецФункции Данные = Новый Структура(\"Ячейка\", 72);".into(),
                             imports: vec![("Данные".into(), "Хранилище".into())],
                         },
-                        ModuleRecipe {
+                        ModuleRecipe { visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Смешанный".into(),
                             source: "Функция Статическая() Возврат Д.Ячейка; КонецФункции Функция Прочитать() Экспорт Возврат Вычислить(\"Статическая() + Д.Ячейка\"); КонецФункции".into(),
                             imports: vec![("Д".into(), "Хранилище".into())],
@@ -152,11 +152,13 @@ fn unused_declared_imports_keep_eager_initialization_order_after_loading() {
         .configuration(ModuleGraphRecipe {
             modules: vec![
                 ModuleRecipe {
+                    visibility: open_bsl::ModuleVisibility::Explicit,
                     name: "Первый".into(),
                     source: "Перем Результат Экспорт; Сообщить(\"первый\"); Результат = 42;".into(),
                     imports: vec![("Зависимость".into(), "Второй".into())],
                 },
                 ModuleRecipe {
+                    visibility: open_bsl::ModuleVisibility::Explicit,
                     name: "Второй".into(),
                     source: "Сообщить(\"второй\");".into(),
                     imports: vec![],

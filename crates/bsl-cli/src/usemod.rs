@@ -166,6 +166,7 @@ pub fn load_graph(
     let modules = files
         .iter()
         .map(|file| open_bsl::ModuleRecipe {
+            visibility: open_bsl::ModuleVisibility::Explicit,
             name: name_of(&file.canonical),
             source: file.source.clone(),
             imports: file

@@ -15,6 +15,8 @@ use crate::chunk::Program;
 pub struct ModuleImport {
     pub alias: String,
     pub module: ModuleId,
+    /// Экспортные методы модуля участвуют в глобальной области импортёра.
+    pub global: bool,
 }
 
 /// Позиция общего модуля в каталоге конфигурации. Детерминирована местом в
@@ -97,6 +99,10 @@ pub enum LinkEntry {
 #[derive(Debug, Clone)]
 pub struct ModuleProgram {
     pub name: String,
+    /// Доступен ли модуль transient entry по имени.
+    pub entry_visible: bool,
+    /// Входят ли экспортные методы в глобальную область entry.
+    pub global: bool,
     pub program: Program,
 }
 

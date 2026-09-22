@@ -945,6 +945,16 @@ impl SessionFactory {
                     })
                     .collect::<Result<Vec<_>, SessionError>>()?;
                 Ok(ModuleRecipe {
+                    visibility: match module.kind() {
+                        ModuleKind::Common if module.execution().global() => {
+                            open_bsl::ModuleVisibility::Global
+                        }
+                        ModuleKind::Common => open_bsl::ModuleVisibility::Named,
+                        // Модуль сеанса видит только синтетический host-entry,
+                        // который запускает обработчик начала сеанса.
+                        ModuleKind::Session => open_bsl::ModuleVisibility::Explicit,
+                        _ => open_bsl::ModuleVisibility::Private,
+                    },
                     name: module.name().into(),
                     source: module.source().into(),
                     imports,

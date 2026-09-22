@@ -37,11 +37,13 @@ fn static_calls_preserve_imported_arguments_and_initialize_their_owners() {
                 .configuration(open_bsl::ModuleGraphRecipe {
                     modules: vec![
                         open_bsl::ModuleRecipe {
+                            visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Хранилище".into(),
                             source: store.into(),
                             imports: vec![],
                         },
                         open_bsl::ModuleRecipe {
+                            visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Работа".into(),
                             source: source.into(),
                             imports: vec![("Хранилище".into(), "Хранилище".into())],
@@ -194,11 +196,13 @@ fn imported_variables_and_nested_calls_share_the_same_parameter_cell() {
             .configuration(open_bsl::ModuleGraphRecipe {
                 modules: vec![
                     open_bsl::ModuleRecipe {
+                        visibility: open_bsl::ModuleVisibility::Explicit,
                         name: "Хранилище".into(),
                         source: store.into(),
                         imports: vec![],
                     },
                     open_bsl::ModuleRecipe {
+                        visibility: open_bsl::ModuleVisibility::Explicit,
                         name: "Работа".into(),
                         source: worker.into(),
                         imports: vec![("Хранилище".into(), "Хранилище".into())],

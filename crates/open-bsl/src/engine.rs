@@ -356,6 +356,22 @@ pub struct ModuleRecipe {
     /// с именем; отдельный нужен файловому загрузчику `bsl-cli`, где
     /// вложенные псевдонимы локальны импортёру.
     pub imports: Vec<(String, String)>,
+    /// Видимость модуля для остальных модулей конфигурации.
+    pub visibility: ModuleVisibility,
+}
+
+/// Видимость экспортов модуля в статическом каталоге конфигурации.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModuleVisibility {
+    /// Модуль виден entry и только явно импортировавшим его модулям.
+    #[default]
+    Explicit,
+    /// Модуль автоматически виден под своим именем.
+    Named,
+    /// Модуль виден под своим именем, а его экспорты — также без квалификатора.
+    Global,
+    /// Модуль доступен только через host-мост и явные импорты.
+    Private,
 }
 
 /// Не зависящее от файловой системы описание графа общих модулей.
@@ -521,6 +537,7 @@ impl EngineBuilder {
             name: name.to_string(),
             source: source.to_string(),
             imports: Vec::new(),
+            visibility: ModuleVisibility::Explicit,
         });
         self
     }
@@ -581,8 +598,14 @@ impl EngineBuilder {
                 .modules
                 .iter()
                 .enumerate()
+                .filter(|(_, module)| module.entry_visible)
                 .map(|(i, module)| {
-                    imported_module_from_program(&module.name, i as u32, &module.program)
+                    imported_module_from_program(
+                        &module.name,
+                        i as u32,
+                        &module.program,
+                        module.global,
+                    )
                 })
                 .collect();
             let init_order = image_init_order(&catalog);
@@ -781,41 +804,96 @@ fn compile_catalog(
         visit(modules, &index_of, &mut state, &mut topo, i)?;
     }
 
-    let mut resolved: Vec<Option<bsl_sema::ResolvedProgram>> = vec![None; modules.len()];
-    for &i in &topo {
-        let module = &modules[i];
-        let imports: Vec<bsl_sema::ImportedModule> = module
+    let syntax = modules
+        .iter()
+        .map(|module| bsl_syntax::parse_with_symbols(&module.source, symbols))
+        .collect::<Result<Vec<_>, _>>()?;
+    let surfaces = syntax
+        .iter()
+        .enumerate()
+        .map(|(i, syntax)| {
+            imported_module_from_syntax(
+                &modules[i].name,
+                i as u32,
+                &syntax.items,
+                modules[i].visibility == ModuleVisibility::Global,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for (i, module) in surfaces
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| modules[*i].visibility == ModuleVisibility::Global)
+    {
+        for function in &module.functions {
+            if surfaces[..i].iter().enumerate().any(|(other_i, other)| {
+                modules[other_i].visibility == ModuleVisibility::Global
+                    && other
+                        .functions
+                        .iter()
+                        .any(|candidate| bsl_rt::folded_eq(&candidate.name, &function.name))
+            }) {
+                return Err(Error::Configuration(format!(
+                    "глобальный экспорт «{}» объявлен несколькими общими модулями",
+                    function.name
+                )));
+            }
+        }
+    }
+
+    let mut resolved = Vec::with_capacity(modules.len());
+    for (i, module) in modules.iter().enumerate() {
+        let mut imports: Vec<bsl_sema::ImportedModule> = module
             .imports
             .iter()
             .map(|(alias, target)| {
                 let target_index = index_of(target).expect("проверено при построении графа выше");
-                bsl_sema::ImportedModule::from_resolved(
-                    alias,
-                    target_index as u32,
-                    resolved[target_index]
-                        .as_ref()
-                        .expect("topo-порядок: цель разрешена раньше импортёра"),
-                )
+                let mut imported = surfaces[target_index].clone();
+                imported.alias = alias.clone();
+                imported.global = false;
+                imported
             })
             .collect();
-        let syntax = bsl_syntax::parse_with_symbols(&module.source, symbols)?;
-        resolved[i] = Some(bsl_sema::resolve_program_with_imports(
-            &syntax.items,
+        for (target_index, target) in modules.iter().enumerate() {
+            if target_index == i
+                || !matches!(
+                    target.visibility,
+                    ModuleVisibility::Named | ModuleVisibility::Global
+                )
+            {
+                continue;
+            }
+            if let Some(existing) = imports
+                .iter()
+                .find(|import| bsl_rt::folded_eq(&import.alias, &target.name))
+            {
+                if existing.module as usize != target_index {
+                    return Err(Error::Configuration(format!(
+                        "псевдоним «{}» модуля «{}» ссылается на два модуля",
+                        target.name, module.name
+                    )));
+                }
+                continue;
+            }
+            imports.push(surfaces[target_index].clone());
+        }
+        resolved.push(bsl_sema::resolve_program_with_imports(
+            &syntax[i].items,
             registry,
             &imports,
         )?);
     }
-    let resolved: Vec<bsl_sema::ResolvedProgram> = resolved
-        .into_iter()
-        .map(|module| module.expect("каждый модуль разрешён topo-обходом"))
-        .collect();
 
     let pairs: Vec<(String, &bsl_sema::ResolvedProgram)> = modules
         .iter()
         .zip(&resolved)
         .map(|(module, resolved)| (module.name.clone(), resolved))
         .collect();
-    let (catalog, _) = bsl_compiler::compile_configuration(&pairs, None, build)?;
+    let (mut catalog, _) = bsl_compiler::compile_configuration(&pairs, None, build)?;
+    for (compiled, recipe) in catalog.modules.iter_mut().zip(modules) {
+        compiled.entry_visible = recipe.visibility != ModuleVisibility::Private;
+        compiled.global = recipe.visibility == ModuleVisibility::Global;
+    }
     bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
 
     let entry_imports = modules
@@ -823,8 +901,12 @@ fn compile_catalog(
         .zip(&resolved)
         .enumerate()
         .map(|(i, (module, resolved))| {
-            bsl_sema::ImportedModule::from_resolved(&module.name, i as u32, resolved)
+            let mut imported =
+                bsl_sema::ImportedModule::from_resolved(&module.name, i as u32, resolved);
+            imported.global = module.visibility == ModuleVisibility::Global;
+            imported
         })
+        .filter(|module| modules[module.module as usize].visibility != ModuleVisibility::Private)
         .collect();
     let init_order = topo.iter().map(|&i| i as u32).collect();
     Ok((catalog, entry_imports, init_order))
@@ -837,6 +919,7 @@ pub(crate) fn imported_module_from_program(
     alias: &str,
     module: u32,
     program: &bsl_bytecode::Program,
+    global: bool,
 ) -> bsl_sema::ImportedModule {
     let functions = program
         .function_names
@@ -868,9 +951,106 @@ pub(crate) fn imported_module_from_program(
     bsl_sema::ImportedModule {
         alias: alias.to_string(),
         module,
+        global,
         functions,
         variables,
     }
+}
+
+fn imported_module_from_syntax(
+    alias: &str,
+    module: u32,
+    items: &[bsl_syntax::Item],
+    global: bool,
+) -> Result<bsl_sema::ImportedModule, Error> {
+    let mut functions = Vec::new();
+    let mut method_index = 0usize;
+    let mut variables: Vec<bsl_sema::ImportedVariable> = Vec::new();
+    let mut module_variables: Vec<(String, bool)> = Vec::new();
+    for item in items {
+        match item {
+            bsl_syntax::Item::Function(function) => {
+                method_index += 1;
+                let chunk = u16::try_from(method_index).map_err(|_| {
+                    Error::Configuration(format!("в модуле «{alias}» слишком много методов"))
+                })?;
+                if function.export {
+                    functions.push(bsl_sema::ImportedFunction {
+                        name: function.name.clone(),
+                        chunk,
+                        is_procedure: false,
+                        is_async: function.is_async,
+                        param_by_val: function
+                            .params
+                            .iter()
+                            .map(|parameter| function.is_async || parameter.by_val)
+                            .collect(),
+                        param_has_default: function
+                            .params
+                            .iter()
+                            .map(|parameter| parameter.default.is_some())
+                            .collect(),
+                    });
+                }
+            }
+            bsl_syntax::Item::Procedure(procedure) => {
+                method_index += 1;
+                let chunk = u16::try_from(method_index).map_err(|_| {
+                    Error::Configuration(format!("в модуле «{alias}» слишком много методов"))
+                })?;
+                if procedure.export {
+                    functions.push(bsl_sema::ImportedFunction {
+                        name: procedure.name.clone(),
+                        chunk,
+                        is_procedure: true,
+                        is_async: procedure.is_async,
+                        param_by_val: procedure
+                            .params
+                            .iter()
+                            .map(|parameter| procedure.is_async || parameter.by_val)
+                            .collect(),
+                        param_has_default: procedure
+                            .params
+                            .iter()
+                            .map(|parameter| parameter.default.is_some())
+                            .collect(),
+                    });
+                }
+            }
+            bsl_syntax::Item::VarDecl(declaration) => {
+                for name in &declaration.names {
+                    if let Some(existing) = module_variables
+                        .iter_mut()
+                        .find(|(variable, _)| bsl_rt::folded_eq(variable, name))
+                    {
+                        existing.1 |= declaration.export;
+                    } else {
+                        module_variables.push((name.clone(), declaration.export));
+                    }
+                }
+            }
+            bsl_syntax::Item::Stmt(_) => {}
+        }
+    }
+    for (slot, (name, export)) in module_variables.into_iter().enumerate() {
+        if export {
+            variables.push(bsl_sema::ImportedVariable {
+                name,
+                slot: u16::try_from(slot).map_err(|_| {
+                    Error::Configuration(format!(
+                        "в модуле «{alias}» слишком много модульных переменных"
+                    ))
+                })?,
+            });
+        }
+    }
+    Ok(bsl_sema::ImportedModule {
+        alias: alias.to_string(),
+        module,
+        global,
+        functions,
+        variables,
+    })
 }
 
 /// Порядок нележивой инициализации для каталога из образа: DFS post-order

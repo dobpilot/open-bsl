@@ -819,6 +819,7 @@ fn check_links(
     own: Option<usize>,
 ) -> Result<(), RtError> {
     use crate::configuration::LinkEntry;
+
     for import in &program.imports {
         if own == Some(import.module.index()) || catalog.module(import.module).is_none() {
             return Err(RtError::InvalidBytecode(
@@ -956,7 +957,7 @@ pub fn verify_linked_program(
 /// Порядок обязанностей: сначала каждый модуль (и entry, если он есть)
 /// проходит одиночный [`verify`], затем сверяются межмодульные свойства —
 /// уникальность имён каталога, разрешимость и экспортность целей связей,
-/// ацикличность графа импортов, арность и согласование «Знач» у
+/// арность и согласование «Знач» у
 /// `CallImported`. Worker принимает каталог ровно через эту проверку и не
 /// повторяет case-insensitive resolution имён: manifest уже числовой.
 ///
@@ -967,8 +968,6 @@ pub fn verify_configuration(
     catalog: &crate::ConfigurationProgram,
     entry: Option<&crate::EntryProgram>,
 ) -> Result<(), RtError> {
-    use crate::configuration::LinkEntry;
-
     let names: Vec<&String> = catalog.modules.iter().map(|m| &m.name).collect();
     for name in &names {
         if name.is_empty() {
@@ -999,44 +998,6 @@ pub fn verify_configuration(
     }
     if let Some(entry) = entry {
         check_links(&entry.program, catalog, None)?;
-    }
-
-    // Граф импортов обязан быть ациклическим: цикл превратил бы ленивую
-    // инициализацию модулей в бесконечную рекурсию, а CLI-проверка циклов
-    // файлового графа образу, пришедшему извне, ничем не помогает.
-    let mut state = vec![0u8; catalog.modules.len()]; // 0 — белый, 1 — серый, 2 — чёрный
-    fn visit(
-        catalog: &crate::ConfigurationProgram,
-        state: &mut [u8],
-        index: usize,
-    ) -> Result<(), RtError> {
-        match state[index] {
-            1 => {
-                return Err(RtError::InvalidBytecode(
-                    "граф импортов модулей содержит цикл",
-                ));
-            }
-            2 => return Ok(()),
-            _ => {}
-        }
-        state[index] = 1;
-        for import in &catalog.modules[index].program.imports {
-            visit(catalog, state, import.module.index())?;
-        }
-        for link in &catalog.modules[index].program.links {
-            let target = match link {
-                LinkEntry::Function { module, .. } | LinkEntry::Variable { module, .. } => {
-                    module.index()
-                }
-                LinkEntry::ObjectMethod { .. } => continue,
-            };
-            visit(catalog, state, target)?;
-        }
-        state[index] = 2;
-        Ok(())
-    }
-    for index in 0..catalog.modules.len() {
-        visit(catalog, &mut state, index)?;
     }
 
     // Арность и «Знач» у CallImported: целевой чанк известен только на

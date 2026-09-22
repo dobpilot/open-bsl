@@ -60,11 +60,13 @@ fn dynamic_frames_keep_catalog_aliases_callbacks_and_async_code_alive() {
                 .configuration(ModuleGraphRecipe {
                     modules: vec![
                         ModuleRecipe {
+                            visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Хранилище".into(),
                             source: "Перем Ячейка Экспорт; Ячейка = 1;".into(),
                             imports: vec![],
                         },
                         ModuleRecipe {
+                            visibility: open_bsl::ModuleVisibility::Explicit,
                             name: "Работа".into(),
                             source: worker.into(),
                             imports: vec![("Данные".into(), "Хранилище".into())],

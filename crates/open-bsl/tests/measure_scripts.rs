@@ -82,6 +82,7 @@ fn the_background_jobs_measure_script_runs_with_the_platform_catalog() {
                 .iter()
                 .enumerate()
                 .map(|(index, (name, source))| open_bsl::ModuleRecipe {
+                    visibility: open_bsl::ModuleVisibility::Explicit,
                     name: name.clone(),
                     source: source.clone(),
                     // Импорты — все РАНЕЕ включённые модули: граф импортов
