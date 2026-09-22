@@ -419,10 +419,9 @@ impl<'src> Parser<'src> {
         } else if self.at_keyword(Keyword::Var) {
             Ok(StmtKind::VarDecl(self.parse_var_decl()?))
         } else if self.eat_keyword(Keyword::Execute) {
-            self.expect_lparen()?;
-            let expr = self.parse_expr()?;
-            self.expect_rparen()?;
-            Ok(StmtKind::Execute(expr))
+            // Скобочная форма остаётся обычным выражением в скобках;
+            // платформа также принимает выражение сразу после оператора.
+            Ok(StmtKind::Execute(self.parse_expr()?))
         } else if self.at_keyword(Keyword::Await) {
             Ok(StmtKind::ExprStmt(self.parse_expr()?))
         } else {
@@ -1000,6 +999,28 @@ mod tests {
                 rhs: Box::new(Expr::Number("2".into())),
             }
         );
+    }
+
+    #[test]
+    fn execute_accepts_bare_and_parenthesized_expressions() {
+        let program = parse_ok("Выполнить \"А = \" + Строка(1); Execute(\"Б = 2\");");
+        assert!(matches!(
+            &program.items[0],
+            Item::Stmt(Stmt {
+                kind: StmtKind::Execute(Expr::Binary {
+                    op: BinaryOp::Add,
+                    ..
+                }),
+                ..
+            })
+        ));
+        assert!(matches!(
+            &program.items[1],
+            Item::Stmt(Stmt {
+                kind: StmtKind::Execute(Expr::Str(_)),
+                ..
+            })
+        ));
     }
 
     #[test]
