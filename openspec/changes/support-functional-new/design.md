@@ -9,3 +9,5 @@ A separate bytecode instruction carries registers for the runtime type and optio
 The dynamic result is not classified as a statically known core receiver: the selected type is known only during execution, so subsequent member access follows the existing open-object path.
 
 The platform round trip on 1C 8.3.27.2342 returned `2|0`: an array containing one constructor argument created an array of length two, while a non-array second argument was ignored and created an empty array. This matches the implemented selection and argument rules. The result is preserved in `tests/conformance/measure/platform.tsv`; the temporary open-question marker and probe were removed together after the measurement.
+
+The isolated hot-code screen compared implementation commit `d2d5c58` with its direct parent. Both `step` and `step_cold` changed: the new bytecode variant necessarily extends the cold dispatch and changes the generated match layout. The change makes no performance claim, so no numerical gain or regression is inferred from that structural difference; the functional constructor remains outside existing hot programs until its opcode is executed.

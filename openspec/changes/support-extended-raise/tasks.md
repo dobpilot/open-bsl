@@ -6,5 +6,5 @@
 - [x] 4. Build structured error information in the VM and expose its documented fields and category behavior.
 - [x] 5. Add focused execution tests for defaults, argument evaluation, category, code, additional information, cause, and rethrow.
 - [x] 6. Measure the behavior on 1C 8.3.27.2342 and reconcile or retain the registered open question.
-- [ ] 7. Run formatting, Clippy, workspace tests, rustdoc, bytecode round trips, API-reference generation, and dependency-tree checks.
-- [ ] 8. Validate with `openspec validate support-extended-raise --strict`; archive only after all checks pass.
+- [x] 7. Run formatting, Clippy, workspace tests, rustdoc, bytecode round trips, API-reference generation, and dependency-tree checks.
+- [x] 8. Validate with `openspec validate support-extended-raise --strict`; archive only after all checks pass.
