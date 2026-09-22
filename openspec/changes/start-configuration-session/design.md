@@ -18,6 +18,8 @@ The host supplies one non-empty platform version when it constructs `SessionFact
 
 The principal is selected from `v8users` by case-insensitive name or GUID. Only a user with at least one enabled authentication method is selectable. With one selectable user the CLI may choose it automatically; with several it requires `--principal`; with no `v8users` rows it constructs the platform empty user and applies the configuration's main roles. The description is frozen at session creation. Temporary authentication locks are outside this testing host.
 
+The pinned `open-sdbl v0.8.0` model supplies `InfoBaseUser::can_authenticate()`: standard 1C authentication or a non-blank operating-system login makes a user selectable, while the display and administrator flags do not. Its upstream combination tests and the `bsl-session` principal-selection tests jointly cover the provider fact and the host filtering policy; this repository does not duplicate the authentication rule.
+
 The required upstream `open-sdbl` user model must decode every authentication method supported by the selected platform family and expose whether at least one method is enabled. `AdmRole` remains separate from object roles and does not grant unrestricted application data access.
 
 `bsl-orm` owns configuration metadata and data-facing platform objects; it does not load BSL source. The initial surface is the one recorded in `docs/research/session-module-runtime-surface-2026-09-21.md`. It includes the global `РольДоступна`/`IsInRole` function, accepting a role name or metadata role object and answering from the frozen principal's roles. Unknown roles and invalid argument types are errors. Unsupported platform members fail explicitly with their BSL name.
