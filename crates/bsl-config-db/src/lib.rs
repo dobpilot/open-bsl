@@ -272,12 +272,12 @@ fn common_execution(bytes: &[u8]) -> Result<ModuleExecution, LoadError> {
             .unwrap_or(false)
     };
     Ok(ModuleExecution::default()
-        .with_global(flag(2))
-        .with_client(flag(3) || flag(6))
-        .with_server(flag(4))
-        .with_external_connection(flag(5))
-        .with_server_call(flag(7))
-        .with_privileged(flag(8)))
+        .with_client(flag(2) || flag(7))
+        .with_server(flag(3))
+        .with_external_connection(flag(4))
+        .with_privileged(flag(5))
+        .with_global(flag(6))
+        .with_server_call(flag(9)))
 }
 
 fn collections(value: &Value) -> Option<Vec<&[Value]>> {

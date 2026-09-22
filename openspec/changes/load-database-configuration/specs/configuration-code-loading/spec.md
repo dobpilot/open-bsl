@@ -33,6 +33,13 @@ The system SHALL represent configuration code as an immutable snapshot containin
 ### Requirement: Configuration common-module visibility
 The configuration module catalog SHALL expose a non-global common module under its configuration name and SHALL expose exported procedures and functions of a global common module as bare BSL names. It SHALL use the existing open-bsl resolver, compiler, module instances, and VM without rewriting the acquired BSL source. A declaration in the current module SHALL retain its existing priority over the configuration-wide global surface. Duplicate bare exports from different global common modules SHALL fail engine construction explicitly.
 
+The database loader SHALL preserve the managed-client, ordinary-client, server, external-connection, global, privileged, and server-call attributes encoded by the common-module descriptor.
+
+#### Scenario: Serialized execution attributes
+- **WHEN** a database common-module descriptor carries independently distinguishable execution flags
+- **THEN** the neutral snapshot reports each flag under its matching attribute
+- **AND** client availability is true when either client flag is enabled
+
 #### Scenario: Named common module
 - **WHEN** one configuration module calls an export as `ModuleName.Method()`
 - **THEN** the call is linked to the non-global common module named `ModuleName`

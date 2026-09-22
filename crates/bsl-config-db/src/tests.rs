@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use open_sdbl_db::ConfigResource;
 
-use super::{LoadError, apply_source_overlay, load_base};
+use super::{LoadError, apply_source_overlay, common_execution, load_base};
 
 fn resource(name: &str, bytes: &[u8]) -> ConfigResource {
     ConfigResource {
@@ -69,10 +69,24 @@ fn base_resources_become_a_snapshot_with_common_module_flags() {
     assert!(session.source().contains("ПриНачалеСеанса"));
     let module = &snapshot.modules()[1];
     assert_eq!(module.name(), "Общий");
-    assert!(module.execution().global());
-    assert!(module.execution().server());
-    assert!(module.execution().server_call());
+    assert!(!module.execution().global());
+    assert!(module.execution().client());
+    assert!(module.execution().external_connection());
+    assert!(!module.execution().server());
+    assert!(!module.execution().server_call());
     assert!(module.source().contains("Возврат 42"));
+}
+
+#[test]
+fn common_module_flags_follow_the_serialized_descriptor_order() {
+    let execution = common_execution(br#"{0,{12,{identity},0,1,0,1,1,1,0,1}}"#).unwrap();
+
+    assert!(execution.client());
+    assert!(execution.server());
+    assert!(!execution.external_connection());
+    assert!(execution.privileged());
+    assert!(execution.global());
+    assert!(execution.server_call());
 }
 
 #[test]
