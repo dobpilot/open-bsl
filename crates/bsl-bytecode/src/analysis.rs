@@ -580,6 +580,11 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             }
             e.ctl = Ctl::Trailing;
         }
+        Instr::RaiseDetailed { base } => {
+            read_range!(base, 5);
+            e.heap_read = true;
+            e.ctl = Ctl::Trailing;
+        }
         Instr::CallBuiltin {
             dst, base, count, ..
         } => {
@@ -759,7 +764,10 @@ fn build_cfg(chunk: &Chunk) -> Cfg {
     // Инструкция после передачи управления начинает новый блок.
     for (pc, instr) in chunk.instrs.iter().enumerate() {
         let ends = instr.jump_target().is_some()
-            || matches!(instr, Instr::Return { .. } | Instr::Raise { .. });
+            || matches!(
+                instr,
+                Instr::Return { .. } | Instr::Raise { .. } | Instr::RaiseDetailed { .. }
+            );
         if ends && pc + 1 < n {
             is_leader[pc + 1] = true;
         }
@@ -793,7 +801,10 @@ fn build_cfg(chunk: &Chunk) -> Cfg {
         // возбуждения исключения.
         let falls = !matches!(
             last,
-            Instr::Jump { .. } | Instr::Return { .. } | Instr::Raise { .. }
+            Instr::Jump { .. }
+                | Instr::Return { .. }
+                | Instr::Raise { .. }
+                | Instr::RaiseDetailed { .. }
         );
         if falls && hi < n {
             succs[b].push(block_of[hi]);

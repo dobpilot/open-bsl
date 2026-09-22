@@ -291,6 +291,8 @@ pub enum RStmtKind {
     /// `ВызватьИсключение <выражение>;` — `None` внутри `Исключение` значит
     /// повторно бросить пойманное исключение (голая форма).
     Raise(Option<RExpr>),
+    /// Скобочная форма: описание, категория, код, дополнение и причина.
+    RaiseDetailed(Vec<RExpr>),
     /// `Выполнить(<строка>);` — компилирует и исполняет строку как
     /// операторы в текущей области видимости верхнего уровня (см.
     /// `Instr::RunDynamic` в `bsl-vm` — там же обоснование ограничений:
@@ -442,6 +444,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
             expr_uses_dynamic(iter) || block_uses_dynamic(body)
         }
         RStmtKind::Return(e) | RStmtKind::Raise(e) => e.as_ref().is_some_and(expr_uses_dynamic),
+        RStmtKind::RaiseDetailed(arguments) => arguments.iter().any(expr_uses_dynamic),
         RStmtKind::Try { body, except_body } => {
             block_uses_dynamic(body) || block_uses_dynamic(except_body)
         }

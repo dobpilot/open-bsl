@@ -30,6 +30,8 @@ struct ErrorInfoObject {
     line_number: i64,
     source_line: BslString,
     code: BslString,
+    additional: BslValue,
+    category: Option<EnumValue>,
     /// Вложенная `ИнформацияОбОшибке` либо `Неопределено`.
     cause: BslValue,
 }
@@ -80,8 +82,20 @@ fn get_cause(receiver: &dyn ObjectProtocol, _ctx: &mut CallContext<'_>) -> RtRes
 }
 
 fn get_additional(receiver: &dyn ObjectProtocol, _ctx: &mut CallContext<'_>) -> RtResult<BslValue> {
-    receiver_of::<ErrorInfoObject>(receiver, "ДополнительнаяИнформация")?;
-    Ok(BslValue::Undefined)
+    let error = receiver_of::<ErrorInfoObject>(receiver, "ДополнительнаяИнформация")?;
+    Ok(error.additional.clone())
+}
+
+fn has_category(error: &ErrorInfoObject, category: EnumValue, include_causes: bool) -> bool {
+    if category == EnumValue::ErrorCategoryAllErrors || error.category == Some(category) {
+        return true;
+    }
+    include_causes
+        && error
+            .cause
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<ErrorInfoObject>())
+            .is_some_and(|cause| has_category(cause, category, true))
 }
 
 static ERROR_INFO_PROPERTIES: &[PropertyDescriptor] = &[
@@ -127,19 +141,27 @@ fn is_error_of_category(
     args: &[BslValue],
     _ctx: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    receiver_of::<ErrorInfoObject>(receiver, "ЯвляетсяОшибкойКатегории")?;
+    let error = receiver_of::<ErrorInfoObject>(receiver, "ЯвляетсяОшибкойКатегории")?;
     let Some(BslValue::Enum(category)) = args.first() else {
         return Err(RtError::TypeError {
             expected: "КатегорияОшибки",
             op: "ЯвляетсяОшибкойКатегории",
         });
     };
-    // «Для категории ВсеОшибки всегда возвращает Истина» — выписка
-    // синтакс-помощника. Категоризация конкретных ошибок open-bsl не
-    // выведена из замеров, поэтому остальные категории отвечают Ложь.
-    Ok(BslValue::Boolean(matches!(
-        category,
-        EnumValue::ErrorCategoryAllErrors
+    let include_causes = match args.get(1) {
+        None | Some(BslValue::Undefined) => true,
+        Some(BslValue::Boolean(value)) => *value,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: "ЯвляетсяОшибкойКатегории",
+            });
+        }
+    };
+    Ok(BslValue::Boolean(has_category(
+        error,
+        *category,
+        include_causes,
     )))
 }
 
@@ -166,6 +188,8 @@ pub fn new_error_info(detail: impl Into<BslString>) -> BslValue {
         line_number: 0,
         source_line: BslString::from_str(""),
         code: BslString::from_str(""),
+        additional: BslValue::Undefined,
+        category: None,
         cause: BslValue::Undefined,
     })
 }
@@ -186,8 +210,40 @@ pub fn new_error_info_detailed(
         line_number: line_number.map_or(0, i64::from),
         source_line: BslString::from_str(""),
         code: BslString::from_str(""),
+        additional: BslValue::Undefined,
+        category: None,
         cause,
     })
+}
+
+/// Создаёт снимок для скобочной формы `ВызватьИсключение`.
+#[must_use]
+pub fn new_raised_error_info(
+    description: BslString,
+    category: Option<EnumValue>,
+    code: BslString,
+    additional: BslString,
+    cause: BslValue,
+) -> BslValue {
+    BslValue::new_object(ErrorInfoObject {
+        detail: description.clone(),
+        description,
+        module_name: BslString::from_str(""),
+        line_number: 0,
+        source_line: BslString::from_str(""),
+        code,
+        additional: BslValue::Str(additional),
+        category,
+        cause,
+    })
+}
+
+/// Проверяет, является ли значение снимком `ИнформацияОбОшибке`.
+#[must_use]
+pub fn is_error_info(value: &BslValue) -> bool {
+    value
+        .object_ref()
+        .is_some_and(|object| object.downcast_ref::<ErrorInfoObject>().is_some())
 }
 
 /// Возвращает подробное представление сохранённой ошибки.

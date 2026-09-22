@@ -105,7 +105,9 @@ pub use env::{
     RandomHandle, RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
     TransferableTemporaryFile, UserMessageSink,
 };
-pub use error_info::{detailed_error_description, new_error_info};
+pub use error_info::{
+    detailed_error_description, is_error_info, new_error_info, new_raised_error_info,
+};
 pub use file::{
     FileMetadataQuery, FileMetadataUpdate, prepare_create_directory_noop,
     prepare_file_operation_path,

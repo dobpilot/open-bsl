@@ -221,6 +221,11 @@ fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
                 expr_reads(e, out);
             }
         }
+        RStmtKind::RaiseDetailed(arguments) => {
+            for expression in arguments {
+                expr_reads(expression, out);
+            }
+        }
         // Границы и коллекция вычисляются один раз до цикла, но приписать
         // их чтение заголовку безопасно: завышение живости стоит регистра,
         // занижение стоило бы неверного кода.
@@ -270,6 +275,7 @@ fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
         | RStmtKind::Return(_)
         | RStmtKind::Try { .. }
         | RStmtKind::Raise(_)
+        | RStmtKind::RaiseDetailed(_)
         // `Выполнить` пишет всё, но обеими формами фрагмента ведает
         // `has_dynamic` ниже — здесь он лишь не пишет ничего сам по себе.
         | RStmtKind::Execute(_) => Vec::new(),
@@ -424,6 +430,7 @@ fn stmt_exprs<'a>(s: &'a RStmt, out: &mut Vec<&'a RExpr>) {
             out.push(value);
         }
         RStmtKind::Return(e) | RStmtKind::Raise(e) => out.extend(e.iter()),
+        RStmtKind::RaiseDetailed(arguments) => out.extend(arguments),
         _ => {}
     }
 }
@@ -556,12 +563,15 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
         // лишь `Branch`, чтения из `Возврат` были невидимы, и значение,
         // использованное только в возврате, выглядело мёртвым. Так три
         // константы `getConst` получили общий регистр.
-        let term_expr = match &cfg.blocks[b].term {
-            crate::cfg::Terminator::Branch { cond, .. } => *cond,
-            crate::cfg::Terminator::Return(e) | crate::cfg::Terminator::Raise(e) => *e,
-            crate::cfg::Terminator::Goto(_) | crate::cfg::Terminator::Exit => None,
+        let term_exprs: Vec<&RExpr> = match &cfg.blocks[b].term {
+            crate::cfg::Terminator::Branch { cond, .. } => cond.iter().copied().collect(),
+            crate::cfg::Terminator::Return(e) | crate::cfg::Terminator::Raise(e) => {
+                e.iter().copied().collect()
+            }
+            crate::cfg::Terminator::RaiseDetailed(arguments) => arguments.iter().collect(),
+            crate::cfg::Terminator::Goto(_) | crate::cfg::Terminator::Exit => Vec::new(),
         };
-        if let Some(c) = term_expr {
+        for c in term_exprs {
             let mut read = Vec::new();
             expr_reads(c, &mut read);
             for slot in read {
@@ -926,6 +936,11 @@ pub fn constants_at_nodes(
             | crate::cfg::Terminator::Return(Some(c))
             | crate::cfg::Terminator::Raise(Some(c)) => {
                 out.insert(std::ptr::from_ref(*c) as usize, slots);
+            }
+            crate::cfg::Terminator::RaiseDetailed(arguments) => {
+                for expression in *arguments {
+                    out.insert(std::ptr::from_ref(expression) as usize, slots.clone());
+                }
             }
             _ => {}
         }

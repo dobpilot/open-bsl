@@ -3199,6 +3199,7 @@ fn step(
             | Instr::NewMap { .. }
             | Instr::NewTextWriter { .. }
             | Instr::Raise { .. }
+            | Instr::RaiseDetailed { .. }
             | Instr::CallObjectMethod { .. }
             | Instr::CallObjectProcedure { .. }
             | Instr::CallLinkedObjectMethod { .. }
@@ -3390,6 +3391,16 @@ fn step_cold(
                 None => current_exception.clone().unwrap_or(BslValue::Undefined),
             };
             return Err(RtError::Raised(value));
+        }
+        Instr::RaiseDetailed { base } => {
+            let mut arguments = Vec::with_capacity(5);
+            for offset in 0..5 {
+                let register = base.checked_add(offset).ok_or(RtError::InvalidBytecode(
+                    "регистры расширенного исключения выходят за кадр",
+                ))?;
+                arguments.push(reg_load(stack, frames[frame_idx].reg_index(register))?);
+            }
+            return Err(RtError::Raised(structured_error_info(&arguments)?));
         }
         Instr::GetObjectProp { dst, obj, name } => {
             let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
@@ -4450,6 +4461,11 @@ fn err_to_value(err: &RtError) -> BslValue {
 /// СОЗНАТЕЛЬНОЕ ОТКЛОНЕНИЕ: снимок содержит только безопасный текст ошибки.
 /// Этого достаточно для повторного броска и журналирования Connector.
 fn current_error_info(current_exception: Option<&BslValue>) -> Result<BslValue, RtError> {
+    if let Some(value) = current_exception
+        && bsl_rt::is_error_info(value)
+    {
+        return Ok(value.clone());
+    }
     let detail = match current_exception {
         Some(value) => bsl_format::format_value(value, None)?,
         // ИЗМЕРЕНО на 1С 8.3.27: вне обработчика функция возвращает объект,
@@ -4458,6 +4474,50 @@ fn current_error_info(current_exception: Option<&BslValue>) -> Result<BslValue, 
         None => "Unexpected error".to_string(),
     };
     Ok(bsl_rt::new_error_info(bsl_rt::BslString::from_str(&detail)))
+}
+
+fn structured_error_info(arguments: &[BslValue]) -> Result<BslValue, RtError> {
+    let description = match &arguments[0] {
+        BslValue::Undefined => bsl_rt::BslString::from_str(""),
+        value => bsl_rt::BslString::from_str(&bsl_format::format_value(value, None)?),
+    };
+    let category = match arguments[1] {
+        BslValue::Undefined => None,
+        BslValue::Enum(value) if value.kind() == bsl_rt::EnumKind::ErrorCategory => Some(value),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "КатегорияОшибки",
+                op: "ВызватьИсключение",
+            });
+        }
+    };
+    let string_argument = |value: &BslValue| match value {
+        BslValue::Undefined => Ok(bsl_rt::BslString::from_str("")),
+        BslValue::Str(value) => Ok(value.clone()),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ВызватьИсключение",
+        }),
+    };
+    let code = string_argument(&arguments[2])?;
+    let additional = string_argument(&arguments[3])?;
+    let cause = match &arguments[4] {
+        BslValue::Undefined => BslValue::Undefined,
+        value if bsl_rt::is_error_info(value) => value.clone(),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "ИнформацияОбОшибке",
+                op: "ВызватьИсключение",
+            });
+        }
+    };
+    Ok(bsl_rt::new_raised_error_info(
+        description,
+        category,
+        code,
+        additional,
+        cause,
+    ))
 }
 
 /// `Строка`/`Формат`/`Число`/`Message` перехватываются здесь, а не в

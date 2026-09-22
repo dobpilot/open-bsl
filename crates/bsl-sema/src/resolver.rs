@@ -995,6 +995,7 @@ impl LabelCollector {
                 | AStmtKind::Break
                 | AStmtKind::Continue
                 | AStmtKind::Raise(_)
+                | AStmtKind::RaiseDetailed(_)
                 | AStmtKind::VarDecl(_)
                 | AStmtKind::Execute(_) => {}
             }
@@ -1461,6 +1462,27 @@ impl<'a> Resolver<'a> {
                     None => None,
                 };
                 Ok(Some(RStmtKind::Raise(r)))
+            }
+            AStmtKind::RaiseDetailed(args) => {
+                if args.len() > 5 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "ВызватьИсключение".to_string(),
+                        expected: 5,
+                        found: args.len(),
+                    });
+                }
+                // НЕ ИЗМЕРЕНО(ERROR.EXTENDED_RAISE): справка задаёт пять
+                // необязательных позиций; платформенный прогон проверит
+                // их значения по умолчанию и наблюдаемый объект ошибки.
+                let mut resolved = Vec::with_capacity(5);
+                for argument in args {
+                    resolved.push(match argument {
+                        Some(expression) => self.resolve_expr(expression)?,
+                        None => RExpr::Undefined,
+                    });
+                }
+                resolved.resize(5, RExpr::Undefined);
+                Ok(Some(RStmtKind::RaiseDetailed(resolved)))
             }
             AStmtKind::VarDecl(vd) => {
                 // `Экспорт` осмыслен только на уровне модуля; здесь —

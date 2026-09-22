@@ -176,6 +176,8 @@ pub enum StmtKind {
         except_body: Vec<Stmt>,
     },
     Raise(Option<Expr>),
+    /// Скобочная форма `ВызватьИсключение` с пятью необязательными позициями.
+    RaiseDetailed(Vec<Option<Expr>>),
     VarDecl(VarDecl),
     /// `Выполнить(СтрокаКода)`.
     Execute(Expr),

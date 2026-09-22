@@ -55,6 +55,8 @@ pub enum Terminator<'a> {
     Return(Option<&'a RExpr>),
     /// `ВызватьИсключение` — выход по исключительному пути.
     Raise(Option<&'a RExpr>),
+    /// Скобочная форма `ВызватьИсключение` с пятью значениями.
+    RaiseDetailed(&'a [RExpr]),
     /// Блок, из которого управление никуда не идёт: конец тела.
     Exit,
 }
@@ -86,7 +88,10 @@ impl<'a> Cfg<'a> {
         let mut out = match &self.blocks[b].term {
             Terminator::Goto(t) => vec![*t],
             Terminator::Branch { then_b, else_b, .. } => vec![*then_b, *else_b],
-            Terminator::Return(_) | Terminator::Raise(_) | Terminator::Exit => Vec::new(),
+            Terminator::Return(_)
+            | Terminator::Raise(_)
+            | Terminator::RaiseDetailed(_)
+            | Terminator::Exit => Vec::new(),
         };
         out.extend(self.blocks[b].handlers.iter().copied());
         out
@@ -398,6 +403,10 @@ impl<'a> Builder<'a> {
             }
             RStmtKind::Raise(e) => {
                 self.blocks[cur].term = Terminator::Raise(e.as_ref());
+                self.new_block()
+            }
+            RStmtKind::RaiseDetailed(arguments) => {
+                self.blocks[cur].term = Terminator::RaiseDetailed(arguments);
                 self.new_block()
             }
             _ => {

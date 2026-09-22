@@ -327,6 +327,11 @@ pub enum Instr {
     Raise {
         src: Option<u8>,
     },
+    /// Скобочная форма `ВызватьИсключение`: пять значений подряд, начиная
+    /// с `base` (описание, категория, код, дополнение, причина).
+    RaiseDetailed {
+        base: u8,
+    },
 
     /// Встроенная функция (`Sqrt`, `Pow`, `Message`, ...) — всегда по
     /// значению, аргументы в регистрах `base..base+count`.
@@ -551,6 +556,7 @@ impl Instr {
             | Instr::NewTextWriter { .. }
             | Instr::CollectionLen { .. }
             | Instr::Raise { .. }
+            | Instr::RaiseDetailed { .. }
             | Instr::CallBuiltin { .. }
             | Instr::CallComponent { .. }
             | Instr::CallMethod { .. }
@@ -666,6 +672,7 @@ impl Instr {
             | Instr::NewMap { .. }
             | Instr::CallBuiltin { .. }
             | Instr::CallComponent { .. }
+            | Instr::RaiseDetailed { .. }
             // `src` здесь — номер параметра, а не регистр со значением:
             // пропуск аргумента лежит в метаданных кадра, и переименование
             // сломало бы саму проверку.

@@ -261,6 +261,11 @@ impl Collector<'_> {
                     self.walk_expr(expr);
                 }
             }
+            StmtKind::RaiseDetailed(arguments) => {
+                for argument in arguments.iter().flatten() {
+                    self.walk_expr(argument);
+                }
+            }
             StmtKind::Execute(expr) => {
                 self.has_dynamic = true;
                 self.walk_expr(expr);

@@ -35,7 +35,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 36;
+pub const FORMAT_VERSION: u32 = 37;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -90,7 +90,7 @@ opcodes! {
     GetImportedVar, SetImportedVar,
     GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
-    CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod,
+    CollectionLen, Raise, RaiseDetailed, CallBuiltin, CallComponent, CallMethod,
     RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp, CallObjectProcedure,
     CallLinkedObjectMethod, CallLinkedObjectProcedure,
 }
@@ -750,6 +750,7 @@ fn write_instr(instr: &Instr) -> String {
             Some(src) => format!("{op} src={src}"),
             None => op.to_string(),
         },
+        Instr::RaiseDetailed { base } => format!("{op} base={base}"),
         Instr::CallBuiltin {
             dst,
             builtin,
@@ -2120,6 +2121,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
                 Err(_) => None,
             },
         },
+        "RaiseDetailed" => Instr::RaiseDetailed { base: base(&f)? },
         "CallBuiltin" => {
             let name = field(&f, no, "builtin")?;
             Instr::CallBuiltin {

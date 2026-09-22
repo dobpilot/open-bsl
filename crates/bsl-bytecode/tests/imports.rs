@@ -39,7 +39,7 @@ fn declared_imports_round_trip_without_static_links() {
         None,
     )
     .unwrap();
-    assert!(text.starts_with("bslc 36\n"));
+    assert!(text.starts_with("bslc 37\n"));
     assert!(text.contains(".imports 2"));
     let bsl_bytecode::BytecodeImage::Configuration {
         catalog: parsed, ..
@@ -54,7 +54,7 @@ fn declared_imports_round_trip_without_static_links() {
     assert!(parsed.modules[0].program.imports[0].global);
     assert!(parsed.modules[0].program.links.is_empty());
     assert!(matches!(
-        bsl_bytecode::parse_image(&text.replacen("bslc 36", "bslc 35", 1)),
+        bsl_bytecode::parse_image(&text.replacen("bslc 37", "bslc 36", 1)),
         Err(bsl_bytecode::TextError::BadHeader(_))
     ));
     for (from, to) in [

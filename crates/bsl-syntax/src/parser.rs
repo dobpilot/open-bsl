@@ -406,12 +406,16 @@ impl<'src> Parser<'src> {
             self.expect(&TokenKind::Tilde)?;
             Ok(StmtKind::Goto(self.expect_label_name()?))
         } else if self.eat_keyword(Keyword::Raise) {
-            let value = if self.at_stmt_boundary() {
-                None
+            if self.eat(&TokenKind::LParen) {
+                Ok(StmtKind::RaiseDetailed(self.parse_call_args()?))
             } else {
-                Some(self.parse_expr()?)
-            };
-            Ok(StmtKind::Raise(value))
+                let value = if self.at_stmt_boundary() {
+                    None
+                } else {
+                    Some(self.parse_expr()?)
+                };
+                Ok(StmtKind::Raise(value))
+            }
         } else if self.at_keyword(Keyword::Var) {
             Ok(StmtKind::VarDecl(self.parse_var_decl()?))
         } else if self.eat_keyword(Keyword::Execute) {
@@ -1201,6 +1205,24 @@ mod tests {
                         Some(Expr::Number("3".into())),
                     ],
                 }),
+                line: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn parenthesized_raise_preserves_omitted_positions() {
+        let prog = parse_ok("ВызватьИсключение(Описание, Категория,,, Причина);");
+        assert_eq!(
+            prog.items[0],
+            Item::Stmt(Stmt {
+                kind: StmtKind::RaiseDetailed(vec![
+                    Some(Expr::Ident("Описание".into())),
+                    Some(Expr::Ident("Категория".into())),
+                    None,
+                    None,
+                    Some(Expr::Ident("Причина".into())),
+                ]),
                 line: 1,
             })
         );

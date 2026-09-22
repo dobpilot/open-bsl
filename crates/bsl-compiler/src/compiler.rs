@@ -2372,6 +2372,16 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::Raise { src: None });
                 }
             },
+            RStmtKind::RaiseDetailed(arguments) => {
+                debug_assert_eq!(arguments.len(), 5);
+                let base = self.next_reg;
+                for argument in arguments {
+                    let register = self.alloc_temp()?;
+                    self.compile_expr(argument, register)?;
+                }
+                self.free_temp(5);
+                self.emit(Instr::RaiseDetailed { base });
+            }
             RStmtKind::Execute(e) => {
                 let s = self.alloc_temp()?;
                 self.compile_expr(e, s)?;
