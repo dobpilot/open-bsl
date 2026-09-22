@@ -667,14 +667,20 @@ impl<'src> Parser<'src> {
         // Циклом по той же причине, что и `parse_not`: самовызов на
         // цепочке `-----x` обходил бы счётчик вложенности.
         let await_expr = self.eat_keyword(Keyword::Await);
-        let mut negs = 0usize;
-        while self.eat(&TokenKind::Minus) {
-            negs += 1;
+        let mut signs = Vec::new();
+        loop {
+            if self.eat(&TokenKind::Plus) {
+                signs.push(UnaryOp::Pos);
+            } else if self.eat(&TokenKind::Minus) {
+                signs.push(UnaryOp::Neg);
+            } else {
+                break;
+            }
         }
         let mut expr = self.parse_postfix()?;
-        for _ in 0..negs {
+        for op in signs.into_iter().rev() {
             expr = Expr::Unary {
-                op: UnaryOp::Neg,
+                op,
                 expr: Box::new(expr),
             };
         }
@@ -966,6 +972,32 @@ mod tests {
                     op: UnaryOp::Neg,
                     expr: Box::new(Expr::Number("1".into())),
                 }),
+            }
+        );
+    }
+
+    #[test]
+    fn unary_plus_has_the_same_precedence_as_unary_minus() {
+        let prog = parse_ok("А = +-1 * 2;");
+        let Item::Stmt(Stmt {
+            kind: StmtKind::Assign { value, .. },
+            ..
+        }) = &prog.items[0]
+        else {
+            panic!("ожидалось присваивание");
+        };
+        assert_eq!(
+            *value,
+            Expr::Binary {
+                op: BinaryOp::Mul,
+                lhs: Box::new(Expr::Unary {
+                    op: UnaryOp::Pos,
+                    expr: Box::new(Expr::Unary {
+                        op: UnaryOp::Neg,
+                        expr: Box::new(Expr::Number("1".into())),
+                    }),
+                }),
+                rhs: Box::new(Expr::Number("2".into())),
             }
         );
     }

@@ -819,6 +819,13 @@ fn eval(e: &bsl_sema::RExpr, slots: &[Const]) -> Const {
             Some(v) => back(v.neg()),
             None => Const::Top,
         },
+        RExpr::Unary {
+            op: bsl_syntax::UnaryOp::Pos,
+            expr,
+        } => match num(&eval(expr, slots)) {
+            Some(v) => back(v.neg().and_then(|value| value.neg())),
+            None => Const::Top,
+        },
         RExpr::Binary { op, lhs, rhs } => {
             let (Some(a), Some(b)) = (num(&eval(lhs, slots)), num(&eval(rhs, slots))) else {
                 return Const::Top;
@@ -1115,6 +1122,10 @@ fn tier_of(e: &RExpr, slots: &[Tier]) -> Tier {
             Tier::Number => Tier::Number,
             other => other,
         },
+        RExpr::Unary {
+            op: bsl_syntax::UnaryOp::Pos,
+            expr,
+        } => tier_of(expr, slots),
         RExpr::Binary { op, lhs, rhs } => {
             let (a, b) = (tier_of(lhs, slots), tier_of(rhs, slots));
             match (&a, &b) {

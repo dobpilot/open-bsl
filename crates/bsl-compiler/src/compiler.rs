@@ -1078,6 +1078,10 @@ impl<'a> Compiler<'a> {
                 op: UnaryOp::Neg,
                 expr,
             } => self.fold_const(expr)?.neg().ok(),
+            RExpr::Unary {
+                op: UnaryOp::Pos,
+                expr,
+            } => self.fold_const(expr)?.neg().ok()?.neg().ok(),
             RExpr::Binary { op, lhs, rhs } => {
                 let a = self.fold_const(lhs)?;
                 let b = self.fold_const(rhs)?;
@@ -1315,6 +1319,12 @@ impl<'a> Compiler<'a> {
                 }
                 self.compile_expr(expr, dst)?;
                 match op {
+                    UnaryOp::Pos => {
+                        // Первая операция проверяет число, вторая точно
+                        // восстанавливает его без отдельного опкода.
+                        self.emit(Instr::Neg { dst, src: dst });
+                        self.emit(Instr::Neg { dst, src: dst });
+                    }
                     UnaryOp::Neg => {
                         self.emit(Instr::Neg { dst, src: dst });
                     }
