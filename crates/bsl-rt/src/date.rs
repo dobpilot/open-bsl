@@ -405,12 +405,13 @@ impl BslDate {
         }
     }
 
-    /// Разбор литерала `'ГГГГММДД'` / `'ГГГГММДДЧЧММСС'` (лексер уже снял
-    /// кавычки и проверил, что внутри только цифры и их 8 или 14 — см.
-    /// `bsl-syntax::lexer`). Та же функция обслуживает и однострочную форму
-    /// `Дата("20240115103000")`, где проверять длину приходится самим.
+    /// Разбор литерала `'ГГГГММДД'`, `'ГГГГММДДЧЧММ'` или
+    /// `'ГГГГММДДЧЧММСС'` (лексер уже снял кавычки и проверил, что внутри
+    /// только цифры и их 8, 12 или 14 — см. `bsl-syntax::lexer`). Та же
+    /// функция обслуживает и однострочную форму `Дата("20240115103000")`,
+    /// где проверять длину приходится самим.
     pub fn parse_digits(digits: &str) -> Option<Self> {
-        if digits.len() != 8 && digits.len() != 14 {
+        if digits.len() != 8 && digits.len() != 12 && digits.len() != 14 {
             return None;
         }
         if !digits.bytes().all(|b| b.is_ascii_digit()) {
@@ -426,8 +427,11 @@ impl BslDate {
         let year = part(0, 4)? as i64;
         let month = part(4, 2)?;
         let day = part(6, 2)?;
-        let (hour, minute, second) = if digits.len() == 14 {
-            (part(8, 2)?, part(10, 2)?, part(12, 2)?)
+        let (hour, minute, second) = if digits.len() >= 12 {
+            // Измерено на серверной 1С 8.3.27: у двенадцатизначного
+            // литерала сохраняются часы и минуты, а секунды равны нулю.
+            let second = if digits.len() == 14 { part(12, 2)? } else { 0 };
+            (part(8, 2)?, part(10, 2)?, second)
         } else {
             (0, 0, 0)
         };
@@ -984,13 +988,18 @@ mod tests {
     }
 
     #[test]
-    fn literal_digits_parse_in_both_lengths_and_reject_garbage() {
+    fn literal_digits_parse_in_supported_lengths_and_reject_garbage() {
         assert_eq!(BslDate::parse_digits("20240115").unwrap(), d(2024, 1, 15));
+        assert_eq!(
+            BslDate::parse_digits("202401151030").unwrap(),
+            BslDate::from_civil(2024, 1, 15, 10, 30, 0).unwrap()
+        );
         assert_eq!(
             BslDate::parse_digits("20240115103000").unwrap(),
             BslDate::from_civil(2024, 1, 15, 10, 30, 0).unwrap()
         );
         assert_eq!(BslDate::parse_digits("2024011"), None);
+        assert_eq!(BslDate::parse_digits("2024011510"), None);
         assert_eq!(BslDate::parse_digits("20240230"), None);
         assert_eq!(
             BslDate::parse_digits("00000000000000"),

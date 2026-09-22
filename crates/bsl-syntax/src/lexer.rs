@@ -9,7 +9,7 @@ pub enum LexError {
     UnterminatedDate(u32),
     /// Многострочный литерал: следующая строка не начинается с `|`.
     ExpectedContinuationBar(u32),
-    /// Внутри `'...'` встретился не-цифровой символ, либо длина не 8/14.
+    /// После удаления разделителей внутри `'...'` осталось не 8, 12 или 14 цифр.
     BadDateLiteral(u32),
     /// Ошибка в инструкции препроцессора: постоянный текст причины и
     /// смещение `#`.
@@ -538,7 +538,8 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    /// `'YYYYMMDD'` или `'YYYYMMDDhhmmss'` — только цифры, 8 либо 14 разрядов.
+    /// `'YYYYMMDD'`, `'YYYYMMDDhhmm'` или `'YYYYMMDDhhmmss'`: нецифровые
+    /// разделители игнорируются, цифр остаётся 8, 12 либо 14.
     fn lex_date(&mut self, start: usize) -> LexResult<Token> {
         self.bump(); // открывающая '
         let mut digits = String::new();
@@ -553,10 +554,14 @@ impl<'src> Lexer<'src> {
                     self.bump();
                     digits.push(c);
                 }
-                Some(_) => return Err(LexError::BadDateLiteral(start as u32)),
+                Some(_) => {
+                    // Измерено на серверной 1С 8.3.27: литерал даты
+                    // игнорирует любые нецифровые разделители.
+                    self.bump();
+                }
             }
         }
-        if digits.len() != 8 && digits.len() != 14 {
+        if digits.len() != 8 && digits.len() != 12 && digits.len() != 14 {
             return Err(LexError::BadDateLiteral(start as u32));
         }
         Ok(Token {
@@ -667,10 +672,22 @@ mod tests {
     }
 
     #[test]
-    fn date_literal_requires_8_or_14_digits() {
+    fn date_literal_requires_8_12_or_14_digits() {
         assert_eq!(
             lex_all("'20200101'").unwrap(),
             vec![TokenKind::Date("20200101".to_string()), TokenKind::Eof]
+        );
+        assert_eq!(
+            lex_all("'202001011230'").unwrap(),
+            vec![TokenKind::Date("202001011230".to_string()), TokenKind::Eof]
+        );
+        assert_eq!(
+            lex_all("'2024-01-15'").unwrap(),
+            vec![TokenKind::Date("20240115".to_string()), TokenKind::Eof]
+        );
+        assert_eq!(
+            lex_all("'2024аб01!!15'").unwrap(),
+            vec![TokenKind::Date("20240115".to_string()), TokenKind::Eof]
         );
         assert_eq!(
             lex_all("'20200101120000'").unwrap(),
@@ -681,6 +698,14 @@ mod tests {
         );
         assert!(matches!(
             lex_all("'2020'").unwrap_err(),
+            LexError::BadDateLiteral(_)
+        ));
+        assert!(matches!(
+            lex_all("'2020010112'").unwrap_err(),
+            LexError::BadDateLiteral(_)
+        ));
+        assert!(matches!(
+            lex_all("'2020--01--01--12'").unwrap_err(),
             LexError::BadDateLiteral(_)
         ));
     }
