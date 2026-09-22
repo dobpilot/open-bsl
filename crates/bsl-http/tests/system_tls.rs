@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Once, mpsc};
 use std::time::Duration;
 
 use bsl_http::SystemHttpClientFactory;
@@ -64,6 +64,17 @@ fn decode(text: &str) -> Vec<u8> {
     bsl_rt::encoding::decode_base64(text).expect("test certificate is valid Base64")
 }
 
+fn install_crypto_provider() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        // В полном workspace одновременно включены `aws-lc-rs` и `ring`:
+        // тест выбирает тот же провайдер, что и `reqwest`.
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .expect("test crypto provider is installed once");
+    });
+}
+
 fn tls_server_config(require_client_certificate: bool) -> Arc<ServerConfig> {
     let builder = ServerConfig::builder();
     let builder = if require_client_certificate {
@@ -93,6 +104,7 @@ fn exercise(
     identity: Option<ClientIdentity>,
     require_client_certificate: bool,
 ) -> Result<HttpWireResponse, NetworkError> {
+    install_crypto_provider();
     let listener = TcpListener::bind("0.0.0.0:0").expect("local TLS server");
     let port = listener.local_addr().unwrap().port();
     let config = tls_server_config(require_client_certificate);
