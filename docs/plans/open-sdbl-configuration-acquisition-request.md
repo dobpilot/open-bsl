@@ -4,38 +4,44 @@
 
 ## Причина
 
-`bsl-config-db` должен получить исходники модулей и `MetadataSnapshot` из
-одного согласованного чтения информационной базы. Сейчас
+`bsl-config-db` должен получить исходники модулей и `MetadataSnapshot` одной
+операцией чтения информационной базы. Сейчас
 `open_sdbl_db::acquire_metadata` потоково читает и сразу отбрасывает целые
 ресурсы `Config`, а `DatabaseSession::metadata` возвращает только разрешённые
 метаданные и отчёт. Повторное чтение тех же таблиц в `bsl-config-db` нарушило бы
-границу адаптера БД и могло бы соединить код и метаданные разных состояний базы.
+границу адаптера БД и без необходимости увеличило бы окно, в котором база может
+измениться между чтениями.
+
+Одна операция не означает атомарный снимок: реализованный адаптер сохраняет
+`READ COMMITTED`, поэтому отдельные запросы внутри неё могут увидеть разные
+зафиксированные состояния. Если хосту нужно обнаружить изменение конфигурации
+во время чтения, он сравнивает `CONFIG_FINGERPRINT` до и после операции.
 
 ## Требуемый публичный контракт
 
 В `open-sdbl-db` нужна одна операция уровня `DatabaseSession`, условно:
 
 ```rust
-pub struct ConfigurationAcquisition {
+pub struct AcquiredConfiguration {
     pub metadata: MetadataSnapshot,
     pub report: ResolutionReport,
     pub layout: StorageLayout,
     pub config_resources: Vec<ConfigResource>,
-    pub extension_resources: Vec<ConfigResource>,
+    pub extensions: Vec<AcquiredExtension>,
 }
 
 impl DatabaseSession {
     pub async fn configuration(
         &mut self,
         progress: &mut dyn MetadataProgress,
-    ) -> Result<ConfigurationAcquisition, DbError>;
+    ) -> Result<AcquiredConfiguration, DbError>;
 }
 ```
 
 Имена могут отличаться. Существенны следующие свойства контракта:
 
-- `metadata`, `report`, базовые ресурсы и ресурсы расширений читаются внутри
-  одной уже существующей ограниченной read-only acquisition;
+- `metadata`, `report`, базовые ресурсы и ресурсы расширений читаются одной
+  ограниченной read-only acquisition на уровне `READ COMMITTED`;
 - применяются существующие определение `StorageLayout`, сборка `PartNo`,
   лимиты распаковки, обработка legacy-layout и provider-specific запросы;
 - `config_resources` содержит каждый ресурс таблицы `Config`, собранный из
@@ -132,16 +138,23 @@ metadata resolution и сохраняет их в результате. Запу
 pub struct AcquiredExtension {
     pub identity: String,
     pub name: String,
-    pub active: bool,
-    pub order: usize,
+    pub active: Option<bool>,
+    pub order: u32,
     pub resources: Vec<ConfigResource>,
 }
 ```
 
-Точные Rust-типы идентичности и порядка могут быть другими, если в `open-sdbl`
-уже есть более узкие типы. Существенно, чтобы два расширения с одинаковым
-именем ресурса не сливались и чтобы `bsl-config-db` мог применить только
-активные расширения в платформенном порядке.
+`active == None` означает, что адаптер не распознал форму записи активности.
+Загрузчик обязан завершиться ошибкой с именем такого расширения: молча считать
+его включённым или выключенным нельзя. Два расширения с одинаковым именем
+ресурса не сливаются, а `order` задаёт платформенный порядок применения.
+
+Запрошенный контракт реализован в ветке `open-sdbl-v8` на коммите `fc67dba`.
+Ресурсы одного хранилища ограничены `config_resource_limit` и
+`config_retained_byte_limit`; те же потолки независимо применяются к `Config`
+и `ConfigCAS`, которые во время приобретения удерживаются одновременно.
+Зависимость в `open-bsl` можно фиксировать после публикации этого коммита в
+remote или выпуска версии, содержащей его.
 
 В модели пользователя необходимые признаки уже присутствуют:
 `InfoBaseUser::standard_authentication` и `InfoBaseUser::os_name`. Для текущего
