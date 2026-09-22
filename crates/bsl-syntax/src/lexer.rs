@@ -109,6 +109,21 @@ impl<'src> Lexer<'src> {
         Some(c)
     }
 
+    /// Поглощает один физический перевод строки в формах, измеренных для
+    /// исходников BSL: LF либо CRLF.
+    fn consume_line_break(&mut self) -> bool {
+        if self.peek() == Some('\r') && self.peek2() == Some('\n') {
+            self.bump();
+            self.bump();
+            true
+        } else if self.peek() == Some('\n') {
+            self.bump();
+            true
+        } else {
+            false
+        }
+    }
+
     fn tok(&self, kind: TokenKind, start: usize) -> Token {
         Token {
             kind,
@@ -520,21 +535,27 @@ impl<'src> Lexer<'src> {
                         },
                     });
                 }
-                Some('\n') => {
-                    self.bump();
+                Some('\n') | Some('\r')
+                    if self.peek() == Some('\n') || self.peek2() == Some('\n') =>
+                {
+                    self.consume_line_break();
                     loop {
                         while matches!(self.peek(), Some(' ') | Some('\t')) {
                             self.bump();
                         }
+                        if self.consume_line_break() {
+                            continue;
+                        }
                         if self.peek() != Some('/') || self.peek2() != Some('/') {
                             break;
                         }
-                        while !matches!(self.peek(), None | Some('\n')) {
+                        while self.peek().is_some()
+                            && self.peek() != Some('\n')
+                            && !(self.peek() == Some('\r') && self.peek2() == Some('\n'))
+                        {
                             self.bump();
                         }
-                        if self.peek() == Some('\n') {
-                            self.bump();
-                        }
+                        self.consume_line_break();
                     }
                     if self.peek() != Some('|') {
                         return Err(LexError::ExpectedContinuationBar(self.pos as u32));
@@ -697,6 +718,20 @@ mod tests {
 
         let err = lex_all("\"Строка1\n// комментарий\nСтрока2\"").unwrap_err();
         assert!(matches!(err, LexError::ExpectedContinuationBar(_)));
+    }
+
+    #[test]
+    fn multiline_string_skips_empty_lines_and_normalizes_crlf() {
+        for source in ["\"Строка1\n\n|Строка2\"", "\"Строка1\r\n\r\n\t|Строка2\""]
+        {
+            assert_eq!(
+                lex_all(source).unwrap(),
+                vec![
+                    TokenKind::String("Строка1\nСтрока2".to_string()),
+                    TokenKind::Eof
+                ]
+            );
+        }
     }
 
     #[test]
