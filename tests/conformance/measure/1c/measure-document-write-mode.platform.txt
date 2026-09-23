@@ -1,0 +1,7 @@
+file.begin	document-write-mode-1
+DOCUMENT.WRITE.MODE.WRITE	Record
+DOCUMENT.WRITE.MODE.POSTING	Posting
+DOCUMENT.WRITE.MODE.UNDO.POSTING	Cancel posting
+DOCUMENT.WRITE.MODE.TYPE	DocumentWriteMode
+DOCUMENT.WRITE.MODE.ENGLISH	OK
+file.end	document-write-mode-1

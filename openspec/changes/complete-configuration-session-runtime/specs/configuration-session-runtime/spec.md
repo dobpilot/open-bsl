@@ -671,3 +671,14 @@ The base runtime SHALL provide the complete measured `РежимПроведен
 #### Scenario: Use the English aliases
 - **WHEN** configuration code reads the corresponding English enum and member names
 - **THEN** it receives the same values as through the Russian names
+
+### Requirement: Configuration startup can name document write modes
+The base runtime SHALL provide the complete measured `РежимЗаписиДокумента` / `DocumentWriteMode` enumeration. It SHALL contain the write, posting, and undo-posting members with their measured Russian and English names and presentations. Providing these values SHALL NOT imply support for document persistence or posting.
+
+#### Scenario: Use every document write mode
+- **WHEN** configuration code reads the write, posting, or undo-posting member
+- **THEN** it receives a value of the DocumentWriteMode type with the measured presentation
+
+#### Scenario: Use the English write-mode aliases
+- **WHEN** configuration code reads the corresponding English enum and member names
+- **THEN** it receives the same values as through the Russian names
