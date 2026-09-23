@@ -51,6 +51,7 @@
 - [x] 5aw. Project acquired Document descriptors through `Документы` / `Documents` and `Метаданные.Документы` using the existing manager path.
 - [x] 5ax. Project acquired DocumentJournal descriptors through `ЖурналыДокументов` / `DocumentJournals` and the corresponding metadata collection using the existing manager path.
 - [x] 5ay. Project acquired Report descriptors through `Отчеты` / `Reports` and the corresponding metadata collection using the existing manager path.
+- [ ] 5az. Project acquired DataProcessor descriptors through `Обработки` / `DataProcessors` and the corresponding metadata collection using the existing manager path.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.

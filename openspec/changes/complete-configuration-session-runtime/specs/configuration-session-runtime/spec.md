@@ -802,3 +802,18 @@ The ORM component SHALL expose `Отчеты` / `Reports` as a library global ba
 #### Scenario: Read report metadata
 - **WHEN** configuration code reads the same report through `Метаданные.Отчеты` or `Metadata.Reports`
 - **THEN** it receives the matching immutable metadata descriptor
+
+### Requirement: Acquired data processors use the existing manager path
+The ORM component SHALL expose `Обработки` / `DataProcessors` as a library global backed by acquired `MetadataKind::DataProcessor` descriptors. A folded property name matching a DataProcessor SHALL return its existing manager value and SHALL dispatch through the same platform-first, exported-manager-module-second path as other configuration managers. `Метаданные.Обработки` / `Metadata.DataProcessors` SHALL expose the same acquired descriptors through the existing metadata-collection behavior. Unknown names and members SHALL fail explicitly. This projection SHALL NOT imply data-processor object creation or form opening.
+
+#### Scenario: Resolve a data-processor manager
+- **WHEN** configuration code reads an acquired data processor through either manager-root language name
+- **THEN** it receives the manager linked to that DataProcessor descriptor
+
+#### Scenario: Call an exported data-processor manager method
+- **WHEN** configuration code calls an exported method not owned by the platform surface
+- **THEN** the existing manager-module instance handles the call with its manager as `ЭтотОбъект`
+
+#### Scenario: Read data-processor metadata
+- **WHEN** configuration code reads the same data processor through `Метаданные.Обработки` or `Metadata.DataProcessors`
+- **THEN** it receives the matching immutable metadata descriptor
