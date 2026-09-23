@@ -552,6 +552,7 @@ fn catalog() -> Arc<MetadataCatalog> {
                     "Пользовательские",
                     MetadataKind::SettingsStorage,
                 ),
+                MetadataObject::new("sequence-documents", "Документы", MetadataKind::Sequence),
                 MetadataObject::new("constant-answer", "Ответ", MetadataKind::Constant)
                     .with_manager_module("ОтветМенеджер"),
                 MetadataObject::new(
@@ -1855,6 +1856,25 @@ fn remaining_acquired_manager_roots_and_metadata_collections_are_projected() {
                     Возврат Ложь;
                 КонецЕсли;
                 Возврат Истина;
+                "#,
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+}
+
+#[test]
+fn sequence_root_and_metadata_collection_are_projected() {
+    let engine = engine();
+    let mut state = state(&engine);
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Возврат Последовательности.Документы.Имя = "Документы"
+                    И Sequences.дОкУмЕнТы.Name = "Документы"
+                    И Метаданные.Последовательности.Документы.Имя = "Документы"
+                    И Metadata.Sequences.дОкУмЕнТы.Name = "Документы";
                 "#,
             )
             .unwrap(),

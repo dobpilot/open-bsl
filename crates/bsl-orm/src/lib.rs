@@ -445,6 +445,8 @@ pub enum MetadataKind {
     Task,
     /// Хранилище настроек.
     SettingsStorage,
+    /// Последовательность.
+    Sequence,
     /// Функциональная опция.
     FunctionalOption,
     /// Элемент стиля.
@@ -3810,6 +3812,7 @@ fn collection_kind(name: &str) -> Option<MetadataKind> {
             "SettingsStorages",
             MetadataKind::SettingsStorage,
         ),
+        ("Последовательности", "Sequences", MetadataKind::Sequence),
         ("Константы", "Constants", MetadataKind::Constant),
         ("ПланыОбмена", "ExchangePlans", MetadataKind::ExchangePlan),
         (
@@ -3931,6 +3934,10 @@ fn tasks(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
 
 fn settings_storages(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     managers(ctx, MetadataKind::SettingsStorage)
+}
+
+fn sequences(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::Sequence)
 }
 
 fn constants(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -4537,6 +4544,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: settings_storages,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(41),
+        names: &["ПолучитьПоследовательностиORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: sequences,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
@@ -4599,6 +4613,10 @@ const GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {
         names: &["ХранилищаНастроек", "SettingsStorages"],
         function: FunctionCode::new(40),
+    },
+    GlobalDescriptor {
+        names: &["Последовательности", "Sequences"],
+        function: FunctionCode::new(41),
     },
     GlobalDescriptor {
         names: &["РегистрыСведений", "InformationRegisters"],

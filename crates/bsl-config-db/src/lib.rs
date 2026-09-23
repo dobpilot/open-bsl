@@ -534,6 +534,7 @@ fn metadata_kind(class: &str) -> Option<MetadataKind> {
         "fcd3404e-1523-48ce-9bc0-ecdb822684a1" => Some(MetadataKind::BusinessProcess),
         "3e63355c-1378-4953-be9b-1deb5fb6bec5" => Some(MetadataKind::Task),
         "46b4cd97-fd13-4eaa-aba2-3bddd7699218" => Some(MetadataKind::SettingsStorage),
+        "bc587f20-35d2-11d6-a3c7-0050bae0a776" => Some(MetadataKind::Sequence),
         FUNCTIONAL_OPTION => Some(MetadataKind::FunctionalOption),
         STYLE_ITEM => Some(MetadataKind::StyleItem),
         ROLE => Some(MetadataKind::Role),

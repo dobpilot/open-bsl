@@ -32,6 +32,14 @@ fn language_metadata_class_is_projected() {
     );
 }
 
+#[test]
+fn sequence_metadata_class_is_projected() {
+    assert_eq!(
+        metadata_kind("bc587f20-35d2-11d6-a3c7-0050bae0a776"),
+        Some(bsl_orm::MetadataKind::Sequence)
+    );
+}
+
 fn resource(name: &str, bytes: &[u8]) -> ConfigResource {
     ConfigResource {
         file_name: name.into(),
