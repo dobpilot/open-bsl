@@ -368,6 +368,8 @@ pub enum ClientSettingsStorage {
     Common,
     /// Системное хранилище настроек платформы.
     System,
+    /// Стандартное хранилище настроек данных форм.
+    FormData,
 }
 
 /// Запрос чтения значения из стандартного хранилища настроек.
@@ -2172,6 +2174,12 @@ fn system_settings_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Val
     }))
 }
 
+fn form_data_settings_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(StandardSettingsStorageObject {
+        storage: ClientSettingsStorage::FormData,
+    }))
+}
+
 fn infobase_connection_number_property(
     receiver: &dyn ObjectProtocol,
     _: &mut CallContext<'_>,
@@ -3126,6 +3134,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: system_settings_storage,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(19),
+        names: &["ПолучитьХранилищеНастроекДанныхФорм"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: form_data_settings_storage,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
@@ -3140,6 +3155,10 @@ const GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {
         names: &["ХранилищеСистемныхНастроек", "SystemSettingsStorage"],
         function: FunctionCode::new(13),
+    },
+    GlobalDescriptor {
+        names: &["ХранилищеНастроекДанныхФорм", "FormDataSettingsStorage"],
+        function: FunctionCode::new(19),
     },
     GlobalDescriptor {
         names: &["ОбработкаОшибок", "ErrorProcessing"],

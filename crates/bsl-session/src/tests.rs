@@ -1925,6 +1925,10 @@ fn client_settings_use_the_current_principal_and_distinguish_stores() {
             Процедура СохранитьНастройку() Экспорт
                 ХранилищеСистемныхНастроек.Сохранить("object", , 7);
             КонецПроцедуры
+
+            Функция ЗагрузитьНастройкиФормы() Экспорт
+                Возврат formdatasettingsstorage.LOAD("present");
+            КонецФункции
             "#,
         )
         .unwrap();
@@ -1951,9 +1955,16 @@ fn client_settings_use_the_current_principal_and_distinguish_stores() {
         Value::number_from_i64(41)
     );
     session.call(&probe, "СохранитьНастройку", vec![]).unwrap();
+    assert_eq!(
+        session
+            .call(&probe, "ЗагрузитьНастройкиФормы", vec![])
+            .unwrap()
+            .0,
+        Value::number_from_i64(41)
+    );
 
     let loads = adapter.loads.borrow();
-    assert_eq!(loads.len(), 3);
+    assert_eq!(loads.len(), 4);
     assert_eq!(loads[0].principal, "Тест");
     assert_eq!(loads[0].storage, ClientSettingsStorage::Common);
     assert_eq!(loads[0].object_key, "present");
@@ -1961,6 +1972,8 @@ fn client_settings_use_the_current_principal_and_distinguish_stores() {
     assert_eq!(loads[0].user_name, None);
     assert_eq!(loads[2].settings_key, "key");
     assert_eq!(loads[2].user_name.as_deref(), Some("Другой"));
+    assert_eq!(loads[3].principal, "Тест");
+    assert_eq!(loads[3].storage, ClientSettingsStorage::FormData);
     let saves = adapter.saves.borrow();
     assert_eq!(saves.len(), 1);
     assert_eq!(saves[0].principal, "Тест");
