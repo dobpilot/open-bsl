@@ -482,6 +482,21 @@ impl BslString {
         }
     }
 
+    /// `СтрЧислоВхождений`/`StrOccurrenceCount` — число неперекрывающихся
+    /// регистрозависимых вхождений. Пустая подстрока даёт ноль.
+    pub fn occurrence_count(&self, needle: &Self) -> usize {
+        if needle.0.is_empty() {
+            return 0;
+        }
+        let mut count = 0;
+        let mut from = 0;
+        while let Some(at) = find_from(&self.0, &needle.0, from) {
+            count += 1;
+            from = at + needle.0.len();
+        }
+        count
+    }
+
     /// `СтрЗаменить`/`StrReplace` — все вхождения. Пустой `from` —
     /// возврат исходной строки без изменений (иначе замена вставляла бы
     /// `to` между каждой парой символов бесконечно).

@@ -128,6 +128,9 @@ pub enum BuiltinFn {
     /// `СтрСравнить`/`StrCompare(левое, правое)` — регистронезависимое
     /// сравнение строковых представлений со знаком `-1`, `0` или `1`.
     StrCompare,
+    /// `СтрЧислоВхождений`/`StrOccurrenceCount(строка, подстрока)` — число
+    /// неперекрывающихся регистрозависимых вхождений.
+    StrOccurrenceCount,
     /// Регистрозависимая проверка непустого префикса.
     StrStartsWith,
     /// Регистрозависимая проверка непустого суффикса.
@@ -351,6 +354,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("StrFind", BuiltinFn::StrFind),
     ("СтрСравнить", BuiltinFn::StrCompare),
     ("StrCompare", BuiltinFn::StrCompare),
+    ("СтрЧислоВхождений", BuiltinFn::StrOccurrenceCount),
+    ("StrOccurrenceCount", BuiltinFn::StrOccurrenceCount),
     ("СтрНачинаетсяС", BuiltinFn::StrStartsWith),
     ("StrStartsWith", BuiltinFn::StrStartsWith),
     ("СтрЗаканчиваетсяНа", BuiltinFn::StrEndsWith),
@@ -763,6 +768,7 @@ impl BuiltinFn {
             | BuiltinFn::StrEndsWith
             | BuiltinFn::StrConcat
             | BuiltinFn::StrCompare
+            | BuiltinFn::StrOccurrenceCount
             | BuiltinFn::StrGetLine
             | BuiltinFn::EncodeString
             | BuiltinFn::DecodeString => (2, 2),
@@ -1260,9 +1266,13 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
             println!("{}", args[0]);
             Ok(BslValue::Undefined)
         }
-        BuiltinFn::ToString | BuiltinFn::Format | BuiltinFn::ToNumber | BuiltinFn::StrCompare => {
+        BuiltinFn::ToString
+        | BuiltinFn::Format
+        | BuiltinFn::ToNumber
+        | BuiltinFn::StrCompare
+        | BuiltinFn::StrOccurrenceCount => {
             unreachable!(
-                "форматозависимые builtin'ы (Строка/Формат/Число/СтрСравнить) перехватываются в bsl-vm, \
+                "форматозависимые builtin'ы (Строка/Формат/Число/СтрСравнить/СтрЧислоВхождений) перехватываются в bsl-vm, \
                  у которого есть доступ к bsl-format — сюда попадать не должны"
             )
         }

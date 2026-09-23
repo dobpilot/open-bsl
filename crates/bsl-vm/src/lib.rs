@@ -4873,6 +4873,13 @@ fn call_builtin_with_format(
             };
             Ok(BslValue::number_from_i64(result))
         }
+        BuiltinFn::StrOccurrenceCount => {
+            let text = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[0], None)?);
+            let needle = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[1], None)?);
+            Ok(BslValue::number_from_i64(
+                text.occurrence_count(&needle) as i64
+            ))
+        }
         // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
         // имён, и путь без контекста для неё кончается ошибкой.
         // Куда именно функция ходит наружу, говорит один источник истины —

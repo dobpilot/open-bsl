@@ -44,7 +44,7 @@
 - [x] 5ap. Measure and add the complete `РежимПроведенияДокумента` / `DocumentPostingMode` enumeration without implementing document posting.
 - [x] 5aq. Measure and add the complete `РежимЗаписиДокумента` / `DocumentWriteMode` enumeration without implementing document writes.
 - [x] 5ar. Measure the reached `НайтиПоСсылкам` / `FindByRef` surface and delegate it to the rights-aware Session data adapter.
-- [ ] 5as. Measure and add the reached `СтрЧислоВхождений` / `StrOccurrenceCount` base-runtime function using the existing string representation.
+- [x] 5as. Measure and add the reached `СтрЧислоВхождений` / `StrOccurrenceCount` base-runtime function using the existing string representation.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.
