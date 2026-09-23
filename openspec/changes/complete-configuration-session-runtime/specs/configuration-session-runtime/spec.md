@@ -473,6 +473,26 @@ The session runtime SHALL provide the boolean startup surface `Установи�
 - **AND** the nested getter returns false
 - **AND** the direct getter returns false after the caller balances its suppression counter
 
+### Requirement: Data-separation safe mode is frame-scoped and Session-bound
+The session runtime SHALL provide `УстановитьБезопасныйРежимРазделенияДанных` / `SetDataSeparationSafeMode` with exactly one String common-attribute name and one Boolean mode. The host SHALL supply the data-separation common-attribute names for the concrete configuration through Session resources. An absent list, an unknown name, or an invalid argument type SHALL fail before mode state changes. Each BSL call frame SHALL own a separate counter for each folded name: `Истина` / `True` increments it, `Ложь` / `False` decrements it, and decrementing a name that the current frame did not enable SHALL fail. An effective name SHALL remain active while any frame in the current synchronous call stack has a nonzero counter and SHALL be removed on normal return or exception unwinding. Another Session SHALL start without active data-separation safe modes. The facade call context SHALL expose an effective per-name query to Session-bound data adapters.
+
+#### Scenario: Nested call observes and cannot remove the caller's mode
+- **WHEN** one frame enables a configured common attribute and a nested frame queries it
+- **THEN** the nested frame observes the effective mode
+- **AND** attempting to disable the caller's enable fails
+
+#### Scenario: Frame exit clears an unbalanced enable
+- **WHEN** a frame enables a configured common attribute and returns or raises an exception without disabling it
+- **THEN** its caller no longer observes that frame's enable
+
+#### Scenario: Reject an unknown separator
+- **WHEN** code names a common attribute absent from the Session resource list
+- **THEN** the operation fails before changing any data-separation mode
+
+#### Scenario: Sessions are isolated
+- **WHEN** one Session enables a configured common attribute
+- **THEN** another Session does not observe it
+
 ### Requirement: Background session isolation and parameter inheritance
 A background job SHALL run in a new Session for an explicitly supplied selectable principal. It SHALL use a separate database connection and module instances. Its initial session parameters SHALL be copied from the parent session, and later changes in either session SHALL not change the other.
 
