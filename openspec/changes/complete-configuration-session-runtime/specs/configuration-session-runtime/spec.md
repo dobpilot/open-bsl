@@ -630,3 +630,18 @@ The XML component SHALL provide `XMLТипЗнч` / `XMLTypeOf` with exactly one
 #### Scenario: Construct and compare an XML data type
 - **WHEN** configuration code constructs two XMLDataType values with equal names and namespaces
 - **THEN** their read-only properties match the supplied strings and the values compare equal
+
+### Requirement: Configuration startup can compare strings without case
+The base runtime SHALL provide `СтрСравнить` / `StrCompare` with exactly two arguments. It SHALL convert both values through the ordinary unformatted String representation, compare the resulting strings without case using the ordering measured on platform 8.3.27, and return `-1`, `0`, or `1` as a Number. It SHALL NOT use the identifier-folding rule as an unmeasured replacement for the platform string ordering.
+
+#### Scenario: Compare strings that differ only by case
+- **WHEN** configuration code compares two strings that differ only by letter case
+- **THEN** the function returns zero
+
+#### Scenario: Compare strings in measured order
+- **WHEN** configuration code compares two unequal strings covered by the platform measurement
+- **THEN** the function returns a negative or positive Number with the same sign as the platform result
+
+#### Scenario: Compare values after standard String conversion
+- **WHEN** configuration code compares Number `1` with String `"1"` or Undefined with an empty String
+- **THEN** the function returns zero

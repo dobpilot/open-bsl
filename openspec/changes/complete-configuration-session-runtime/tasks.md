@@ -39,6 +39,7 @@
 - [x] 5ak. Measure and accept the reached three-argument `ОписаниеТипов` / `TypeDescription` form with string qualifiers.
 - [x] 5al. Measure and add the reached `XMLТипЗнч` / `XMLTypeOf` mapping and immutable `ТипДанныхXML` / `XMLDataType` value in `bsl-xml`.
 - [x] 5am. Add the measured `ТранзакцияАктивна` / `TransactionActive` query through the existing connection-bound `DataAccess` transaction boundary.
+- [ ] 5an. Measure and add the reached `СтрСравнить` / `StrCompare` base-runtime function without introducing a second string-collation subsystem.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.
