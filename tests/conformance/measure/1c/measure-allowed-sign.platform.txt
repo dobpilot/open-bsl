@@ -1,0 +1,6 @@
+file.begin	allowed-sign-1
+ALLOWED.SIGN.ANY	Any
+ALLOWED.SIGN.NONNEGATIVE	Nonnegative
+ALLOWED.SIGN.TYPE	AllowedSign
+ALLOWED.SIGN.ENGLISH	OK
+file.end	allowed-sign-1
