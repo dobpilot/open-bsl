@@ -723,3 +723,22 @@ The base runtime SHALL provide the complete platform 8.3.27 `ТипПлатфо�
 #### Scenario: Use the English enumeration name
 - **WHEN** configuration code reads a member through `PlatformType`
 - **THEN** it receives the same value as through `ТипПлатформы`
+
+### Requirement: Standard time offsets use the State time-zone capability
+The base runtime SHALL provide `СмещениеСтандартногоВремени` / `StandardTimeOffset` with zero through two arguments: an optional String-or-Undefined zone identifier and an optional Date-or-Undefined UTC time. It SHALL return the standard offset from UTC in seconds as a Number without the daylight-time adjustment. An omitted or Undefined zone SHALL use the current State zone. An omitted or Undefined time SHALL use the current State clock. Named IANA zones and documented GMT offset identifiers SHALL be resolved by the State's time-zone capability. Unknown zones and invalid argument types SHALL fail explicitly.
+
+#### Scenario: Read the current State zone
+- **WHEN** configuration code omits the zone and supplies either a UTC date or no date
+- **THEN** the result comes from the current State's time-zone capability and clock
+
+#### Scenario: Read a named standard offset
+- **WHEN** configuration code supplies a valid IANA or GMT zone identifier and a UTC date
+- **THEN** it receives that zone's standard offset without a daylight-time adjustment
+
+#### Scenario: Keep State zones isolated
+- **WHEN** two States carry different time-zone capabilities
+- **THEN** each call observes only its own current and named-zone results
+
+#### Scenario: Reject an unavailable zone
+- **WHEN** configuration code supplies an unknown zone identifier or an invalid argument type
+- **THEN** the call fails explicitly
