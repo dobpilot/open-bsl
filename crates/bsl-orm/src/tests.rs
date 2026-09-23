@@ -93,6 +93,62 @@ impl DataAccess for FunctionalOptionAccessStub {
 }
 
 #[derive(Debug, Default)]
+struct TempTablesAccessStub {
+    next: Cell<u64>,
+    created: RefCell<Vec<TempTablesManagerHandle>>,
+    closed: RefCell<Vec<TempTablesManagerHandle>>,
+    queries: RefCell<Vec<Option<TempTablesManagerHandle>>>,
+}
+
+impl DataAccess for TempTablesAccessStub {
+    fn constant_value(
+        &self,
+        _: &MetadataObject,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError("константы не поддерживаются".into()))
+    }
+
+    fn create_temp_tables_manager(
+        &self,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<TempTablesManagerHandle> {
+        assert_eq!(principal.id(), "user");
+        let handle = TempTablesManagerHandle::new(self.next.get() + 1);
+        self.next.set(handle.value());
+        self.created.borrow_mut().push(handle);
+        Ok(handle)
+    }
+
+    fn close_temp_tables_manager(
+        &self,
+        manager: TempTablesManagerHandle,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        assert_eq!(principal.id(), "user");
+        self.closed.borrow_mut().push(manager);
+        Ok(())
+    }
+
+    fn execute_query(
+        &self,
+        request: &QueryRequest,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<QueryResultData> {
+        self.queries
+            .borrow_mut()
+            .push(request.temp_tables_manager());
+        QueryResultData::new(Vec::new(), Vec::new()).map_err(|error| {
+            RtError::DynamicError(format!("не удалось создать результат пробы: {error}"))
+        })
+    }
+}
+
+#[derive(Debug, Default)]
 struct RecordingDataLocks {
     requests: RefCell<Vec<Vec<String>>>,
     principals: RefCell<Vec<String>>,
@@ -984,6 +1040,64 @@ fn functional_option_uses_the_current_session_adapter() {
             .unwrap_err()
             .to_string()
             .contains("функциональные опции не поддерживаются")
+    );
+}
+
+#[test]
+fn temporary_tables_manager_stays_on_its_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(TempTablesAccessStub::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Менеджер = Новый МенеджерВременныхТаблиц;
+                Первый = Новый Запрос("ВЫБРАТЬ 1");
+                Второй = New Query("ВЫБРАТЬ 2");
+                Если Первый.МенеджерВременныхТаблиц <> Неопределено Тогда
+                    Возврат Ложь;
+                КонецЕсли;
+                Первый.МенеджерВременныхТаблиц = Менеджер;
+                Второй.TempTablesManager = Менеджер;
+                Первый.Выполнить();
+                Второй.Execute();
+                Менеджер.Close();
+                Менеджер.Закрыть();
+                Первый.Выполнить();
+                Возврат Истина;
+                "#,
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+    let handle = TempTablesManagerHandle::new(1);
+    assert_eq!(access.created.borrow().as_slice(), [handle]);
+    assert_eq!(
+        access.queries.borrow().as_slice(),
+        [Some(handle), Some(handle), Some(handle)]
+    );
+    assert_eq!(access.closed.borrow().as_slice(), [handle, handle]);
+
+    let other_access = Rc::new(TempTablesAccessStub::default());
+    let mut other_state = state_with_data_access(&engine, Some(other_access));
+    let foreign_manager = state
+        .exec("Возврат Новый МенеджерВременныхТаблиц;")
+        .unwrap();
+    let query = other_state.exec("Возврат Новый Запрос;").unwrap();
+    let module = engine
+        .compile(
+            "Процедура Назначить(ЗапросПробы, Менеджер) Экспорт ЗапросПробы.МенеджерВременныхТаблиц = Менеджер; КонецПроцедуры",
+        )
+        .unwrap();
+    let instance = other_state.instantiate(&module).unwrap();
+    assert!(
+        instance
+            .call(&mut other_state, "Назначить", vec![query, foreign_manager],)
+            .unwrap_err()
+            .to_string()
+            .contains("другому сеансу")
     );
 }
 

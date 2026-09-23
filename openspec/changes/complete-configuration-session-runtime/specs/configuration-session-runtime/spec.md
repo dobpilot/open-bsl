@@ -557,18 +557,22 @@ The ORM component SHALL provide `ПолучитьФункциональнуюО�
 - **THEN** the call fails explicitly instead of returning an invented disabled value
 
 ### Requirement: A temporary-tables manager is bound to one Session adapter
-The ORM component SHALL provide the zero-argument `МенеджерВременныхТаблиц` / `TempTablesManager` constructor and its zero-argument `Закрыть` / `Close` method. Construction SHALL obtain an opaque manager handle from the current Session `DataAccess`; closing SHALL return that handle to the same adapter. After a successful close, further use SHALL fail explicitly.
+The ORM component SHALL provide the zero-argument `МенеджерВременныхТаблиц` / `TempTablesManager` constructor and its zero-argument `Закрыть` / `Close` method. Construction SHALL obtain an opaque manager handle from the current Session `DataAccess`; every close call SHALL return that handle to the same adapter. Physical-table removal and the validity of later data operations SHALL remain the adapter's responsibility.
 
 #### Scenario: Create and close a manager
 - **WHEN** configuration code constructs a temporary-tables manager and closes it
 - **THEN** the current Session adapter receives one create operation and one close operation for the same opaque handle
+
+#### Scenario: Close a manager twice
+- **WHEN** configuration code calls Close twice for one manager
+- **THEN** both calls reach the same Session adapter, which can provide the measured idempotent result
 
 #### Scenario: An unsupported adapter fails explicitly
 - **WHEN** configuration code constructs a temporary-tables manager and the current Session adapter does not implement it
 - **THEN** construction fails instead of creating an in-memory substitute
 
 ### Requirement: Query execution carries its temporary-tables manager
-`Запрос.МенеджерВременныхТаблиц` / `Query.TempTablesManager` SHALL be a mutable property whose initial value is `Неопределено` / `Undefined`. It SHALL accept an open manager created by the same Session adapter. Query execution SHALL include that manager's opaque handle in `QueryRequest`. A manager from another Session adapter or a closed manager SHALL be rejected explicitly.
+`Запрос.МенеджерВременныхТаблиц` / `Query.TempTablesManager` SHALL be a mutable property whose initial value is `Неопределено` / `Undefined`. It SHALL accept a manager created by the same Session adapter. Query execution SHALL include that manager's opaque handle in `QueryRequest`, including after Close so the adapter can distinguish an operation that does not need temporary tables from one that uses a removed table. A manager from another Session adapter SHALL be rejected explicitly.
 
 #### Scenario: Execute two queries in one temporary-table scope
 - **WHEN** code assigns one manager to two Query objects and executes them

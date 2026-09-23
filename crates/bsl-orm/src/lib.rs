@@ -846,6 +846,25 @@ impl Principal {
 pub struct QueryRequest {
     text: Rc<str>,
     parameters: Rc<[(Rc<str>, Value)]>,
+    temp_tables_manager: Option<TempTablesManagerHandle>,
+}
+
+/// Непрозрачный идентификатор менеджера временных таблиц у адаптера данных.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TempTablesManagerHandle(u64);
+
+impl TempTablesManagerHandle {
+    /// Создаёт идентификатор из значения, уникального в пределах соединения.
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Возвращает значение для сопоставления с ресурсом адаптера.
+    #[must_use]
+    pub const fn value(self) -> u64 {
+        self.0
+    }
 }
 
 /// Неизменяемый запрос значения функциональной опции.
@@ -928,6 +947,12 @@ impl QueryRequest {
         self.parameters
             .iter()
             .map(|(name, value)| (name.as_ref(), value))
+    }
+
+    /// Возвращает менеджер временных таблиц, назначенный запросу.
+    #[must_use]
+    pub const fn temp_tables_manager(&self) -> Option<TempTablesManagerHandle> {
+        self.temp_tables_manager
     }
 }
 
@@ -1110,6 +1135,39 @@ pub trait DataAccess {
     ) -> RtResult<Value> {
         Err(RtError::DynamicError(
             "функциональные опции не поддерживаются адаптером данных".into(),
+        ))
+    }
+
+    /// Создаёт менеджер временных таблиц на соединении текущего сеанса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, соединения или неподдерживаемой
+    /// операции.
+    fn create_temp_tables_manager(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<TempTablesManagerHandle> {
+        Err(RtError::DynamicError(
+            "временные таблицы не поддерживаются адаптером данных".into(),
+        ))
+    }
+
+    /// Закрывает менеджер и удаляет принадлежащие ему временные таблицы.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку неизвестного идентификатора, соединения, удаления
+    /// таблиц или неподдерживаемой операции.
+    fn close_temp_tables_manager(
+        &self,
+        _manager: TempTablesManagerHandle,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "временные таблицы не поддерживаются адаптером данных".into(),
         ))
     }
 
@@ -1626,6 +1684,21 @@ struct QueryValue {
 struct QueryState {
     text: Rc<str>,
     parameters: Vec<(Rc<str>, Value)>,
+    temp_tables_manager: Option<Value>,
+}
+
+struct TempTablesManagerValue {
+    handle: TempTablesManagerHandle,
+    data_access: Rc<dyn DataAccess>,
+}
+
+impl fmt::Debug for TempTablesManagerValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("TempTablesManagerValue")
+            .field("handle", &self.handle)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug)]
@@ -1727,6 +1800,12 @@ static QUERY_TYPE: TypeDescriptor = TypeDescriptor {
     name: "Запрос",
     type_display: "Query",
     type_names: &["Query"],
+};
+static TEMP_TABLES_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "МенеджерВременныхТаблиц",
+    type_display: "Temporary Table Manager",
+    type_names: &["TempTablesManager"],
 };
 static QUERY_RESULT_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
@@ -2174,6 +2253,16 @@ impl ObjectProtocol for QueryValue {
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         QUERY_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for TempTablesManagerValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &TEMP_TABLES_MANAGER_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        TEMP_TABLES_MANAGER_METHODS
     }
 }
 
@@ -2719,7 +2808,17 @@ fn new_query(_: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
         state: RefCell::new(QueryState {
             text,
             parameters: Vec::new(),
+            temp_tables_manager: None,
         }),
+    }))
+}
+
+fn new_temp_tables_manager(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    let handle = data_access.create_temp_tables_manager(&principal, context)?;
+    Ok(Value::new_object(TempTablesManagerValue {
+        handle,
+        data_access,
     }))
 }
 
@@ -2961,6 +3060,68 @@ fn set_query_text(
     Ok(())
 }
 
+fn temp_tables_manager(value: &Value) -> RtResult<&TempTablesManagerValue> {
+    value
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<TempTablesManagerValue>())
+        .ok_or_else(|| RtError::TypeError {
+            expected: "МенеджерВременныхТаблиц",
+            op: "Запрос.МенеджерВременныхТаблиц",
+        })
+}
+
+fn query_temp_tables_manager(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let query = receiver
+        .downcast_ref::<QueryValue>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(query
+        .state
+        .borrow()
+        .temp_tables_manager
+        .clone()
+        .unwrap_or(Value::Undefined))
+}
+
+fn set_query_temp_tables_manager(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let query = receiver
+        .downcast_ref::<QueryValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let manager = temp_tables_manager(&value)?;
+    let (_, data_access) = current_data_access(context)?;
+    if !Rc::ptr_eq(&manager.data_access, &data_access) {
+        return Err(RtError::DynamicError(
+            "менеджер временных таблиц принадлежит другому сеансу".into(),
+        ));
+    }
+    query.state.borrow_mut().temp_tables_manager = Some(value);
+    Ok(())
+}
+
+fn close_temp_tables_manager(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let manager = receiver
+        .downcast_ref::<TempTablesManagerValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let (principal, data_access) = current_data_access(context)?;
+    if !Rc::ptr_eq(&manager.data_access, &data_access) {
+        return Err(RtError::DynamicError(
+            "менеджер временных таблиц принадлежит другому сеансу".into(),
+        ));
+    }
+    data_access.close_temp_tables_manager(manager.handle, &principal, context)?;
+    Ok(Value::Undefined)
+}
+
 fn query_set_parameter(
     receiver: &dyn ObjectProtocol,
     arguments: &[Value],
@@ -2999,9 +3160,17 @@ fn query_execute(
         .ok_or(RtError::NotAnObject)?;
     let request = {
         let state = query.state.borrow();
+        let temp_tables_manager = match &state.temp_tables_manager {
+            None => None,
+            Some(value) => {
+                let manager = temp_tables_manager(value)?;
+                Some(manager.handle)
+            }
+        };
         QueryRequest {
             text: Rc::clone(&state.text),
             parameters: state.parameters.clone().into(),
+            temp_tables_manager,
         }
     };
     let (principal, data_access) = {
@@ -3141,11 +3310,18 @@ fn query_selection_get(
     query_selection_value(query_selection(receiver)?, index)
 }
 
-static QUERY_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
-    names: &["Текст", "Text"],
-    get: query_text,
-    set: Some(set_query_text),
-}];
+static QUERY_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Текст", "Text"],
+        get: query_text,
+        set: Some(set_query_text),
+    },
+    PropertyDescriptor {
+        names: &["МенеджерВременныхТаблиц", "TempTablesManager"],
+        get: query_temp_tables_manager,
+        set: Some(set_query_temp_tables_manager),
+    },
+];
 
 static QUERY_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(
@@ -3155,6 +3331,13 @@ static QUERY_METHODS: &[MethodDescriptor] = &[
     ),
     MethodDescriptor::new(&["Выполнить", "Execute"], Arity::exact(0), query_execute),
 ];
+
+static TEMP_TABLES_MANAGER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Закрыть", "Close"],
+    Arity::exact(0),
+    close_temp_tables_manager,
+)
+.as_procedure()];
 
 static QUERY_RESULT_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(
@@ -3750,6 +3933,12 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: new_data_lock,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(5),
+        names: &["МенеджерВременныхТаблиц", "TempTablesManager"],
+        arity: Arity::exact(0),
+        call: new_temp_tables_manager,
+    },
 ];
 
 const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
@@ -3757,6 +3946,7 @@ const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
     (ConstructorCode::new(2), &DEFLATION_TYPE),
     (ConstructorCode::new(3), &VALUE_STORAGE_TYPE),
     (ConstructorCode::new(4), &DATA_LOCK_TYPE),
+    (ConstructorCode::new(5), &TEMP_TABLES_MANAGER_TYPE),
 ];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
@@ -4001,6 +4191,7 @@ const TYPES: &[&TypeDescriptor] = &[
     &CONFIGURATION_EXTENSION_TYPE,
     &EXTENSION_APPLICATION_ISSUE_TYPE,
     &QUERY_TYPE,
+    &TEMP_TABLES_MANAGER_TYPE,
     &QUERY_RESULT_TYPE,
     &QUERY_SELECTION_TYPE,
     &DEFLATION_TYPE,
@@ -4045,6 +4236,8 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&QUERY_TYPE)
         .with_methods(QUERY_METHODS)
         .with_properties(QUERY_PROPERTIES),
+    ObjectMembersDescriptor::new(&TEMP_TABLES_MANAGER_TYPE)
+        .with_methods(TEMP_TABLES_MANAGER_METHODS),
     ObjectMembersDescriptor::new(&QUERY_RESULT_TYPE).with_methods(QUERY_RESULT_METHODS),
     ObjectMembersDescriptor::new(&QUERY_SELECTION_TYPE)
         .with_methods(QUERY_SELECTION_METHODS)
