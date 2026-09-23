@@ -1,0 +1,6 @@
+file.begin	document-posting-mode-1
+DOCUMENT.POSTING.MODE.OPERATIONAL	Real-time
+DOCUMENT.POSTING.MODE.NONOPERATIONAL	Regular
+DOCUMENT.POSTING.MODE.TYPE	DocumentPostingMode
+DOCUMENT.POSTING.MODE.ENGLISH	OK
+file.end	document-posting-mode-1

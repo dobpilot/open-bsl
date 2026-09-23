@@ -660,3 +660,14 @@ The Session runtime SHALL provide `ТекущийЯзык()` / `CurrentLanguage(
 #### Scenario: Keep Sessions isolated
 - **WHEN** two Sessions open with different resolved language values
 - **THEN** each function call returns the value owned by its own Session
+
+### Requirement: Configuration startup can name document posting modes
+The base runtime SHALL provide the complete measured `РежимПроведенияДокумента` / `DocumentPostingMode` enumeration. It SHALL contain the operational and non-operational members with their measured Russian and English names and presentations. Providing these values SHALL NOT imply support for document posting or register writes.
+
+#### Scenario: Use either posting mode
+- **WHEN** configuration code reads either Russian member
+- **THEN** it receives a value of the DocumentPostingMode type with the measured presentation
+
+#### Scenario: Use the English aliases
+- **WHEN** configuration code reads the corresponding English enum and member names
+- **THEN** it receives the same values as through the Russian names
