@@ -525,3 +525,18 @@ The runtime SHALL accept `Новый Соответствие(Фиксирова
 #### Scenario: Reject another source type
 - **WHEN** code passes `Неопределено` or a mutable map to the one-argument constructor
 - **THEN** construction fails explicitly
+
+### Requirement: Configuration code can construct a passive job schedule value
+The session component SHALL provide the zero-argument `РасписаниеРегламентногоЗадания` / `JobSchedule` constructor. The value SHALL expose the mutable date, time, numeric and array properties documented by platform 8.3.27.2342. A fresh value SHALL contain empty dates, zero numeric properties except `ПериодНедель` / `WeeksPeriod` equal to one, and three separate empty arrays. Constructing or editing the value SHALL NOT register or execute a scheduled job.
+
+#### Scenario: A fresh schedule has the measured defaults
+- **WHEN** configuration code constructs a job schedule
+- **THEN** its dates are empty, its week period is one, its other numbers are zero, and its week-day, month and detailed-day arrays are empty
+
+#### Scenario: Schedule properties are session-local mutable data
+- **WHEN** configuration code writes the documented properties and changes their arrays
+- **THEN** reads from that same value observe the writes and a separately constructed value remains unchanged
+
+#### Scenario: The value does not create a scheduled job
+- **WHEN** configuration code constructs and edits a job schedule
+- **THEN** no background or scheduled job is submitted

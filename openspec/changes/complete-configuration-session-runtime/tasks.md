@@ -32,6 +32,7 @@
 - [x] 5ad. Add the measured zero-argument predefined-data initialization procedure through `DataAccess`.
 - [x] 5ae. Add the measured `ОписаниеНастроек` / `SettingsDescription` value in `bsl-session`.
 - [x] 5af. Add measured `ТекущаяДатаСеанса()` / `CurrentSessionDate()` using the existing per-State clock and effective zone.
+- [ ] 5ag. Add the measured passive `РасписаниеРегламентногоЗадания` / `JobSchedule` value required to compile the reached `unf` graph without adding a scheduled-job service.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.
