@@ -1,0 +1,9 @@
+file.begin	find-by-ref-1
+FIND.BY.REF.TYPE	Value table
+FIND.BY.REF.ROWS	0
+FIND.BY.REF.COLUMNS	4
+FIND.BY.REF.COLUMN.NAMES	Ref,Data,Metadata,DataSeparation
+FIND.BY.REF.FOUR.ARGS	0
+FIND.BY.REF.ENGLISH	0
+FIND.BY.REF.WRONG.TYPE	ERROR
+file.end	find-by-ref-1

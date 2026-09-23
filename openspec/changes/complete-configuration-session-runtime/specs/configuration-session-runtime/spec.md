@@ -682,3 +682,18 @@ The base runtime SHALL provide the complete measured `РежимЗаписиДо
 #### Scenario: Use the English write-mode aliases
 - **WHEN** configuration code reads the corresponding English enum and member names
 - **THEN** it receives the same values as through the Russian names
+
+### Requirement: Reference search uses the current Session data adapter
+The ORM component SHALL provide `НайтиПоСсылкам` / `FindByRef` with one required Array and three optional Array-or-Undefined arguments. It SHALL delegate the reference list and search restrictions to the current Session's rights-aware data adapter together with the frozen principal and current call context. The adapter's neutral tabular result SHALL be returned as a standard ValueTable. An empty result SHALL retain the measured `Ссылка`, `Данные`, `Метаданные`, and `РазделениеДанных` columns (`Ref`, `Data`, `Metadata`, and `DataSeparation` in the English platform presentation). Missing adapter support and invalid argument forms SHALL fail explicitly.
+
+#### Scenario: Search with only a reference list
+- **WHEN** configuration code supplies one Array
+- **THEN** the adapter receives that list with all three restrictions absent and its rows are materialized as a ValueTable
+
+#### Scenario: Preserve explicit search restrictions
+- **WHEN** configuration code supplies search-area, include, or exclude arrays
+- **THEN** the adapter receives those values distinctly and in their declared positions
+
+#### Scenario: Reject unavailable reference search
+- **WHEN** the Session adapter does not implement reference search
+- **THEN** the call fails explicitly instead of returning an empty table
