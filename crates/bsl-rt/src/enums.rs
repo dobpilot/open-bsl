@@ -78,6 +78,73 @@ pub enum EnumValue {
     EventLogEntryTransactionModeIndependent,
     EventLogEntryTransactionModeTransactional,
 
+    // --- РежимОтправкиИнформацииОбОшибке -----------------------------
+    ErrorReportingModeAuto,
+    ErrorReportingModeDontSend,
+    ErrorReportingModeAskUser,
+    ErrorReportingModeSend,
+
+    // --- ОтправкаЭлементаДанных --------------------------------------
+    DataItemSendAuto,
+    DataItemSendDelete,
+    DataItemSendIgnore,
+
+    // --- ПолучениеЭлементаДанных -------------------------------------
+    DataItemReceiveAuto,
+    DataItemReceiveAccept,
+    DataItemReceiveIgnore,
+
+    // --- ОбновлениеПредопределенныхДанных ----------------------------
+    PredefinedDataUpdateAuto,
+    PredefinedDataUpdateAutoUpdate,
+    PredefinedDataUpdateDontAutoUpdate,
+
+    // --- ВидСравненияКомпоновкиДанных ---------------------------------
+    DataCompositionComparisonBeginsWith,
+    DataCompositionComparisonContains,
+    DataCompositionComparisonEqual,
+    DataCompositionComparisonFilled,
+    DataCompositionComparisonGreater,
+    DataCompositionComparisonGreaterOrEqual,
+    DataCompositionComparisonInHierarchy,
+    DataCompositionComparisonInList,
+    DataCompositionComparisonInListByHierarchy,
+    DataCompositionComparisonLess,
+    DataCompositionComparisonLessOrEqual,
+    DataCompositionComparisonLike,
+    DataCompositionComparisonNotBeginsWith,
+    DataCompositionComparisonNotContains,
+    DataCompositionComparisonNotEqual,
+    DataCompositionComparisonNotFilled,
+    DataCompositionComparisonNotInHierarchy,
+    DataCompositionComparisonNotInList,
+    DataCompositionComparisonNotInListByHierarchy,
+    DataCompositionComparisonNotLike,
+
+    // --- ВариантСтандартнойДатыНачала ---------------------------------
+    StandardBeginningDateThisDay,
+    StandardBeginningDateThisWeek,
+    StandardBeginningDateThisTenDays,
+    StandardBeginningDateThisMonth,
+    StandardBeginningDateThisQuarter,
+    StandardBeginningDateThisHalfYear,
+    StandardBeginningDateThisYear,
+    StandardBeginningDateLastDay,
+    StandardBeginningDateLastWeek,
+    StandardBeginningDateLastTenDays,
+    StandardBeginningDateLastMonth,
+    StandardBeginningDateLastQuarter,
+    StandardBeginningDateLastHalfYear,
+    StandardBeginningDateLastYear,
+    StandardBeginningDateNextDay,
+    StandardBeginningDateNextWeek,
+    StandardBeginningDateNextTenDays,
+    StandardBeginningDateNextMonth,
+    StandardBeginningDateNextQuarter,
+    StandardBeginningDateNextHalfYear,
+    StandardBeginningDateNextYear,
+    StandardBeginningDateCustom,
+
     // --- ТипЗначенияJSON ---------------------------------------------
     JsonString,
     JsonNumber,
@@ -115,9 +182,15 @@ pub enum EnumValue {
     // --- ТипФайлаТабличногоДокумента -----------------------------------
     // Членов у платформы четырнадцать (MXL, MXL7, XLS, XLS95, XLSX, ODS,
     // TXT, ANSITXT, HTML, HTML3, HTML4, HTML5, PDF, DOCX; `MXLX` НЕТ —
-    // измерено перебором). Здесь заведены те, в которые мы умеем писать:
-    // остальные лучше не знать вовсе, чем принять и записать не то.
+    // измерено перебором). Здесь заведены форматы записи и значения, которые
+    // модуль сеанса читает как данные. Наличие члена не обещает поддержку
+    // экспортёром: `bsl-spreadsheet` отклоняет формат без кодировщика.
     SpreadFileMxl,
+    SpreadFileXls,
+    SpreadFileOds,
+    SpreadFileAnsiTxt,
+    SpreadFileHtml5,
+    SpreadFileDocx,
     SpreadFileTxt,
     SpreadFileXlsx,
     SpreadFilePdf,
@@ -462,6 +535,18 @@ pub enum EnumKind {
     EventLogLevel,
     /// Связь записи журнала регистрации с текущей транзакцией.
     EventLogEntryTransactionMode,
+    /// Способ отправки отчёта об ошибке.
+    ErrorReportingMode,
+    /// Действие над элементом данных при обмене.
+    DataItemSend,
+    /// Действие над полученным элементом данных при обмене.
+    DataItemReceive,
+    /// Режим обновления предопределённых данных.
+    PredefinedDataUpdate,
+    /// Операция сравнения в настройках системы компоновки данных.
+    DataCompositionComparisonType,
+    /// Относительный период либо произвольная стандартная дата начала.
+    StandardBeginningDateVariant,
     JsonValueType,
     JsonLineBreak,
     /// Способ перевода Unicode-символов в `\uXXXX` при записи JSON.
@@ -627,6 +712,22 @@ impl EnumKind {
                 "РежимТранзакцииЗаписиЖурналаРегистрации",
                 "EventLogEntryTransactionMode",
             ),
+            EnumKind::ErrorReportingMode => {
+                ("РежимОтправкиИнформацииОбОшибке", "ErrorReportingMode")
+            }
+            EnumKind::DataItemSend => ("ОтправкаЭлементаДанных", "DataItemSend"),
+            EnumKind::DataItemReceive => ("ПолучениеЭлементаДанных", "DataItemReceive"),
+            EnumKind::PredefinedDataUpdate => {
+                ("ОбновлениеПредопределенныхДанных", "PredefinedDataUpdate")
+            }
+            EnumKind::DataCompositionComparisonType => (
+                "ВидСравненияКомпоновкиДанных",
+                "DataCompositionComparisonType",
+            ),
+            EnumKind::StandardBeginningDateVariant => (
+                "ВариантСтандартнойДатыНачала",
+                "StandardBeginningDateVariant",
+            ),
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonEscapeCharacters => {
@@ -717,6 +818,12 @@ impl EnumKind {
             // ИЗМЕРЕНО на 8.3.27 пробой `measure-event-log.bsl`.
             EnumKind::EventLogLevel => "EnumEventLogLevel",
             EnumKind::EventLogEntryTransactionMode => "EnumEventLogEntryTransactionMode",
+            EnumKind::ErrorReportingMode => "ErrorReportingMode",
+            EnumKind::DataItemSend => "DataItemSend",
+            EnumKind::DataItemReceive => "DataItemReceive",
+            EnumKind::PredefinedDataUpdate => "PredefinedDataUpdate",
+            EnumKind::DataCompositionComparisonType => "DataCompositionComparisonType",
+            EnumKind::StandardBeginningDateVariant => "StandardBeginningDateVariant",
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
             EnumKind::JsonLineBreak => "ПеречислениеПереносСтрокJSON",
             EnumKind::JsonEscapeCharacters => "ПеречислениеЭкранированиеСимволовJSON",
@@ -1069,6 +1176,403 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Transactional",
         "Transactional",
     ),
+    // Состав, оба написания и представления измерены на платформе 8.3.27.2342
+    // пробой `measure-error-processing.bsl`.
+    (
+        EnumKind::ErrorReportingMode,
+        EnumValue::ErrorReportingModeAuto,
+        "Авто",
+        "Auto",
+        "Auto",
+    ),
+    (
+        EnumKind::ErrorReportingMode,
+        EnumValue::ErrorReportingModeDontSend,
+        "НеОтправлять",
+        "DontSend",
+        "Do not send",
+    ),
+    (
+        EnumKind::ErrorReportingMode,
+        EnumValue::ErrorReportingModeAskUser,
+        "СпрашиватьПользователя",
+        "AskUser",
+        "Ask user",
+    ),
+    (
+        EnumKind::ErrorReportingMode,
+        EnumValue::ErrorReportingModeSend,
+        "Отправлять",
+        "Send",
+        "Send",
+    ),
+    // Состав, оба написания и представления измерены на платформе 8.3.27.2074
+    // пробой `measure-data-item-send.bsl`.
+    (
+        EnumKind::DataItemSend,
+        EnumValue::DataItemSendAuto,
+        "Авто",
+        "Auto",
+        "Auto",
+    ),
+    (
+        EnumKind::DataItemSend,
+        EnumValue::DataItemSendDelete,
+        "Удалить",
+        "Delete",
+        "Delete",
+    ),
+    (
+        EnumKind::DataItemSend,
+        EnumValue::DataItemSendIgnore,
+        "Игнорировать",
+        "Ignore",
+        "Ignore",
+    ),
+    // Состав, оба написания и представления измерены на платформе 8.3.27.2074
+    // пробой `measure-data-item-receive.bsl`.
+    (
+        EnumKind::DataItemReceive,
+        EnumValue::DataItemReceiveAuto,
+        "Авто",
+        "Auto",
+        "Auto",
+    ),
+    (
+        EnumKind::DataItemReceive,
+        EnumValue::DataItemReceiveAccept,
+        "Принять",
+        "Accept",
+        "Accept",
+    ),
+    (
+        EnumKind::DataItemReceive,
+        EnumValue::DataItemReceiveIgnore,
+        "Игнорировать",
+        "Ignore",
+        "Ignore",
+    ),
+    // Состав, оба написания и представления измерены на платформе 8.3.27.2342
+    // пробой `measure-infobase-predefined-data-update.bsl`.
+    (
+        EnumKind::PredefinedDataUpdate,
+        EnumValue::PredefinedDataUpdateAuto,
+        "Авто",
+        "Auto",
+        "Auto",
+    ),
+    (
+        EnumKind::PredefinedDataUpdate,
+        EnumValue::PredefinedDataUpdateAutoUpdate,
+        "ОбновлятьАвтоматически",
+        "AutoUpdate",
+        "Auto update",
+    ),
+    (
+        EnumKind::PredefinedDataUpdate,
+        EnumValue::PredefinedDataUpdateDontAutoUpdate,
+        "НеОбновлятьАвтоматически",
+        "DontAutoUpdate",
+        "Auto update off",
+    ),
+    // Состав, оба написания и представления измерены на платформе 8.3.27.2074
+    // пробой `measure-data-composition-comparison-type.bsl`.
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonBeginsWith,
+        "НачинаетсяС",
+        "BeginsWith",
+        "Begins with",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonContains,
+        "Содержит",
+        "Contains",
+        "Contains",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonEqual,
+        "Равно",
+        "Equal",
+        "Equal to",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonFilled,
+        "Заполнено",
+        "Filled",
+        "Filled",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonGreater,
+        "Больше",
+        "Greater",
+        "Greater than",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonGreaterOrEqual,
+        "БольшеИлиРавно",
+        "GreaterOrEqual",
+        "Greater than or equal to",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonInHierarchy,
+        "ВИерархии",
+        "InHierarchy",
+        "In group",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonInList,
+        "ВСписке",
+        "InList",
+        "In list",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonInListByHierarchy,
+        "ВСпискеПоИерархии",
+        "InListByHierarchy",
+        "In list group",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonLess,
+        "Меньше",
+        "Less",
+        "Less than",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonLessOrEqual,
+        "МеньшеИлиРавно",
+        "LessOrEqual",
+        "Less than or equal to",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonLike,
+        "Подобно",
+        "Like",
+        "Like",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotBeginsWith,
+        "НеНачинаетсяС",
+        "NotBeginsWith",
+        "Does not begin with",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotContains,
+        "НеСодержит",
+        "NotContains",
+        "Does not contain",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotEqual,
+        "НеРавно",
+        "NotEqual",
+        "Not equal",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotFilled,
+        "НеЗаполнено",
+        "NotFilled",
+        "Empty",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotInHierarchy,
+        "НеВИерархии",
+        "NotInHierarchy",
+        "Not in group",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotInList,
+        "НеВСписке",
+        "NotInList",
+        "Not in list",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotInListByHierarchy,
+        "НеВСпискеПоИерархии",
+        "NotInListByHierarchy",
+        "Not in list group",
+    ),
+    (
+        EnumKind::DataCompositionComparisonType,
+        EnumValue::DataCompositionComparisonNotLike,
+        "НеПодобно",
+        "NotLike",
+        "Not like",
+    ),
+    // Состав, оба написания и представления измерены на платформе 8.3.27.2074
+    // пробой `measure-standard-beginning-date.bsl`.
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateThisDay,
+        "НачалоЭтогоДня",
+        "BeginningOfThisDay",
+        "Beginning of this day",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateThisWeek,
+        "НачалоЭтойНедели",
+        "BeginningOfThisWeek",
+        "Beginning of this week",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateThisTenDays,
+        "НачалоЭтойДекады",
+        "BeginningOfThisTenDays",
+        "Beginning of this ten-day period",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateThisMonth,
+        "НачалоЭтогоМесяца",
+        "BeginningOfThisMonth",
+        "Beginning of this month",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateThisQuarter,
+        "НачалоЭтогоКвартала",
+        "BeginningOfThisQuarter",
+        "Beginning of this quarter",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateThisHalfYear,
+        "НачалоЭтогоПолугодия",
+        "BeginningOfThisHalfYear",
+        "Beginning of this half year",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateThisYear,
+        "НачалоЭтогоГода",
+        "BeginningOfThisYear",
+        "Beginning of this year",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateLastDay,
+        "НачалоПрошлогоДня",
+        "BeginningOfLastDay",
+        "Beginning of yesterday",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateLastWeek,
+        "НачалоПрошлойНедели",
+        "BeginningOfLastWeek",
+        "Beginning of last week",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateLastTenDays,
+        "НачалоПрошлойДекады",
+        "BeginningOfLastTenDays",
+        "Beginning of last ten-day period",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateLastMonth,
+        "НачалоПрошлогоМесяца",
+        "BeginningOfLastMonth",
+        "Beginning of last month",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateLastQuarter,
+        "НачалоПрошлогоКвартала",
+        "BeginningOfLastQuarter",
+        "Beginning of last quarter",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateLastHalfYear,
+        "НачалоПрошлогоПолугодия",
+        "BeginningOfLastHalfYear",
+        "Beginning of last half year",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateLastYear,
+        "НачалоПрошлогоГода",
+        "BeginningOfLastYear",
+        "Beginning of last year",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateNextDay,
+        "НачалоСледующегоДня",
+        "BeginningOfNextDay",
+        "Beginning of tomorrow",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateNextWeek,
+        "НачалоСледующейНедели",
+        "BeginningOfNextWeek",
+        "Beginning of next week",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateNextTenDays,
+        "НачалоСледующейДекады",
+        "BeginningOfNextTenDays",
+        "Beginning of next ten-day period",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateNextMonth,
+        "НачалоСледующегоМесяца",
+        "BeginningOfNextMonth",
+        "Beginning of next month",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateNextQuarter,
+        "НачалоСледующегоКвартала",
+        "BeginningOfNextQuarter",
+        "Beginning of next quarter",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateNextHalfYear,
+        "НачалоСледующегоПолугодия",
+        "BeginningOfNextHalfYear",
+        "Beginning of next half year",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateNextYear,
+        "НачалоСледующегоГода",
+        "BeginningOfNextYear",
+        "Beginning of next year",
+    ),
+    (
+        EnumKind::StandardBeginningDateVariant,
+        EnumValue::StandardBeginningDateCustom,
+        "ПроизвольнаяДата",
+        "Custom",
+        "Custom date",
+    ),
     (
         EnumKind::ClientRunMode,
         EnumValue::ClientRunModeAuto,
@@ -1296,6 +1800,41 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "MXL",
         "MXL",
         "MXL",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileXls,
+        "XLS",
+        "XLS",
+        "XLS",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileOds,
+        "ODS",
+        "ODS",
+        "ODS",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileAnsiTxt,
+        "ANSITXT",
+        "ANSITXT",
+        "ANSITXT",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileHtml5,
+        "HTML5",
+        "HTML5",
+        "HTML5",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileDocx,
+        "DOCX",
+        "DOCX",
+        "DOCX",
     ),
     (
         EnumKind::SpreadFileType,
@@ -2849,6 +3388,36 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     (
         "EventLogEntryTransactionMode",
         EnumKind::EventLogEntryTransactionMode,
+    ),
+    (
+        "РежимОтправкиИнформацииОбОшибке",
+        EnumKind::ErrorReportingMode,
+    ),
+    ("ErrorReportingMode", EnumKind::ErrorReportingMode),
+    ("ОтправкаЭлементаДанных", EnumKind::DataItemSend),
+    ("DataItemSend", EnumKind::DataItemSend),
+    ("ПолучениеЭлементаДанных", EnumKind::DataItemReceive),
+    ("DataItemReceive", EnumKind::DataItemReceive),
+    (
+        "ОбновлениеПредопределенныхДанных",
+        EnumKind::PredefinedDataUpdate,
+    ),
+    ("PredefinedDataUpdate", EnumKind::PredefinedDataUpdate),
+    (
+        "ВидСравненияКомпоновкиДанных",
+        EnumKind::DataCompositionComparisonType,
+    ),
+    (
+        "DataCompositionComparisonType",
+        EnumKind::DataCompositionComparisonType,
+    ),
+    (
+        "ВариантСтандартнойДатыНачала",
+        EnumKind::StandardBeginningDateVariant,
+    ),
+    (
+        "StandardBeginningDateVariant",
+        EnumKind::StandardBeginningDateVariant,
     ),
     ("ТипЗначенияJSON", EnumKind::JsonValueType),
     ("JSONValueType", EnumKind::JsonValueType),

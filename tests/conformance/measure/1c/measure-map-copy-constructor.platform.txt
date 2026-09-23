@@ -1,0 +1,8 @@
+file.begin	map-copy-constructor-1
+MAP.COPY.COUNT	1
+MAP.COPY.VALUE	2
+MAP.COPY.SOURCE	1
+MAP.COPY.ENGLISH	1
+MAP.COPY.UNDEFINED	ERR
+MAP.COPY.MUTABLE	ERR
+file.end	map-copy-constructor-1

@@ -1,0 +1,7 @@
+file.begin	picture-library-1
+PICTURE.TYPE	Picture
+PICTURE.STRING	Picture
+PICTURE.EQUAL.ALIAS	Yes
+PICTURE.EQUAL.DIFFERENT	No
+PICTURE.FILLED	Yes
+file.end	picture-library-1

@@ -7,6 +7,7 @@ use crate::{
     StructureStorage, folded_eq,
 };
 use crate::{TypeRef, bindata};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 impl BslValue {
@@ -92,6 +93,22 @@ impl BslValue {
     pub fn new_structure(shape: Rc<Shape>, slots: Vec<BslValue>) -> Self {
         BslValue::Object(Rc::new(BslObject::Structure(std::cell::RefCell::new(
             StructureStorage::new(shape, slots),
+        ))))
+    }
+
+    /// Создаёт структуру с вычисленными во время исполнения полями, не
+    /// добавляя их набор в общую таблицу форм.
+    #[must_use]
+    pub fn new_dictionary_structure(entries: Vec<(NameId, BslValue)>) -> Self {
+        let mut order = Vec::with_capacity(entries.len());
+        let mut values = HashMap::with_capacity(entries.len());
+        for (name, value) in entries {
+            if values.insert(name, value).is_none() {
+                order.push(name);
+            }
+        }
+        BslValue::Object(Rc::new(BslObject::Structure(std::cell::RefCell::new(
+            StructureStorage::Dictionary { order, values },
         ))))
     }
 

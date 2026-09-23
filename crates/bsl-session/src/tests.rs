@@ -20,6 +20,8 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
             connections: None,
             event_log_writer: None,
             client_settings: None,
+            error_processing_settings: None,
+            database_configuration_changed_dynamically: None,
             background_method: None,
         })),
     )
@@ -36,6 +38,48 @@ fn engine(handler: &str) -> Engine {
 
 fn entry(engine: &Engine, source: &str) -> open_bsl::Module {
     engine.compile(source).unwrap()
+}
+
+#[test]
+fn settings_description_matches_the_measured_surface() {
+    let engine = engine("");
+    let mut state = engine.state_builder().build();
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Описание = Новый ОписаниеНастроек;
+                Начало = Строка(ТипЗнч(Описание)) + ":"
+                    + Строка(Описание.КлючОбъекта = Неопределено) + ":"
+                    + Строка(Описание.КлючНастроек = Неопределено) + ":"
+                    + Строка(Описание.ДополнительныеСвойства.Количество());
+                Описание.КлючОбъекта = 1;
+                Описание.КлючНастроек = "key";
+                Описание.Пользователь = "user";
+                Описание.Представление = "caption";
+                Описание.ДополнительныеСвойства.Вставить("Поле", 42);
+                EnglishDescription = New SettingsDescription();
+                EnglishDescription.User = "english";
+                Возврат Начало + ":" + Строка(Описание.КлючОбъекта) + ":"
+                    + Описание.КлючНастроек + ":" + Описание.Пользователь + ":"
+                    + Описание.Представление + ":"
+                    + Строка(Описание.ДополнительныеСвойства.Поле) + ":"
+                    + EnglishDescription.User;
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Setting description:Да:Да:0:1:key:user:caption:42:english".into())
+    );
+    assert!(
+        state
+            .exec(
+                "Описание = Новый ОписаниеНастроек; Описание.ДополнительныеСвойства = Новый Структура;",
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("ДополнительныеСвойства")
+    );
 }
 
 #[test]
@@ -227,6 +271,91 @@ fn missing_runtime_is_an_explicit_error() {
         .unwrap_err();
     assert!(matches!(error, Error::Runtime(_)));
     assert!(error.to_string().contains("данные хоста"));
+}
+
+#[test]
+fn refreshing_an_absent_reusable_value_cache_succeeds() {
+    let engine = Engine::builder()
+        .register_library(library())
+        .build()
+        .unwrap();
+    let mut state = engine.new_state();
+
+    assert_eq!(
+        state
+            .exec("ОбновитьПовторноИспользуемыеЗначения(); RefreshReusableValues(); Возврат 1;")
+            .unwrap(),
+        Value::number_from_i64(1)
+    );
+}
+
+#[test]
+fn dynamic_database_configuration_change_state_is_session_local() {
+    let foreground_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut parent = foreground_factory
+        .open(
+            principal(),
+            resources((), 1).with_database_configuration_changed_dynamically(true),
+        )
+        .unwrap();
+    let probe = parent
+        .instantiate(
+            "Функция Проверить() Экспорт Возврат КонфигурацияБазыДанныхИзмененаДинамически() = DataBaseConfigurationChangedDynamically(); КонецФункции",
+        )
+        .unwrap();
+    assert_eq!(
+        parent.call(&probe, "Проверить", vec![]).unwrap().0,
+        Value::Boolean(true)
+    );
+
+    let background_factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::BackgroundJob,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut background = background_factory
+        .open_background(
+            principal(),
+            resources((), 2).with_database_configuration_changed_dynamically(false),
+            "Обработка.Проверить",
+            &parent,
+        )
+        .unwrap();
+    let probe = background
+        .instantiate(
+            "Функция Проверить() Экспорт Возврат КонфигурацияБазыДанныхИзмененаДинамически(); КонецФункции",
+        )
+        .unwrap();
+    assert_eq!(
+        background.call(&probe, "Проверить", vec![]).unwrap().0,
+        Value::Boolean(false)
+    );
+
+    let mut missing = foreground_factory
+        .open(principal(), resources((), 3))
+        .unwrap();
+    let probe = missing
+        .instantiate(
+            "Функция Проверить() Экспорт Возврат КонфигурацияБазыДанныхИзмененаДинамически(); КонецФункции",
+        )
+        .unwrap();
+    assert!(
+        missing
+            .call(&probe, "Проверить", vec![])
+            .unwrap_err()
+            .to_string()
+            .contains("не передан хостом")
+    );
 }
 
 fn code_snapshot(handler: &str) -> ConfigurationCodeSnapshot {
@@ -1034,6 +1163,73 @@ fn safe_and_privileged_modes_follow_the_measured_frame_scope() {
                 Возврат Строка(ВБезопасном) + ":" + Строка(ПослеБезопасного);
             КонецФункции
 
+            Функция ПодавлениеБезопасногоСбалансировано() Экспорт
+                УстановитьБезопасныйРежим(Истина);
+                УстановитьОтключениеБезопасногоРежима(Истина);
+                ПриПодавлении = БезопасныйРежим();
+                УстановитьОтключениеБезопасногоРежима(Ложь);
+                ПослеБалансировки = БезопасныйРежим();
+                УстановитьБезопасныйРежим(Ложь);
+                Возврат Строка(ПриПодавлении) + ":" + Строка(ПослеБалансировки);
+            КонецФункции
+
+            Функция СнятьПодавлениеРодителя()
+                Попытка
+                    УстановитьОтключениеБезопасногоРежима(Ложь);
+                    Возврат "NO_ERROR";
+                Исключение
+                    Возврат "ERROR";
+                КонецПопытки;
+            КонецФункции
+
+            Функция ПодавлениеБезопасногоРодителя() Экспорт
+                УстановитьБезопасныйРежим(Истина);
+                УстановитьОтключениеБезопасногоРежима(Истина);
+                Результат = СнятьПодавлениеРодителя() + ":" + Строка(БезопасныйРежим());
+                УстановитьОтключениеБезопасногоРежима(Ложь);
+                УстановитьБезопасныйРежим(Ложь);
+                Возврат Результат;
+            КонецФункции
+
+            Функция ПодавлениеСВозвратом()
+                УстановитьОтключениеБезопасногоРежима(Истина);
+                Возврат БезопасныйРежим();
+            КонецФункции
+
+            Функция РодительПослеВозвратаПодавления() Экспорт
+                УстановитьБезопасныйРежим(Истина);
+                Вложенный = ПодавлениеСВозвратом();
+                Родитель = БезопасныйРежим();
+                УстановитьБезопасныйРежим(Ложь);
+                Возврат Строка(Вложенный) + ":" + Строка(Родитель);
+            КонецФункции
+
+            Функция ПривилегированныйПриПодавлении() Экспорт
+                УстановитьБезопасныйРежим(Истина);
+                УстановитьПривилегированныйРежим(Истина);
+                УстановитьОтключениеБезопасногоРежима(Истина);
+                ПриПодавлении = Строка(БезопасныйРежим()) + ":"
+                    + Строка(ПривилегированныйРежим());
+                УстановитьОтключениеБезопасногоРежима(Ложь);
+                ПослеБалансировки = ПривилегированныйРежим();
+                УстановитьБезопасныйРежим(Ложь);
+                УстановитьПривилегированныйРежим(Ложь);
+                Возврат ПриПодавлении + ":" + Строка(ПослеБалансировки);
+            КонецФункции
+
+            Функция ПрочитатьПодавлениеВложенное()
+                Возврат ПолучитьОтключениеБезопасногоРежима();
+            КонецФункции
+
+            Функция ПрочитатьПодавление() Экспорт
+                УстановитьОтключениеБезопасногоРежима(Истина);
+                До = ПолучитьОтключениеБезопасногоРежима();
+                Вложенное = ПрочитатьПодавлениеВложенное();
+                УстановитьОтключениеБезопасногоРежима(Ложь);
+                После = GetSafeModeDisabled();
+                Возврат Строка(До) + ":" + Строка(Вложенное) + ":" + Строка(После);
+            КонецФункции
+
             Процедура ИменованныйПрофиль() Экспорт
                 SetSafeMode("Профиль");
             КонецПроцедуры
@@ -1103,6 +1299,41 @@ fn safe_and_privileged_modes_follow_the_measured_frame_scope() {
             .unwrap()
             .0,
         Value::Str("Нет:Да".into())
+    );
+    assert_eq!(
+        session
+            .call(&module, "ПодавлениеБезопасногоСбалансировано", vec![])
+            .unwrap()
+            .0,
+        Value::Str("Нет:Нет".into())
+    );
+    assert_eq!(
+        session
+            .call(&module, "ПодавлениеБезопасногоРодителя", vec![])
+            .unwrap()
+            .0,
+        Value::Str("ERROR:Нет".into())
+    );
+    assert_eq!(
+        session
+            .call(&module, "РодительПослеВозвратаПодавления", vec![])
+            .unwrap()
+            .0,
+        Value::Str("Нет:Да".into())
+    );
+    assert_eq!(
+        session
+            .call(&module, "ПривилегированныйПриПодавлении", vec![])
+            .unwrap()
+            .0,
+        Value::Str("Нет:Да:Да".into())
+    );
+    assert_eq!(
+        session
+            .call(&module, "ПрочитатьПодавление", vec![])
+            .unwrap()
+            .0,
+        Value::Str("Да:Нет:Нет".into())
     );
     let error = session
         .call(&module, "ИменованныйПрофиль", vec![])
@@ -1468,6 +1699,65 @@ fn event_log_fails_explicitly_without_a_session_writer() {
             .unwrap_err()
             .to_string()
             .contains("журнал регистрации не подключён")
+    );
+}
+
+#[test]
+fn error_processing_uses_the_session_owned_current_user_settings() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let settings = ErrorProcessingSettingsData::new(ErrorReportingMode::Auto, "");
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 1).with_error_processing_settings(settings),
+        )
+        .unwrap();
+    let probe = session
+        .instantiate(
+            r#"
+            Функция Проверить() Экспорт
+                Настройки = ErrorProcessing.GetUserSettings();
+                Попытка
+                    ВызватьИсключение "Пробная ошибка";
+                Исключение
+                    Ошибка = ИнформацияОбОшибке();
+                    Кратко = ОбработкаОшибок.КраткоеПредставлениеОшибки(Ошибка)
+                        = Ошибка.Описание;
+                    Подробно = ErrorProcessing.DetailErrorDescription(Ошибка)
+                        = ПодробноеПредставлениеОшибки(Ошибка);
+                КонецПопытки;
+                Возврат Строка(ТипЗнч(Настройки)) + ":"
+                    + Строка(Настройки.ОтправлятьОтчетНаКлиенте) + ":"
+                    + Настройки.ErrorProcessingServiceAddress + ":"
+                    + Строка(Кратко) + ":" + Строка(Подробно);
+            КонецФункции
+            "#,
+        )
+        .unwrap();
+    assert_eq!(
+        session.call(&probe, "Проверить", vec![]).unwrap().0,
+        Value::Str("Settings of error processing on the client:Auto::Да:Да".into())
+    );
+
+    let mut missing = factory.open(principal(), resources((), 2)).unwrap();
+    let probe = missing
+        .instantiate(
+            "Функция Проверить() Экспорт Возврат ОбработкаОшибок.ПолучитьНастройкиПользователя(); КонецФункции",
+        )
+        .unwrap();
+    assert!(
+        missing
+            .call(&probe, "Проверить", vec![])
+            .unwrap_err()
+            .to_string()
+            .contains("не переданы хостом")
     );
 }
 

@@ -35,7 +35,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 38;
+pub const FORMAT_VERSION: u32 = 40;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -93,6 +93,7 @@ opcodes! {
     CollectionLen, Raise, RaiseDetailed, CallBuiltin, CallComponent, CallMethod,
     RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp, CallObjectProcedure,
     CallLinkedObjectMethod, CallLinkedObjectProcedure,
+    NewDynamicStructure,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -742,12 +743,18 @@ fn write_instr(instr: &Instr) -> String {
             base,
             count,
         } => format!("{op} dst={dst} shape={shape} base={base} count={count}"),
+        Instr::NewDynamicStructure { dst, base, count } => {
+            format!("{op} dst={dst} base={base} count={count}")
+        }
         Instr::NewTable { dst } => format!("{op} dst={dst}"),
         Instr::NewTypeDescription { dst, names } => {
             format!("{op} dst={dst} names={names}")
         }
         Instr::NewValueComparison { dst } => format!("{op} dst={dst}"),
-        Instr::NewMap { dst } => format!("{op} dst={dst}"),
+        Instr::NewMap { dst, source } => match source {
+            Some(source) => format!("{op} dst={dst} source={source}"),
+            None => format!("{op} dst={dst}"),
+        },
         Instr::NewTextWriter { dst, path } => format!("{op} dst={dst} path={path}"),
         Instr::CollectionLen { dst, obj } => format!("{op} dst={dst} obj={obj}"),
         Instr::Raise { src } => match src {
@@ -2112,13 +2119,24 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             base: base(&f)?,
             count: count(&f)?,
         },
+        "NewDynamicStructure" => Instr::NewDynamicStructure {
+            dst: dst(&f)?,
+            base: base(&f)?,
+            count: count(&f)?,
+        },
         "NewTable" => Instr::NewTable { dst: dst(&f)? },
         "NewTypeDescription" => Instr::NewTypeDescription {
             dst: dst(&f)?,
             names: field_u8(&f, no, "names")?,
         },
         "NewValueComparison" => Instr::NewValueComparison { dst: dst(&f)? },
-        "NewMap" => Instr::NewMap { dst: dst(&f)? },
+        "NewMap" => Instr::NewMap {
+            dst: dst(&f)?,
+            source: match field(&f, no, "source") {
+                Ok(_) => Some(field_u8(&f, no, "source")?),
+                Err(_) => None,
+            },
+        },
         "NewTextWriter" => Instr::NewTextWriter {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,

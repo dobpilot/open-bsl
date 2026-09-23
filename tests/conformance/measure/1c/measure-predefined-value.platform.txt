@@ -1,0 +1,10 @@
+file.begin	predefined-value-1
+PREDEFINED.EMPTY.RU.TYPE	ERR: Predefined value "Обработка.Замеры.ПустаяСсылка" not found.
+PREDEFINED.EMPTY.RU.STRING	ERR: Predefined value "Обработка.Замеры.ПустаяСсылка" not found.
+PREDEFINED.EMPTY.RU.FILLED	ERR: Predefined value "Обработка.Замеры.ПустаяСсылка" not found.
+PREDEFINED.EMPTY.EN.PATH	ERR: Predefined value "DataProcessor.Замеры.EmptyRef" not found.
+PREDEFINED.SYSTEM.RU.TYPE	DataItemSend
+PREDEFINED.SYSTEM.RU.STRING	Auto
+PREDEFINED.UNKNOWN	ERR: Predefined value "Справочник.НетТакого.НетТакого" not found.
+PREDEFINED.NON_STRING	ERR: Type mismatch (parameter number '1')
+file.end	predefined-value-1

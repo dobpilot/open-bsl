@@ -9,6 +9,7 @@ pub mod background_jobs;
 mod bindata;
 mod builtin;
 mod component;
+mod data_composition;
 mod date;
 pub mod encoding;
 mod enums;
@@ -106,7 +107,8 @@ pub use env::{
     TransferableTemporaryFile, UserMessageSink,
 };
 pub use error_info::{
-    detailed_error_description, is_error_info, new_error_info, new_raised_error_info,
+    brief_error_description, detailed_error_description, is_error_info, new_error_info,
+    new_raised_error_info,
 };
 pub use file::{
     FileMetadataQuery, FileMetadataUpdate, prepare_create_directory_noop,
@@ -121,6 +123,7 @@ pub use file_search::{
     call_builtin_delete_files, call_builtin_delete_files_formatted, call_builtin_find_files,
     find_files, prepare_file_search, search_file_paths,
 };
+pub use fixed_collections::{fixed_map_entries, fixed_structure_entries};
 pub use fold::folded_eq;
 pub use http::{
     ClientIdentity, HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink,

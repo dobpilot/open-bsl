@@ -566,7 +566,17 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             read_range!(base, count);
             write!(dst);
         }
-        Instr::NewTable { dst } | Instr::NewValueComparison { dst } | Instr::NewMap { dst } => {
+        Instr::NewDynamicStructure { dst, base, count } => {
+            read_range!(base, count);
+            write!(dst);
+        }
+        Instr::NewTable { dst } | Instr::NewValueComparison { dst } => {
+            write!(dst);
+        }
+        Instr::NewMap { dst, source } => {
+            if let Some(source) = source {
+                read!(source);
+            }
             write!(dst);
         }
         Instr::NewTypeDescription { dst, names } => {

@@ -49,6 +49,11 @@ fn write_refuses_a_file_type_it_cannot_produce() {
         (bsl_rt::EnumValue::SpreadFileTxt, true),
         (bsl_rt::EnumValue::SpreadFileXlsx, true),
         (bsl_rt::EnumValue::SpreadFilePdf, true),
+        (bsl_rt::EnumValue::SpreadFileXls, false),
+        (bsl_rt::EnumValue::SpreadFileOds, false),
+        (bsl_rt::EnumValue::SpreadFileAnsiTxt, false),
+        (bsl_rt::EnumValue::SpreadFileHtml5, false),
+        (bsl_rt::EnumValue::SpreadFileDocx, false),
         (bsl_rt::EnumValue::JsonBoolean, false),
     ] {
         let args = [path.clone(), BslValue::Enum(kind)];

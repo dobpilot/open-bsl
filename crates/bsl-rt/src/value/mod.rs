@@ -67,6 +67,12 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         }
         EnumKind::EventLogLevel => TypeId::EventLogLevel,
         EnumKind::EventLogEntryTransactionMode => TypeId::EventLogEntryTransactionMode,
+        EnumKind::ErrorReportingMode => TypeId::ErrorReportingMode,
+        EnumKind::DataItemSend => TypeId::DataItemSend,
+        EnumKind::DataItemReceive => TypeId::DataItemReceive,
+        EnumKind::PredefinedDataUpdate => TypeId::PredefinedDataUpdate,
+        EnumKind::DataCompositionComparisonType => TypeId::DataCompositionComparisonType,
+        EnumKind::StandardBeginningDateVariant => TypeId::StandardBeginningDateVariant,
         EnumKind::JsonValueType => TypeId::JsonValueType,
         EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
         EnumKind::JsonEscapeCharacters => TypeId::JsonEscapeCharacters,
@@ -873,7 +879,10 @@ impl Hash for BslValue {
                 BslObject::Extension(object) => {
                     std::ptr::from_ref(object.type_descriptor()).hash(state);
                     if object.value_eq(object).is_some() {
-                        object.display().hash(state);
+                        match object.value_hash_key() {
+                            Some(key) => key.hash(state),
+                            None => object.display().hash(state),
+                        }
                     } else if let Some(key) = object.identity_key() {
                         key.hash(state);
                     } else {

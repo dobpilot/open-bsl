@@ -56,6 +56,12 @@ pub enum TypeId {
     ConfigurationExtensionApplicationIssueSeverity,
     EventLogLevel,
     EventLogEntryTransactionMode,
+    ErrorReportingMode,
+    DataItemSend,
+    DataItemReceive,
+    PredefinedDataUpdate,
+    DataCompositionComparisonType,
+    StandardBeginningDateVariant,
     JsonValueType,
     JsonLineBreak,
     JsonEscapeCharacters,
@@ -226,6 +232,36 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::EventLogEntryTransactionMode,
         "РежимТранзакцииЗаписиЖурналаРегистрации",
         "EventLogEntryTransactionMode",
+    ),
+    (
+        TypeId::ErrorReportingMode,
+        "РежимОтправкиИнформацииОбОшибке",
+        "ErrorReportingMode",
+    ),
+    (
+        TypeId::DataItemSend,
+        "ОтправкаЭлементаДанных",
+        "DataItemSend",
+    ),
+    (
+        TypeId::DataItemReceive,
+        "ПолучениеЭлементаДанных",
+        "DataItemReceive",
+    ),
+    (
+        TypeId::PredefinedDataUpdate,
+        "ОбновлениеПредопределенныхДанных",
+        "PredefinedDataUpdate",
+    ),
+    (
+        TypeId::DataCompositionComparisonType,
+        "ВидСравненияКомпоновкиДанных",
+        "DataCompositionComparisonType",
+    ),
+    (
+        TypeId::StandardBeginningDateVariant,
+        "ВариантСтандартнойДатыНачала",
+        "StandardBeginningDateVariant",
     ),
     // Тип с пробелом, как и остальные объектные типы JSON выше; значение
     // («Строка(Новый НастройкиСериализацииJSON)») — без, см. `lib.rs`.
@@ -438,6 +474,18 @@ const DISPLAY: &[(TypeId, &str)] = &[
     (
         TypeId::EventLogEntryTransactionMode,
         "EventLogEntryTransactionMode",
+    ),
+    (TypeId::ErrorReportingMode, "ErrorReportingMode"),
+    (TypeId::DataItemSend, "DataItemSend"),
+    (TypeId::DataItemReceive, "DataItemReceive"),
+    (TypeId::PredefinedDataUpdate, "PredefinedDataUpdate"),
+    (
+        TypeId::DataCompositionComparisonType,
+        "DataCompositionComparisonType",
+    ),
+    (
+        TypeId::StandardBeginningDateVariant,
+        "StandardBeginningDateVariant",
     ),
 ];
 

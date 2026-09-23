@@ -1235,7 +1235,7 @@ impl<'a> Resolver<'a> {
             RExpr::NewArray { .. }
             | RExpr::NewStructure { .. }
             | RExpr::NewTable
-            | RExpr::NewMap
+            | RExpr::NewMap(_)
             | RExpr::NewTypeDescription(_)
             | RExpr::NewValueComparison => Some(CoreReceiver::Core),
             _ => None,
@@ -1991,25 +1991,19 @@ impl<'a> Resolver<'a> {
                         values: Vec::new(),
                     });
                 }
-                // ВНИМАНИЕ: список ключей обязан быть строковым ЛИТЕРАЛОМ —
-                // именно это делает число форм структур конечным и
-                // известным на этапе компиляции (`ShapeTable::intern`
-                // заводит их с `depth = 0`, то есть с полным запасом
-                // переходов). Когда сюда добавят вычисляемую строку
-                // (`Новый Структура(КлючиИзПеременной)`), интернировать её
-                // ключи в таблицу форм НЕЛЬЗЯ: цикл с разными ключами
-                // заводил бы бессмертную форму на каждой итерации, а
-                // деградация по `MAX_SHAPE_TRANSITIONS` тут не спасает —
-                // каждая такая форма создаётся с нулевой глубиной. Такой
-                // конструктор должен сразу строить структуру в словарном
-                // режиме (`bsl_rt::StructureStorage::Dictionary`), минуя
-                // интернирование.
+                // Литеральный список сохраняет быстрый путь через конечную
+                // таблицу форм. Вычисляемый список разрешается отдельно и
+                // сразу строит словарную структуру: иначе цикл с разными
+                // ключами удерживал бы новую форму для каждой итерации.
                 let key_text = match &args[0] {
                     AExpr::Str(s) => s,
                     _ => {
-                        return Err(SemaError::Unsupported(
-                            "Новый Структура(...) со списком полей не строковым литералом появится позже",
-                        ));
+                        return Ok(RExpr::NewDynamicStructure {
+                            args: args
+                                .iter()
+                                .map(|argument| self.resolve_expr(argument))
+                                .collect::<Result<_, _>>()?,
+                        });
                     }
                 };
                 let keys: Vec<String> = key_text
@@ -2069,14 +2063,18 @@ impl<'a> Resolver<'a> {
                 Ok(RExpr::NewValueComparison)
             }
             "СООТВЕТСТВИЕ" | "MAP" => {
-                if !args.is_empty() {
+                if args.len() > 1 {
                     return Err(SemaError::ArgumentCountMismatch {
                         name: "Новый Соответствие".to_string(),
-                        expected: 0,
+                        expected: 1,
                         found: args.len(),
                     });
                 }
-                Ok(RExpr::NewMap)
+                Ok(RExpr::NewMap(
+                    args.first()
+                        .map(|source| self.resolve_expr(source).map(Box::new))
+                        .transpose()?,
+                ))
             }
             "ЗАПИСЬТЕКСТА" | "TEXTWRITER" => {
                 if args.len() != 1 {
@@ -3358,16 +3356,17 @@ mod tests {
     }
 
     #[test]
-    fn new_structure_with_dynamic_key_list_is_unsupported() {
-        // Проверка формы аргумента (строковый литерал?) идёт раньше
-        // резолвинга самого идентификатора, поэтому это Unsupported, а не
-        // UndefinedVariable("k"), даже когда k нигде не объявлена.
-        let prog = parse("s = Новый Структура(k);").unwrap();
-        let stmts = items_to_stmts(prog.items);
-        assert!(matches!(
-            resolve_script(&stmts).unwrap_err(),
-            SemaError::Unsupported(_)
-        ));
+    fn new_structure_with_dynamic_key_list_retains_runtime_arguments() {
+        let r = resolve_src("k = \"x,y\"; s = Новый Структура(k, 1);");
+        assert_eq!(
+            r.body[1].kind,
+            RStmtKind::AssignLocal {
+                slot: 1,
+                value: RExpr::NewDynamicStructure {
+                    args: vec![RExpr::Local(0), RExpr::Number(BslNumber::from_i64(1)),],
+                },
+            }
+        );
     }
 
     #[test]

@@ -24,6 +24,21 @@ struct FixedStructureObject {
     fields: Vec<(String, BslValue)>,
 }
 
+/// Возвращает копию полей фиксированной структуры для конструктора
+/// изменяемой структуры или `None`, если значение имеет другой тип.
+#[must_use]
+pub fn fixed_structure_entries(value: &BslValue) -> Option<Vec<(String, BslValue)>> {
+    let BslValue::Object(object) = value else {
+        return None;
+    };
+    let BslObject::Extension(object) = object.as_ref() else {
+        return None;
+    };
+    object
+        .downcast_ref::<FixedStructureObject>()
+        .map(|fixed| fixed.fields.clone())
+}
+
 impl FixedStructureObject {
     fn find(&self, name: &str) -> Option<BslValue> {
         self.fields
@@ -61,6 +76,21 @@ impl FixedMapObject {
             .map(|(_, value)| value.clone())
             .unwrap_or(BslValue::Undefined)
     }
+}
+
+/// Возвращает копию пар фиксированного соответствия или `None`, если
+/// значение имеет другой тип.
+#[must_use]
+pub fn fixed_map_entries(value: &BslValue) -> Option<Vec<(BslValue, BslValue)>> {
+    let BslValue::Object(object) = value else {
+        return None;
+    };
+    let BslObject::Extension(object) = object.as_ref() else {
+        return None;
+    };
+    object
+        .downcast_ref::<FixedMapObject>()
+        .map(|fixed| fixed.entries.clone())
 }
 
 impl ObjectProtocol for FixedMapObject {

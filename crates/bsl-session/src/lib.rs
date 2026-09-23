@@ -19,7 +19,8 @@ use open_bsl::{
     Error as OpenBslError, FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor,
     LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe, ModuleInstance, ModuleRecipe,
     ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, State,
-    TypeDescriptor, Value, background_job_type_descriptor, folded_eq,
+    TypeDescriptor, Value, background_job_type_descriptor, brief_error_description,
+    detailed_error_description, folded_eq,
 };
 
 #[derive(Debug, Clone)]
@@ -612,6 +613,63 @@ pub trait ClientSettingsAdapter: fmt::Debug {
     -> RtResult<()>;
 }
 
+/// Режим отправки отчёта об ошибке из настроек текущего пользователя.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorReportingMode {
+    /// Платформа выбирает режим автоматически.
+    Auto,
+    /// Отчёт не отправляется.
+    DontSend,
+    /// Решение принимает пользователь.
+    AskUser,
+    /// Отчёт отправляется.
+    Send,
+}
+
+impl ErrorReportingMode {
+    fn value(self) -> Value {
+        Value::Enum(match self {
+            Self::Auto => EnumValue::ErrorReportingModeAuto,
+            Self::DontSend => EnumValue::ErrorReportingModeDontSend,
+            Self::AskUser => EnumValue::ErrorReportingModeAskUser,
+            Self::Send => EnumValue::ErrorReportingModeSend,
+        })
+    }
+}
+
+/// Неизменяемые настройки обработки ошибок текущего пользователя.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ErrorProcessingSettingsData {
+    send_report_on_client: ErrorReportingMode,
+    service_address: Arc<str>,
+}
+
+impl ErrorProcessingSettingsData {
+    /// Создаёт снимок с режимом отправки и адресом сервиса регистрации.
+    #[must_use]
+    pub fn new(
+        send_report_on_client: ErrorReportingMode,
+        service_address: impl Into<String>,
+    ) -> Self {
+        Self {
+            send_report_on_client,
+            service_address: Arc::from(service_address.into()),
+        }
+    }
+
+    /// Возвращает режим отправки отчёта на клиенте.
+    #[must_use]
+    pub const fn send_report_on_client(&self) -> ErrorReportingMode {
+        self.send_report_on_client
+    }
+
+    /// Возвращает адрес сервиса обработки ошибок.
+    #[must_use]
+    pub fn service_address(&self) -> &str {
+        &self.service_address
+    }
+}
+
 /// Ресурсы одного открываемого сеанса.
 pub struct SessionResources {
     connection: Box<dyn std::any::Any>,
@@ -620,6 +678,8 @@ pub struct SessionResources {
     connections: Option<Arc<[InfoBaseConnection]>>,
     event_log_writer: Option<Rc<dyn EventLogWriter>>,
     client_settings: Option<Rc<dyn ClientSettingsAdapter>>,
+    error_processing_settings: Option<ErrorProcessingSettingsData>,
+    database_configuration_changed_dynamically: Option<bool>,
 }
 
 impl SessionResources {
@@ -633,6 +693,8 @@ impl SessionResources {
             connections: None,
             event_log_writer: None,
             client_settings: None,
+            error_processing_settings: None,
+            database_configuration_changed_dynamically: None,
         }
     }
 
@@ -667,6 +729,21 @@ impl SessionResources {
         self.client_settings = Some(adapter);
         self
     }
+
+    /// Подключает снимок настроек обработки ошибок текущего пользователя.
+    #[must_use]
+    pub fn with_error_processing_settings(mut self, settings: ErrorProcessingSettingsData) -> Self {
+        self.error_processing_settings = Some(settings);
+        self
+    }
+
+    /// Подключает признак динамического обновления конфигурации базы данных
+    /// во время жизни открываемого сеанса.
+    #[must_use]
+    pub const fn with_database_configuration_changed_dynamically(mut self, changed: bool) -> Self {
+        self.database_configuration_changed_dynamically = Some(changed);
+        self
+    }
 }
 
 /// Дополнение [`bsl_orm::SessionData`] для runtime сеанса.
@@ -680,6 +757,8 @@ pub struct SessionRuntime {
     connections: Option<Arc<[InfoBaseConnection]>>,
     event_log_writer: Option<Rc<dyn EventLogWriter>>,
     client_settings: Option<Rc<dyn ClientSettingsAdapter>>,
+    error_processing_settings: Option<ErrorProcessingSettingsData>,
+    database_configuration_changed_dynamically: Option<bool>,
     background_method: Option<Arc<str>>,
 }
 
@@ -724,6 +803,19 @@ impl SessionRuntime {
     #[must_use]
     pub fn client_settings(&self) -> Option<&Rc<dyn ClientSettingsAdapter>> {
         self.client_settings.as_ref()
+    }
+
+    /// Возвращает настройки обработки ошибок текущего пользователя.
+    #[must_use]
+    pub const fn error_processing_settings(&self) -> Option<&ErrorProcessingSettingsData> {
+        self.error_processing_settings.as_ref()
+    }
+
+    /// Возвращает переданный хостом признак динамического обновления
+    /// конфигурации базы данных во время жизни этого сеанса.
+    #[must_use]
+    pub const fn database_configuration_changed_dynamically(&self) -> Option<bool> {
+        self.database_configuration_changed_dynamically
     }
 
     /// Возвращает полное имя метода текущего фонового задания.
@@ -1071,6 +1163,8 @@ impl SessionFactory {
             connections,
             event_log_writer,
             client_settings,
+            error_processing_settings,
+            database_configuration_changed_dynamically,
         } = resources;
         if connection_number == 0 || connection_number > i64::MAX as u64 {
             return Err(SessionError::InvalidConnectionNumber(connection_number));
@@ -1106,6 +1200,8 @@ impl SessionFactory {
             connections,
             event_log_writer,
             client_settings,
+            error_processing_settings,
+            database_configuration_changed_dynamically,
             background_method,
         };
         let mut data = SessionData::new(Arc::clone(&self.catalog), principal.clone())
@@ -1399,6 +1495,23 @@ struct HomePageFormsObject {
     right: Value,
 }
 
+#[derive(Debug)]
+struct ErrorProcessingManagerObject;
+
+#[derive(Debug)]
+struct ErrorProcessingSettingsObject {
+    data: ErrorProcessingSettingsData,
+}
+
+#[derive(Debug)]
+struct SettingsDescriptionObject {
+    object_key: RefCell<Value>,
+    settings_key: RefCell<Value>,
+    user: RefCell<Value>,
+    presentation: RefCell<Value>,
+    additional_properties: Value,
+}
+
 static PARAMETERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-session", "ПараметрыСеанса");
 static SYSTEM_INFORMATION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-session", "СистемнаяИнформация");
@@ -1437,6 +1550,24 @@ static HOME_PAGE_FORMS_TYPE: TypeDescriptor = TypeDescriptor {
     name: "СоставФормНачальнойСтраницы",
     type_display: "Home page forms",
     type_names: &["HomePageForms"],
+};
+static ERROR_PROCESSING_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "МенеджерОбработкиОшибок",
+    type_display: "Error processing manager",
+    type_names: &["ErrorProcessingManager"],
+};
+static ERROR_PROCESSING_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "НастройкиОбработкиОшибок",
+    type_display: "Settings of error processing on the client",
+    type_names: &["ErrorProcessingSettings"],
+};
+static SETTINGS_DESCRIPTION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ОписаниеНастроек",
+    type_display: "Setting description",
+    type_names: &["SettingsDescription"],
 };
 
 impl ObjectProtocol for ParametersObject {
@@ -1509,6 +1640,16 @@ impl ObjectProtocol for StandardSettingsStorageObject {
     }
 }
 
+impl ObjectProtocol for SettingsDescriptionObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &SETTINGS_DESCRIPTION_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        SETTINGS_DESCRIPTION_PROPERTIES
+    }
+}
+
 impl ObjectProtocol for StandardSettingsSelectionObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &STANDARD_SETTINGS_SELECTION_TYPE
@@ -1540,6 +1681,26 @@ impl ObjectProtocol for HomePageFormsObject {
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         HOME_PAGE_FORMS_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for ErrorProcessingManagerObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &ERROR_PROCESSING_MANAGER_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        ERROR_PROCESSING_MANAGER_METHODS
+    }
+}
+
+impl ObjectProtocol for ErrorProcessingSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &ERROR_PROCESSING_SETTINGS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        ERROR_PROCESSING_SETTINGS_PROPERTIES
     }
 }
 
@@ -2032,6 +2193,18 @@ fn safe_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::Boolean(ctx.safe_mode()?))
 }
 
+fn set_safe_mode_disabled(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    ctx.set_safe_mode_disabled(security_mode_flag(
+        arguments,
+        "УстановитьОтключениеБезопасногоРежима",
+    )?)?;
+    Ok(Value::Undefined)
+}
+
+fn get_safe_mode_disabled(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::Boolean(ctx.safe_mode_disabled()?))
+}
+
 fn set_privileged_mode(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
     ctx.set_privileged_mode(security_mode_flag(
         arguments,
@@ -2042,6 +2215,93 @@ fn set_privileged_mode(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResu
 
 fn privileged_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::Boolean(ctx.privileged_mode()?))
+}
+
+fn refresh_reusable_values(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // У интерпретатора пока нет повторно используемых возвращаемых значений:
+    // каждый вызов функции исполняется. Очистка пустого кэша сохраняет
+    // наблюдаемое состояние платформенной процедуры и успешно завершается.
+    Ok(Value::Undefined)
+}
+
+fn database_configuration_changed_dynamically(
+    ctx: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    runtime(ctx)?
+        .database_configuration_changed_dynamically()
+        .map(Value::Boolean)
+        .ok_or_else(|| {
+            RtError::DynamicError(
+                "признак динамического обновления конфигурации базы данных не передан хостом"
+                    .into(),
+            )
+        })
+}
+
+fn error_processing(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(ErrorProcessingManagerObject))
+}
+
+fn error_processing_brief(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<ErrorProcessingManagerObject>()
+        .ok_or(RtError::NotAnObject)?;
+    brief_error_description(&arguments[0])
+}
+
+fn error_processing_detail(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<ErrorProcessingManagerObject>()
+        .ok_or(RtError::NotAnObject)?;
+    detailed_error_description(&arguments[0])
+}
+
+fn error_processing_user_settings(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<ErrorProcessingManagerObject>()
+        .ok_or(RtError::NotAnObject)?;
+    let data = runtime(ctx)?
+        .error_processing_settings()
+        .cloned()
+        .ok_or_else(|| {
+            RtError::DynamicError(
+                "настройки обработки ошибок текущего пользователя не переданы хостом".into(),
+            )
+        })?;
+    Ok(Value::new_object(ErrorProcessingSettingsObject { data }))
+}
+
+fn error_settings_send_report(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let settings = receiver
+        .downcast_ref::<ErrorProcessingSettingsObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(settings.data.send_report_on_client().value())
+}
+
+fn error_settings_service_address(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let settings = receiver
+        .downcast_ref::<ErrorProcessingSettingsObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(settings.data.service_address().into()))
 }
 
 fn current_infobase_session(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -2085,6 +2345,117 @@ fn construct_system_information(ctx: &mut CallContext<'_>, _: &[Value]) -> RtRes
     }))
 }
 
+fn construct_settings_description(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(SettingsDescriptionObject {
+        object_key: RefCell::new(Value::Undefined),
+        settings_key: RefCell::new(Value::Undefined),
+        user: RefCell::new(Value::Str("".into())),
+        presentation: RefCell::new(Value::Str("".into())),
+        additional_properties: Value::new_structure(
+            context.runtime_shapes().shapes.empty(),
+            Vec::new(),
+        ),
+    }))
+}
+
+fn settings_description(receiver: &dyn ObjectProtocol) -> RtResult<&SettingsDescriptionObject> {
+    receiver
+        .downcast_ref::<SettingsDescriptionObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn settings_description_object_key(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(settings_description(receiver)?.object_key.borrow().clone())
+}
+
+fn set_settings_description_object_key(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    *settings_description(receiver)?.object_key.borrow_mut() = value;
+    Ok(())
+}
+
+fn settings_description_settings_key(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(settings_description(receiver)?
+        .settings_key
+        .borrow()
+        .clone())
+}
+
+fn set_settings_description_settings_key(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    *settings_description(receiver)?.settings_key.borrow_mut() = value;
+    Ok(())
+}
+
+fn string_settings_description_property(value: Value, op: &'static str) -> RtResult<Value> {
+    if matches!(value, Value::Str(_)) {
+        Ok(value)
+    } else {
+        Err(RtError::TypeError {
+            expected: "Строка",
+            op,
+        })
+    }
+}
+
+fn settings_description_user(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(settings_description(receiver)?.user.borrow().clone())
+}
+
+fn set_settings_description_user(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    *settings_description(receiver)?.user.borrow_mut() =
+        string_settings_description_property(value, "ОписаниеНастроек.Пользователь")?;
+    Ok(())
+}
+
+fn settings_description_presentation(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(settings_description(receiver)?
+        .presentation
+        .borrow()
+        .clone())
+}
+
+fn set_settings_description_presentation(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    *settings_description(receiver)?.presentation.borrow_mut() =
+        string_settings_description_property(value, "ОписаниеНастроек.Представление")?;
+    Ok(())
+}
+
+fn settings_description_additional_properties(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(settings_description(receiver)?
+        .additional_properties
+        .clone())
+}
+
 fn system_information_app_version(
     receiver: &dyn ObjectProtocol,
     _: &mut CallContext<'_>,
@@ -2114,12 +2485,19 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: construct_home_page_forms,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(4),
+        names: &["ОписаниеНастроек", "SettingsDescription"],
+        arity: Arity::exact(0),
+        call: construct_settings_description,
+    },
 ];
 
 const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
     (ConstructorCode::new(1), &SYSTEM_INFORMATION_TYPE),
     (ConstructorCode::new(2), &HOME_PAGE_SETTINGS_TYPE),
     (ConstructorCode::new(3), &HOME_PAGE_FORMS_TYPE),
+    (ConstructorCode::new(4), &SETTINGS_DESCRIPTION_TYPE),
 ];
 
 static SYSTEM_INFORMATION_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
@@ -2127,6 +2505,34 @@ static SYSTEM_INFORMATION_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescript
     get: system_information_app_version,
     set: None,
 }];
+
+static SETTINGS_DESCRIPTION_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["КлючОбъекта", "ObjectKey"],
+        get: settings_description_object_key,
+        set: Some(set_settings_description_object_key),
+    },
+    PropertyDescriptor {
+        names: &["КлючНастроек", "SettingsKey"],
+        get: settings_description_settings_key,
+        set: Some(set_settings_description_settings_key),
+    },
+    PropertyDescriptor {
+        names: &["Пользователь", "User"],
+        get: settings_description_user,
+        set: Some(set_settings_description_user),
+    },
+    PropertyDescriptor {
+        names: &["Представление", "Presentation"],
+        get: settings_description_presentation,
+        set: Some(set_settings_description_presentation),
+    },
+    PropertyDescriptor {
+        names: &["ДополнительныеСвойства", "AdditionalProperties"],
+        get: settings_description_additional_properties,
+        set: None,
+    },
+];
 
 static INFOBASE_SESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     &["ПолучитьФоновоеЗадание", "GetBackgroundJob"],
@@ -2233,6 +2639,40 @@ static HOME_PAGE_FORMS_PROPERTIES: &[PropertyDescriptor] = &[
     },
 ];
 
+static ERROR_PROCESSING_MANAGER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["КраткоеПредставлениеОшибки", "BriefErrorDescription"],
+        Arity::exact(1),
+        error_processing_brief,
+    ),
+    MethodDescriptor::new(
+        &["ПодробноеПредставлениеОшибки", "DetailErrorDescription"],
+        Arity::exact(1),
+        error_processing_detail,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьНастройкиПользователя", "GetUserSettings"],
+        Arity::exact(0),
+        error_processing_user_settings,
+    ),
+];
+
+static ERROR_PROCESSING_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["ОтправлятьОтчетНаКлиенте", "SendReportOnClient"],
+        get: error_settings_send_report,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &[
+            "АдресСервисаОбработкиОшибок",
+            "ErrorProcessingServiceAddress",
+        ],
+        get: error_settings_service_address,
+        set: None,
+    },
+];
+
 const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
         code: FunctionCode::new(1),
@@ -2317,6 +2757,50 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         call: infobase_connections,
     },
     FunctionDescriptor {
+        code: FunctionCode::new(14),
+        names: &[
+            "УстановитьОтключениеБезопасногоРежима",
+            "SetSafeModeDisabled",
+        ],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Procedure,
+        call: set_safe_mode_disabled,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(15),
+        names: &[
+            "ОбновитьПовторноИспользуемыеЗначения",
+            "RefreshReusableValues",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Procedure,
+        call: refresh_reusable_values,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(16),
+        names: &["ПолучитьОбработкуОшибокСеанса"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: error_processing,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(17),
+        names: &[
+            "КонфигурацияБазыДанныхИзмененаДинамически",
+            "DataBaseConfigurationChangedDynamically",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: database_configuration_changed_dynamically,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(18),
+        names: &["ПолучитьОтключениеБезопасногоРежима", "GetSafeModeDisabled"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_safe_mode_disabled,
+    },
+    FunctionDescriptor {
         code: FunctionCode::new(11),
         names: &["ЗаписьЖурналаРегистрации", "WriteLogEvent"],
         arity: Arity::range(1, 6),
@@ -2352,6 +2836,10 @@ const GLOBALS: &[GlobalDescriptor] = &[
         names: &["ХранилищеСистемныхНастроек", "SystemSettingsStorage"],
         function: FunctionCode::new(13),
     },
+    GlobalDescriptor {
+        names: &["ОбработкаОшибок", "ErrorProcessing"],
+        function: FunctionCode::new(16),
+    },
 ];
 
 const TYPES: &[&TypeDescriptor] = &[
@@ -2363,6 +2851,9 @@ const TYPES: &[&TypeDescriptor] = &[
     &STANDARD_SETTINGS_SELECTION_TYPE,
     &HOME_PAGE_SETTINGS_TYPE,
     &HOME_PAGE_FORMS_TYPE,
+    &ERROR_PROCESSING_MANAGER_TYPE,
+    &ERROR_PROCESSING_SETTINGS_TYPE,
+    &SETTINGS_DESCRIPTION_TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -2381,6 +2872,12 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
         .with_properties(STANDARD_SETTINGS_SELECTION_PROPERTIES),
     ObjectMembersDescriptor::new(&HOME_PAGE_SETTINGS_TYPE).with_methods(HOME_PAGE_SETTINGS_METHODS),
     ObjectMembersDescriptor::new(&HOME_PAGE_FORMS_TYPE).with_properties(HOME_PAGE_FORMS_PROPERTIES),
+    ObjectMembersDescriptor::new(&ERROR_PROCESSING_MANAGER_TYPE)
+        .with_methods(ERROR_PROCESSING_MANAGER_METHODS),
+    ObjectMembersDescriptor::new(&ERROR_PROCESSING_SETTINGS_TYPE)
+        .with_properties(ERROR_PROCESSING_SETTINGS_PROPERTIES),
+    ObjectMembersDescriptor::new(&SETTINGS_DESCRIPTION_TYPE)
+        .with_properties(SETTINGS_DESCRIPTION_PROPERTIES),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];

@@ -1,0 +1,13 @@
+file.begin	error-processing-1
+ERROR.SETTINGS.TYPE	Settings of error processing on the client
+ERROR.SETTINGS.SEND	Auto
+ERROR.SETTINGS.SEND.TYPE	ErrorReportingMode
+ERROR.SETTINGS.ADDRESS	
+ERROR.MODE.AUTO	Auto
+ERROR.MODE.DONT	Do not send
+ERROR.MODE.ASK	Ask user
+ERROR.MODE.SEND	Send
+ERROR.MODE.ALIAS	Yes
+ERROR.BRIEF.MATCH	Yes
+ERROR.DETAIL.MATCH	Yes
+file.end	error-processing-1

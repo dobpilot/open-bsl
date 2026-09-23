@@ -1,0 +1,24 @@
+file.begin	data-composition-comparison-type-1
+DCC.BEGINS_WITH	Begins with
+DCC.CONTAINS	Contains
+DCC.EQUAL	Equal to
+DCC.FILLED	Filled
+DCC.GREATER	Greater than
+DCC.GREATER_OR_EQUAL	Greater than or equal to
+DCC.IN_HIERARCHY	In group
+DCC.IN_LIST	In list
+DCC.IN_LIST_BY_HIERARCHY	In list group
+DCC.LESS	Less than
+DCC.LESS_OR_EQUAL	Less than or equal to
+DCC.LIKE	Like
+DCC.NOT_BEGINS_WITH	Does not begin with
+DCC.NOT_CONTAINS	Does not contain
+DCC.NOT_EQUAL	Not equal
+DCC.NOT_FILLED	Empty
+DCC.NOT_IN_HIERARCHY	Not in group
+DCC.NOT_IN_LIST	Not in list
+DCC.NOT_IN_LIST_BY_HIERARCHY	Not in list group
+DCC.NOT_LIKE	Not like
+DCC.TYPE	DataCompositionComparisonType
+DCC.ENGLISH_ALIAS	Equal to
+file.end	data-composition-comparison-type-1

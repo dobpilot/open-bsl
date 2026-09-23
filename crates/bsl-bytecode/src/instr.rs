@@ -302,9 +302,10 @@ pub enum Instr {
     NewValueComparison {
         dst: u8,
     },
-    /// `Новый Соответствие()` — пары заводятся отдельно, через `Вставить`.
+    /// `Новый Соответствие()` либо копия фиксированного соответствия.
     NewMap {
         dst: u8,
+        source: Option<u8>,
     },
     /// `Новый ЗаписьТекста(Путь)`: `path` содержит строковый путь, а `dst`
     /// получает созданный объект записи.
@@ -432,6 +433,14 @@ pub enum Instr {
         ty: u8,
         params: Option<u8>,
     },
+    /// `Новый Структура(Выражение, ...)`: регистры `base..base+count`
+    /// содержат вычисленный список полей и значения в исходном порядке.
+    /// Вариант добавлен в конец, чтобы сохранить теги прежних инструкций.
+    NewDynamicStructure {
+        dst: u8,
+        base: u8,
+        count: u8,
+    },
 }
 
 /// Режим передачи одного аргумента вызова. У `Call` и `CallImported`
@@ -557,6 +566,7 @@ impl Instr {
             | Instr::SetProp { .. }
             | Instr::CreateObject { .. }
             | Instr::CreateDynamicObject { .. }
+            | Instr::NewDynamicStructure { .. }
             | Instr::NewArray { .. }
             | Instr::NewStructure { .. }
             | Instr::NewTable { .. }
@@ -681,6 +691,7 @@ impl Instr {
             | Instr::Call { .. }
             | Instr::CallImported { .. }
             | Instr::CreateObject { .. }
+            | Instr::NewDynamicStructure { .. }
             | Instr::NewArray { .. }
             | Instr::NewStructure { .. }
             | Instr::NewTable { .. }

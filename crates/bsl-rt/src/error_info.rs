@@ -246,6 +246,22 @@ pub fn is_error_info(value: &BslValue) -> bool {
         .is_some_and(|object| object.downcast_ref::<ErrorInfoObject>().is_some())
 }
 
+/// Возвращает краткое представление сохранённой ошибки.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если передано не `ИнформацияОбОшибке`.
+pub fn brief_error_description(value: &BslValue) -> RtResult<BslValue> {
+    let error = value
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<ErrorInfoObject>())
+        .ok_or(RtError::TypeError {
+            expected: "ИнформацияОбОшибке",
+            op: "КраткоеПредставлениеОшибки",
+        })?;
+    Ok(BslValue::Str(error.description.clone()))
+}
+
 /// Возвращает подробное представление сохранённой ошибки.
 ///
 /// # Errors

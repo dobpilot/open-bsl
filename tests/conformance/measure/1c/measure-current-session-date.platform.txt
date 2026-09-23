@@ -1,0 +1,6 @@
+file.begin	current-session-date-1
+SESSION.DATE.TYPE	Date
+SESSION.DATE.VS.UTC	10800
+SESSION.DATE.VS.CURRENT	0
+SESSION.DATE.ENGLISH.TYPE	Date
+file.end	current-session-date-1

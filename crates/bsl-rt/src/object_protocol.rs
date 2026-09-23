@@ -338,6 +338,16 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         None
     }
 
+    /// Канонический ключ хэширования типа-значения, если равенство не
+    /// совпадает с его строковым представлением.
+    ///
+    /// Равные по [`ObjectProtocol::value_eq`] значения обязаны возвращать
+    /// одинаковый ключ. `None` сохраняет прежнее хэширование через
+    /// [`ObjectProtocol::display`].
+    fn value_hash_key(&self) -> Option<u64> {
+        None
+    }
+
     fn display(&self) -> String {
         self.type_descriptor().name.to_string()
     }
@@ -424,6 +434,10 @@ impl ObjectRef {
 
     pub fn value_eq(&self, other: &ObjectRef) -> Option<bool> {
         self.0.value_eq(other)
+    }
+
+    pub fn value_hash_key(&self) -> Option<u64> {
+        self.0.value_hash_key()
     }
 
     pub fn fill_source_pairs(&self) -> Option<Vec<(String, BslValue)>> {

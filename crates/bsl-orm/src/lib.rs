@@ -20,7 +20,7 @@ use open_bsl::{
     FunctionCode, FunctionDescriptor, FunctionKind, GlobalDescriptor, GraphLimits,
     LibraryDescriptor, MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol,
     PropertyDescriptor, RtError, RtResult, SerializedValueGraph, TypeDescriptor, Value,
-    call_method_from_table, folded_eq, get_property_from_table, lookup_member,
+    call_method_from_table, folded_eq, get_property_from_table, lookup_enum, lookup_member,
 };
 
 /// Основной язык программирования конфигурации.
@@ -38,6 +38,39 @@ impl ScriptVariant {
             Self::Russian => EnumValue::ScriptVariantRussian,
             Self::English => EnumValue::ScriptVariantEnglish,
         })
+    }
+}
+
+/// Режим обновления предопределённых данных информационной базы.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PredefinedDataUpdateMode {
+    /// Режим определяется настройками объектов и узла распределённой базы.
+    Auto,
+    /// Предопределённые данные обновляются автоматически.
+    AutoUpdate,
+    /// Автоматическое обновление отключено.
+    DontAutoUpdate,
+}
+
+impl PredefinedDataUpdateMode {
+    fn value(self) -> Value {
+        Value::Enum(match self {
+            Self::Auto => EnumValue::PredefinedDataUpdateAuto,
+            Self::AutoUpdate => EnumValue::PredefinedDataUpdateAutoUpdate,
+            Self::DontAutoUpdate => EnumValue::PredefinedDataUpdateDontAutoUpdate,
+        })
+    }
+
+    fn from_value(value: &Value) -> RtResult<Self> {
+        match value {
+            Value::Enum(EnumValue::PredefinedDataUpdateAuto) => Ok(Self::Auto),
+            Value::Enum(EnumValue::PredefinedDataUpdateAutoUpdate) => Ok(Self::AutoUpdate),
+            Value::Enum(EnumValue::PredefinedDataUpdateDontAutoUpdate) => Ok(Self::DontAutoUpdate),
+            _ => Err(RtError::TypeError {
+                expected: "ОбновлениеПредопределенныхДанных",
+                op: "УстановитьОбновлениеПредопределенныхДанныхИнформационнойБазы",
+            }),
+        }
     }
 }
 
@@ -372,12 +405,44 @@ impl ConfigurationExtensionsSnapshot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MetadataKind {
+    /// Перечисление конфигурации.
+    Enumeration,
+    /// Общая картинка.
+    CommonPicture,
     /// Справочник.
     Catalog,
+    /// Документ.
+    Document,
+    /// Журнал документов.
+    DocumentJournal,
     /// Регистр сведений.
     InformationRegister,
+    /// Регистр накопления.
+    AccumulationRegister,
+    /// Регистр бухгалтерии.
+    AccountingRegister,
+    /// Регистр расчёта.
+    CalculationRegister,
+    /// План счетов.
+    ChartOfAccounts,
+    /// План видов характеристик.
+    ChartOfCharacteristicTypes,
+    /// План видов расчёта.
+    ChartOfCalculationTypes,
+    /// План обмена.
+    ExchangePlan,
     /// Константа.
     Constant,
+    /// Отчёт.
+    Report,
+    /// Обработка.
+    DataProcessor,
+    /// Бизнес-процесс.
+    BusinessProcess,
+    /// Задача.
+    Task,
+    /// Хранилище настроек.
+    SettingsStorage,
     /// Функциональная опция.
     FunctionalOption,
     /// Элемент стиля.
@@ -400,6 +465,48 @@ pub struct MetadataObject {
     kind: MetadataKind,
     manager_module: Option<Arc<str>>,
     string_properties: Arc<[(Arc<str>, Arc<str>)]>,
+}
+
+/// Неизменяемое описание значения конфигурационного перечисления.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigurationEnumValue {
+    owner_id: Arc<str>,
+    value_id: Arc<str>,
+    name: Arc<str>,
+}
+
+impl ConfigurationEnumValue {
+    /// Создаёт описание из устойчивых идентификаторов приобретённого снимка.
+    #[must_use]
+    pub fn new(
+        owner_id: impl Into<String>,
+        value_id: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
+        Self {
+            owner_id: Arc::from(owner_id.into()),
+            value_id: Arc::from(value_id.into()),
+            name: Arc::from(name.into()),
+        }
+    }
+
+    /// Возвращает идентификатор объекта-перечисления.
+    #[must_use]
+    pub fn owner_id(&self) -> &str {
+        &self.owner_id
+    }
+
+    /// Возвращает идентификатор значения перечисления.
+    #[must_use]
+    pub fn value_id(&self) -> &str {
+        &self.value_id
+    }
+
+    /// Возвращает имя значения в конфигурации.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl MetadataObject {
@@ -467,6 +574,8 @@ pub struct MetadataCatalog {
     objects: Arc<[MetadataObject]>,
     configuration: Option<ConfigurationDescription>,
     configuration_extensions: Option<Arc<ConfigurationExtensionsSnapshot>>,
+    configuration_changed: Option<bool>,
+    enumeration_values: Arc<[ConfigurationEnumValue]>,
 }
 
 #[derive(Debug)]
@@ -543,7 +652,41 @@ impl MetadataCatalog {
             objects: objects.into(),
             configuration: None,
             configuration_extensions: None,
+            configuration_changed: None,
+            enumeration_values: Arc::from([]),
         })
+    }
+
+    /// Добавляет значения конфигурационных перечислений из того же снимка.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку для пустого идентификатора или имени, неизвестного
+    /// владельца, владельца другого вида и повторного имени у владельца.
+    pub fn with_enumeration_values(
+        mut self,
+        values: Vec<ConfigurationEnumValue>,
+    ) -> Result<Self, CatalogError> {
+        for (index, value) in values.iter().enumerate() {
+            if value.value_id.is_empty() || value.name.is_empty() {
+                return Err(CatalogError::InvalidEnumerationValue);
+            }
+            let owner = self
+                .object_by_id(&value.owner_id)
+                .filter(|owner| owner.kind == MetadataKind::Enumeration)
+                .ok_or_else(|| CatalogError::UnknownEnumerationOwner(value.owner_id.to_string()))?;
+            if values[..index]
+                .iter()
+                .any(|known| known.owner_id == owner.id && folded_eq(&known.name, &value.name))
+            {
+                return Err(CatalogError::DuplicateEnumerationValue {
+                    owner: owner.name.to_string(),
+                    name: value.name.to_string(),
+                });
+            }
+        }
+        self.enumeration_values = values.into();
+        Ok(self)
     }
 
     /// Добавляет свойства корневого объекта метаданных конфигурации.
@@ -595,6 +738,13 @@ impl MetadataCatalog {
         self
     }
 
+    /// Добавляет признак различия основной конфигурации и конфигурации базы.
+    #[must_use]
+    pub const fn with_configuration_changed(mut self, changed: bool) -> Self {
+        self.configuration_changed = Some(changed);
+        self
+    }
+
     #[must_use]
     /// Возвращает идентичность конфигурации.
     pub fn identity(&self) -> &str {
@@ -619,6 +769,14 @@ impl MetadataCatalog {
         self.objects
             .iter()
             .find(|object| object.kind == kind && folded_eq(&object.name, name))
+    }
+
+    /// Находит значение перечисления по владельцу и регистронезависимому имени.
+    #[must_use]
+    pub fn enumeration_value(&self, owner_id: &str, name: &str) -> Option<&ConfigurationEnumValue> {
+        self.enumeration_values
+            .iter()
+            .find(|value| value.owner_id.as_ref() == owner_id && folded_eq(&value.name, name))
     }
 
     /// Возвращает идентификаторы основных ролей конфигурации.
@@ -688,6 +846,66 @@ impl Principal {
 pub struct QueryRequest {
     text: Rc<str>,
     parameters: Rc<[(Rc<str>, Value)]>,
+}
+
+/// Именованное пространство управляемой блокировки данных.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataLockRequest {
+    lock_space: Rc<str>,
+}
+
+/// Чей набор ролей проверяет [`DataAccess::access_right`].
+#[derive(Debug, Clone)]
+pub enum AccessRightSubject {
+    /// Пользователь текущего сеанса.
+    CurrentPrincipal,
+    /// Явно переданный пользователь информационной базы.
+    Principal(Principal),
+    /// Явно переданная роль конфигурации.
+    Role(Arc<str>),
+}
+
+/// Неизменяемый запрос проверки права на объект метаданных.
+#[derive(Debug, Clone)]
+pub struct AccessRightRequest {
+    right: Rc<str>,
+    metadata: MetadataObject,
+    subject: AccessRightSubject,
+    standard_attribute: Option<Rc<str>>,
+}
+
+impl AccessRightRequest {
+    /// Возвращает имя проверяемого права.
+    #[must_use]
+    pub fn right(&self) -> &str {
+        &self.right
+    }
+
+    /// Возвращает объект метаданных, для которого проверяется право.
+    #[must_use]
+    pub const fn metadata(&self) -> &MetadataObject {
+        &self.metadata
+    }
+
+    /// Возвращает явно выбранный субъект либо текущего пользователя.
+    #[must_use]
+    pub const fn subject(&self) -> &AccessRightSubject {
+        &self.subject
+    }
+
+    /// Возвращает путь стандартного реквизита или табличной части.
+    #[must_use]
+    pub fn standard_attribute(&self) -> Option<&str> {
+        self.standard_attribute.as_deref()
+    }
+}
+
+impl DataLockRequest {
+    /// Возвращает имя пространства блокировок в синтаксисе платформы.
+    #[must_use]
+    pub fn lock_space(&self) -> &str {
+        &self.lock_space
+    }
 }
 
 impl QueryRequest {
@@ -855,6 +1073,205 @@ pub trait DataAccess {
             "выполнение запросов не поддерживается адаптером данных".into(),
         ))
     }
+
+    /// Проверяет эффективное право на объект метаданных.
+    ///
+    /// Адаптер применяет иерархию прав ролей и самостоятельно проверяет
+    /// административное право текущего пользователя для явно указанного
+    /// субъекта.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку отсутствующих данных ролей, неизвестного права,
+    /// неприменимого объекта либо недостаточного административного права.
+    fn access_right(
+        &self,
+        _request: &AccessRightRequest,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<bool> {
+        Err(RtError::DynamicError(
+            "проверка прав метаданных не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Устанавливает управляемые блокировки на соединении текущего сеанса.
+    /// Адаптер отвечает за транзакцию, время жизни и снятие блокировок.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, проверки прав, транзакции или
+    /// неподдерживаемого механизма блокировок.
+    fn lock_data(
+        &self,
+        _requests: &[DataLockRequest],
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "управляемые блокировки данных не поддерживаются адаптером данных".into(),
+        ))
+    }
+
+    /// Начинает транзакцию на соединении текущего сеанса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных или неподдерживаемой транзакции.
+    fn begin_transaction(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "транзакции не поддерживаются адаптером данных".into(),
+        ))
+    }
+
+    /// Фиксирует текущую транзакцию соединения сеанса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, состояния или фиксации транзакции.
+    fn commit_transaction(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "транзакции не поддерживаются адаптером данных".into(),
+        ))
+    }
+
+    /// Отменяет текущую транзакцию соединения сеанса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, состояния или отката транзакции.
+    fn rollback_transaction(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "транзакции не поддерживаются адаптером данных".into(),
+        ))
+    }
+
+    /// Возвращает состояние монопольного режима текущего соединения.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных или неподдерживаемой
+    /// операции.
+    fn exclusive_mode(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<bool> {
+        Err(RtError::DynamicError(
+            "монопольный режим не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Изменяет монопольный режим текущего соединения.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, прав, конкурирующего сеанса
+    /// или неподдерживаемой операции.
+    fn set_exclusive_mode(
+        &self,
+        _enabled: bool,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "монопольный режим не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Запускает или останавливает обработку сервисов интеграции.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, прав, разделителей сеанса или
+    /// неподдерживаемой операции.
+    fn set_integration_services_processing(
+        &self,
+        _enabled: bool,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "обработка сервисов интеграции не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Возвращает менеджер именованного сервиса интеграции.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку неизвестного сервиса, источника данных, прав или
+    /// неподдерживаемой операции.
+    fn integration_service(
+        &self,
+        _name: &str,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError(
+            "сервисы интеграции не поддерживаются адаптером данных".into(),
+        ))
+    }
+
+    /// Возвращает режим обновления предопределённых данных информационной базы.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, прав или неподдерживаемой операции.
+    fn info_base_predefined_data_update(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<PredefinedDataUpdateMode> {
+        Err(RtError::DynamicError(
+            "режим обновления предопределённых данных не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Изменяет режим обновления предопределённых данных информационной базы.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, административных прав,
+    /// разделителей сеанса или неподдерживаемой операции.
+    fn set_info_base_predefined_data_update(
+        &self,
+        _mode: PredefinedDataUpdateMode,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "режим обновления предопределённых данных не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Инициализирует предопределённые данные текущей области базы.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, прав, разделителей сеанса или
+    /// неподдерживаемой операции.
+    fn initialize_predefined_data(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "инициализация предопределённых данных не поддерживается адаптером данных".into(),
+        ))
+    }
 }
 
 /// Данные ORM, принадлежащие ровно одному `open_bsl::State`.
@@ -977,6 +1394,17 @@ pub enum CatalogError {
         /// Повторное имя.
         name: String,
     },
+    /// Идентификатор или имя значения перечисления пусы.
+    InvalidEnumerationValue,
+    /// Владелец значения отсутствует или не является перечислением.
+    UnknownEnumerationOwner(String),
+    /// Имя значения повторяется у одного перечисления.
+    DuplicateEnumerationValue {
+        /// Имя перечисления.
+        owner: String,
+        /// Повторившееся имя значения.
+        name: String,
+    },
     /// Набор ссылается на неизвестное расширение.
     UnknownExtensionIdentity,
     /// Расширение одновременно активно и отключено в сеансе.
@@ -1025,6 +1453,17 @@ impl fmt::Display for CatalogError {
             Self::DuplicateExtensionName { name } => {
                 write!(formatter, "имя расширения `{name}` повторяется")
             }
+            Self::InvalidEnumerationValue => {
+                formatter.write_str("идентификатор или имя значения перечисления пусы")
+            }
+            Self::UnknownEnumerationOwner(owner) => write!(
+                formatter,
+                "владелец значения перечисления `{owner}` отсутствует или имеет другой вид"
+            ),
+            Self::DuplicateEnumerationValue { owner, name } => write!(
+                formatter,
+                "значение `{name}` перечисления `{owner}` повторяется"
+            ),
             Self::UnknownExtensionIdentity => {
                 formatter.write_str("набор сеанса ссылается на неизвестное расширение")
             }
@@ -1044,6 +1483,14 @@ fn session<'a>(ctx: &'a CallContext<'_>) -> RtResult<&'a SessionData> {
     ctx.host_data()?
         .downcast_ref::<SessionData>()
         .ok_or_else(|| RtError::DynamicError("данные сеанса имеют неверный тип".into()))
+}
+
+fn current_data_access(context: &CallContext<'_>) -> RtResult<(Principal, Rc<dyn DataAccess>)> {
+    let session = session(context)?;
+    let data_access = session.data_access.as_ref().ok_or_else(|| {
+        RtError::DynamicError("адаптер данных текущего сеанса не подключён".into())
+    })?;
+    Ok((session.principal.clone(), Rc::clone(data_access)))
 }
 
 #[derive(Debug)]
@@ -1087,8 +1534,36 @@ struct ManagerValue {
 }
 
 #[derive(Debug)]
+struct EnumerationReferenceValue {
+    catalog: Arc<MetadataCatalog>,
+    value_id: Arc<str>,
+}
+
+#[derive(Debug)]
+struct PictureLibrary {
+    catalog: Arc<MetadataCatalog>,
+}
+
+#[derive(Debug)]
+struct PictureValue {
+    catalog: Arc<MetadataCatalog>,
+    object_id: Arc<str>,
+}
+
+#[derive(Debug)]
 struct ConfigurationExtensionsManager {
     catalog: Arc<MetadataCatalog>,
+}
+
+#[derive(Debug)]
+struct InfoBaseUsersManager;
+
+#[derive(Debug)]
+struct IntegrationServicesManager;
+
+#[derive(Debug)]
+struct InfoBaseUserValue {
+    principal: Principal,
 }
 
 #[derive(Debug)]
@@ -1138,6 +1613,14 @@ struct ValueStorageValue {
     _compression_level: Option<i8>,
 }
 
+#[derive(Debug, Default)]
+struct DataLockValue {
+    requests: RefCell<Vec<DataLockRequest>>,
+}
+
+#[derive(Debug)]
+struct DataLockItemValue;
+
 static METADATA_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-orm", "ОбъектМетаданныхКонфигурация");
 static METADATA_COLLECTION_TYPE: TypeDescriptor =
@@ -1156,8 +1639,44 @@ static COMPATIBILITY_MODE_PROPERTY_TYPE: TypeDescriptor = TypeDescriptor {
 };
 static MANAGERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-orm", "МенеджерыОбъектов");
 static MANAGER_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-orm", "МенеджерОбъекта");
+static ENUMERATION_REFERENCE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "ПеречислениеСсылка",
+    type_display: "Enumeration reference",
+    type_names: &["EnumerationRef"],
+};
+static PICTURE_LIBRARY_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "БиблиотекаКартинок",
+    type_display: "Picture library",
+    type_names: &["PictureLib"],
+};
+static PICTURE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "Картинка",
+    type_display: "Picture",
+    type_names: &["Picture"],
+};
 static CONFIGURATION_EXTENSIONS_MANAGER_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-orm", "МенеджерРасширенийКонфигурации");
+static INFO_BASE_USERS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "МенеджерПользователейИнформационнойБазы",
+    type_display: "InfoBase users manager",
+    type_names: &["InfoBaseUsersManager"],
+};
+static INFO_BASE_USER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "ПользовательИнформационнойБазы",
+    type_display: "InfoBase user",
+    type_names: &["InfoBaseUser"],
+};
+static INTEGRATION_SERVICES_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "МенеджерСервисовИнтеграции",
+    type_display: "Integration services manager",
+    type_names: &["IntegrationServicesManager"],
+};
 static CONFIGURATION_EXTENSION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-orm", "РасширениеКонфигурации");
 static EXTENSION_APPLICATION_ISSUE_TYPE: TypeDescriptor = TypeDescriptor::new(
@@ -1193,6 +1712,18 @@ static VALUE_STORAGE_TYPE: TypeDescriptor = TypeDescriptor {
     name: "ХранилищеЗначения",
     type_display: "Value storage",
     type_names: &["ValueStorage"],
+};
+static DATA_LOCK_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "БлокировкаДанных",
+    type_display: "Data lock",
+    type_names: &["DataLock"],
+};
+static DATA_LOCK_ITEM_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "ЭлементБлокировкиДанных",
+    type_display: "Data lock item",
+    type_names: &["DataLockItem"],
 };
 
 impl ObjectProtocol for MetadataRoot {
@@ -1454,6 +1985,76 @@ impl ObjectProtocol for ManagerValue {
     }
 }
 
+// НЕ ИЗМЕРЕНО(PREDEFINED.CONFIG_ENUM.REFERENCE_SURFACE): до замера
+// конкретного перечисления значение имеет общий тип, печатает имя и
+// сравнивается по устойчивому GUID в одном снимке.
+impl ObjectProtocol for EnumerationReferenceValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &ENUMERATION_REFERENCE_TYPE
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        let index = self
+            .catalog
+            .enumeration_values
+            .iter()
+            .position(|value| value.value_id == self.value_id)?;
+        Some((Arc::as_ptr(&self.catalog) as usize, index))
+    }
+
+    fn display(&self) -> String {
+        self.catalog
+            .enumeration_values
+            .iter()
+            .find(|value| value.value_id == self.value_id)
+            .map_or_else(String::new, |value| value.name.to_string())
+    }
+}
+
+impl ObjectProtocol for PictureLibrary {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &PICTURE_LIBRARY_TYPE
+    }
+
+    fn get_property(&self, name: &str, _: &mut CallContext<'_>) -> RtResult<Value> {
+        let object = self
+            .catalog
+            .object(MetadataKind::CommonPicture, name)
+            .ok_or_else(|| RtError::UnknownProperty(name.into()))?;
+        Ok(Value::new_object(PictureValue {
+            catalog: Arc::clone(&self.catalog),
+            object_id: Arc::clone(&object.id),
+        }))
+    }
+}
+
+impl ObjectProtocol for PictureValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &PICTURE_TYPE
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        let index = self
+            .catalog
+            .objects
+            .iter()
+            .position(|object| object.id == self.object_id)?;
+        Some((Arc::as_ptr(&self.catalog) as usize, index))
+    }
+
+    fn display(&self) -> String {
+        "Picture".into()
+    }
+}
+
 impl ObjectProtocol for ConfigurationExtensionsManager {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &CONFIGURATION_EXTENSIONS_MANAGER_TYPE
@@ -1461,6 +2062,41 @@ impl ObjectProtocol for ConfigurationExtensionsManager {
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
         CONFIGURATION_EXTENSIONS_MANAGER_METHODS
+    }
+}
+
+impl ObjectProtocol for InfoBaseUsersManager {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &INFO_BASE_USERS_MANAGER_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        INFO_BASE_USERS_MANAGER_METHODS
+    }
+}
+
+impl ObjectProtocol for IntegrationServicesManager {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &INTEGRATION_SERVICES_MANAGER_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        INTEGRATION_SERVICES_MANAGER_METHODS
+    }
+
+    fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<Value> {
+        let (principal, data_access) = current_data_access(context)?;
+        data_access.integration_service(name, &principal, context)
+    }
+}
+
+impl ObjectProtocol for InfoBaseUserValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &INFO_BASE_USER_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        INFO_BASE_USER_PROPERTIES
     }
 }
 
@@ -1550,6 +2186,22 @@ impl ObjectProtocol for ValueStorageValue {
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
         VALUE_STORAGE_METHODS
+    }
+}
+
+impl ObjectProtocol for DataLockValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DATA_LOCK_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        DATA_LOCK_METHODS
+    }
+}
+
+impl ObjectProtocol for DataLockItemValue {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DATA_LOCK_ITEM_TYPE
     }
 }
 
@@ -2104,6 +2756,147 @@ fn value_storage_get(
     Ok(values.remove(0))
 }
 
+fn new_data_lock(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(DataLockValue::default()))
+}
+
+fn data_lock_add(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let lock = receiver
+        .downcast_ref::<DataLockValue>()
+        .ok_or(RtError::NotAnObject)?;
+    match arguments {
+        [] => {}
+        [Value::Str(lock_space)] => lock.requests.borrow_mut().push(DataLockRequest {
+            lock_space: Rc::from(lock_space.to_string()),
+        }),
+        [_] => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "БлокировкаДанных.Добавить",
+            });
+        }
+        _ => {
+            return Err(RtError::DynamicError(
+                "БлокировкаДанных.Добавить ожидает не больше одного аргумента".into(),
+            ));
+        }
+    }
+    Ok(Value::new_object(DataLockItemValue))
+}
+
+fn data_lock_lock(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let lock = receiver
+        .downcast_ref::<DataLockValue>()
+        .ok_or(RtError::NotAnObject)?;
+    let requests = lock.requests.borrow().clone();
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.lock_data(&requests, &principal, context)?;
+    Ok(Value::Undefined)
+}
+
+fn begin_transaction(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.begin_transaction(&principal, context)?;
+    Ok(Value::Undefined)
+}
+
+fn commit_transaction(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.commit_transaction(&principal, context)?;
+    Ok(Value::Undefined)
+}
+
+fn rollback_transaction(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.rollback_transaction(&principal, context)?;
+    Ok(Value::Undefined)
+}
+
+fn exclusive_mode(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    Ok(Value::Boolean(
+        data_access.exclusive_mode(&principal, context)?,
+    ))
+}
+
+fn set_exclusive_mode(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let [Value::Boolean(enabled)] = arguments else {
+        return Err(RtError::TypeError {
+            expected: "Булево",
+            op: "УстановитьМонопольныйРежим",
+        });
+    };
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.set_exclusive_mode(*enabled, &principal, context)?;
+    Ok(Value::Undefined)
+}
+
+fn integration_services(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(IntegrationServicesManager))
+}
+
+fn set_integration_services_processing(
+    receiver: &dyn ObjectProtocol,
+    enabled: bool,
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<IntegrationServicesManager>()
+        .ok_or(RtError::NotAnObject)?;
+    let (principal, data_access) = current_data_access(context)?;
+    // НЕ ИЗМЕРЕНО(INTEGRATION_SERVICES.PROCESSING): синтакс-помощник задаёт
+    // назначение операций, но их побочные эффекты и ошибки ещё не сняты на 1С.
+    data_access.set_integration_services_processing(enabled, &principal, context)?;
+    Ok(Value::Undefined)
+}
+
+fn execute_integration_services_processing(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    set_integration_services_processing(receiver, true, context)
+}
+
+fn stop_integration_services_processing(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    set_integration_services_processing(receiver, false, context)
+}
+
+fn info_base_predefined_data_update(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    Ok(data_access
+        .info_base_predefined_data_update(&principal, context)?
+        .value())
+}
+
+fn set_info_base_predefined_data_update(
+    context: &mut CallContext<'_>,
+    arguments: &[Value],
+) -> RtResult<Value> {
+    let mode = PredefinedDataUpdateMode::from_value(&arguments[0])?;
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.set_info_base_predefined_data_update(mode, &principal, context)?;
+    Ok(Value::Undefined)
+}
+
+fn initialize_predefined_data(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.initialize_predefined_data(&principal, context)?;
+    Ok(Value::Undefined)
+}
+
 fn query_text(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
     let query = receiver
         .downcast_ref::<QueryValue>()
@@ -2357,6 +3150,11 @@ static VALUE_STORAGE_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     value_storage_get,
 )];
 
+static DATA_LOCK_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(&["Добавить", "Add"], Arity::range(0, 1), data_lock_add),
+    MethodDescriptor::new(&["Заблокировать", "Lock"], Arity::exact(0), data_lock_lock),
+];
+
 static METADATA_COLLECTION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     &["Найти", "Find"],
     Arity::exact(1),
@@ -2449,6 +3247,31 @@ static CONFIGURATION_EXTENSIONS_MANAGER_METHODS: &[MethodDescriptor] = &[
     ),
 ];
 
+static INFO_BASE_USERS_MANAGER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["ТекущийПользователь", "CurrentUser"],
+    Arity::exact(0),
+    current_user,
+)];
+
+static INTEGRATION_SERVICES_MANAGER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["ВыполнитьОбработку", "ExecuteProcessing"],
+        Arity::exact(0),
+        execute_integration_services_processing,
+    ),
+    MethodDescriptor::new(
+        &["ОстановитьОбработку", "StopProcessing"],
+        Arity::exact(0),
+        stop_integration_services_processing,
+    ),
+];
+
+static INFO_BASE_USER_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["Имя", "Name"],
+    get: current_user_name,
+    set: None,
+}];
+
 static CONFIGURATION_EXTENSION_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
         names: &["УникальныйИдентификатор", "UUID"],
@@ -2538,6 +3361,12 @@ fn collection_kind(name: &str) -> Option<MetadataKind> {
             MetadataKind::InformationRegister,
         ),
         ("Константы", "Constants", MetadataKind::Constant),
+        ("ПланыОбмена", "ExchangePlans", MetadataKind::ExchangePlan),
+        (
+            "ОбщиеКартинки",
+            "CommonPictures",
+            MetadataKind::CommonPicture,
+        ),
         (
             "ФункциональныеОпции",
             "FunctionalOptions",
@@ -2605,10 +3434,186 @@ fn constants(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     managers(ctx, MetadataKind::Constant)
 }
 
+fn enumerations(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::Enumeration)
+}
+
+fn exchange_plans(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::ExchangePlan)
+}
+
 fn configuration_extensions(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::new_object(ConfigurationExtensionsManager {
         catalog: Arc::clone(session(ctx)?.catalog()),
     }))
+}
+
+fn info_base_users(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(InfoBaseUsersManager))
+}
+
+fn picture_library(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(PictureLibrary {
+        catalog: Arc::clone(session(ctx)?.catalog()),
+    }))
+}
+
+fn configuration_changed(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let changed = session(ctx)?
+        .catalog()
+        .configuration_changed
+        .ok_or_else(|| {
+            RtError::DynamicError(
+                "признак изменения конфигурации не предоставлен источником метаданных".into(),
+            )
+        })?;
+    Ok(Value::Boolean(changed))
+}
+
+fn current_user(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    receiver
+        .downcast_ref::<InfoBaseUsersManager>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::new_object(InfoBaseUserValue {
+        principal: session(context)?.principal().clone(),
+    }))
+}
+
+fn current_user_name(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    let user = receiver
+        .downcast_ref::<InfoBaseUserValue>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(user.principal.name().into()))
+}
+
+fn user_name(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::Str(session(context)?.principal().name().into()))
+}
+
+fn predefined_value(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let [Value::Str(path)] = arguments else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ПредопределенноеЗначение",
+        });
+    };
+    let path = path.to_string();
+    let parts = path.split('.').collect::<Vec<_>>();
+    if let [kind, member] = parts.as_slice()
+        && let Some(value) = lookup_enum(kind).and_then(|kind| lookup_member(kind, member))
+    {
+        return Ok(Value::Enum(value));
+    }
+    if let [kind, owner_name, member] = parts.as_slice()
+        && (folded_eq(kind, "Перечисление")
+            || folded_eq(kind, "Enum")
+            || folded_eq(kind, "Enumeration"))
+    {
+        let catalog = Arc::clone(session(context)?.catalog());
+        if let Some(owner) = catalog.object(MetadataKind::Enumeration, owner_name)
+            && let Some(value) = catalog.enumeration_value(owner.id(), member)
+        {
+            return Ok(Value::new_object(EnumerationReferenceValue {
+                catalog: Arc::clone(&catalog),
+                value_id: Arc::clone(&value.value_id),
+            }));
+        }
+    }
+    Err(RtError::DynamicError(format!(
+        "предопределённое значение `{path}` не найдено"
+    )))
+}
+
+fn access_right(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let [right, metadata, tail @ ..] = arguments else {
+        return Err(RtError::DynamicError(
+            "ПравоДоступа ожидает от двух до четырёх аргументов".into(),
+        ));
+    };
+    let Value::Str(right) = right else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ПравоДоступа",
+        });
+    };
+    let right = right.to_string();
+    if right.is_empty() {
+        return Err(RtError::DynamicError("имя права пусто".into()));
+    }
+
+    let (catalog, metadata) = {
+        let session = session(context)?;
+        let value = metadata
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<MetadataValue>())
+            .filter(|value| Arc::ptr_eq(&value.catalog, session.catalog()))
+            .ok_or_else(|| RtError::TypeError {
+                expected: "ОбъектМетаданных",
+                op: "ПравоДоступа",
+            })?;
+        let metadata = session
+            .catalog()
+            .object_by_id(&value.object_id)
+            .cloned()
+            .ok_or_else(|| {
+                RtError::DynamicError("объект метаданных отсутствует в каталоге".into())
+            })?;
+        (Arc::clone(session.catalog()), metadata)
+    };
+
+    let subject = match tail.first() {
+        None | Some(Value::Undefined) => AccessRightSubject::CurrentPrincipal,
+        Some(value) => {
+            let object = value.object_ref().ok_or_else(|| RtError::TypeError {
+                expected: "ПользовательИнформационнойБазы или ОбъектМетаданныхРоль",
+                op: "ПравоДоступа",
+            })?;
+            if let Some(user) = object.downcast_ref::<InfoBaseUserValue>() {
+                AccessRightSubject::Principal(user.principal.clone())
+            } else if let Some(role) = object
+                .downcast_ref::<MetadataValue>()
+                .filter(|value| Arc::ptr_eq(&value.catalog, &catalog))
+                .and_then(|value| catalog.object_by_id(&value.object_id))
+                .filter(|object| object.kind() == MetadataKind::Role)
+            {
+                AccessRightSubject::Role(Arc::from(role.id()))
+            } else {
+                return Err(RtError::TypeError {
+                    expected: "ПользовательИнформационнойБазы или ОбъектМетаданныхРоль",
+                    op: "ПравоДоступа",
+                });
+            }
+        }
+    };
+    let standard_attribute = match tail.get(1) {
+        None | Some(Value::Undefined) => None,
+        Some(Value::Str(value)) if !value.to_string().is_empty() => {
+            Some(Rc::from(value.to_string()))
+        }
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "непустая Строка",
+                op: "ПравоДоступа",
+            });
+        }
+    };
+    let request = AccessRightRequest {
+        right: Rc::from(right),
+        metadata,
+        subject,
+        standard_attribute,
+    };
+    if context.privileged_mode()? {
+        return Ok(Value::Boolean(true));
+    }
+    let (principal, data_access) = current_data_access(context)?;
+    Ok(Value::Boolean(
+        data_access.access_right(&request, &principal, context)?,
+    ))
 }
 
 fn role_available(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
@@ -2652,12 +3657,19 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::range(1, 2),
         call: new_value_storage,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(4),
+        names: &["БлокировкаДанных", "DataLock"],
+        arity: Arity::exact(0),
+        call: new_data_lock,
+    },
 ];
 
 const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
     (ConstructorCode::new(1), &QUERY_TYPE),
     (ConstructorCode::new(2), &DEFLATION_TYPE),
     (ConstructorCode::new(3), &VALUE_STORAGE_TYPE),
+    (ConstructorCode::new(4), &DATA_LOCK_TYPE),
 ];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
@@ -2703,6 +3715,134 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: configuration_extensions,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(7),
+        names: &["ПолучитьПользователейИнформационнойБазыORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: info_base_users,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(8),
+        names: &["ПолучитьПеречисленияORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: enumerations,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(9),
+        names: &["ПолучитьБиблиотекуКартинокORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: picture_library,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(10),
+        names: &["КонфигурацияИзменена", "ConfigurationChanged"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: configuration_changed,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(11),
+        names: &["ПолучитьПланыОбменаORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: exchange_plans,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(12),
+        names: &["НачатьТранзакцию", "BeginTransaction"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Procedure,
+        call: begin_transaction,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(13),
+        names: &["ЗафиксироватьТранзакцию", "CommitTransaction"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Procedure,
+        call: commit_transaction,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(14),
+        names: &["ОтменитьТранзакцию", "RollbackTransaction"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Procedure,
+        call: rollback_transaction,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(15),
+        names: &["ПравоДоступа", "AccessRight"],
+        arity: Arity::range(2, 4),
+        kind: FunctionKind::Function,
+        call: access_right,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(16),
+        names: &["ИмяПользователя", "UserName"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: user_name,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(17),
+        names: &["ПредопределенноеЗначение", "PredefinedValue"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: predefined_value,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(18),
+        names: &["МонопольныйРежим", "ExclusiveMode"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: exclusive_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(19),
+        names: &["УстановитьМонопольныйРежим", "SetExclusiveMode"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Procedure,
+        call: set_exclusive_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(20),
+        names: &["ПолучитьСервисыИнтеграцииORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: integration_services,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(21),
+        names: &[
+            "ПолучитьОбновлениеПредопределенныхДанныхИнформационнойБазы",
+            "GetInfoBasePredefinedData",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: info_base_predefined_data_update,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(22),
+        names: &[
+            "УстановитьОбновлениеПредопределенныхДанныхИнформационнойБазы",
+            "SetInfoBasePredefinedDataUpdate",
+        ],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Procedure,
+        call: set_info_base_predefined_data_update,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(23),
+        names: &[
+            "ИнициализироватьПредопределенныеДанные",
+            "InitializePredefinedData",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Procedure,
+        call: initialize_predefined_data,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
@@ -2726,6 +3866,26 @@ const GLOBALS: &[GlobalDescriptor] = &[
         names: &["РасширенияКонфигурации", "ConfigurationExtensions"],
         function: FunctionCode::new(6),
     },
+    GlobalDescriptor {
+        names: &["ПользователиИнформационнойБазы", "InfoBaseUsers"],
+        function: FunctionCode::new(7),
+    },
+    GlobalDescriptor {
+        names: &["Перечисления", "Enums"],
+        function: FunctionCode::new(8),
+    },
+    GlobalDescriptor {
+        names: &["ПланыОбмена", "ExchangePlans"],
+        function: FunctionCode::new(11),
+    },
+    GlobalDescriptor {
+        names: &["БиблиотекаКартинок", "PictureLib"],
+        function: FunctionCode::new(9),
+    },
+    GlobalDescriptor {
+        names: &["СервисыИнтеграции", "IntegrationServices"],
+        function: FunctionCode::new(20),
+    },
 ];
 
 const TYPES: &[&TypeDescriptor] = &[
@@ -2737,7 +3897,13 @@ const TYPES: &[&TypeDescriptor] = &[
     &COMPATIBILITY_MODE_PROPERTY_TYPE,
     &MANAGERS_TYPE,
     &MANAGER_TYPE,
+    &ENUMERATION_REFERENCE_TYPE,
+    &PICTURE_LIBRARY_TYPE,
+    &PICTURE_TYPE,
     &CONFIGURATION_EXTENSIONS_MANAGER_TYPE,
+    &INFO_BASE_USERS_MANAGER_TYPE,
+    &INFO_BASE_USER_TYPE,
+    &INTEGRATION_SERVICES_MANAGER_TYPE,
     &CONFIGURATION_EXTENSION_TYPE,
     &EXTENSION_APPLICATION_ISSUE_TYPE,
     &QUERY_TYPE,
@@ -2745,6 +3911,8 @@ const TYPES: &[&TypeDescriptor] = &[
     &QUERY_SELECTION_TYPE,
     &DEFLATION_TYPE,
     &VALUE_STORAGE_TYPE,
+    &DATA_LOCK_TYPE,
+    &DATA_LOCK_ITEM_TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -2765,8 +3933,17 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&MANAGER_TYPE)
         .with_methods(CONSTANT_MANAGER_METHODS)
         .with_properties(MANAGER_PROPERTIES),
+    ObjectMembersDescriptor::new(&ENUMERATION_REFERENCE_TYPE),
+    ObjectMembersDescriptor::new(&PICTURE_LIBRARY_TYPE).with_dynamic_properties(),
+    ObjectMembersDescriptor::new(&PICTURE_TYPE),
     ObjectMembersDescriptor::new(&CONFIGURATION_EXTENSIONS_MANAGER_TYPE)
         .with_methods(CONFIGURATION_EXTENSIONS_MANAGER_METHODS),
+    ObjectMembersDescriptor::new(&INFO_BASE_USERS_MANAGER_TYPE)
+        .with_methods(INFO_BASE_USERS_MANAGER_METHODS),
+    ObjectMembersDescriptor::new(&INFO_BASE_USER_TYPE).with_properties(INFO_BASE_USER_PROPERTIES),
+    ObjectMembersDescriptor::new(&INTEGRATION_SERVICES_MANAGER_TYPE)
+        .with_methods(INTEGRATION_SERVICES_MANAGER_METHODS)
+        .with_dynamic_properties(),
     ObjectMembersDescriptor::new(&CONFIGURATION_EXTENSION_TYPE)
         .with_properties(CONFIGURATION_EXTENSION_PROPERTIES),
     ObjectMembersDescriptor::new(&EXTENSION_APPLICATION_ISSUE_TYPE)
@@ -2779,6 +3956,8 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
         .with_methods(QUERY_SELECTION_METHODS)
         .with_dynamic_properties(),
     ObjectMembersDescriptor::new(&VALUE_STORAGE_TYPE).with_methods(VALUE_STORAGE_METHODS),
+    ObjectMembersDescriptor::new(&DATA_LOCK_TYPE).with_methods(DATA_LOCK_METHODS),
+    ObjectMembersDescriptor::new(&DATA_LOCK_ITEM_TYPE),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];

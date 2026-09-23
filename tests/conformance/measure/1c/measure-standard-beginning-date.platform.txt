@@ -1,0 +1,38 @@
+file.begin	standard-beginning-date-1
+SBDV.THIS_DAY	Beginning of this day
+SBDV.THIS_WEEK	Beginning of this week
+SBDV.THIS_TEN_DAYS	Beginning of this ten-day period
+SBDV.THIS_MONTH	Beginning of this month
+SBDV.THIS_QUARTER	Beginning of this quarter
+SBDV.THIS_HALF_YEAR	Beginning of this half year
+SBDV.THIS_YEAR	Beginning of this year
+SBDV.LAST_DAY	Beginning of yesterday
+SBDV.LAST_WEEK	Beginning of last week
+SBDV.LAST_TEN_DAYS	Beginning of last ten-day period
+SBDV.LAST_MONTH	Beginning of last month
+SBDV.LAST_QUARTER	Beginning of last quarter
+SBDV.LAST_HALF_YEAR	Beginning of last half year
+SBDV.LAST_YEAR	Beginning of last year
+SBDV.NEXT_DAY	Beginning of tomorrow
+SBDV.NEXT_WEEK	Beginning of next week
+SBDV.NEXT_TEN_DAYS	Beginning of next ten-day period
+SBDV.NEXT_MONTH	Beginning of next month
+SBDV.NEXT_QUARTER	Beginning of next quarter
+SBDV.NEXT_HALF_YEAR	Beginning of next half year
+SBDV.NEXT_YEAR	Beginning of next year
+SBDV.CUSTOM	Custom date
+SBDV.TYPE	StandardBeginningDateVariant
+SBDV.ENGLISH_ALIAS	Custom date
+SBD.DEFAULT.VARIANT	Custom date
+SBD.DEFAULT.DATE	
+SBD.DEFAULT.STRING	1/1/0001 12:00:00 AM
+SBD.DEFAULT.TYPE	Standard beginning date
+SBD.DATE.VARIANT	Custom date
+SBD.DATE.VALUE	20240203040506
+SBD.VARIANT.VALUE	Beginning of this day
+SBD.VARIANT.DATE	Yes
+SBD.SET_DATE.VARIANT	Custom date
+SBD.SET_DATE.VALUE	20240203040506
+SBD.SET_VARIANT.VALUE	Beginning of this month
+SBD.SET_VARIANT.DATE	Yes
+file.end	standard-beginning-date-1

@@ -1,0 +1,5 @@
+file.begin	configuration-changed-1
+CONFIG.CHANGED.VALUE	No
+CONFIG.CHANGED.TYPE	Boolean
+CONFIG.CHANGED.ALIAS	Yes
+file.end	configuration-changed-1

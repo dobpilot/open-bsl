@@ -62,6 +62,14 @@ impl SecurityModeControl for FacadeControl {
         Ok(())
     }
 
+    fn set_safe_mode_disabled(&self, _: bool) -> RtResult<()> {
+        Ok(())
+    }
+
+    fn safe_mode_disabled(&self) -> bool {
+        false
+    }
+
     fn privileged_mode(&self) -> bool {
         false
     }

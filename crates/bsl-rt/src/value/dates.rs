@@ -94,6 +94,23 @@ impl BslValue {
             })
     }
 
+    /// `ТекущаяДатаСеанса()` — текущий момент в эффективном часовом поясе
+    /// сеанса, который хост передал этому прогону.
+    pub fn current_session_date(env: &mut HostEnv) -> RtResult<Self> {
+        let secs = env.unix_millis().div_euclid(1000);
+        let local_secs = secs
+            .checked_add(i64::from(env.zone().offset_seconds(secs)))
+            .and_then(|secs| secs.checked_add(date::UNIX_EPOCH_SECONDS))
+            .ok_or(RtError::DateOutOfRange {
+                op: "ТекущаяДатаСеанса",
+            })?;
+        BslDate::from_seconds(local_secs)
+            .map(BslValue::Date)
+            .ok_or(RtError::DateOutOfRange {
+                op: "ТекущаяДатаСеанса",
+            })
+    }
+
     /// `ТекущаяУниверсальнаяДата()` — текущий момент UTC как наивная дата
     /// BSL. Источник времени принадлежит прогону и потому подменяется тем
     /// же `Clock`, что и две соседние функции времени.

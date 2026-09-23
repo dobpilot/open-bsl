@@ -172,6 +172,7 @@ fn expr_reads(e: &RExpr, out: &mut Vec<u32>) {
         }
         RExpr::NewArray { dims: xs }
         | RExpr::NewStructure { values: xs, .. }
+        | RExpr::NewDynamicStructure { args: xs }
         | RExpr::CallBuiltinFn { args: xs, .. }
         | RExpr::CallComponent { args: xs, .. }
         | RExpr::CreateObject { args: xs, .. } => {
@@ -201,7 +202,8 @@ fn expr_reads(e: &RExpr, out: &mut Vec<u32>) {
         | RExpr::EnumTypeRef(_)
         | RExpr::NewTable
         | RExpr::NewValueComparison
-        | RExpr::NewMap => {}
+        | RExpr::NewMap(None) => {}
+        RExpr::NewMap(Some(source)) => expr_reads(source, out),
     }
 }
 

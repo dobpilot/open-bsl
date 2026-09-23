@@ -1,0 +1,4 @@
+file.begin	initialize-predefined-data-1
+PREDEFINED.INITIALIZE.RUSSIAN	OK
+PREDEFINED.INITIALIZE.ENGLISH	OK
+file.end	initialize-predefined-data-1

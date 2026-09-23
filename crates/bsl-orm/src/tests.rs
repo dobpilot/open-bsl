@@ -1,5 +1,5 @@
 use super::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -57,6 +57,165 @@ impl DataAccess for QueryAccessStub {
     }
 }
 
+#[derive(Debug, Default)]
+struct RecordingDataLocks {
+    requests: RefCell<Vec<Vec<String>>>,
+    principals: RefCell<Vec<String>>,
+    transactions: RefCell<Vec<&'static str>>,
+    exclusive: Cell<bool>,
+    exclusive_changes: RefCell<Vec<bool>>,
+    integration_processing: RefCell<Vec<bool>>,
+    integration_services: RefCell<Vec<String>>,
+    predefined_data_update: Cell<Option<PredefinedDataUpdateMode>>,
+    predefined_data_updates: RefCell<Vec<PredefinedDataUpdateMode>>,
+    predefined_initializations: Cell<usize>,
+}
+
+impl DataAccess for RecordingDataLocks {
+    fn constant_value(
+        &self,
+        _: &MetadataObject,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError(
+            "константы в этой пробе не читаются".into(),
+        ))
+    }
+
+    fn lock_data(
+        &self,
+        requests: &[DataLockRequest],
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        self.requests.borrow_mut().push(
+            requests
+                .iter()
+                .map(|request| request.lock_space().to_string())
+                .collect(),
+        );
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        Ok(())
+    }
+
+    fn begin_transaction(&self, principal: &Principal, _: &mut CallContext<'_>) -> RtResult<()> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.transactions.borrow_mut().push("begin");
+        Ok(())
+    }
+
+    fn commit_transaction(&self, principal: &Principal, _: &mut CallContext<'_>) -> RtResult<()> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.transactions.borrow_mut().push("commit");
+        Ok(())
+    }
+
+    fn rollback_transaction(&self, principal: &Principal, _: &mut CallContext<'_>) -> RtResult<()> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.transactions.borrow_mut().push("rollback");
+        Ok(())
+    }
+
+    fn exclusive_mode(&self, principal: &Principal, _: &mut CallContext<'_>) -> RtResult<bool> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        Ok(self.exclusive.get())
+    }
+
+    fn set_exclusive_mode(
+        &self,
+        enabled: bool,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.exclusive.set(enabled);
+        self.exclusive_changes.borrow_mut().push(enabled);
+        Ok(())
+    }
+
+    fn set_integration_services_processing(
+        &self,
+        enabled: bool,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.integration_processing.borrow_mut().push(enabled);
+        Ok(())
+    }
+
+    fn integration_service(
+        &self,
+        name: &str,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.integration_services.borrow_mut().push(name.into());
+        Ok(Value::Str(open_bsl::BslString::from_utf8_string(format!(
+            "service:{name}"
+        ))))
+    }
+
+    fn info_base_predefined_data_update(
+        &self,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<PredefinedDataUpdateMode> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        Ok(self
+            .predefined_data_update
+            .get()
+            .unwrap_or(PredefinedDataUpdateMode::Auto))
+    }
+
+    fn set_info_base_predefined_data_update(
+        &self,
+        mode: PredefinedDataUpdateMode,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.predefined_data_update.set(Some(mode));
+        self.predefined_data_updates.borrow_mut().push(mode);
+        Ok(())
+    }
+
+    fn initialize_predefined_data(
+        &self,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.predefined_initializations
+            .set(self.predefined_initializations.get() + 1);
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 struct DeniedDataAccess;
 
@@ -81,6 +240,49 @@ impl DataAccess for DeniedDataAccess {
         Err(RtError::DynamicError(
             "ограничение доступа запроса не раскрыто".into(),
         ))
+    }
+}
+
+#[derive(Debug, Default)]
+struct RecordingRights {
+    calls: RefCell<Vec<RecordedAccessRightCall>>,
+}
+
+type RecordedAccessRightCall = (String, String, String, Option<String>, String);
+
+impl DataAccess for RecordingRights {
+    fn constant_value(
+        &self,
+        _: &MetadataObject,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError(
+            "константы в этой пробе не читаются".into(),
+        ))
+    }
+
+    fn access_right(
+        &self,
+        request: &AccessRightRequest,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<bool> {
+        let subject = match request.subject() {
+            AccessRightSubject::CurrentPrincipal => "current".into(),
+            AccessRightSubject::Principal(principal) => {
+                format!("principal:{}", principal.id())
+            }
+            AccessRightSubject::Role(id) => format!("role:{id}"),
+        };
+        self.calls.borrow_mut().push((
+            request.right().into(),
+            request.metadata().id().into(),
+            subject,
+            request.standard_attribute().map(str::to_owned),
+            principal.id().into(),
+        ));
+        Ok(true)
     }
 }
 
@@ -131,6 +333,18 @@ fn catalog() -> Arc<MetadataCatalog> {
             vec![
                 MetadataObject::new("role-user", "Пользователь", MetadataKind::Role),
                 MetadataObject::new("role-admin", "Администратор", MetadataKind::Role),
+                MetadataObject::new("enum-statuses", "Статусы", MetadataKind::Enumeration),
+                MetadataObject::new("exchange-plan-main", "Основной", MetadataKind::ExchangePlan),
+                MetadataObject::new(
+                    "picture-information",
+                    "ИнформацияКонфигурации",
+                    MetadataKind::CommonPicture,
+                ),
+                MetadataObject::new(
+                    "picture-warning",
+                    "ПредупреждениеКонфигурации",
+                    MetadataKind::CommonPicture,
+                ),
                 MetadataObject::new("catalog-versions", "Версии", MetadataKind::Catalog)
                     .with_manager_module("ВерсииМенеджер"),
                 MetadataObject::new("constant-answer", "Ответ", MetadataKind::Constant)
@@ -152,8 +366,42 @@ fn catalog() -> Arc<MetadataCatalog> {
             ["role-user".into()],
         )
         .unwrap()
-        .with_configuration_extensions(extensions()),
+        .with_enumeration_values(vec![ConfigurationEnumValue::new(
+            "enum-statuses",
+            "enum-status-active",
+            "Активен",
+        )])
+        .unwrap()
+        .with_configuration_extensions(extensions())
+        .with_configuration_changed(false),
     )
+}
+
+#[test]
+fn predefined_value_resolves_configuration_and_system_enumerations() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Значение = ПредопределенноеЗначение("Перечисление.статусы.активен");
+                Англ = PredefinedValue("Enum.СТАТУСЫ.АКТИВЕН");
+                Возврат Строка(Значение) + ":" + Строка(Значение = Англ)
+                    + ":" + Строка(ПредопределенноеЗначение("ОтправкаЭлементаДанных.Авто"));
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Активен:Да:Auto".into())
+    );
+    assert!(
+        state
+            .exec("Возврат ПредопределенноеЗначение(\"Перечисление.Статусы.Нет\");")
+            .unwrap_err()
+            .to_string()
+            .contains("не найдено")
+    );
 }
 
 fn engine() -> open_bsl::Engine {
@@ -201,6 +449,374 @@ fn state_with_data_access(
         session = session.with_data_access(data_access);
     }
     engine.state_builder().host_data(Rc::new(session)).build()
+}
+
+#[test]
+fn current_info_base_user_is_frozen_per_state() {
+    let engine = engine();
+    let make_state = |name: &str| {
+        engine
+            .state_builder()
+            .host_data(Rc::new(SessionData::new(
+                catalog(),
+                Principal::new("user", name, vec!["role-user".into()]),
+            )))
+            .build()
+    };
+    let mut first = make_state("Первый");
+    let mut second = make_state("Второй");
+
+    assert_eq!(
+        first
+            .exec("Возврат ПользователиИнформационнойБазы.ТекущийПользователь().Имя;")
+            .unwrap(),
+        Value::Str("Первый".into())
+    );
+    assert_eq!(
+        second
+            .exec("Возврат InfoBaseUsers.CurrentUser().Name;")
+            .unwrap(),
+        Value::Str("Второй".into())
+    );
+    assert!(
+        first
+            .exec("ПользователиИнформационнойБазы.ТекущийПользователь().Имя = \"Подмена\";")
+            .unwrap_err()
+            .to_string()
+            .contains("Имя")
+    );
+    assert_eq!(
+        first.exec("Возврат ИмяПользователя();").unwrap(),
+        Value::Str("Первый".into())
+    );
+    assert_eq!(
+        second.exec("Возврат UserName();").unwrap(),
+        Value::Str("Второй".into())
+    );
+}
+
+#[test]
+fn enumeration_manager_is_resolved_from_the_session_catalog() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    assert!(
+        state
+            .exec("Возврат Перечисления.сТаТуСы;")
+            .unwrap()
+            .object_ref()
+            .is_some()
+    );
+    assert!(
+        state
+            .exec("Возврат Enums.СТАТУСЫ;")
+            .unwrap()
+            .object_ref()
+            .is_some()
+    );
+    assert!(
+        state
+            .exec("Возврат Перечисления.Отсутствует;")
+            .unwrap_err()
+            .to_string()
+            .contains("Отсутствует")
+    );
+}
+
+#[test]
+fn exchange_plan_manager_and_metadata_use_the_session_catalog() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    assert!(
+        state
+            .exec("Возврат ПланыОбмена.оСнОвНоЙ;")
+            .unwrap()
+            .object_ref()
+            .is_some()
+    );
+    assert!(
+        state
+            .exec("Возврат ExchangePlans.ОСНОВНОЙ;")
+            .unwrap()
+            .object_ref()
+            .is_some()
+    );
+    assert!(
+        state
+            .exec("Возврат Метаданные.ПланыОбмена.Основной;")
+            .unwrap()
+            .object_ref()
+            .is_some()
+    );
+    assert!(
+        state
+            .exec("Возврат Metadata.ExchangePlans.ОСНОВНОЙ;")
+            .unwrap()
+            .object_ref()
+            .is_some()
+    );
+    assert!(
+        state
+            .exec("Возврат ПланыОбмена.Отсутствует;")
+            .unwrap_err()
+            .to_string()
+            .contains("Отсутствует")
+    );
+}
+
+#[test]
+fn data_lock_delegates_named_spaces_to_the_current_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(RecordingDataLocks::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Блокировка = Новый БлокировкаДанных;
+                Элемент = Блокировка.Добавить("Catalog.Test");
+                Блокировка.Заблокировать();
+                Другая = New DataLock;
+                ДругойЭлемент = Другая.Add();
+                Возврат Строка(ТипЗнч(Блокировка)) + ":"
+                    + Строка(ТипЗнч(Элемент)) + ":"
+                    + Строка(ТипЗнч(Другая) = ТипЗнч(Блокировка)) + ":"
+                    + Строка(ТипЗнч(ДругойЭлемент) = ТипЗнч(Элемент));
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Data lock:Data lock item:Да:Да".into())
+    );
+    assert_eq!(
+        *access.requests.borrow(),
+        vec![vec!["Catalog.Test".to_string()]]
+    );
+    assert_eq!(*access.principals.borrow(), vec!["user".to_string()]);
+
+    let mut missing = state_with_data_access(&engine, None);
+    assert!(
+        missing
+            .exec("Блокировка = Новый БлокировкаДанных; Блокировка.Заблокировать();")
+            .unwrap_err()
+            .to_string()
+            .contains("адаптер данных")
+    );
+}
+
+#[test]
+fn transaction_procedures_delegate_to_the_current_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(RecordingDataLocks::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    state
+        .exec(
+            "НачатьТранзакцию(); ЗафиксироватьТранзакцию(); BeginTransaction(); RollbackTransaction();",
+        )
+        .unwrap();
+    assert_eq!(
+        *access.transactions.borrow(),
+        vec!["begin", "commit", "begin", "rollback"]
+    );
+    assert_eq!(access.principals.borrow().as_slice(), ["user"; 4]);
+
+    let mut missing = state_with_data_access(&engine, None);
+    assert!(
+        missing
+            .exec("НачатьТранзакцию();")
+            .unwrap_err()
+            .to_string()
+            .contains("адаптер данных")
+    );
+}
+
+#[test]
+fn exclusive_mode_delegates_to_the_current_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(RecordingDataLocks::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                До = МонопольныйРежим();
+                УстановитьМонопольныйРежим(Истина);
+                ВоВремя = ExclusiveMode();
+                SetExclusiveMode(False);
+                Возврат Строка(До) + ":" + Строка(ВоВремя) + ":"
+                    + Строка(МонопольныйРежим());
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Нет:Да:Нет".into())
+    );
+    assert_eq!(*access.exclusive_changes.borrow(), [true, false]);
+    assert_eq!(access.principals.borrow().as_slice(), ["user"; 5]);
+
+    let mut missing = state_with_data_access(&engine, None);
+    assert!(
+        missing
+            .exec("Возврат МонопольныйРежим();")
+            .unwrap_err()
+            .to_string()
+            .contains("адаптер данных")
+    );
+}
+
+#[test]
+fn integration_services_delegate_to_the_current_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(RecordingDataLocks::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                СервисыИнтеграции.ВыполнитьОбработку();
+                IntegrationServices.StopProcessing();
+                Возврат СервисыИнтеграции.Тестовый;
+                "#,
+            )
+            .unwrap(),
+        Value::Str("service:Тестовый".into())
+    );
+    assert_eq!(*access.integration_processing.borrow(), [true, false]);
+    assert_eq!(
+        access.integration_services.borrow().as_slice(),
+        ["Тестовый"]
+    );
+    assert_eq!(access.principals.borrow().as_slice(), ["user"; 3]);
+
+    let mut missing = state_with_data_access(&engine, None);
+    assert!(
+        missing
+            .exec("СервисыИнтеграции.ВыполнитьОбработку();")
+            .unwrap_err()
+            .to_string()
+            .contains("адаптер данных")
+    );
+}
+
+#[test]
+fn predefined_data_update_delegates_to_the_current_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(RecordingDataLocks::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                До = ПолучитьОбновлениеПредопределенныхДанныхИнформационнойБазы();
+                УстановитьОбновлениеПредопределенныхДанныхИнформационнойБазы(
+                    ОбновлениеПредопределенныхДанных.ОбновлятьАвтоматически);
+                После = GetInfoBasePredefinedData();
+                SetInfoBasePredefinedDataUpdate(PredefinedDataUpdate.DontAutoUpdate);
+                Возврат Строка(До) + ":" + Строка(После) + ":"
+                    + Строка(ПолучитьОбновлениеПредопределенныхДанныхИнформационнойБазы());
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Auto:Auto update:Auto update off".into())
+    );
+    assert_eq!(
+        *access.predefined_data_updates.borrow(),
+        [
+            PredefinedDataUpdateMode::AutoUpdate,
+            PredefinedDataUpdateMode::DontAutoUpdate
+        ]
+    );
+    assert_eq!(access.principals.borrow().as_slice(), ["user"; 5]);
+
+    assert!(
+        state
+            .exec("УстановитьОбновлениеПредопределенныхДанныхИнформационнойБазы();")
+            .unwrap_err()
+            .to_string()
+            .contains("аргумент")
+    );
+}
+
+#[test]
+fn predefined_data_initialization_delegates_to_the_current_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(RecordingDataLocks::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    state
+        .exec("ИнициализироватьПредопределенныеДанные(); InitializePredefinedData();")
+        .unwrap();
+    assert_eq!(access.predefined_initializations.get(), 2);
+    assert_eq!(access.principals.borrow().as_slice(), ["user"; 2]);
+
+    let mut missing = state_with_data_access(&engine, None);
+    assert!(
+        missing
+            .exec("ИнициализироватьПредопределенныеДанные();")
+            .unwrap_err()
+            .to_string()
+            .contains("адаптер данных")
+    );
+}
+
+#[test]
+fn picture_library_returns_measured_opaque_picture_values() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Картинка1 = БиблиотекаКартинок.информацияконфигурации;
+                Картинка1Англ = PictureLib.ИНФОРМАЦИЯКОНФИГУРАЦИИ;
+                Картинка2 = БиблиотекаКартинок.ПредупреждениеКонфигурации;
+                Возврат Строка(ТипЗнч(Картинка1)) + ":" + Строка(Картинка1)
+                    + ":" + Строка(ЗначениеЗаполнено(Картинка1))
+                    + ":" + Строка(Картинка1 = Картинка1Англ)
+                    + ":" + Строка(Картинка1 = Картинка2);
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Picture:Picture:Да:Да:Нет".into())
+    );
+    assert!(
+        state
+            .exec("Возврат БиблиотекаКартинок.Отсутствует;")
+            .unwrap_err()
+            .to_string()
+            .contains("Отсутствует")
+    );
+}
+
+#[test]
+fn configuration_changed_reads_the_frozen_catalog_state() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    assert_eq!(
+        state.exec("Возврат КонфигурацияИзменена();").unwrap(),
+        Value::Boolean(false)
+    );
+    assert_eq!(
+        state.exec("Возврат ConfigurationChanged();").unwrap(),
+        Value::Boolean(false)
+    );
+
+    let catalog = Arc::new(MetadataCatalog::new("configuration", vec![]).unwrap());
+    let session = SessionData::new(catalog, Principal::new("user", "Тест", vec![]));
+    let mut missing = engine.state_builder().host_data(Rc::new(session)).build();
+    assert!(
+        missing
+            .exec("Возврат КонфигурацияИзменена();")
+            .unwrap_err()
+            .to_string()
+            .contains("не предоставлен")
+    );
 }
 
 #[test]
@@ -405,6 +1021,89 @@ fn role_available_accepts_a_name_and_a_metadata_role() {
             .to_string()
             .contains("роль конфигурации не найдена")
     );
+}
+
+#[test]
+fn access_right_preserves_current_user_role_and_standard_attribute() {
+    let engine = engine();
+    let access = Rc::new(RecordingRights::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec("Возврат ПравоДоступа(\"Чтение\", Метаданные.Справочники.Версии);")
+            .unwrap(),
+        Value::Boolean(true)
+    );
+    assert_eq!(
+        state
+            .exec(
+                "Возврат AccessRight(\"Read\", Metadata.Catalogs.Версии, Metadata.Roles.Администратор, \"Код\");"
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+    assert_eq!(
+        state
+            .exec(
+                "Возврат ПравоДоступа(\"Использование\", Метаданные.Справочники.Версии, ПользователиИнформационнойБазы.ТекущийПользователь());"
+            )
+            .unwrap(),
+        Value::Boolean(true)
+    );
+
+    assert_eq!(
+        *access.calls.borrow(),
+        vec![
+            (
+                "Чтение".into(),
+                "catalog-versions".into(),
+                "current".into(),
+                None,
+                "user".into(),
+            ),
+            (
+                "Read".into(),
+                "catalog-versions".into(),
+                "role:role-admin".into(),
+                Some("Код".into()),
+                "user".into(),
+            ),
+            (
+                "Использование".into(),
+                "catalog-versions".into(),
+                "principal:user".into(),
+                None,
+                "user".into(),
+            ),
+        ]
+    );
+}
+
+#[test]
+fn access_right_rejects_missing_adapter_and_invalid_arguments() {
+    let engine = engine();
+    let mut state = state(&engine);
+    let error = state
+        .exec("Возврат ПравоДоступа(\"Чтение\", Метаданные.Справочники.Версии);")
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("адаптер данных текущего сеанса не подключён"),
+        "{error}"
+    );
+
+    let access = Rc::new(RecordingRights::default());
+    let mut state = state_with_data_access(&engine, Some(access));
+    for source in [
+        "Возврат ПравоДоступа(\"\", Метаданные.Справочники.Версии);",
+        "Возврат ПравоДоступа(\"Чтение\", 1);",
+        "Возврат ПравоДоступа(\"Чтение\", Метаданные.Справочники.Версии, 1);",
+        "Возврат ПравоДоступа(\"Чтение\", Метаданные.Справочники.Версии, , \"\");",
+    ] {
+        assert!(state.exec(source).is_err(), "должен быть отказ: {source}");
+    }
 }
 
 #[test]

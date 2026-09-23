@@ -1731,6 +1731,19 @@ impl<'a> Compiler<'a> {
                     count,
                 });
             }
+            RExpr::NewDynamicStructure { args } => {
+                let base = self.next_reg;
+                for argument in args {
+                    let register = self.alloc_temp()?;
+                    self.compile_expr(argument, register)?;
+                }
+                let count: u8 = args
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
+                self.emit(Instr::NewDynamicStructure { dst, base, count });
+            }
             RExpr::CreateObject {
                 library,
                 constructor,
@@ -1794,8 +1807,18 @@ impl<'a> Compiler<'a> {
             RExpr::NewValueComparison => {
                 self.emit(Instr::NewValueComparison { dst });
             }
-            RExpr::NewMap => {
-                self.emit(Instr::NewMap { dst });
+            RExpr::NewMap(source) => {
+                let source = if let Some(source) = source {
+                    let register = self.alloc_temp()?;
+                    self.compile_expr(source, register)?;
+                    Some(register)
+                } else {
+                    None
+                };
+                self.emit(Instr::NewMap { dst, source });
+                if source.is_some() {
+                    self.free_temp(1);
+                }
             }
             // Член перечисления — обычная константа чанка: значение
             // известно на этапе компиляции целиком.

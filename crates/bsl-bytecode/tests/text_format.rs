@@ -26,7 +26,7 @@ fn one_const() -> bsl_bytecode::Program {
 #[test]
 fn format_without_open_method_argument_modes_is_rejected() {
     let text = write_program(&one_const(), None).unwrap();
-    let old = text.replacen("bslc 38", "bslc 37", 1);
+    let old = text.replacen("bslc 40", "bslc 39", 1);
     assert_ne!(old, text);
     assert!(matches!(parse_program(&old), Err(TextError::BadHeader(_))));
 }
@@ -45,7 +45,7 @@ fn date_constants_round_trip_ticks_and_refuse_the_seconds_format() {
         assert_eq!(parsed.chunks[0].consts, program.chunks[0].consts);
         assert_eq!(write_program(&parsed, None).unwrap(), text);
         assert!(matches!(
-            parse_program(&text.replacen("bslc 38", "bslc 37", 1)),
+            parse_program(&text.replacen("bslc 40", "bslc 39", 1)),
             Err(TextError::BadHeader(_))
         ));
         for invalid in ["-1", "3155378976000000", "18446744073709551615", "1.5"] {
@@ -68,6 +68,23 @@ fn comments_and_blank_lines_are_ignored_by_the_parser() {
     // Комментарий, добавленный руками, тоже не мешает.
     let hand_edited = text.replace(".code", "; моя пометка\n  .code");
     assert!(parse_program(&hand_edited).is_ok());
+}
+
+#[test]
+fn map_copy_source_register_round_trips() {
+    let mut code = chunk(vec![
+        Instr::NewMap {
+            dst: 0,
+            source: Some(1),
+        },
+        Instr::Return { src: Some(0) },
+    ]);
+    code.n_regs = 2;
+    let program = program(vec![code]);
+    let text = write_program(&program, None).unwrap();
+    assert!(text.contains("NewMap dst=0 source=1"), "{text}");
+    let parsed = parse_program(&text).unwrap();
+    assert_eq!(parsed.chunks[0].instrs, program.chunks[0].instrs);
 }
 
 #[test]

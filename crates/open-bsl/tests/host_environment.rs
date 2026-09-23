@@ -99,6 +99,31 @@ fn a_fixed_clock_makes_the_time_reproducible() {
     );
 }
 
+#[test]
+fn current_session_date_uses_each_states_clock_and_zone() {
+    let engine = Engine::builder().build().unwrap();
+    let mut utc = engine
+        .state_builder()
+        .clock(FixedClock(1_577_934_245_000))
+        .zone(open_bsl::FixedTimeZone::UTC)
+        .build();
+    let mut east = engine
+        .state_builder()
+        .clock(FixedClock(1_577_934_245_000))
+        .zone(open_bsl::FixedTimeZone::new(3 * 3600).unwrap())
+        .build();
+
+    let script = "Возврат Строка(ТекущаяДатаСеанса()) + \"|\" + Строка(CurrentSessionDate());";
+    assert_eq!(
+        text(&utc.exec(script).unwrap()),
+        "02.01.2020 3:04:05|02.01.2020 3:04:05"
+    );
+    assert_eq!(
+        text(&east.exec(script).unwrap()),
+        "02.01.2020 6:04:05|02.01.2020 6:04:05"
+    );
+}
+
 /// Миллисекунды без разделителей групп: сравнивать удобнее, а вопрос теста
 /// не про форматирование числа.
 const MILLIS: &str = "Возврат Формат(ТекущаяУниверсальнаяДатаВМиллисекундах(), \"ЧГ=0\");";

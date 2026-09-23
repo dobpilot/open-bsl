@@ -60,6 +60,7 @@ use std::io::Write;
 #[derive(Debug, Clone, Copy, Default)]
 struct SecurityModeSnapshot {
     safe: bool,
+    safe_disabled: bool,
     privileged: bool,
 }
 
@@ -67,6 +68,8 @@ struct SecurityModeSnapshot {
 struct TaskSecurityModes {
     inherited: SecurityModeSnapshot,
     safe_by_frame: Vec<Cell<u32>>,
+    safe_disabled_by_frame: Vec<Cell<u32>>,
+    safe_disabled_latch_by_frame: Vec<Cell<bool>>,
     privileged_by_frame: Vec<Cell<u32>>,
 }
 
@@ -80,13 +83,31 @@ impl TaskSecurityModes {
 
     fn synchronize_frames(&mut self, count: usize) {
         self.safe_by_frame.resize_with(count, Cell::default);
+        self.safe_disabled_by_frame
+            .resize_with(count, Cell::default);
+        self.safe_disabled_latch_by_frame
+            .resize_with(count, Cell::default);
         self.privileged_by_frame.resize_with(count, Cell::default);
         self.safe_by_frame.truncate(count);
+        self.safe_disabled_by_frame.truncate(count);
+        self.safe_disabled_latch_by_frame.truncate(count);
         self.privileged_by_frame.truncate(count);
     }
 
-    fn safe(&self) -> bool {
+    fn safe_enabled(&self) -> bool {
         self.inherited.safe || self.safe_by_frame.iter().any(|depth| depth.get() != 0)
+    }
+
+    fn safe_disabled(&self) -> bool {
+        self.inherited.safe_disabled
+            || self
+                .safe_disabled_latch_by_frame
+                .iter()
+                .any(|disabled| disabled.get())
+    }
+
+    fn safe(&self) -> bool {
+        self.safe_enabled() && !self.safe_disabled()
     }
 
     fn privileged(&self) -> bool {
@@ -100,7 +121,8 @@ impl TaskSecurityModes {
 
     fn snapshot(&self) -> SecurityModeSnapshot {
         SecurityModeSnapshot {
-            safe: self.safe(),
+            safe: self.safe_enabled(),
+            safe_disabled: self.safe_disabled(),
             privileged: self.inherited.privileged
                 || self
                     .privileged_by_frame
@@ -143,6 +165,22 @@ impl bsl_rt::SecurityModeControl for VmSecurityModeControl<'_> {
             enabled,
             "БезопасныйРежим",
         )
+    }
+
+    fn set_safe_mode_disabled(&self, disabled: bool) -> Result<(), RtError> {
+        Self::change(
+            &self.modes.safe_disabled_by_frame[self.frame],
+            disabled,
+            "ОтключениеБезопасногоРежима",
+        )?;
+        if disabled {
+            self.modes.safe_disabled_latch_by_frame[self.frame].set(true);
+        }
+        Ok(())
+    }
+
+    fn safe_mode_disabled(&self) -> bool {
+        self.modes.safe_disabled_by_frame[self.frame].get() != 0
     }
 
     fn privileged_mode(&self) -> bool {
@@ -3194,6 +3232,7 @@ fn step(
             Instr::NewArray { .. }
             | Instr::CreateDynamicObject { .. }
             | Instr::NewStructure { .. }
+            | Instr::NewDynamicStructure { .. }
             | Instr::NewTable { .. }
             | Instr::NewTypeDescription { .. }
             | Instr::NewValueComparison { .. }
@@ -3399,6 +3438,16 @@ fn step_cold(
             reg_store(stack, destination, value)?;
             frames[frame_idx].pc += 1;
         }
+        Instr::NewDynamicStructure { dst, base, count } => {
+            let mut arguments = Vec::with_capacity(count as usize);
+            for index in 0..count {
+                arguments.push(reg_load(stack, frames[frame_idx].reg_index(base + index))?);
+            }
+            let value = construct_structure(&arguments, runtime_shapes, true)?;
+            let destination = frames[frame_idx].reg_index(dst);
+            reg_store(stack, destination, value)?;
+            frames[frame_idx].pc += 1;
+        }
         Instr::NewStructure {
             dst,
             shape,
@@ -3437,9 +3486,20 @@ fn step_cold(
             reg_store(stack, d, BslValue::new_value_comparison())?;
             frames[frame_idx].pc += 1;
         }
-        Instr::NewMap { dst } => {
+        Instr::NewMap { dst, source } => {
             let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_map())?;
+            let map = BslValue::new_map();
+            if let Some(source) = source {
+                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+                let entries = bsl_rt::fixed_map_entries(&source).ok_or(RtError::TypeError {
+                    expected: "ФиксированноеСоответствие",
+                    op: "Новый Соответствие",
+                })?;
+                for (key, value) in entries {
+                    map.map_insert(key, value)?;
+                }
+            }
+            reg_store(stack, d, map)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewTextWriter { dst, path } => {
@@ -4312,38 +4372,7 @@ fn construct_dynamic_native(
                 .collect::<Result<Vec<_>, _>>()?;
             build_nested_array(&dims)
         }
-        bsl_rt::TypeId::Structure => {
-            let structure = BslValue::new_structure(runtime_shapes.shapes.empty(), Vec::new());
-            if let Some(first) = args.first() {
-                let BslValue::Str(names) = first else {
-                    return Err(RtError::TypeError {
-                        expected: "Строка",
-                        op: "Новый Структура(...)",
-                    });
-                };
-                let keys: Vec<String> = names
-                    .to_string()
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty())
-                    .map(str::to_string)
-                    .collect();
-                let values = &args[1..];
-                if !values.is_empty() && values.len() != keys.len() {
-                    return Err(RtError::DynamicError(format!(
-                        "Неверное число значений конструктора Структура: {} для {} полей",
-                        values.len(),
-                        keys.len()
-                    )));
-                }
-                for (index, key) in keys.iter().enumerate() {
-                    let field = runtime_shapes.names.intern(key);
-                    let value = values.get(index).cloned().unwrap_or(BslValue::Undefined);
-                    structure.structure_insert(field, value, &mut runtime_shapes.shapes)?;
-                }
-            }
-            structure
-        }
+        bsl_rt::TypeId::Structure => construct_structure(args, runtime_shapes, false)?,
         bsl_rt::TypeId::ValueTable if args.is_empty() => BslValue::new_table(),
         bsl_rt::TypeId::ValueComparison if args.is_empty() => BslValue::new_value_comparison(),
         bsl_rt::TypeId::Map if args.is_empty() => BslValue::new_map(),
@@ -4359,6 +4388,78 @@ fn construct_dynamic_native(
         _ => return Ok(None),
     };
     Ok(Some(value))
+}
+
+fn construct_structure(
+    arguments: &[BslValue],
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    computed_static_form: bool,
+) -> Result<BslValue, RtError> {
+    let Some(first) = arguments.first() else {
+        return Ok(BslValue::new_structure(
+            runtime_shapes.shapes.empty(),
+            Vec::new(),
+        ));
+    };
+    if !computed_static_form {
+        let BslValue::Str(names) = first else {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый Структура(...)",
+            });
+        };
+        let keys = names
+            .to_string()
+            .split(',')
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        let values = &arguments[1..];
+        if !values.is_empty() && values.len() != keys.len() {
+            return Err(RtError::DynamicError(format!(
+                "Неверное число значений конструктора Структура: {} для {} полей",
+                values.len(),
+                keys.len()
+            )));
+        }
+        let structure = BslValue::new_structure(runtime_shapes.shapes.empty(), Vec::new());
+        for (index, key) in keys.iter().enumerate() {
+            let field = runtime_shapes.names.intern(key);
+            let value = values.get(index).cloned().unwrap_or(BslValue::Undefined);
+            structure.structure_insert(field, value, &mut runtime_shapes.shapes)?;
+        }
+        return Ok(structure);
+    }
+
+    let fixed_fields = (arguments.len() == 1)
+        .then(|| bsl_rt::fixed_structure_entries(first))
+        .flatten();
+    let entries = if let Some(fields) = fixed_fields {
+        fields
+            .into_iter()
+            .map(|(name, value)| (runtime_shapes.names.intern(&name), value))
+            .collect()
+    } else {
+        let names = match first {
+            BslValue::Str(names) => names.to_string(),
+            value => bsl_format::format_value(value, None)?,
+        };
+        names
+            .split(',')
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .enumerate()
+            .map(|(index, name)| {
+                let value = arguments
+                    .get(index + 1)
+                    .cloned()
+                    .unwrap_or(BslValue::Undefined);
+                (runtime_shapes.names.intern(name), value)
+            })
+            .collect()
+    };
+    Ok(BslValue::new_dictionary_structure(entries))
 }
 
 /// `Новый Массив(3, 4)` — массив из 3 массивов по 4: каждое измерение

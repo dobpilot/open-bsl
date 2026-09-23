@@ -104,14 +104,19 @@ pub enum RExpr {
     NewArray {
         dims: Vec<RExpr>,
     },
-    /// `Новый Структура("x,y,z", ...)`. Список полей — обязательно строковый
-    /// литерал на месте вызова (см. `SemaError::Unsupported` иначе):
-    /// динамические формы, зависящие от рантайм-значения строки, отложены.
+    /// `Новый Структура("x,y,z", ...)` со строковым литералом полей.
+    /// Вычисляемый список представлен отдельным `NewDynamicStructure`,
+    /// потому что его нельзя интернировать в таблице форм.
     /// `values.len() == keys.len()` всегда — если аргументов-значений не
     /// было вовсе, `values` заполнен `RExpr::Undefined`.
     NewStructure {
         keys: Vec<String>,
         values: Vec<RExpr>,
+    },
+    /// `Новый Структура(Выражение, ...)`: первый аргумент задаёт поля
+    /// только во время исполнения, поэтому форма не интернируется.
+    NewDynamicStructure {
+        args: Vec<RExpr>,
     },
     /// Конструктор статически подключённого runtime-компонента. Локальный
     /// индекс библиотеки назначается позднее по итоговой `.requires`.
@@ -131,10 +136,8 @@ pub enum RExpr {
     NewTable,
     NewTypeDescription(Box<RExpr>),
     NewValueComparison,
-    /// `Новый Соответствие()` — пары ключ-значение заводятся отдельно, через
-    /// `.Вставить(Ключ, Значение)`, не в конструкторе (как и `ТаблицаЗначений`
-    /// выше).
-    NewMap,
+    /// `Новый Соответствие()` либо копия `ФиксированногоСоответствия`.
+    NewMap(Option<Box<RExpr>>),
     /// `Новый ЗаписьТекста(Путь)` — путь вычисляется во время исполнения.
     /// Член платформенного перечисления — КОНСТАНТА времени компиляции.
     /// У платформы перечисление тоже не объект с полями: опечатка в имени
@@ -486,6 +489,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::Field { obj, .. } => expr_uses_dynamic(obj),
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
+        RExpr::NewDynamicStructure { args } => args.iter().any(expr_uses_dynamic),
         RExpr::CreateObject { args, .. } => args.iter().any(expr_uses_dynamic),
         RExpr::CreateDynamicObject { type_expr, params } => {
             expr_uses_dynamic(type_expr) || params.as_deref().is_some_and(expr_uses_dynamic)
@@ -509,6 +513,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         | RExpr::Str(_)
         | RExpr::NewTable
         | RExpr::NewValueComparison
-        | RExpr::NewMap => false,
+        | RExpr::NewMap(None) => false,
+        RExpr::NewMap(Some(source)) => expr_uses_dynamic(source),
     }
 }

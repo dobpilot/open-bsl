@@ -1,0 +1,5 @@
+file.begin	database-configuration-changed-dynamically-1
+CONFIG.DYNAMIC.VALUE	No
+CONFIG.DYNAMIC.TYPE	Boolean
+CONFIG.DYNAMIC.ALIAS	Yes
+file.end	database-configuration-changed-dynamically-1

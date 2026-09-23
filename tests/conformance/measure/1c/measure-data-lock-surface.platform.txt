@@ -1,0 +1,6 @@
+file.begin	data-lock-surface-1
+DATA.LOCK.TYPE	Data lock
+DATA.LOCK.ITEM.TYPE	Data lock item
+DATA.LOCK.ALIAS.TYPE	Yes
+DATA.LOCK.ALIAS.ITEM	Yes
+file.end	data-lock-surface-1

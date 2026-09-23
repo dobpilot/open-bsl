@@ -2302,6 +2302,55 @@ fn structure_construction_and_field_access() {
 }
 
 #[test]
+fn dynamic_structure_fields_use_dictionary_storage_and_platform_value_rules() {
+    let value = run_src(
+        "имена = \"x,y\";\n\
+         s = Новый Структура(имена, 1);\n\
+         Возврат s;",
+    );
+    let BslValue::Object(object) = &value else {
+        panic!("конструктор вернул не объект");
+    };
+    let bsl_rt::BslObject::Structure(storage) = object.as_ref() else {
+        panic!("конструктор вернул не структуру");
+    };
+    assert!(matches!(
+        &*storage.borrow(),
+        bsl_rt::StructureStorage::Dictionary { .. }
+    ));
+    assert_eq!(
+        run_src(
+            "имена = \"x,y\";\n\
+             s = Новый Структура(имена, 1, 2, 3);\n\
+             Возврат s.x * 100 + s.y * 10 + s.Количество();",
+        ),
+        num("122")
+    );
+    assert_eq!(
+        run_src("имена = \"x,y\"; s = Новый Структура(имена, 1); Возврат s.y;"),
+        BslValue::Undefined
+    );
+    assert_eq!(
+        run_src("имена = \"x\"; s = New Structure(имена, 7); Возврат s.x;"),
+        num("7")
+    );
+}
+
+#[test]
+fn dynamic_structure_copies_a_fixed_structure() {
+    assert_eq!(
+        run_src(
+            "исходная = Новый Структура(\"x,y\", 3, 4);\n\
+             фикс = Новый ФиксированнаяСтруктура(исходная);\n\
+             копия = Новый Структура(фикс);\n\
+             копия.x = 8;\n\
+             Возврат копия.x * 100 + копия.y * 10 + исходная.x;",
+        ),
+        num("843")
+    );
+}
+
+#[test]
 fn get_prop_inline_cache_stays_correct_across_different_shapes() {
     // Один и тот же GetProp (внутри тела Для Каждого) видит структуры
     // ДВУХ разных форм подряд — если бы кэш слепо доверял старому
@@ -2670,6 +2719,37 @@ fn map_insert_get_count_and_missing_key_returns_undefined() {
 
     let v = run_src("м = Новый Соответствие;\nВозврат м.Получить(\"нет\");");
     assert_eq!(v, BslValue::Undefined);
+}
+
+#[test]
+fn map_constructor_copies_a_fixed_map_and_rejects_other_sources() {
+    let value = run_src(
+        r#"
+        Источник = Новый Соответствие;
+        Источник.Вставить("А", 1);
+        Фиксированный = Новый ФиксированноеСоответствие(Источник);
+        Копия = Новый Соответствие(Фиксированный);
+        Копия.Вставить("А", 2);
+        EnglishCopy = New Map(Фиксированный);
+        Возврат Копия.Получить("А") = 2
+            И Фиксированный.Получить("А") = 1
+            И EnglishCopy.Get("А") = 1;
+        "#,
+    );
+    assert_eq!(value, BslValue::Boolean(true));
+
+    for source in [
+        "Возврат Новый Соответствие(Неопределено);",
+        "Возврат Новый Соответствие(Новый Соответствие);",
+    ] {
+        let parsed = parse(source).unwrap();
+        let resolved = resolve_program(&parsed.items).unwrap();
+        let program = compile_program(&resolved).unwrap();
+        assert!(
+            run_with_dynamic(&program).is_err(),
+            "должен быть отказ: {source}"
+        );
+    }
 }
 
 #[test]

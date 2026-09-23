@@ -224,6 +224,22 @@ pub trait SecurityModeControl {
     /// или если счётчик переполнен.
     fn set_safe_mode(&self, enabled: bool) -> RtResult<()>;
 
+    /// Устанавливает или балансирует подавление безопасного режима текущего
+    /// кадра.
+    ///
+    /// После первого включения подавление действует до выхода из кадра, даже
+    /// когда его счётчик уже сбалансирован.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, если текущий кадр пытается снять чужое подавление
+    /// или если счётчик переполнен.
+    fn set_safe_mode_disabled(&self, disabled: bool) -> RtResult<()>;
+
+    /// Проверяет, включал ли текущий кадр подавление безопасного режима
+    /// и ещё не сбалансировал это включение.
+    fn safe_mode_disabled(&self) -> bool;
+
     /// Проверяет, действует ли привилегированный режим с учётом подавления
     /// безопасным режимом.
     fn privileged_mode(&self) -> bool;
@@ -404,6 +420,27 @@ impl<'a> CallContext<'a> {
     /// кадра или переполнения счётчика.
     pub fn set_safe_mode(&self, enabled: bool) -> RtResult<()> {
         self.security_modes()?.set_safe_mode(enabled)
+    }
+
+    /// Устанавливает или балансирует подавление безопасного режима текущего
+    /// кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку отсутствующей возможности, снятия подавления чужого
+    /// кадра или переполнения счётчика.
+    pub fn set_safe_mode_disabled(&self, disabled: bool) -> RtResult<()> {
+        self.security_modes()?.set_safe_mode_disabled(disabled)
+    }
+
+    /// Проверяет команду подавления в текущем кадре.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает [`RtError::CapabilityMissing`], если вызов не принадлежит
+    /// исполняемому кадру BSL.
+    pub fn safe_mode_disabled(&self) -> RtResult<bool> {
+        Ok(self.security_modes()?.safe_mode_disabled())
     }
 
     /// Проверяет привилегированный режим текущего кадра.
@@ -1691,6 +1728,18 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(1),
         call: crate::fixed_collections::construct_fixed_map,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(13),
+        names: &["ПолеКомпоновкиДанных", "DataCompositionField"],
+        arity: Arity::exact(1),
+        call: crate::data_composition::construct_field,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(14),
+        names: &["СтандартнаяДатаНачала", "StandardBeginningDate"],
+        arity: Arity::exact(1),
+        call: crate::data_composition::construct_standard_beginning_date,
+    },
 ];
 
 const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
@@ -1724,6 +1773,14 @@ const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
         ConstructorCode::new(12),
         &crate::fixed_collections::FIXED_MAP_TYPE,
     ),
+    (
+        ConstructorCode::new(13),
+        &crate::data_composition::DATA_COMPOSITION_FIELD_TYPE,
+    ),
+    (
+        ConstructorCode::new(14),
+        &crate::data_composition::STANDARD_BEGINNING_DATE_TYPE,
+    ),
 ];
 
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
@@ -1743,6 +1800,8 @@ const CORE_TYPES: &[&crate::TypeDescriptor] = &[
     &crate::value_table_indexes::VALUE_TABLE_INDEXES_TYPE,
     &crate::value_table_indexes::VALUE_TABLE_INDEX_TYPE,
     &crate::type_description::DATE_QUALIFIERS_TYPE,
+    &crate::data_composition::DATA_COMPOSITION_FIELD_TYPE,
+    &crate::data_composition::STANDARD_BEGINNING_DATE_TYPE,
 ];
 
 const CORE_OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[

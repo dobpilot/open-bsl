@@ -758,6 +758,19 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
                 )),
             }
         }
+        Instr::NewDynamicStructure { base, count, .. } => {
+            if *count == 0 {
+                return Err(RtError::InvalidBytecode(
+                    "динамический конструктор структуры не содержит списка полей",
+                ));
+            }
+            match (*base).checked_add(*count) {
+                Some(end) if end as usize <= chunk.n_regs as usize => Ok(()),
+                _ => Err(RtError::InvalidBytecode(
+                    "регистры динамического конструктора структуры выходят за кадр",
+                )),
+            }
+        }
         // Номер имени поля или метода — индекс в таблице имён программы. У
         // ЗАКРЫТЫХ опкодов (`GetProp`/`SetProp`) висячий номер даёт
         // `InvalidBytecode` уже в рантайме, а у ОТКРЫТЫХ (объектных) — нет:

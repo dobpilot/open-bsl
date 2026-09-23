@@ -1,0 +1,6 @@
+file.begin	transaction-surface-1
+TRANSACTION.RU.ROLLBACK	Yes
+TRANSACTION.RU.COMMIT	Yes
+TRANSACTION.EN.ROLLBACK	Yes
+TRANSACTION.EN.COMMIT	Yes
+file.end	transaction-surface-1

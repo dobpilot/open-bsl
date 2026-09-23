@@ -390,6 +390,33 @@ fn a_new_structure_with_a_broken_geometry_is_invalid_bytecode() {
     );
 }
 
+/// Вычисляемая форма обязана иметь хотя бы строку имён, а её окно
+/// аргументов не может заворачиваться через границу `u8`.
+#[test]
+fn a_dynamic_structure_with_a_broken_geometry_is_invalid_bytecode() {
+    const SAMPLE: &str = "имена = \"а\"; х = Новый Структура(имена);\nВозврат х.а;\n";
+    assert_eq!(
+        bsl_vm::run_program(&compile(SAMPLE)).unwrap().to_string(),
+        ""
+    );
+
+    let empty = tampered_in(SAMPLE, "NewDynamicStructure", |line| {
+        retoken(line, "count", "0")
+    });
+    assert_eq!(
+        invalid(&empty),
+        "динамический конструктор структуры не содержит списка полей"
+    );
+
+    let base_off = tampered_in(SAMPLE, "NewDynamicStructure", |line| {
+        retoken(line, "base", "255")
+    });
+    assert_eq!(
+        invalid(&base_off),
+        "регистры динамического конструктора структуры выходят за кадр"
+    );
+}
+
 /// Ноль — это `chunks[0]`, тело модуля, которого не вызывает никто. Без
 /// отсева `chunks.get(0)` вернул бы `Some`, и вызов рекурсивно входил бы в
 /// верхний уровень: ловимый `StackOverflow`, который окружающая `Попытка`

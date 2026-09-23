@@ -41,6 +41,7 @@ pub enum HostEffect {
 pub fn call_builtin_env(f: BuiltinFn, env: &mut HostEnv) -> RtResult<BslValue> {
     match f {
         BuiltinFn::CurrentDate => BslValue::current_date(env),
+        BuiltinFn::CurrentSessionDate => BslValue::current_session_date(env),
         BuiltinFn::CurrentUniversalDate => BslValue::current_universal_date(env),
         BuiltinFn::CurrentUniversalDateInMilliseconds => {
             BslValue::current_universal_date_in_milliseconds(env)
@@ -171,6 +172,9 @@ pub enum BuiltinFn {
     /// `ТекущаяДата`/`CurrentDate` — см. `BslValue::current_date` про то,
     /// почему момент берётся по UTC, а не по локальной зоне.
     CurrentDate,
+    /// `ТекущаяДатаСеанса`/`CurrentSessionDate` — текущий момент в
+    /// эффективном часовом поясе этого прогона.
+    CurrentSessionDate,
     /// `ТекущаяУниверсальнаяДата`/`CurrentUniversalDate` — текущий момент
     /// UTC как значение `Дата`.
     CurrentUniversalDate,
@@ -386,6 +390,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("Date", BuiltinFn::MakeDate),
     ("ТекущаяДата", BuiltinFn::CurrentDate),
     ("CurrentDate", BuiltinFn::CurrentDate),
+    ("ТекущаяДатаСеанса", BuiltinFn::CurrentSessionDate),
+    ("CurrentSessionDate", BuiltinFn::CurrentSessionDate),
     ("ТекущаяУниверсальнаяДата", BuiltinFn::CurrentUniversalDate),
     ("CurrentUniversalDate", BuiltinFn::CurrentUniversalDate),
     (
@@ -645,6 +651,7 @@ impl BuiltinFn {
                 | BuiltinFn::CharCode
                 | BuiltinFn::Cos
                 | BuiltinFn::CurrentDate
+                | BuiltinFn::CurrentSessionDate
                 | BuiltinFn::DateBoundaryOf(..)
                 | BuiltinFn::DatePartOf(..)
                 | BuiltinFn::Exp
@@ -692,6 +699,7 @@ impl BuiltinFn {
             BuiltinFn::RunApp | BuiltinFn::RunAppAsync => Some(HostEffect::Application),
             BuiltinFn::Message => Some(HostEffect::Output),
             BuiltinFn::CurrentDate
+            | BuiltinFn::CurrentSessionDate
             | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments => Some(HostEffect::Env),
@@ -781,6 +789,7 @@ impl BuiltinFn {
             // `BslValue::make_date`.
             BuiltinFn::MakeDate => (1, 6),
             BuiltinFn::CurrentDate
+            | BuiltinFn::CurrentSessionDate
             | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments
@@ -1295,6 +1304,7 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // что у соседей ниже: функция публична, и прямой вызов из
         // Rust-кода не должен ронять процесс.
         BuiltinFn::CurrentDate
+        | BuiltinFn::CurrentSessionDate
         | BuiltinFn::CurrentUniversalDate
         | BuiltinFn::CurrentUniversalDateInMilliseconds
         | BuiltinFn::CommandLineArguments => Err(RtError::InvalidBytecode(
