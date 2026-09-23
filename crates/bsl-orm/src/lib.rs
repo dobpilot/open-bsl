@@ -3758,6 +3758,11 @@ fn collection_kind(name: &str) -> Option<MetadataKind> {
         ("Справочники", "Catalogs", MetadataKind::Catalog),
         ("Документы", "Documents", MetadataKind::Document),
         (
+            "ЖурналыДокументов",
+            "DocumentJournals",
+            MetadataKind::DocumentJournal,
+        ),
+        (
             "РегистрыСведений",
             "InformationRegisters",
             MetadataKind::InformationRegister,
@@ -3831,6 +3836,10 @@ fn catalogs(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
 
 fn documents(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     managers(ctx, MetadataKind::Document)
+}
+
+fn document_journals(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::DocumentJournal)
 }
 
 fn information_registers(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -4357,6 +4366,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: documents,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(29),
+        names: &["ПолучитьЖурналыДокументовORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: document_journals,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
@@ -4371,6 +4387,10 @@ const GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {
         names: &["Документы", "Documents"],
         function: FunctionCode::new(28),
+    },
+    GlobalDescriptor {
+        names: &["ЖурналыДокументов", "DocumentJournals"],
+        function: FunctionCode::new(29),
     },
     GlobalDescriptor {
         names: &["РегистрыСведений", "InformationRegisters"],
