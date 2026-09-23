@@ -742,3 +742,18 @@ The base runtime SHALL provide `СмещениеСтандартногоВрем
 #### Scenario: Reject an unavailable zone
 - **WHEN** configuration code supplies an unknown zone identifier or an invalid argument type
 - **THEN** the call fails explicitly
+
+### Requirement: Session time-zone identity belongs to the State
+The base runtime SHALL provide zero-argument `ЧасовойПоясСеанса` / `SessionTimeZone` and return the identifier of the current State's time-zone capability as a String. A system zone SHALL report its configured IANA identity when available, and a fixed zone SHALL report an equivalent documented GMT identifier. Two States MAY carry different identities. If a custom host zone provides offsets without an identity, the call SHALL fail explicitly. This getter SHALL NOT add process-global time-zone mutation or the unreached session-zone setter.
+
+#### Scenario: Read a State time-zone identifier
+- **WHEN** configuration code calls either language name in a State whose zone has an identity
+- **THEN** both calls return that State's identifier as a String
+
+#### Scenario: Keep zone identities isolated
+- **WHEN** two States carry different time-zone identities
+- **THEN** each getter returns only its own identity
+
+#### Scenario: Reject a missing identity
+- **WHEN** a custom State time-zone capability has no identifier
+- **THEN** the getter fails explicitly
