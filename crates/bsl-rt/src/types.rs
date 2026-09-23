@@ -105,6 +105,8 @@ pub enum TypeId {
     ErrorCategory,
     /// Тип члена перечисления `ЧастиДаты`.
     DateFractions,
+    /// Тип члена перечисления `ДопустимаяДлина`.
+    AllowedLength,
     /// Тип члена перечисления `ХешФункция`.
     HashFunction,
 
@@ -375,6 +377,7 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     (TypeId::MessageStatus, "СтатусСообщения", "MessageStatus"),
     (TypeId::ErrorCategory, "КатегорияОшибки", "ErrorCategory"),
     (TypeId::DateFractions, "DateFractions", "DateFractions"),
+    (TypeId::AllowedLength, "AllowedLength", "AllowedLength"),
     (TypeId::HashFunction, "HashFunction", "HashFunction"),
     (TypeId::BinaryData, "Двоичные данные", "BinaryData"),
     (

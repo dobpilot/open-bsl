@@ -1,8 +1,9 @@
 //! Узкий контракт `ОписаниеТипов`, нужный Connector 2.6.0.
 
 use crate::{
-    BslDate, BslNumber, BslObject, BslValue, EnumValue, ObjectProtocol, RtError, RtResult,
-    TypeDescriptor, TypeId, TypeRef,
+    BslDate, BslNumber, BslObject, BslValue, CallContext, EnumKind, EnumValue,
+    ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    TypeId, TypeRef, receiver_of,
 };
 
 pub(crate) static DATE_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
@@ -10,6 +11,13 @@ pub(crate) static DATE_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
     name: "КвалификаторыДаты",
     type_display: "Date qualifiers",
     type_names: &["DateQualifiers"],
+};
+
+pub(crate) static STRING_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КвалификаторыСтроки",
+    type_display: "String qualifiers",
+    type_names: &["StringQualifiers"],
 };
 
 #[derive(Debug)]
@@ -21,6 +29,100 @@ impl ObjectProtocol for DateQualifiersObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &DATE_QUALIFIERS_TYPE
     }
+}
+
+#[derive(Debug)]
+struct StringQualifiersObject {
+    length: BslNumber,
+    allowed_length: EnumValue,
+}
+
+impl ObjectProtocol for StringQualifiersObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &STRING_QUALIFIERS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        STRING_QUALIFIERS_PROPERTIES
+    }
+
+    fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        crate::get_property_from_table(
+            STRING_QUALIFIERS_PROPERTIES,
+            "КвалификаторыСтроки",
+            self,
+            name,
+            context,
+        )
+    }
+}
+
+fn get_string_length(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let qualifiers = receiver_of::<StringQualifiersObject>(receiver, "Длина")?;
+    Ok(BslValue::Number(qualifiers.length.clone()))
+}
+
+fn get_allowed_length(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let qualifiers = receiver_of::<StringQualifiersObject>(receiver, "ДопустимаяДлина")?;
+    Ok(BslValue::Enum(qualifiers.allowed_length))
+}
+
+static STRING_QUALIFIERS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Длина", "Length"],
+        get: get_string_length,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ДопустимаяДлина", "AllowedLength"],
+        get: get_allowed_length,
+        set: None,
+    },
+];
+
+pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] =
+    &[ObjectMembersDescriptor::new(&STRING_QUALIFIERS_TYPE)
+        .with_properties(STRING_QUALIFIERS_PROPERTIES)];
+
+pub(crate) fn construct_string_qualifiers(arguments: &[BslValue]) -> RtResult<BslValue> {
+    let length = match arguments.first() {
+        None => BslNumber::from_i64(0),
+        Some(BslValue::Number(number)) => {
+            let truncated = number.trunc_to_scale(0);
+            let zero = BslNumber::from_i64(0);
+            if truncated.cmp(&zero).is_lt() {
+                zero
+            } else {
+                truncated
+            }
+        }
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Число",
+                op: "Новый КвалификаторыСтроки",
+            });
+        }
+    };
+    let allowed_length = match arguments.get(1) {
+        None => EnumValue::AllowedLengthVariable,
+        Some(BslValue::Enum(value)) if value.kind() == EnumKind::AllowedLength => *value,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "ДопустимаяДлина",
+                op: "Новый КвалификаторыСтроки",
+            });
+        }
+    };
+    Ok(BslValue::new_object(StringQualifiersObject {
+        length,
+        allowed_length,
+    }))
 }
 
 pub(crate) fn new_date_qualifiers(argument: &BslValue) -> RtResult<BslValue> {

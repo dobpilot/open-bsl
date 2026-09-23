@@ -13,6 +13,17 @@
 М("STRING.QUALIFIERS.ENUM.FIXED", ДопустимаяДлина.Фиксированная);
 М("STRING.QUALIFIERS.ENUM.TYPE", ТипЗнч(ДопустимаяДлина.Переменная));
 
+АнглийскиеИмена = "ERROR";
+Попытка
+	АнглийскийКвалификатор = Вычислить("New StringQualifiers(7, AllowedLength.Fixed)");
+	Если АнглийскийКвалификатор.Length = 7
+		И АнглийскийКвалификатор.AllowedLength = AllowedLength.Fixed Тогда
+		АнглийскиеИмена = "OK";
+	КонецЕсли;
+Исключение
+КонецПопытки;
+М("STRING.QUALIFIERS.ENGLISH", АнглийскиеИмена);
+
 КвалификаторыФиксированные = Новый КвалификаторыСтроки(50, ДопустимаяДлина.Фиксированная);
 М("STRING.QUALIFIERS.EXPLICIT.LENGTH", КвалификаторыФиксированные.Длина);
 М("STRING.QUALIFIERS.EXPLICIT.ALLOWED", КвалификаторыФиксированные.ДопустимаяДлина);

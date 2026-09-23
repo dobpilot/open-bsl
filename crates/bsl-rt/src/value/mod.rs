@@ -90,6 +90,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::MessageStatus => TypeId::MessageStatus,
         EnumKind::ErrorCategory => TypeId::ErrorCategory,
         EnumKind::DateFractions => TypeId::DateFractions,
+        EnumKind::AllowedLength => TypeId::AllowedLength,
         EnumKind::HashFunction => TypeId::HashFunction,
         EnumKind::ByteOrder => TypeId::ByteOrder,
         EnumKind::FileOpenMode => TypeId::FileOpenMode,

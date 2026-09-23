@@ -300,6 +300,10 @@ pub enum EnumValue {
     // --- ЧастиДаты -------------------------------------------------------
     DateFractionsDateTime,
 
+    // --- ДопустимаяДлина -------------------------------------------------
+    AllowedLengthVariable,
+    AllowedLengthFixed,
+
     // --- ХешФункция -----------------------------------------------------
     HashMd5,
     HashSha1,
@@ -585,6 +589,8 @@ pub enum EnumKind {
     SortDirection,
     /// Какие части даты сохраняет `КвалификаторыДаты`.
     DateFractions,
+    /// Ограничение длины для `КвалификаторыСтроки`.
+    AllowedLength,
     /// Алгоритм объекта `ХешированиеДанных`.
     HashFunction,
     /// `ПорядокБайтов` — порядок байтов многобайтового целого в
@@ -754,6 +760,7 @@ impl EnumKind {
             EnumKind::MessageStatus => ("СтатусСообщения", "MessageStatus"),
             EnumKind::ErrorCategory => ("КатегорияОшибки", "ErrorCategory"),
             EnumKind::DateFractions => ("ЧастиДаты", "DateFractions"),
+            EnumKind::AllowedLength => ("ДопустимаяДлина", "AllowedLength"),
             EnumKind::HashFunction => ("ХешФункция", "HashFunction"),
             EnumKind::ByteOrder => ("ПорядокБайтов", "ByteOrder"),
             EnumKind::FileOpenMode => ("РежимОткрытияФайла", "FileOpenMode"),
@@ -843,6 +850,7 @@ impl EnumKind {
             EnumKind::MessageStatus => "ПеречислениеСтатусСообщения",
             EnumKind::ErrorCategory => "ПеречислениеКатегорияОшибки",
             EnumKind::DateFractions => "ПеречислениеЧастиДаты",
+            EnumKind::AllowedLength => "AllowedLength",
             EnumKind::HashFunction => "ПеречислениеХешФункция",
             // Здесь префикс не предположение по образцу, а ИЗМЕРЕНО:
             // `Строка(ПорядокБайтов)` и `Строка(ТипЗнч(ПорядокБайтов))`
@@ -2393,6 +2401,20 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Date and time",
     ),
     (
+        EnumKind::AllowedLength,
+        EnumValue::AllowedLengthVariable,
+        "Переменная",
+        "Variable",
+        "Variable-length",
+    ),
+    (
+        EnumKind::AllowedLength,
+        EnumValue::AllowedLengthFixed,
+        "Фиксированная",
+        "Fixed",
+        "Fixed-length",
+    ),
+    (
         EnumKind::HashFunction,
         EnumValue::HashMd5,
         "MD5",
@@ -3447,6 +3469,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("SortDirection", EnumKind::SortDirection),
     ("ЧастиДаты", EnumKind::DateFractions),
     ("DateFractions", EnumKind::DateFractions),
+    ("ДопустимаяДлина", EnumKind::AllowedLength),
+    ("AllowedLength", EnumKind::AllowedLength),
     ("ХешФункция", EnumKind::HashFunction),
     ("HashFunction", EnumKind::HashFunction),
     ("ТипФайлаТабличногоДокумента", EnumKind::SpreadFileType),

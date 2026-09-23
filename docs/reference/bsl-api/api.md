@@ -188,6 +188,7 @@
 | `ФиксированноеСоответствие`, `FixedMap` | 1 |
 | `ПолеКомпоновкиДанных`, `DataCompositionField` | 1 |
 | `СтандартнаяДатаНачала`, `StandardBeginningDate` | 1 |
+| `КвалификаторыСтроки`, `StringQualifiers` | 0…2 |
 
 #### Типы объектов
 
@@ -209,6 +210,7 @@
 | `КоллекцияИндексовТаблицыЗначений` | `Value table index collection` | `ValueTableIndexCollection` |
 | `ИндексТаблицыЗначений` | `Value table index` | `ValueTableIndex` |
 | `КвалификаторыДаты` | `Date qualifiers` | `DateQualifiers` |
+| `КвалификаторыСтроки` | `String qualifiers` | `StringQualifiers` |
 | `ПолеКомпоновкиДанных` | `Data composition field` | `DataCompositionField` |
 | `СтандартнаяДатаНачала` | `Standard beginning date` | `StandardBeginningDate` |
 
@@ -395,6 +397,13 @@
 | `Добавить`, `Add` | 0…1 |
 | `Удалить`, `Delete` | 1 |
 | `Очистить`, `Clear` | 0 |
+
+##### `КвалификаторыСтроки`
+
+| Свойство | Доступ |
+|---|---|
+| `Длина`, `Length` | только чтение |
+| `ДопустимаяДлина`, `AllowedLength` | только чтение |
 
 ### `bsl-binbuf` 0.2.0
 

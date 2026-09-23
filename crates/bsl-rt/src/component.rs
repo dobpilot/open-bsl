@@ -1632,6 +1632,13 @@ fn construct_date_qualifiers(
     crate::type_description::new_date_qualifiers(fractions)
 }
 
+fn construct_string_qualifiers(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    crate::type_description::construct_string_qualifiers(arguments)
+}
+
 fn construct_qualified_type_description(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
@@ -1740,6 +1747,12 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(1),
         call: crate::data_composition::construct_standard_beginning_date,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(15),
+        names: &["КвалификаторыСтроки", "StringQualifiers"],
+        arity: Arity::range(0, 2),
+        call: construct_string_qualifiers,
+    },
 ];
 
 const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
@@ -1781,6 +1794,10 @@ const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
         ConstructorCode::new(14),
         &crate::data_composition::STANDARD_BEGINNING_DATE_TYPE,
     ),
+    (
+        ConstructorCode::new(15),
+        &crate::type_description::STRING_QUALIFIERS_TYPE,
+    ),
 ];
 
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
@@ -1800,6 +1817,7 @@ const CORE_TYPES: &[&crate::TypeDescriptor] = &[
     &crate::value_table_indexes::VALUE_TABLE_INDEXES_TYPE,
     &crate::value_table_indexes::VALUE_TABLE_INDEX_TYPE,
     &crate::type_description::DATE_QUALIFIERS_TYPE,
+    &crate::type_description::STRING_QUALIFIERS_TYPE,
     &crate::data_composition::DATA_COMPOSITION_FIELD_TYPE,
     &crate::data_composition::STANDARD_BEGINNING_DATE_TYPE,
 ];
@@ -1814,6 +1832,7 @@ const CORE_OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[
     crate::error_info::API_MEMBERS,
     crate::value_list::API_MEMBERS,
     crate::value_table_indexes::API_MEMBERS,
+    crate::type_description::API_MEMBERS,
 ];
 
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
