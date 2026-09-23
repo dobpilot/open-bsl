@@ -712,3 +712,14 @@ The base runtime SHALL provide `СтрЧислоВхождений` / `StrOccurr
 #### Scenario: Convert non-string arguments
 - **WHEN** either argument is not a String
 - **THEN** the function searches their ordinary unformatted String representations
+
+### Requirement: Configuration startup can name platform types
+The base runtime SHALL provide the complete platform 8.3.27 `ТипПлатформы` / `PlatformType` enumeration with all seventeen documented members and their measured presentations. Russian and English enumeration names SHALL resolve to the same values. Providing the enumeration SHALL NOT imply detection of the current host platform.
+
+#### Scenario: Use every platform type
+- **WHEN** configuration code reads any documented PlatformType member
+- **THEN** it receives a value of the PlatformType with the measured presentation
+
+#### Scenario: Use the English enumeration name
+- **WHEN** configuration code reads a member through `PlatformType`
+- **THEN** it receives the same value as through `ТипПлатформы`
