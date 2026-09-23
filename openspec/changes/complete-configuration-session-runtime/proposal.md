@@ -12,6 +12,7 @@ Full session-parameter initialization calls manager modules, performs live queri
 - Forward configuration event-log records to a writer owned by the current Session.
 - Provide the client settings-storage and home-page surface, including the standard form-data store, through an adapter explicitly attached to the current Session.
 - Expose the platform's global XDTO serializer through the existing XML/XDTO component surface.
+- Add the XML type-assignment enumeration reached by configuration serialization helpers.
 - Execute data reads under the current principal's rights and RLS.
 - Start background jobs as separate sessions for an explicitly selected principal while copying the parent session parameters.
 - Expose the frozen current principal through the information-base users manager.

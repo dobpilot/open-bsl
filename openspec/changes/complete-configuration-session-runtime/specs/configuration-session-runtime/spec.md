@@ -646,6 +646,13 @@ The XML component SHALL expose `СериализаторXDTO` / `XDTOSerializer`
 - **WHEN** code reads the global serializer without configuration XDTO metadata
 - **THEN** the operation fails explicitly instead of returning a serializer with an empty model
 
+### Requirement: XML type-assignment values match the platform enumeration
+The base runtime SHALL expose the complete `НазначениеТипаXML` / `XMLTypeAssignment` system enumeration with `Неявное` / `Implicit` and `Явное` / `Explicit`. Each member SHALL have the presentation measured on platform 8.3.27.2074 and both language names SHALL identify the same value.
+
+#### Scenario: Read every XML type-assignment member
+- **WHEN** configuration code reads either member through its Russian or English name
+- **THEN** it receives the same typed enumeration value and measured presentation
+
 ### Requirement: Configuration startup can compare strings without case
 The base runtime SHALL provide `СтрСравнить` / `StrCompare` with exactly two arguments. It SHALL convert both values through the ordinary unformatted String representation, compare the resulting strings without case using the ordering measured on platform 8.3.27, and return `-1`, `0`, or `1` as a Number. It SHALL NOT use the identifier-folding rule as an unmeasured replacement for the platform string ordering.
 
