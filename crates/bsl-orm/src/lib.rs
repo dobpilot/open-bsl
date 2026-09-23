@@ -1255,6 +1255,21 @@ pub trait DataAccess {
         ))
     }
 
+    /// Возвращает состояние транзакции на соединении текущего сеанса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных или неподдерживаемой транзакции.
+    fn transaction_active(
+        &self,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<bool> {
+        Err(RtError::DynamicError(
+            "транзакции не поддерживаются адаптером данных".into(),
+        ))
+    }
+
     /// Возвращает состояние монопольного режима текущего соединения.
     ///
     /// # Errors
@@ -2958,6 +2973,13 @@ fn rollback_transaction(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<
     Ok(Value::Undefined)
 }
 
+fn transaction_active(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let (principal, data_access) = current_data_access(context)?;
+    Ok(Value::Boolean(
+        data_access.transaction_active(&principal, context)?,
+    ))
+}
+
 fn exclusive_mode(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     let (principal, data_access) = current_data_access(context)?;
     Ok(Value::Boolean(
@@ -4126,6 +4148,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::range(1, 2),
         kind: FunctionKind::Function,
         call: functional_option,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(25),
+        names: &["ТранзакцияАктивна", "TransactionActive"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: transaction_active,
     },
 ];
 

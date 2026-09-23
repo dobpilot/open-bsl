@@ -153,6 +153,7 @@ struct RecordingDataLocks {
     requests: RefCell<Vec<Vec<String>>>,
     principals: RefCell<Vec<String>>,
     transactions: RefCell<Vec<&'static str>>,
+    transaction_active: Cell<bool>,
     exclusive: Cell<bool>,
     exclusive_changes: RefCell<Vec<bool>>,
     integration_processing: RefCell<Vec<bool>>,
@@ -197,6 +198,7 @@ impl DataAccess for RecordingDataLocks {
             .borrow_mut()
             .push(principal.id().to_string());
         self.transactions.borrow_mut().push("begin");
+        self.transaction_active.set(true);
         Ok(())
     }
 
@@ -205,6 +207,7 @@ impl DataAccess for RecordingDataLocks {
             .borrow_mut()
             .push(principal.id().to_string());
         self.transactions.borrow_mut().push("commit");
+        self.transaction_active.set(false);
         Ok(())
     }
 
@@ -213,7 +216,16 @@ impl DataAccess for RecordingDataLocks {
             .borrow_mut()
             .push(principal.id().to_string());
         self.transactions.borrow_mut().push("rollback");
+        self.transaction_active.set(false);
         Ok(())
+    }
+
+    fn transaction_active(&self, principal: &Principal, _: &mut CallContext<'_>) -> RtResult<bool> {
+        self.principals
+            .borrow_mut()
+            .push(principal.id().to_string());
+        self.transactions.borrow_mut().push("active");
+        Ok(self.transaction_active.get())
     }
 
     fn exclusive_mode(&self, principal: &Principal, _: &mut CallContext<'_>) -> RtResult<bool> {
@@ -704,19 +716,36 @@ fn transaction_procedures_delegate_to_the_current_session_adapter() {
 
     state
         .exec(
-            "НачатьТранзакцию(); ЗафиксироватьТранзакцию(); BeginTransaction(); RollbackTransaction();",
+            r#"
+Если ТранзакцияАктивна() Тогда ВызватьИсключение "initial"; КонецЕсли;
+НачатьТранзакцию();
+Если Не TransactionActive() Тогда ВызватьИсключение "active"; КонецЕсли;
+ЗафиксироватьТранзакцию();
+BeginTransaction();
+RollbackTransaction();
+Если TransactionActive() Тогда ВызватьИсключение "finished"; КонецЕсли;
+"#,
         )
         .unwrap();
     assert_eq!(
         *access.transactions.borrow(),
-        vec!["begin", "commit", "begin", "rollback"]
+        vec![
+            "active", "begin", "active", "commit", "begin", "rollback", "active"
+        ]
     );
-    assert_eq!(access.principals.borrow().as_slice(), ["user"; 4]);
+    assert_eq!(access.principals.borrow().as_slice(), ["user"; 7]);
 
     let mut missing = state_with_data_access(&engine, None);
     assert!(
         missing
             .exec("НачатьТранзакцию();")
+            .unwrap_err()
+            .to_string()
+            .contains("адаптер данных")
+    );
+    assert!(
+        missing
+            .exec("ТранзакцияАктивна();")
             .unwrap_err()
             .to_string()
             .contains("адаптер данных")
