@@ -757,3 +757,18 @@ The base runtime SHALL provide zero-argument `ЧасовойПоясСеанса
 #### Scenario: Reject a missing identity
 - **WHEN** a custom State time-zone capability has no identifier
 - **THEN** the getter fails explicitly
+
+### Requirement: Acquired documents use the existing manager path
+The ORM component SHALL expose `Документы` / `Documents` as a library global backed by acquired `MetadataKind::Document` descriptors. A folded property name matching a Document SHALL return its existing manager value and SHALL dispatch through the same platform-first, exported-manager-module-second path as other configuration managers. `Метаданные.Документы` / `Metadata.Documents` SHALL expose the same acquired descriptors through the existing metadata-collection behavior. Unknown names and members SHALL fail explicitly. This projection SHALL NOT imply document persistence, posting, or register writes.
+
+#### Scenario: Resolve a document manager
+- **WHEN** configuration code reads an acquired document through either manager-root language name
+- **THEN** it receives the manager linked to that Document descriptor
+
+#### Scenario: Call an exported document manager method
+- **WHEN** configuration code calls an exported method not owned by the platform surface
+- **THEN** the existing manager-module instance handles the call with its manager as `ЭтотОбъект`
+
+#### Scenario: Read document metadata
+- **WHEN** configuration code reads the same document through `Метаданные.Документы` or `Metadata.Documents`
+- **THEN** it receives the matching immutable metadata descriptor
