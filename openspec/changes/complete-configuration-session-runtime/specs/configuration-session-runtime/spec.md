@@ -699,7 +699,7 @@ The ORM component SHALL provide `НайтиПоСсылкам` / `FindByRef` wit
 - **THEN** the call fails explicitly instead of returning an empty table
 
 ### Requirement: Configuration startup can count substring occurrences
-The base runtime SHALL provide `СтрЧислоВхождений` / `StrOccurrenceCount` with exactly two arguments. It SHALL return a Number and follow the platform 8.3.27 measurement for overlapping matches, an empty substring, letter case, and invalid argument types. The operation SHALL use the runtime's existing string representation rather than introduce another text representation.
+The base runtime SHALL provide `СтрЧислоВхождений` / `StrOccurrenceCount` with exactly two arguments. It SHALL convert both values through the ordinary unformatted String representation, count non-overlapping case-sensitive matches, and return the count as a Number. An empty substring SHALL return zero. The operation SHALL use the runtime's existing string representation rather than introduce another text representation.
 
 #### Scenario: Count repeated substring occurrences
 - **WHEN** configuration code counts a substring that occurs several times
@@ -707,8 +707,8 @@ The base runtime SHALL provide `СтрЧислоВхождений` / `StrOccurr
 
 #### Scenario: Preserve measured edge behavior
 - **WHEN** the searched substring overlaps with itself, is empty, or differs only by letter case
-- **THEN** the function returns the same Number as platform 8.3.27
+- **THEN** only non-overlapping case-sensitive matches are counted and an empty substring produces zero
 
-#### Scenario: Reject or convert non-string arguments as measured
+#### Scenario: Convert non-string arguments
 - **WHEN** either argument is not a String
-- **THEN** the function follows the measured platform type behavior
+- **THEN** the function searches their ordinary unformatted String representations
