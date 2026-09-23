@@ -61,6 +61,7 @@ pub enum TypeId {
     DataItemReceive,
     PredefinedDataUpdate,
     DocumentPostingMode,
+    DocumentWriteMode,
     DataCompositionComparisonType,
     StandardBeginningDateVariant,
     JsonValueType,
@@ -260,6 +261,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::DocumentPostingMode,
         "РежимПроведенияДокумента",
         "DocumentPostingMode",
+    ),
+    (
+        TypeId::DocumentWriteMode,
+        "РежимЗаписиДокумента",
+        "DocumentWriteMode",
     ),
     (
         TypeId::DataCompositionComparisonType,
@@ -489,6 +495,7 @@ const DISPLAY: &[(TypeId, &str)] = &[
     (TypeId::DataItemReceive, "DataItemReceive"),
     (TypeId::PredefinedDataUpdate, "PredefinedDataUpdate"),
     (TypeId::DocumentPostingMode, "DocumentPostingMode"),
+    (TypeId::DocumentWriteMode, "DocumentWriteMode"),
     (
         TypeId::DataCompositionComparisonType,
         "DataCompositionComparisonType",
