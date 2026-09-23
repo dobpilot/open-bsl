@@ -828,3 +828,10 @@ The ORM component SHALL expose the remaining acquired database-backed manager ki
 #### Scenario: Reject an unknown configured name
 - **WHEN** configuration code reads an unknown property from any listed manager root
 - **THEN** the existing explicit unknown-property error is returned
+
+### Requirement: Acquired sequences use the existing manager path
+The database configuration loader SHALL classify platform Sequence descriptors as `MetadataKind::Sequence`. The ORM component SHALL expose them through `Последовательности` / `Sequences` and `Метаданные.Последовательности` / `Metadata.Sequences` using the existing generic manager and metadata-collection behavior. This projection SHALL NOT imply sequence-boundary registration or mutation.
+
+#### Scenario: Resolve an acquired sequence
+- **WHEN** the acquired configuration contains a Sequence descriptor
+- **THEN** both manager-root language names and both metadata-root language names resolve that descriptor case-insensitively
