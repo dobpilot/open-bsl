@@ -192,7 +192,7 @@ The base runtime SHALL expose the complete measured `РежимОтправки�
 - **THEN** the method fails explicitly
 
 ### Requirement: Reached transaction procedures
-The ORM component SHALL provide the reached zero-argument procedures `НачатьТранзакцию()` / `BeginTransaction()`, `ЗафиксироватьТранзакцию()` / `CommitTransaction()`, and `ОтменитьТранзакцию()` / `RollbackTransaction()`. Each operation SHALL delegate to the current Session's data-access adapter with its frozen principal and SHALL use the same concrete connection as managed data locks, queries, and constants. Missing transaction capability SHALL fail explicitly. Transaction nesting, commit, rollback, and release SHALL remain owned by that connection-bound adapter.
+The ORM component SHALL provide the reached zero-argument procedures `НачатьТранзакцию()` / `BeginTransaction()`, `ЗафиксироватьТранзакцию()` / `CommitTransaction()`, and `ОтменитьТранзакцию()` / `RollbackTransaction()`, plus the zero-argument function `ТранзакцияАктивна()` / `TransactionActive()`. Each operation SHALL delegate to the current Session's data-access adapter with its frozen principal and SHALL use the same concrete connection as managed data locks, queries, and constants. Missing transaction capability SHALL fail explicitly. Transaction nesting, active-state reporting, commit, rollback, and release SHALL remain owned by that connection-bound adapter.
 
 #### Scenario: Commit a Session transaction
 - **WHEN** startup begins and commits a transaction with a capable adapter
@@ -201,6 +201,10 @@ The ORM component SHALL provide the reached zero-argument procedures `Начат
 #### Scenario: Roll back after a caught failure
 - **WHEN** startup begins a transaction and calls rollback from its exception handler
 - **THEN** the adapter rolls back that same Session transaction
+
+#### Scenario: Query the concrete Session transaction
+- **WHEN** startup queries transaction state before, during, and after a transaction
+- **THEN** the current Session adapter reports false, true, and false from its concrete connection
 
 #### Scenario: Transaction capability is absent
 - **WHEN** startup invokes a transaction procedure without a capable data adapter
