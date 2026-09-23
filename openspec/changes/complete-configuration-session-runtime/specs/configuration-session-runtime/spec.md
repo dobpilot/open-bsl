@@ -635,6 +635,17 @@ The XML component SHALL provide `XMLТипЗнч` / `XMLTypeOf` with exactly one
 - **WHEN** configuration code constructs two XMLDataType values with equal names and namespaces
 - **THEN** their read-only properties match the supplied strings and the values compare equal
 
+### Requirement: Global XDTO serializer
+The XML component SHALL expose `СериализаторXDTO` / `XDTOSerializer` as a library global backed by the existing XDTO serializer and the same configuration XDTO factory as global `ФабрикаXDTO` / `XDTOFactory`. It SHALL NOT construct an unrelated empty factory. If configuration XDTO metadata is unavailable, reading the global SHALL fail explicitly with the configuration-factory error.
+
+#### Scenario: Compile a global serializer call
+- **WHEN** configuration code invokes a documented serializer method through either global language name
+- **THEN** the resolver binds the name to the XML component's serializer value
+
+#### Scenario: Configuration factory is unavailable
+- **WHEN** code reads the global serializer without configuration XDTO metadata
+- **THEN** the operation fails explicitly instead of returning a serializer with an empty model
+
 ### Requirement: Configuration startup can compare strings without case
 The base runtime SHALL provide `СтрСравнить` / `StrCompare` with exactly two arguments. It SHALL convert both values through the ordinary unformatted String representation, compare the resulting strings without case using the ordering measured on platform 8.3.27, and return `-1`, `0`, or `1` as a Number. It SHALL NOT use the identifier-folding rule as an unmeasured replacement for the platform string ordering.
 
