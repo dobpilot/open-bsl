@@ -817,3 +817,14 @@ The ORM component SHALL expose `Обработки` / `DataProcessors` as a libr
 #### Scenario: Read data-processor metadata
 - **WHEN** configuration code reads the same data processor through `Метаданные.Обработки` or `Metadata.DataProcessors`
 - **THEN** it receives the matching immutable metadata descriptor
+
+### Requirement: Every acquired database-backed manager kind is projected
+The ORM component SHALL expose the remaining acquired database-backed manager kinds through the standard Russian and English roots: `РегистрыНакопления` / `AccumulationRegisters`, `РегистрыБухгалтерии` / `AccountingRegisters`, `РегистрыРасчета` / `CalculationRegisters`, `ПланыСчетов` / `ChartsOfAccounts`, `ПланыВидовХарактеристик` / `ChartsOfCharacteristicTypes`, `ПланыВидовРасчета` / `ChartsOfCalculationTypes`, `БизнесПроцессы` / `BusinessProcesses`, `Задачи` / `Tasks`, and `ХранилищаНастроек` / `SettingsStorages`. Each root and its corresponding `Метаданные` / `Metadata` collection SHALL project descriptors already present in the immutable catalog through the existing generic manager path. This projection SHALL NOT imply persistence, register writes, workflow execution, or settings-storage operations.
+
+#### Scenario: Resolve every acquired manager kind
+- **WHEN** the catalog contains one descriptor of each listed kind
+- **THEN** both language names resolve its manager and the corresponding metadata collection resolves the same descriptor
+
+#### Scenario: Reject an unknown configured name
+- **WHEN** configuration code reads an unknown property from any listed manager root
+- **THEN** the existing explicit unknown-property error is returned
