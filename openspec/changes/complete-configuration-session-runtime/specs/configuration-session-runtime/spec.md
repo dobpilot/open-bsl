@@ -697,3 +697,18 @@ The ORM component SHALL provide `НайтиПоСсылкам` / `FindByRef` wit
 #### Scenario: Reject unavailable reference search
 - **WHEN** the Session adapter does not implement reference search
 - **THEN** the call fails explicitly instead of returning an empty table
+
+### Requirement: Configuration startup can count substring occurrences
+The base runtime SHALL provide `СтрЧислоВхождений` / `StrOccurrenceCount` with exactly two arguments. It SHALL return a Number and follow the platform 8.3.27 measurement for overlapping matches, an empty substring, letter case, and invalid argument types. The operation SHALL use the runtime's existing string representation rather than introduce another text representation.
+
+#### Scenario: Count repeated substring occurrences
+- **WHEN** configuration code counts a substring that occurs several times
+- **THEN** the function returns the platform-measured occurrence count
+
+#### Scenario: Preserve measured edge behavior
+- **WHEN** the searched substring overlaps with itself, is empty, or differs only by letter case
+- **THEN** the function returns the same Number as platform 8.3.27
+
+#### Scenario: Reject or convert non-string arguments as measured
+- **WHEN** either argument is not a String
+- **THEN** the function follows the measured platform type behavior
