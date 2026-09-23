@@ -4778,7 +4778,7 @@ fn structured_error_info(arguments: &[BslValue]) -> Result<BslValue, RtError> {
     ))
 }
 
-/// `Строка`/`Формат`/`Число`/`Message` перехватываются здесь, а не в
+/// `Строка`/`Формат`/`Число`/`СтрСравнить`/`Message` перехватываются здесь, а не в
 /// `bsl_rt::call_builtin_fn`: форматирование живёт в `bsl-format`, которое
 /// зависит от `bsl-rt` (не наоборот) — `bsl-rt` физически не может
 /// отформатировать число сам. Всё остальное уходит в `bsl-rt` как обычно.
@@ -4862,6 +4862,16 @@ fn call_builtin_with_format(
             };
             let n = bsl_format::parse_number(&s.to_string(), &bsl_format::NumberFormat::default())?;
             Ok(BslValue::Number(n))
+        }
+        BuiltinFn::StrCompare => {
+            let left = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[0], None)?);
+            let right = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[1], None)?);
+            let result = match left.compare_case_insensitive(&right) {
+                std::cmp::Ordering::Less => -1,
+                std::cmp::Ordering::Equal => 0,
+                std::cmp::Ordering::Greater => 1,
+            };
+            Ok(BslValue::number_from_i64(result))
         }
         // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
         // имён, и путь без контекста для неё кончается ошибкой.
