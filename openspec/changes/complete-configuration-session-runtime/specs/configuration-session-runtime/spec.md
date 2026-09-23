@@ -369,13 +369,17 @@ The configuration-session runtime SHALL provide `ЗаписьЖурналаРе�
 - **THEN** the call fails explicitly
 
 ### Requirement: Principal-bound client settings
-For web-client and thin-client Sessions, the runtime SHALL expose `ХранилищеОбщихНастроек`/`CommonSettingsStorage` and `ХранилищеСистемныхНастроек`/`SystemSettingsStorage` through a client-settings adapter explicitly supplied for that Session. The standard manager SHALL provide `Загрузить`/`Load` with one through four arguments, `Сохранить`/`Save` with three through five arguments, and `Выбрать`/`Select` with zero or one argument. The adapter SHALL receive the selected principal and SHALL enforce the documented user-data-save and data-administration rights. Missing storage data, denied access, and an absent adapter SHALL remain distinguishable and SHALL NOT become an unrestricted or process-global store.
+For web-client and thin-client Sessions, the runtime SHALL expose `ХранилищеОбщихНастроек`/`CommonSettingsStorage`, `ХранилищеСистемныхНастроек`/`SystemSettingsStorage`, and `ХранилищеНастроекДанныхФорм`/`FormDataSettingsStorage` through a client-settings adapter explicitly supplied for that Session. The standard manager SHALL provide `Загрузить`/`Load` with one through four arguments and `Сохранить`/`Save` with three through five arguments. The system store SHALL also provide `Выбрать`/`Select` with zero or one argument. The adapter SHALL receive the selected principal and the selected storage kind and SHALL enforce the documented user-data-save and data-administration rights. Missing storage data, denied access, and an absent adapter SHALL remain distinguishable and SHALL NOT become an unrestricted or process-global store.
 
 `Выбрать`/`Select` SHALL return a standard-settings selection with `Следующий`/`Next` and read-only `КлючОбъекта`/`ObjectKey`, `КлючНастроек`/`SettingsKey`, `Пользователь`/`User`, and `Настройки`/`Settings` properties. The selection SHALL traverse only the immutable row snapshot returned by the current Session adapter.
 
 #### Scenario: Load current-user settings
 - **WHEN** managed-client code loads an existing setting without an explicit user name
 - **THEN** the adapter reads the setting for the current Session principal
+
+#### Scenario: Load form-data settings
+- **WHEN** managed-client code loads a setting through `ХранилищеНастроекДанныхФорм` or `FormDataSettingsStorage`
+- **THEN** the adapter receives the current Session principal and the form-data storage kind
 
 #### Scenario: Access another user's settings
 - **WHEN** code requests another user's setting without data-administration permission

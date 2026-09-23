@@ -10,7 +10,7 @@ Full session-parameter initialization calls manager modules, performs live queri
 - Provide the measured stored-value objects used by managed-client startup code.
 - Expose the current information-base session and its explicit background-job identity.
 - Forward configuration event-log records to a writer owned by the current Session.
-- Provide the client settings-storage and home-page surface through an adapter explicitly attached to the current Session.
+- Provide the client settings-storage and home-page surface, including the standard form-data store, through an adapter explicitly attached to the current Session.
 - Execute data reads under the current principal's rights and RLS.
 - Start background jobs as separate sessions for an explicitly selected principal while copying the parent session parameters.
 - Expose the frozen current principal through the information-base users manager.
