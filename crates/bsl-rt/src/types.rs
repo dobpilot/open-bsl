@@ -63,6 +63,7 @@ pub enum TypeId {
     DocumentPostingMode,
     DocumentWriteMode,
     AllowedSign,
+    XmlTypeAssignment,
     PlatformType,
     DataCompositionComparisonType,
     StandardBeginningDateVariant,
@@ -270,6 +271,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "DocumentWriteMode",
     ),
     (TypeId::AllowedSign, "ДопустимыйЗнак", "AllowedSign"),
+    (
+        TypeId::XmlTypeAssignment,
+        "НазначениеТипаXML",
+        "XMLTypeAssignment",
+    ),
     (TypeId::PlatformType, "ТипПлатформы", "PlatformType"),
     (
         TypeId::DataCompositionComparisonType,
@@ -501,6 +507,7 @@ const DISPLAY: &[(TypeId, &str)] = &[
     (TypeId::DocumentPostingMode, "DocumentPostingMode"),
     (TypeId::DocumentWriteMode, "DocumentWriteMode"),
     (TypeId::AllowedSign, "AllowedSign"),
+    (TypeId::XmlTypeAssignment, "XMLTypeAssignment"),
     (TypeId::PlatformType, "PlatformType"),
     (
         TypeId::DataCompositionComparisonType,

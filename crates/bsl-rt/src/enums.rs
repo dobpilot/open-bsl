@@ -112,6 +112,10 @@ pub enum EnumValue {
     AllowedSignAny,
     AllowedSignNonnegative,
 
+    // --- НазначениеТипаXML -------------------------------------------
+    XmlTypeAssignmentImplicit,
+    XmlTypeAssignmentExplicit,
+
     // --- ТипПлатформы ------------------------------------------------
     PlatformTypeAndroidArm,
     PlatformTypeAndroidArm64,
@@ -585,6 +589,8 @@ pub enum EnumKind {
     DocumentWriteMode,
     /// Допустимый знак числа.
     AllowedSign,
+    /// Способ назначения типа при записи значения в XML.
+    XmlTypeAssignment,
     /// Тип операционной системы и архитектуры платформы.
     PlatformType,
     /// Операция сравнения в настройках системы компоновки данных.
@@ -769,6 +775,7 @@ impl EnumKind {
             EnumKind::DocumentPostingMode => ("РежимПроведенияДокумента", "DocumentPostingMode"),
             EnumKind::DocumentWriteMode => ("РежимЗаписиДокумента", "DocumentWriteMode"),
             EnumKind::AllowedSign => ("ДопустимыйЗнак", "AllowedSign"),
+            EnumKind::XmlTypeAssignment => ("НазначениеТипаXML", "XMLTypeAssignment"),
             EnumKind::PlatformType => ("ТипПлатформы", "PlatformType"),
             EnumKind::DataCompositionComparisonType => (
                 "ВидСравненияКомпоновкиДанных",
@@ -876,6 +883,7 @@ impl EnumKind {
             EnumKind::DocumentPostingMode => "DocumentPostingMode",
             EnumKind::DocumentWriteMode => "DocumentWriteMode",
             EnumKind::AllowedSign => "AllowedSign",
+            EnumKind::XmlTypeAssignment => "XMLTypeAssignment",
             EnumKind::PlatformType => "PlatformType",
             EnumKind::DataCompositionComparisonType => "DataCompositionComparisonType",
             EnumKind::StandardBeginningDateVariant => "StandardBeginningDateVariant",
@@ -1381,6 +1389,22 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Неотрицательный",
         "Nonnegative",
         "Nonnegative",
+    ),
+    // Полный состав и представления измерены на платформе 8.3.27.2074
+    // пробой `measure-xml-type-assignment.bsl`.
+    (
+        EnumKind::XmlTypeAssignment,
+        EnumValue::XmlTypeAssignmentImplicit,
+        "Неявное",
+        "Implicit",
+        "Implicit",
+    ),
+    (
+        EnumKind::XmlTypeAssignment,
+        EnumValue::XmlTypeAssignmentExplicit,
+        "Явное",
+        "Explicit",
+        "Explicit",
     ),
     // Полный состав и представления измерены на платформе 8.3.27.2074
     // пробой `measure-platform-type.bsl`.
@@ -3651,6 +3675,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("DocumentWriteMode", EnumKind::DocumentWriteMode),
     ("ДопустимыйЗнак", EnumKind::AllowedSign),
     ("AllowedSign", EnumKind::AllowedSign),
+    ("НазначениеТипаXML", EnumKind::XmlTypeAssignment),
+    ("XMLTypeAssignment", EnumKind::XmlTypeAssignment),
     ("ТипПлатформы", EnumKind::PlatformType),
     ("PlatformType", EnumKind::PlatformType),
     (
