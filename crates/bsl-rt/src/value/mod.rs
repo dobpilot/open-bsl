@@ -73,6 +73,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::PredefinedDataUpdate => TypeId::PredefinedDataUpdate,
         EnumKind::DocumentPostingMode => TypeId::DocumentPostingMode,
         EnumKind::DocumentWriteMode => TypeId::DocumentWriteMode,
+        EnumKind::AllowedSign => TypeId::AllowedSign,
         EnumKind::PlatformType => TypeId::PlatformType,
         EnumKind::DataCompositionComparisonType => TypeId::DataCompositionComparisonType,
         EnumKind::StandardBeginningDateVariant => TypeId::StandardBeginningDateVariant,

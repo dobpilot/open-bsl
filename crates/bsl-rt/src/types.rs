@@ -62,6 +62,7 @@ pub enum TypeId {
     PredefinedDataUpdate,
     DocumentPostingMode,
     DocumentWriteMode,
+    AllowedSign,
     PlatformType,
     DataCompositionComparisonType,
     StandardBeginningDateVariant,
@@ -268,6 +269,7 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "РежимЗаписиДокумента",
         "DocumentWriteMode",
     ),
+    (TypeId::AllowedSign, "ДопустимыйЗнак", "AllowedSign"),
     (TypeId::PlatformType, "ТипПлатформы", "PlatformType"),
     (
         TypeId::DataCompositionComparisonType,
@@ -498,6 +500,7 @@ const DISPLAY: &[(TypeId, &str)] = &[
     (TypeId::PredefinedDataUpdate, "PredefinedDataUpdate"),
     (TypeId::DocumentPostingMode, "DocumentPostingMode"),
     (TypeId::DocumentWriteMode, "DocumentWriteMode"),
+    (TypeId::AllowedSign, "AllowedSign"),
     (TypeId::PlatformType, "PlatformType"),
     (
         TypeId::DataCompositionComparisonType,
