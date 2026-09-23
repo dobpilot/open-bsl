@@ -58,6 +58,41 @@ impl DataAccess for QueryAccessStub {
 }
 
 #[derive(Debug, Default)]
+struct FunctionalOptionAccessStub {
+    calls: RefCell<Vec<FunctionalOptionCall>>,
+}
+
+type FunctionalOptionCall = (String, Vec<(String, Value)>, String);
+
+impl DataAccess for FunctionalOptionAccessStub {
+    fn constant_value(
+        &self,
+        _: &MetadataObject,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError("константы не поддерживаются".into()))
+    }
+
+    fn functional_option(
+        &self,
+        request: &FunctionalOptionRequest,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        self.calls.borrow_mut().push((
+            request.name().to_string(),
+            request
+                .parameters()
+                .map(|(name, value)| (name.to_string(), value.clone()))
+                .collect(),
+            principal.id().to_string(),
+        ));
+        Ok(Value::Str(request.name().into()))
+    }
+}
+
+#[derive(Debug, Default)]
 struct RecordingDataLocks {
     requests: RefCell<Vec<Vec<String>>>,
     principals: RefCell<Vec<String>>,
@@ -903,6 +938,52 @@ fn query_fails_closed_without_support_and_rejects_non_linear_traversal() {
         error
             .to_string()
             .contains("поддерживается только прямой обход по умолчанию")
+    );
+}
+
+#[test]
+fn functional_option_uses_the_current_session_adapter() {
+    let engine = engine();
+    let access = Rc::new(FunctionalOptionAccessStub::default());
+    let mut state = state_with_data_access(&engine, Some(access.clone()));
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Параметры = Новый Структура;
+                Параметры.Вставить("Первый", 1);
+                Параметры.Вставить("Второй", "два");
+                Русский = ПолучитьФункциональнуюОпцию("Опция", Параметры);
+                English = GetFunctionalOption("Option");
+                Возврат Русский + ":" + English;
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Опция:Option".into())
+    );
+    assert_eq!(
+        access.calls.borrow().as_slice(),
+        [
+            (
+                "Опция".into(),
+                vec![
+                    ("Первый".into(), Value::number_from_i64(1)),
+                    ("Второй".into(), Value::Str("два".into())),
+                ],
+                "user".into(),
+            ),
+            ("Option".into(), Vec::new(), "user".into()),
+        ]
+    );
+
+    let mut unsupported = state_with_data_access(&engine, Some(Rc::new(DataAccessStub)));
+    assert!(
+        unsupported
+            .exec("Возврат ПолучитьФункциональнуюОпцию(\"Опция\");")
+            .unwrap_err()
+            .to_string()
+            .contains("функциональные опции не поддерживаются")
     );
 }
 

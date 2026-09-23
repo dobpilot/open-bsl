@@ -848,6 +848,13 @@ pub struct QueryRequest {
     parameters: Rc<[(Rc<str>, Value)]>,
 }
 
+/// Неизменяемый запрос значения функциональной опции.
+#[derive(Debug, Clone)]
+pub struct FunctionalOptionRequest {
+    name: Rc<str>,
+    parameters: Rc<[(Rc<str>, Value)]>,
+}
+
 /// Именованное пространство управляемой блокировки данных.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataLockRequest {
@@ -917,6 +924,21 @@ impl QueryRequest {
 
     /// Перечисляет окончательные значения параметров в порядке их первой
     /// установки.
+    pub fn parameters(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.parameters
+            .iter()
+            .map(|(name, value)| (name.as_ref(), value))
+    }
+}
+
+impl FunctionalOptionRequest {
+    /// Возвращает имя функциональной опции в языке текущей конфигурации.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Перечисляет переданные параметры в порядке полей исходной структуры.
     pub fn parameters(&self) -> impl Iterator<Item = (&str, &Value)> {
         self.parameters
             .iter()
@@ -1071,6 +1093,23 @@ pub trait DataAccess {
     ) -> RtResult<QueryResultData> {
         Err(RtError::DynamicError(
             "выполнение запросов не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Возвращает значение функциональной опции для текущего сеанса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку неизвестной опции, неполного набора параметров,
+    /// источника данных, проверки прав или неподдерживаемой операции.
+    fn functional_option(
+        &self,
+        _request: &FunctionalOptionRequest,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError(
+            "функциональные опции не поддерживаются адаптером данных".into(),
         ))
     }
 
@@ -3528,6 +3567,54 @@ fn predefined_value(context: &mut CallContext<'_>, arguments: &[Value]) -> RtRes
     )))
 }
 
+fn functional_option(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let [Value::Str(name), tail @ ..] = arguments else {
+        return Err(RtError::TypeError {
+            expected: "Строка, Структура",
+            op: "ПолучитьФункциональнуюОпцию",
+        });
+    };
+    let parameters = match tail {
+        [] => Vec::new(),
+        [Value::Object(object)] => {
+            let BslObject::Structure(storage) = object.as_ref() else {
+                return Err(RtError::TypeError {
+                    expected: "Структура",
+                    op: "ПолучитьФункциональнуюОпцию",
+                });
+            };
+            let storage = storage.borrow();
+            (0..storage.len())
+                .map(|index| {
+                    let (name, value) = storage.entry_at(index).ok_or_else(|| {
+                        RtError::DynamicError(
+                            "структура параметров функциональной опции повреждена".into(),
+                        )
+                    })?;
+                    let name = context.runtime_shapes().names.name(name).ok_or_else(|| {
+                        RtError::DynamicError(
+                            "имя параметра функциональной опции отсутствует".into(),
+                        )
+                    })?;
+                    Ok((Rc::from(name), value))
+                })
+                .collect::<RtResult<Vec<_>>>()?
+        }
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Структура",
+                op: "ПолучитьФункциональнуюОпцию",
+            });
+        }
+    };
+    let request = FunctionalOptionRequest {
+        name: Rc::from(name.to_string()),
+        parameters: parameters.into(),
+    };
+    let (principal, data_access) = current_data_access(context)?;
+    data_access.functional_option(&request, &principal, context)
+}
+
 fn access_right(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
     let [right, metadata, tail @ ..] = arguments else {
         return Err(RtError::DynamicError(
@@ -3842,6 +3929,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Procedure,
         call: initialize_predefined_data,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(24),
+        names: &["ПолучитьФункциональнуюОпцию", "GetFunctionalOption"],
+        arity: Arity::range(1, 2),
+        kind: FunctionKind::Function,
+        call: functional_option,
     },
 ];
 
