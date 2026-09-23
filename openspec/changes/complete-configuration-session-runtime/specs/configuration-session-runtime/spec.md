@@ -540,3 +540,18 @@ The session component SHALL provide the zero-argument `РасписаниеРе�
 #### Scenario: The value does not create a scheduled job
 - **WHEN** configuration code constructs and edits a job schedule
 - **THEN** no background or scheduled job is submitted
+
+### Requirement: Functional-option evaluation uses the current Session data adapter
+The ORM component SHALL provide `ПолучитьФункциональнуюОпцию` / `GetFunctionalOption` with one required string name and one optional Structure of parameter values. It SHALL copy that request and delegate evaluation to the `DataAccess` attached to the current Session together with the frozen principal and current call context. It SHALL fail explicitly when the adapter does not implement functional-option evaluation.
+
+#### Scenario: Evaluate an unparameterized functional option
+- **WHEN** configuration code calls the function with a name only
+- **THEN** the current Session adapter receives that name and an empty parameter set and its value is returned unchanged
+
+#### Scenario: Evaluate a parameterized functional option
+- **WHEN** configuration code calls the function with a name and a Structure
+- **THEN** the current Session adapter receives the Structure fields in insertion order together with their values
+
+#### Scenario: Reject an unsupported adapter
+- **WHEN** configuration code calls the function and the current Session adapter does not implement functional-option evaluation
+- **THEN** the call fails explicitly instead of returning an invented disabled value
