@@ -645,3 +645,18 @@ The base runtime SHALL provide `СтрСравнить` / `StrCompare` with exac
 #### Scenario: Compare values after standard String conversion
 - **WHEN** configuration code compares Number `1` with String `"1"` or Undefined with an empty String
 - **THEN** the function returns zero
+
+### Requirement: Current language is fixed when a Session opens
+The Session runtime SHALL provide `ТекущийЯзык()` / `CurrentLanguage()`. The host SHALL resolve the current principal's selected interface language and fall back to the configuration's primary language before running startup code. For the reached managed-Session form, every call SHALL return the same configuration Language metadata object without rereading user or configuration tables. A separately opened foreground or background Session SHALL receive its own resolved language identity. Missing or inconsistent language data SHALL fail explicitly when the function is requested. The platform's documented String result variant is outside this reached slice.
+
+#### Scenario: Use the current principal's language
+- **WHEN** a Session opens with an interface language selected for its principal
+- **THEN** both language names return the immutable value resolved for that Session
+
+#### Scenario: Fall back to the configuration language
+- **WHEN** the current principal has no selected interface language
+- **THEN** the host resolves the configuration's primary language before startup and the function returns it
+
+#### Scenario: Keep Sessions isolated
+- **WHEN** two Sessions open with different resolved language values
+- **THEN** each function call returns the value owned by its own Session
