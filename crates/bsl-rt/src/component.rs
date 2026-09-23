@@ -251,6 +251,27 @@ pub trait SecurityModeControl {
     /// Возвращает ошибку, если текущий кадр пытается снять чужое включение
     /// или если счётчик переполнен.
     fn set_privileged_mode(&self, enabled: bool) -> RtResult<()>;
+
+    /// Проверяет безопасный режим разделения данных для общего реквизита.
+    fn data_separation_safe_mode(&self, _common_attribute: &str) -> bool {
+        false
+    }
+
+    /// Изменяет безопасный режим разделения данных текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, если исполнитель не поддерживает этот режим,
+    /// текущий кадр пытается снять чужое включение или счётчик переполнен.
+    fn set_data_separation_safe_mode(
+        &self,
+        _common_attribute: &str,
+        _enabled: bool,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "безопасный режим разделения данных не поддерживается исполнителем".into(),
+        ))
+    }
 }
 
 /// Возможность прогона, которой может не быть на конкретном пути
@@ -461,6 +482,33 @@ impl<'a> CallContext<'a> {
     /// кадра или переполнения счётчика.
     pub fn set_privileged_mode(&self, enabled: bool) -> RtResult<()> {
         self.security_modes()?.set_privileged_mode(enabled)
+    }
+
+    /// Проверяет безопасный режим разделения данных для общего реквизита.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает [`RtError::CapabilityMissing`], если вызов не принадлежит
+    /// исполняемому кадру BSL.
+    pub fn data_separation_safe_mode(&self, common_attribute: &str) -> RtResult<bool> {
+        Ok(self
+            .security_modes()?
+            .data_separation_safe_mode(common_attribute))
+    }
+
+    /// Изменяет безопасный режим разделения данных текущего кадра.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку отсутствующей возможности, снятия режима чужого
+    /// кадра или переполнения счётчика.
+    pub fn set_data_separation_safe_mode(
+        &self,
+        common_attribute: &str,
+        enabled: bool,
+    ) -> RtResult<()> {
+        self.security_modes()?
+            .set_data_separation_safe_mode(common_attribute, enabled)
     }
 
     fn security_modes(&self) -> RtResult<&dyn SecurityModeControl> {

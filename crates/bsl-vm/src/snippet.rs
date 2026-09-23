@@ -432,7 +432,7 @@ fn start_dynamic_snippet(
             safe_points_per_quantum: async_state.scheduler_quantum(),
         },
     );
-    execution.inherit_security_modes(host.security_modes);
+    execution.inherit_security_modes(host.security_modes.clone());
     // Два имени параметров могут обозначать одну ячейку вызывающего.
     // Во фрагмент переносится эта связь, а не две независимые копии.
     let mut local_indices = Vec::with_capacity(old_count);
@@ -511,7 +511,7 @@ impl DynamicExecution {
             dynamic_depth: host.dynamic_depth,
             cancel_flag: host.cancel_flag.clone(),
             file_promises: None,
-            security_modes: host.security_modes,
+            security_modes: host.security_modes.clone(),
         };
         self.execution.force_scheduled = force_scheduled;
         self.execution.poll_linked(

@@ -54,15 +54,18 @@ use snippet::run_dynamic_snippet;
 
 use bsl_bytecode::{ArgMode, DynamicCompiler, Instr, Program};
 use bsl_rt::{BslValue, HostPromiseSpawner as _, RtError};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::Write;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 struct SecurityModeSnapshot {
     safe: bool,
     safe_disabled: bool,
     privileged: bool,
+    data_separation: std::rc::Rc<[std::rc::Rc<str>]>,
 }
+
+type DataSeparationFrameModes = RefCell<Vec<(std::rc::Rc<str>, u32)>>;
 
 #[derive(Default)]
 struct TaskSecurityModes {
@@ -71,6 +74,7 @@ struct TaskSecurityModes {
     safe_disabled_by_frame: Vec<Cell<u32>>,
     safe_disabled_latch_by_frame: Vec<Cell<bool>>,
     privileged_by_frame: Vec<Cell<u32>>,
+    data_separation_by_frame: Vec<DataSeparationFrameModes>,
 }
 
 impl TaskSecurityModes {
@@ -88,10 +92,13 @@ impl TaskSecurityModes {
         self.safe_disabled_latch_by_frame
             .resize_with(count, Cell::default);
         self.privileged_by_frame.resize_with(count, Cell::default);
+        self.data_separation_by_frame
+            .resize_with(count, RefCell::default);
         self.safe_by_frame.truncate(count);
         self.safe_disabled_by_frame.truncate(count);
         self.safe_disabled_latch_by_frame.truncate(count);
         self.privileged_by_frame.truncate(count);
+        self.data_separation_by_frame.truncate(count);
     }
 
     fn safe_enabled(&self) -> bool {
@@ -119,7 +126,32 @@ impl TaskSecurityModes {
                     .any(|depth| depth.get() != 0))
     }
 
+    fn data_separation(&self, common_attribute: &str) -> bool {
+        self.inherited
+            .data_separation
+            .iter()
+            .any(|name| bsl_rt::folded_eq(name, common_attribute))
+            || self.data_separation_by_frame.iter().any(|modes| {
+                modes
+                    .borrow()
+                    .iter()
+                    .any(|(name, depth)| *depth != 0 && bsl_rt::folded_eq(name, common_attribute))
+            })
+    }
+
     fn snapshot(&self) -> SecurityModeSnapshot {
+        let mut data_separation = self.inherited.data_separation.to_vec();
+        for modes in &self.data_separation_by_frame {
+            for (name, depth) in modes.borrow().iter() {
+                if *depth != 0
+                    && !data_separation
+                        .iter()
+                        .any(|known| bsl_rt::folded_eq(known, name))
+                {
+                    data_separation.push(name.clone());
+                }
+            }
+        }
         SecurityModeSnapshot {
             safe: self.safe_enabled(),
             safe_disabled: self.safe_disabled(),
@@ -128,6 +160,7 @@ impl TaskSecurityModes {
                     .privileged_by_frame
                     .iter()
                     .any(|depth| depth.get() != 0),
+            data_separation: data_separation.into(),
         }
     }
 }
@@ -193,6 +226,42 @@ impl bsl_rt::SecurityModeControl for VmSecurityModeControl<'_> {
             enabled,
             "ПривилегированныйРежим",
         )
+    }
+
+    fn data_separation_safe_mode(&self, common_attribute: &str) -> bool {
+        self.modes.data_separation(common_attribute)
+    }
+
+    fn set_data_separation_safe_mode(
+        &self,
+        common_attribute: &str,
+        enabled: bool,
+    ) -> Result<(), RtError> {
+        let mut modes = self.modes.data_separation_by_frame[self.frame].borrow_mut();
+        if let Some(position) = modes
+            .iter()
+            .position(|(name, _)| bsl_rt::folded_eq(name, common_attribute))
+        {
+            let depth = modes[position].1;
+            if enabled {
+                modes[position].1 = depth.checked_add(1).ok_or_else(|| {
+                    RtError::DynamicError(format!(
+                        "переполнен счётчик безопасного режима разделения данных «{common_attribute}»"
+                    ))
+                })?;
+            } else if depth == 1 {
+                modes.remove(position);
+            } else {
+                modes[position].1 = depth - 1;
+            }
+        } else if enabled {
+            modes.push((std::rc::Rc::from(common_attribute), 1));
+        } else {
+            return Err(RtError::DynamicError(format!(
+                "текущий вызов не включал безопасный режим разделения данных «{common_attribute}»"
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -1569,7 +1638,7 @@ fn drive_linked(
         owned_module_state,
         SchedulerConfig::default(),
     );
-    execution.inherit_security_modes(host.security_modes);
+    execution.inherit_security_modes(host.security_modes.clone());
     if let Some(hook) = debug {
         execution.set_debug_hook(hook);
     }
@@ -1693,7 +1762,7 @@ fn call_configuration_module_in_execution(
                 target_state.take_for_execution(),
                 SchedulerConfig::default(),
             );
-            execution.inherit_security_modes(host.security_modes);
+            execution.inherit_security_modes(host.security_modes.clone());
             execution.root_catalog_module = Some(target_u32);
             execution.attach_catalog(catalog.catalog);
             execution.swap_session_modules(modules.session);
@@ -1732,7 +1801,7 @@ fn call_configuration_module_in_execution(
             target_state.take_for_execution(),
             SchedulerConfig::default(),
         );
-        execution.inherit_security_modes(host.security_modes);
+        execution.inherit_security_modes(host.security_modes.clone());
         execution.root_catalog_module = Some(target_u32);
         execution.attach_catalog(catalog.catalog);
         execution.swap_session_modules(modules.session);

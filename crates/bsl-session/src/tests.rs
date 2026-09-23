@@ -22,6 +22,7 @@ fn host_data(parameters: Rc<SessionParameters>) -> Rc<SessionData> {
             client_settings: None,
             error_processing_settings: None,
             database_configuration_changed_dynamically: None,
+            data_separation_common_attributes: None,
             background_method: None,
         })),
     )
@@ -1384,6 +1385,93 @@ fn safe_and_privileged_modes_follow_the_measured_frame_scope() {
         .call(&module, "ИменованныйПрофиль", vec![])
         .unwrap_err();
     assert!(error.to_string().contains("не поддерживаются"));
+}
+
+#[test]
+fn data_separation_safe_mode_validates_session_names_and_frame_balance() {
+    let factory = SessionFactory::new(
+        code_snapshot(START_HANDLER),
+        metadata_catalog("configuration"),
+        "МодульСеанса",
+        SessionKind::ThinClient,
+        PLATFORM_VERSION,
+    )
+    .unwrap();
+    let mut session = factory
+        .open(
+            principal(),
+            resources((), 1).with_data_separation_common_attributes(["Разделитель".to_string()]),
+        )
+        .unwrap();
+    let module = session
+        .instantiate(
+            r#"
+            Функция СнятьВложенно()
+                Попытка
+                    SetDataSeparationSafeMode("Разделитель", Ложь);
+                    Возврат "NO_ERROR";
+                Исключение
+                    Возврат "ERROR";
+                КонецПопытки;
+            КонецФункции
+
+            Функция Сбалансировать() Экспорт
+                УстановитьБезопасныйРежимРазделенияДанных("Разделитель", Истина);
+                Вложенный = СнятьВложенно();
+                УстановитьБезопасныйРежимРазделенияДанных("разделитель", Ложь);
+                Возврат Вложенный;
+            КонецФункции
+
+            Процедура ОставитьВКадре()
+                УстановитьБезопасныйРежимРазделенияДанных("Разделитель", Истина);
+            КонецПроцедуры
+
+            Функция ПроверитьПослеВозврата() Экспорт
+                ОставитьВКадре();
+                Попытка
+                    УстановитьБезопасныйРежимРазделенияДанных("Разделитель", Ложь);
+                    Возврат "NO_ERROR";
+                Исключение
+                    Возврат "ERROR";
+                КонецПопытки;
+            КонецФункции
+
+            Процедура Неизвестный() Экспорт
+                УстановитьБезопасныйРежимРазделенияДанных("Чужой", Истина);
+            КонецПроцедуры
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!(
+        session.call(&module, "Сбалансировать", vec![]).unwrap().0,
+        Value::Str("ERROR".into())
+    );
+    assert_eq!(
+        session
+            .call(&module, "ПроверитьПослеВозврата", vec![])
+            .unwrap()
+            .0,
+        Value::Str("ERROR".into())
+    );
+    assert!(
+        session
+            .call(&module, "Неизвестный", vec![])
+            .unwrap_err()
+            .to_string()
+            .contains("не найден")
+    );
+
+    let mut without_names = factory.open(principal(), resources((), 2)).unwrap();
+    let module = without_names
+        .instantiate(
+            "Процедура Проверить() Экспорт УстановитьБезопасныйРежимРазделенияДанных(\"Разделитель\", Истина); КонецПроцедуры",
+        )
+        .unwrap();
+    let error = without_names
+        .call(&module, "Проверить", vec![])
+        .unwrap_err();
+    assert!(error.to_string().contains("не переданы хостом"));
 }
 
 #[test]

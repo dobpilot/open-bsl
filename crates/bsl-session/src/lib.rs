@@ -682,6 +682,7 @@ pub struct SessionResources {
     client_settings: Option<Rc<dyn ClientSettingsAdapter>>,
     error_processing_settings: Option<ErrorProcessingSettingsData>,
     database_configuration_changed_dynamically: Option<bool>,
+    data_separation_common_attributes: Option<Arc<[Arc<str>]>>,
 }
 
 impl SessionResources {
@@ -697,6 +698,7 @@ impl SessionResources {
             client_settings: None,
             error_processing_settings: None,
             database_configuration_changed_dynamically: None,
+            data_separation_common_attributes: None,
         }
     }
 
@@ -746,6 +748,18 @@ impl SessionResources {
         self.database_configuration_changed_dynamically = Some(changed);
         self
     }
+
+    /// Подключает имена общих реквизитов, используемых для разделения
+    /// данных в конфигурации этого сеанса.
+    #[must_use]
+    pub fn with_data_separation_common_attributes(
+        mut self,
+        names: impl IntoIterator<Item = String>,
+    ) -> Self {
+        self.data_separation_common_attributes =
+            Some(names.into_iter().map(Arc::<str>::from).collect());
+        self
+    }
 }
 
 /// Дополнение [`bsl_orm::SessionData`] для runtime сеанса.
@@ -761,6 +775,7 @@ pub struct SessionRuntime {
     client_settings: Option<Rc<dyn ClientSettingsAdapter>>,
     error_processing_settings: Option<ErrorProcessingSettingsData>,
     database_configuration_changed_dynamically: Option<bool>,
+    data_separation_common_attributes: Option<Arc<[Arc<str>]>>,
     background_method: Option<Arc<str>>,
 }
 
@@ -818,6 +833,15 @@ impl SessionRuntime {
     #[must_use]
     pub const fn database_configuration_changed_dynamically(&self) -> Option<bool> {
         self.database_configuration_changed_dynamically
+    }
+
+    /// Проверяет, принадлежит ли имя общему реквизиту разделения данных
+    /// текущей конфигурации.
+    #[must_use]
+    pub fn is_data_separation_common_attribute(&self, name: &str) -> Option<bool> {
+        self.data_separation_common_attributes
+            .as_deref()
+            .map(|names| names.iter().any(|known| folded_eq(known, name)))
     }
 
     /// Возвращает полное имя метода текущего фонового задания.
@@ -1167,6 +1191,7 @@ impl SessionFactory {
             client_settings,
             error_processing_settings,
             database_configuration_changed_dynamically,
+            data_separation_common_attributes,
         } = resources;
         if connection_number == 0 || connection_number > i64::MAX as u64 {
             return Err(SessionError::InvalidConnectionNumber(connection_number));
@@ -1204,6 +1229,7 @@ impl SessionFactory {
             client_settings,
             error_processing_settings,
             database_configuration_changed_dynamically,
+            data_separation_common_attributes,
             background_method,
         };
         let mut data = SessionData::new(Arc::clone(&self.catalog), principal.clone())
@@ -2260,6 +2286,47 @@ fn privileged_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::Boolean(ctx.privileged_mode()?))
 }
 
+fn set_data_separation_safe_mode(
+    ctx: &mut CallContext<'_>,
+    arguments: &[Value],
+) -> RtResult<Value> {
+    const OPERATION: &str = "УстановитьБезопасныйРежимРазделенияДанных";
+    let Value::Str(common_attribute) = &arguments[0] else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: OPERATION,
+        });
+    };
+    let Value::Boolean(enabled) = arguments[1] else {
+        return Err(RtError::TypeError {
+            expected: "Булево",
+            op: OPERATION,
+        });
+    };
+    let common_attribute = common_attribute.shared_utf8();
+    let runtime = session_data(ctx)?
+        .extension::<SessionRuntime>()
+        .ok_or_else(|| RtError::DynamicError("runtime сеанса не подключён".into()))?;
+    match runtime.is_data_separation_common_attribute(&common_attribute) {
+        Some(true) => {}
+        Some(false) => {
+            return Err(RtError::DynamicError(format!(
+                "общий реквизит разделения данных «{common_attribute}» не найден"
+            )));
+        }
+        None => {
+            return Err(RtError::DynamicError(
+                "общие реквизиты разделения данных не переданы хостом".into(),
+            ));
+        }
+    }
+    // НЕ ИЗМЕРЕНО(SECURITY.DATA_SEPARATION_MODE) — счётчик следует
+    // документированным правилам платформы до замера на конфигурации с
+    // общим реквизитом, включённым как разделитель данных.
+    ctx.set_data_separation_safe_mode(&common_attribute, enabled)?;
+    Ok(Value::Undefined)
+}
+
 fn refresh_reusable_values(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     // У интерпретатора пока нет повторно используемых возвращаемых значений:
     // каждый вызов функции исполняется. Очистка пустого кэша сохраняет
@@ -3140,6 +3207,16 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
         call: form_data_settings_storage,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(20),
+        names: &[
+            "УстановитьБезопасныйРежимРазделенияДанных",
+            "SetDataSeparationSafeMode",
+        ],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Procedure,
+        call: set_data_separation_safe_mode,
     },
 ];
 

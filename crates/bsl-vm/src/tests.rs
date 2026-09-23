@@ -3,12 +3,49 @@
 use super::*;
 use bsl_compiler::compile_program;
 use bsl_number::BslNumber;
+use bsl_rt::SecurityModeControl as _;
 use bsl_sema::resolve_program;
 use bsl_syntax::parse;
 
 #[test]
 fn scheduler_quantum_defaults_to_the_confirmed_value() {
     assert_eq!(SchedulerConfig::default().safe_points_per_quantum, 1_024);
+}
+
+#[test]
+fn data_separation_modes_follow_frames_and_effective_snapshots() {
+    let mut modes = TaskSecurityModes::default();
+    modes.synchronize_frames(2);
+    let outer = VmSecurityModeControl {
+        modes: &modes,
+        frame: 0,
+    };
+    outer
+        .set_data_separation_safe_mode("Разделитель", true)
+        .unwrap();
+    let inner = VmSecurityModeControl {
+        modes: &modes,
+        frame: 1,
+    };
+    assert!(inner.data_separation_safe_mode("разделитель"));
+    assert!(
+        inner
+            .set_data_separation_safe_mode("Разделитель", false)
+            .is_err()
+    );
+    inner
+        .set_data_separation_safe_mode("Разделитель", true)
+        .unwrap();
+    inner
+        .set_data_separation_safe_mode("РАЗДЕЛИТЕЛЬ", false)
+        .unwrap();
+    assert!(outer.data_separation_safe_mode("Разделитель"));
+
+    let inherited = TaskSecurityModes::new(modes.snapshot());
+    assert!(inherited.data_separation("разделитель"));
+    modes.synchronize_frames(0);
+    assert!(!modes.data_separation("Разделитель"));
+    assert!(!TaskSecurityModes::default().data_separation("Разделитель"));
 }
 
 #[test]
