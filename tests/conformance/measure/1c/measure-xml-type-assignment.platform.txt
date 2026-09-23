@@ -1,0 +1,6 @@
+file.begin	xml-type-assignment-1
+XML.TYPE.ASSIGNMENT.IMPLICIT	Implicit
+XML.TYPE.ASSIGNMENT.EXPLICIT	Explicit
+XML.TYPE.ASSIGNMENT.TYPE	XMLTypeAssignment
+XML.TYPE.ASSIGNMENT.ENGLISH	OK
+file.end	xml-type-assignment-1
