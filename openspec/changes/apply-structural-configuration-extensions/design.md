@@ -34,3 +34,9 @@ still prevents construction of an effective Session graph.
 generic extension envelope. `bsl-config-db` owns knowledge of which serialized
 configuration objects and module slots those resources represent. `bsl-orm`
 receives only provider-neutral descriptions.
+
+The sanitized live survey is recorded in
+`docs/research/configuration-session-startup.md`. It demonstrates that neither
+authorized active extension can be applied by matching resource names and that
+serialized extension values contain references to base identities whose roles
+the current acquisition API does not expose.
