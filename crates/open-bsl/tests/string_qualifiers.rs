@@ -65,3 +65,20 @@ fn string_qualifiers_reject_wrong_argument_types() {
         assert!(engine.new_state().run(&module).is_err(), "{source}");
     }
 }
+
+#[test]
+fn qualified_type_description_accepts_the_reached_constructor_family() {
+    run_in_every_mode(
+        r#"
+Строковый = Новый ОписаниеТипов("Строка", Неопределено, Новый КвалификаторыСтроки(20, ДопустимаяДлина.Фиксированная));
+English = New TypeDescription("String", Undefined, New StringQualifiers(7, AllowedLength.Fixed));
+Перекрестный = Новый ОписаниеТипов("Строка", Неопределено, Новый КвалификаторыДаты(ЧастиДаты.ДатаВремя));
+"#,
+    );
+
+    let engine = Engine::builder().build().unwrap();
+    let module = engine
+        .compile("Значение = Новый ОписаниеТипов(\"Строка\", Неопределено, 1);")
+        .unwrap();
+    assert!(engine.new_state().run(&module).is_err());
+}

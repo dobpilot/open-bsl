@@ -1643,17 +1643,17 @@ fn construct_qualified_type_description(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let [names, number_qualifiers, string_qualifiers, date_qualifiers] = arguments else {
+    let Some((names, qualifiers)) = arguments.split_first() else {
         return Err(RtError::InvalidBytecode(
-            "квалифицированное ОписаниеТипов вызвано не с четырьмя аргументами",
+            "квалифицированное ОписаниеТипов вызвано без аргументов",
         ));
     };
-    if !matches!(number_qualifiers, BslValue::Undefined)
-        || !matches!(string_qualifiers, BslValue::Undefined)
-        || !crate::type_description::is_date_time_qualifier(date_qualifiers)
+    if qualifiers
+        .iter()
+        .any(|value| !crate::type_description::is_supported_qualifier(value))
     {
         return Err(RtError::TypeError {
-            expected: "квалификаторы даты и пустые остальные квалификаторы",
+            expected: "поддерживаемый квалификатор типа или Неопределено",
             op: "Новый ОписаниеТипов",
         });
     }
@@ -1699,8 +1699,8 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(5),
-        names: &["ОписаниеТипов"],
-        arity: Arity::exact(4),
+        names: &["ОписаниеТипов", "TypeDescription"],
+        arity: Arity::range(2, 5),
         call: construct_qualified_type_description,
     },
     // Голое имя `ФоновыеЗадания` разрешается конструктором менеджера —

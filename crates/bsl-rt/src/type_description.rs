@@ -144,6 +144,15 @@ pub(crate) fn is_date_time_qualifier(value: &BslValue) -> bool {
         .is_some_and(|qualifier| qualifier.fractions == EnumValue::DateFractionsDateTime)
 }
 
+pub(crate) fn is_supported_qualifier(value: &BslValue) -> bool {
+    matches!(value, BslValue::Undefined)
+        || is_date_time_qualifier(value)
+        || value
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<StringQualifiersObject>())
+            .is_some()
+}
+
 /// `ОписаниеТипов.ПривестиЗначение` для двух форм Connector.
 ///
 /// Платформа 8.3.27 измерена файлом

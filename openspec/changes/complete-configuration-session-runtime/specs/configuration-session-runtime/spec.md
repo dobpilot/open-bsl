@@ -602,11 +602,11 @@ The base runtime SHALL provide `КвалификаторыСтроки` / `Strin
 - **THEN** the write fails explicitly
 
 ### Requirement: Reached type descriptions accept string qualifiers
-The base runtime SHALL accept the direct two-through-five-argument `ОписаниеТипов` / `TypeDescription` constructor family in addition to its existing one-argument form. The reached three-argument form SHALL accept type names, an omitted number qualifier, and a `КвалификаторыСтроки` / `StringQualifiers` value. It SHALL retain the same type identities as the corresponding one-argument description. Supported qualifier objects SHALL be accepted by their own type across the optional qualifier positions, matching the measured platform behavior. Another value type SHALL fail explicitly. The separate constructor based on an existing type description is outside this startup slice.
+The base runtime SHALL accept the direct two-through-five-argument `ОписаниеТипов` / `TypeDescription` constructor family in addition to its existing one-argument form. The reached three-argument form SHALL accept type names, an omitted number qualifier, and a `КвалификаторыСтроки` / `StringQualifiers` value. It SHALL retain the same internal type identities as the corresponding one-argument description. Supported qualifier objects SHALL be accepted by their own type across the optional qualifier positions, matching the measured platform behavior. Another value type SHALL fail explicitly. The separate constructor based on an existing type description, `Типы` / `Types`, and `СодержитТип` / `ContainsType` are outside this startup slice.
 
 #### Scenario: Construct a string-qualified type description
 - **WHEN** configuration code constructs a String description with an omitted number qualifier and a fixed String qualifier
-- **THEN** the result has the TypeDescription type and contains the String type
+- **THEN** construction succeeds with the TypeDescription type and the String identity retained internally
 
 #### Scenario: Accept a supported qualifier across optional positions
 - **WHEN** configuration code supplies a date qualifier in the nominal String-qualifier position
