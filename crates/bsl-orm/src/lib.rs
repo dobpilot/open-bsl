@@ -3769,6 +3769,47 @@ fn collection_kind(name: &str) -> Option<MetadataKind> {
             "InformationRegisters",
             MetadataKind::InformationRegister,
         ),
+        (
+            "РегистрыНакопления",
+            "AccumulationRegisters",
+            MetadataKind::AccumulationRegister,
+        ),
+        (
+            "РегистрыБухгалтерии",
+            "AccountingRegisters",
+            MetadataKind::AccountingRegister,
+        ),
+        (
+            "РегистрыРасчета",
+            "CalculationRegisters",
+            MetadataKind::CalculationRegister,
+        ),
+        (
+            "ПланыСчетов",
+            "ChartsOfAccounts",
+            MetadataKind::ChartOfAccounts,
+        ),
+        (
+            "ПланыВидовХарактеристик",
+            "ChartsOfCharacteristicTypes",
+            MetadataKind::ChartOfCharacteristicTypes,
+        ),
+        (
+            "ПланыВидовРасчета",
+            "ChartsOfCalculationTypes",
+            MetadataKind::ChartOfCalculationTypes,
+        ),
+        (
+            "БизнесПроцессы",
+            "BusinessProcesses",
+            MetadataKind::BusinessProcess,
+        ),
+        ("Задачи", "Tasks", MetadataKind::Task),
+        (
+            "ХранилищаНастроек",
+            "SettingsStorages",
+            MetadataKind::SettingsStorage,
+        ),
         ("Константы", "Constants", MetadataKind::Constant),
         ("ПланыОбмена", "ExchangePlans", MetadataKind::ExchangePlan),
         (
@@ -3854,6 +3895,42 @@ fn data_processors(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
 
 fn information_registers(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     managers(ctx, MetadataKind::InformationRegister)
+}
+
+fn accumulation_registers(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::AccumulationRegister)
+}
+
+fn accounting_registers(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::AccountingRegister)
+}
+
+fn calculation_registers(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::CalculationRegister)
+}
+
+fn charts_of_accounts(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::ChartOfAccounts)
+}
+
+fn charts_of_characteristic_types(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::ChartOfCharacteristicTypes)
+}
+
+fn charts_of_calculation_types(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::ChartOfCalculationTypes)
+}
+
+fn business_processes(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::BusinessProcess)
+}
+
+fn tasks(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::Task)
+}
+
+fn settings_storages(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::SettingsStorage)
 }
 
 fn constants(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -4397,6 +4474,69 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: data_processors,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(32),
+        names: &["ПолучитьРегистрыНакопленияORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: accumulation_registers,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(33),
+        names: &["ПолучитьРегистрыБухгалтерииORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: accounting_registers,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(34),
+        names: &["ПолучитьРегистрыРасчетаORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: calculation_registers,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(35),
+        names: &["ПолучитьПланыСчетовORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: charts_of_accounts,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(36),
+        names: &["ПолучитьПланыВидовХарактеристикORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: charts_of_characteristic_types,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(37),
+        names: &["ПолучитьПланыВидовРасчетаORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: charts_of_calculation_types,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(38),
+        names: &["ПолучитьБизнесПроцессыORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: business_processes,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(39),
+        names: &["ПолучитьЗадачиORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: tasks,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(40),
+        names: &["ПолучитьХранилищаНастроекORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: settings_storages,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
@@ -4423,6 +4563,42 @@ const GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {
         names: &["Обработки", "DataProcessors"],
         function: FunctionCode::new(31),
+    },
+    GlobalDescriptor {
+        names: &["РегистрыНакопления", "AccumulationRegisters"],
+        function: FunctionCode::new(32),
+    },
+    GlobalDescriptor {
+        names: &["РегистрыБухгалтерии", "AccountingRegisters"],
+        function: FunctionCode::new(33),
+    },
+    GlobalDescriptor {
+        names: &["РегистрыРасчета", "CalculationRegisters"],
+        function: FunctionCode::new(34),
+    },
+    GlobalDescriptor {
+        names: &["ПланыСчетов", "ChartsOfAccounts"],
+        function: FunctionCode::new(35),
+    },
+    GlobalDescriptor {
+        names: &["ПланыВидовХарактеристик", "ChartsOfCharacteristicTypes"],
+        function: FunctionCode::new(36),
+    },
+    GlobalDescriptor {
+        names: &["ПланыВидовРасчета", "ChartsOfCalculationTypes"],
+        function: FunctionCode::new(37),
+    },
+    GlobalDescriptor {
+        names: &["БизнесПроцессы", "BusinessProcesses"],
+        function: FunctionCode::new(38),
+    },
+    GlobalDescriptor {
+        names: &["Задачи", "Tasks"],
+        function: FunctionCode::new(39),
+    },
+    GlobalDescriptor {
+        names: &["ХранилищаНастроек", "SettingsStorages"],
+        function: FunctionCode::new(40),
     },
     GlobalDescriptor {
         names: &["РегистрыСведений", "InformationRegisters"],

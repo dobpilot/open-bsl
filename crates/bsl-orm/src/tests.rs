@@ -511,6 +511,47 @@ fn catalog() -> Arc<MetadataCatalog> {
                     MetadataKind::DataProcessor,
                 )
                 .with_manager_module("ИмпортОбработкаМенеджер"),
+                MetadataObject::new(
+                    "accumulation-register-stock",
+                    "Остатки",
+                    MetadataKind::AccumulationRegister,
+                ),
+                MetadataObject::new(
+                    "accounting-register-main",
+                    "Основной",
+                    MetadataKind::AccountingRegister,
+                ),
+                MetadataObject::new(
+                    "calculation-register-payroll",
+                    "Начисления",
+                    MetadataKind::CalculationRegister,
+                ),
+                MetadataObject::new(
+                    "chart-of-accounts-main",
+                    "Основной",
+                    MetadataKind::ChartOfAccounts,
+                ),
+                MetadataObject::new(
+                    "chart-of-characteristic-types-properties",
+                    "Свойства",
+                    MetadataKind::ChartOfCharacteristicTypes,
+                ),
+                MetadataObject::new(
+                    "chart-of-calculation-types-main",
+                    "Основной",
+                    MetadataKind::ChartOfCalculationTypes,
+                ),
+                MetadataObject::new(
+                    "business-process-approval",
+                    "Согласование",
+                    MetadataKind::BusinessProcess,
+                ),
+                MetadataObject::new("task-performer", "Исполнитель", MetadataKind::Task),
+                MetadataObject::new(
+                    "settings-storage-user",
+                    "Пользовательские",
+                    MetadataKind::SettingsStorage,
+                ),
                 MetadataObject::new("constant-answer", "Ответ", MetadataKind::Constant)
                     .with_manager_module("ОтветМенеджер"),
                 MetadataObject::new(
@@ -1781,6 +1822,43 @@ fn data_processor_root_and_metadata_use_the_existing_manager_path() {
             )
             .unwrap(),
         Value::number_from_i64(103)
+    );
+}
+
+#[test]
+fn remaining_acquired_manager_roots_and_metadata_collections_are_projected() {
+    let engine = engine();
+    let mut state = state(&engine);
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Если РегистрыНакопления.Остатки.Имя <> "Остатки"
+                    Или AccumulationRegisters.оСтАтКи.Name <> "Остатки"
+                    Или Метаданные.РегистрыНакопления.Остатки.Имя <> "Остатки"
+                    Или РегистрыБухгалтерии.Основной.Имя <> "Основной"
+                    Или Metadata.AccountingRegisters.Основной.Name <> "Основной"
+                    Или РегистрыРасчета.Начисления.Имя <> "Начисления"
+                    Или Metadata.CalculationRegisters.Начисления.Name <> "Начисления"
+                    Или ПланыСчетов.Основной.Имя <> "Основной"
+                    Или Metadata.ChartsOfAccounts.Основной.Name <> "Основной"
+                    Или ПланыВидовХарактеристик.Свойства.Имя <> "Свойства"
+                    Или Metadata.ChartsOfCharacteristicTypes.Свойства.Name <> "Свойства"
+                    Или ПланыВидовРасчета.Основной.Имя <> "Основной"
+                    Или Metadata.ChartsOfCalculationTypes.Основной.Name <> "Основной"
+                    Или БизнесПроцессы.Согласование.Имя <> "Согласование"
+                    Или Metadata.BusinessProcesses.Согласование.Name <> "Согласование"
+                    Или Задачи.Исполнитель.Имя <> "Исполнитель"
+                    Или Metadata.Tasks.Исполнитель.Name <> "Исполнитель"
+                    Или ХранилищаНастроек.Пользовательские.Имя <> "Пользовательские"
+                    Или Metadata.SettingsStorages.Пользовательские.Name <> "Пользовательские" Тогда
+                    Возврат Ложь;
+                КонецЕсли;
+                Возврат Истина;
+                "#,
+            )
+            .unwrap(),
+        Value::Boolean(true)
     );
 }
 
