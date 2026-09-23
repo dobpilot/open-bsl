@@ -11,6 +11,7 @@ impl Clock for TestClock {
 struct NamedZone {
     current: i32,
     named: i32,
+    identifier: &'static str,
 }
 
 impl TimeZone for NamedZone {
@@ -25,6 +26,10 @@ impl TimeZone for NamedZone {
     fn named_standard_offset_seconds(&self, name: &str, _: i64) -> Option<i32> {
         (name == "Test/Named").then_some(self.named)
     }
+
+    fn identifier(&self) -> Option<String> {
+        Some(self.identifier.into())
+    }
 }
 
 #[test]
@@ -36,6 +41,7 @@ fn standard_time_offset_uses_each_states_zone_and_clock() {
         .zone(NamedZone {
             current: 3 * 3600,
             named: -5 * 3600,
+            identifier: "Test/First",
         })
         .build();
     let mut second = engine
@@ -44,6 +50,7 @@ fn standard_time_offset_uses_each_states_zone_and_clock() {
         .zone(NamedZone {
             current: 4 * 3600,
             named: 3600,
+            identifier: "Test/Second",
         })
         .build();
 
@@ -59,6 +66,47 @@ fn standard_time_offset_uses_each_states_zone_and_clock() {
         second.exec(script).unwrap(),
         Value::number_from_i64(5 * 3600)
     );
+}
+
+#[test]
+fn session_time_zone_uses_each_states_identity() {
+    let engine = Engine::builder().build().unwrap();
+    let mut first = engine
+        .state_builder()
+        .zone(NamedZone {
+            current: 3 * 3600,
+            named: 0,
+            identifier: "Test/First",
+        })
+        .build();
+    let mut second = engine
+        .state_builder()
+        .zone(NamedZone {
+            current: 4 * 3600,
+            named: 0,
+            identifier: "Test/Second",
+        })
+        .build();
+
+    assert_eq!(
+        first.exec("Возврат ЧасовойПоясСеанса();").unwrap(),
+        Value::Str("Test/First".into())
+    );
+    assert_eq!(
+        second.exec("Возврат SessionTimeZone();").unwrap(),
+        Value::Str("Test/Second".into())
+    );
+
+    let mut anonymous = engine.state_builder().zone(AnonymousZone).build();
+    assert!(anonymous.exec("Возврат ЧасовойПоясСеанса();").is_err());
+}
+
+struct AnonymousZone;
+
+impl TimeZone for AnonymousZone {
+    fn offset_seconds(&self, _: i64) -> i32 {
+        0
+    }
 }
 
 #[test]

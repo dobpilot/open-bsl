@@ -66,6 +66,13 @@ pub fn call_builtin_env_with_args(
                 .collect(),
         )),
         BuiltinFn::StandardTimeOffset => standard_time_offset(args, env),
+        BuiltinFn::SessionTimeZone => env
+            .zone()
+            .identifier()
+            .map(|name| BslValue::Str(BslString::from_str(&name)))
+            .ok_or_else(|| {
+                RtError::DynamicError("часовой пояс сеанса не имеет идентификатора".into())
+            }),
         _ => Err(RtError::InvalidBytecode(
             "эта встроенная функция не относится к окружению прогона",
         )),
@@ -235,6 +242,9 @@ pub enum BuiltinFn {
     /// `СмещениеСтандартногоВремени`/`StandardTimeOffset` — стандартное
     /// смещение текущей или именованной зоны в секундах.
     StandardTimeOffset,
+    /// `ЧасовойПоясСеанса`/`SessionTimeZone` — идентификатор зоны
+    /// текущего прогона.
+    SessionTimeZone,
     /// `ТекущаяУниверсальнаяДата`/`CurrentUniversalDate` — текущий момент
     /// UTC как значение `Дата`.
     CurrentUniversalDate,
@@ -458,6 +468,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("CurrentSessionDate", BuiltinFn::CurrentSessionDate),
     ("СмещениеСтандартногоВремени", BuiltinFn::StandardTimeOffset),
     ("StandardTimeOffset", BuiltinFn::StandardTimeOffset),
+    ("ЧасовойПоясСеанса", BuiltinFn::SessionTimeZone),
+    ("SessionTimeZone", BuiltinFn::SessionTimeZone),
     ("ТекущаяУниверсальнаяДата", BuiltinFn::CurrentUniversalDate),
     ("CurrentUniversalDate", BuiltinFn::CurrentUniversalDate),
     (
@@ -769,7 +781,8 @@ impl BuiltinFn {
             | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments
-            | BuiltinFn::StandardTimeOffset => Some(HostEffect::Env),
+            | BuiltinFn::StandardTimeOffset
+            | BuiltinFn::SessionTimeZone => Some(HostEffect::Env),
             BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Some(HostEffect::Files),
             BuiltinFn::GetPathSeparator | BuiltinFn::TempFilesDir => Some(HostEffect::Files),
             BuiltinFn::CreateDirectory => Some(HostEffect::FileCreate),
@@ -862,6 +875,7 @@ impl BuiltinFn {
             | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments
+            | BuiltinFn::SessionTimeZone
             | BuiltinFn::Metadata
             | BuiltinFn::ThisObject
             | BuiltinFn::ErrorInfo
@@ -1380,6 +1394,7 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::CurrentDate
         | BuiltinFn::CurrentSessionDate
         | BuiltinFn::StandardTimeOffset
+        | BuiltinFn::SessionTimeZone
         | BuiltinFn::CurrentUniversalDate
         | BuiltinFn::CurrentUniversalDateInMilliseconds
         | BuiltinFn::CommandLineArguments => Err(RtError::InvalidBytecode(

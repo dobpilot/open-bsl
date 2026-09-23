@@ -130,6 +130,13 @@ pub trait TimeZone {
         parse_gmt_offset(name)
     }
 
+    /// Идентификатор текущей зоны сеанса, если host способен его назвать.
+    /// Значение возвращается во владение вызывающего, чтобы фиксированная
+    /// зона могла сформировать документированное имя `GMT±…`.
+    fn identifier(&self) -> Option<String> {
+        None
+    }
+
     /// Смещение, действовавшее в заданный момент МЕСТНОГО времени, где
     /// `wall_seconds` — показания местных часов, посчитанные от
     /// Unix-эпохи так, будто они и есть UTC.
@@ -267,6 +274,18 @@ impl FixedTimeZone {
 impl TimeZone for FixedTimeZone {
     fn offset_seconds(&self, _unix_seconds: i64) -> i32 {
         self.0
+    }
+
+    fn identifier(&self) -> Option<String> {
+        let sign = if self.0 < 0 { '-' } else { '+' };
+        let absolute = self.0.abs();
+        let hours = absolute / 3600;
+        let minutes = absolute % 3600 / 60;
+        Some(if minutes == 0 {
+            format!("GMT{sign}{hours}")
+        } else {
+            format!("GMT{sign}{hours:02}:{minutes:02}")
+        })
     }
 }
 

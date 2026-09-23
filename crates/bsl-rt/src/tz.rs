@@ -107,6 +107,7 @@ impl TzTable {
 /// ронять прогон (см. обзор модуля).
 pub struct SystemTimeZone {
     table: Option<TzTable>,
+    identifier: Option<String>,
 }
 
 impl SystemTimeZone {
@@ -118,6 +119,7 @@ impl SystemTimeZone {
             table: std::fs::read("/etc/localtime")
                 .ok()
                 .and_then(|bytes| parse_tzif(&bytes)),
+            identifier: system_zone_identifier(),
         }
     }
 }
@@ -158,6 +160,26 @@ impl crate::TimeZone for SystemTimeZone {
             .and_then(|bytes| parse_tzif(&bytes))
             .map(|table| table.standard_offset_for(unix_seconds))
     }
+
+    fn identifier(&self) -> Option<String> {
+        self.identifier.clone()
+    }
+}
+
+fn system_zone_identifier() -> Option<String> {
+    if let Ok(link) = std::fs::read_link("/etc/localtime") {
+        let parts = link.components().collect::<Vec<_>>();
+        if let Some(index) = parts.iter().position(|part| part.as_os_str() == "zoneinfo") {
+            let relative = parts[index + 1..].iter().collect::<std::path::PathBuf>();
+            if !relative.as_os_str().is_empty() {
+                return relative.to_str().map(str::to_owned);
+            }
+        }
+    }
+    std::fs::read_to_string("/etc/timezone")
+        .ok()
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
 }
 
 /// Заголовок TZif (44 байта) — общий формат у блока V1 и у блока V2/V3,
@@ -373,7 +395,10 @@ mod tests {
         let _ = SystemTimeZone::new().offset_seconds(0);
         // Заведомо негодный буфер даёт зону, отвечающую нулём, а не
         // отсутствие зоны: `None` в таблице — это UTC.
-        let broken = SystemTimeZone { table: None };
+        let broken = SystemTimeZone {
+            table: None,
+            identifier: None,
+        };
         assert_eq!(broken.offset_seconds(0), 0);
         assert_eq!(broken.offset_seconds(2_000_000_000), 0);
     }
