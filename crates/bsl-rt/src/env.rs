@@ -115,6 +115,21 @@ pub trait TimeZone {
     /// но не панику и не расхождение с `offset_seconds`.
     fn offset_seconds(&self, unix_seconds: i64) -> i32;
 
+    /// Стандартное смещение текущей зоны без сезонной поправки.
+    ///
+    /// Реализация по умолчанию подходит фиксированным зонам. Зона с
+    /// переходами на летнее время должна переопределить этот метод.
+    fn standard_offset_seconds(&self, unix_seconds: i64) -> i32 {
+        self.offset_seconds(unix_seconds)
+    }
+
+    /// Стандартное смещение именованной зоны. Базовая реализация знает
+    /// документированный формат `GMT+3` и `GMT-05:30`; системная зона
+    /// дополнительно разрешает имена базы IANA.
+    fn named_standard_offset_seconds(&self, name: &str, _unix_seconds: i64) -> Option<i32> {
+        parse_gmt_offset(name)
+    }
+
     /// Смещение, действовавшее в заданный момент МЕСТНОГО времени, где
     /// `wall_seconds` — показания местных часов, посчитанные от
     /// Unix-эпохи так, будто они и есть UTC.
@@ -170,6 +185,26 @@ pub trait TimeZone {
         // существовало. Ответ — смещение до перехода.
         before
     }
+}
+
+pub(crate) fn parse_gmt_offset(name: &str) -> Option<i32> {
+    let rest = name.strip_prefix("GMT")?;
+    let (sign, digits) = match rest.as_bytes().first()? {
+        b'+' => (1, &rest[1..]),
+        b'-' => (-1, &rest[1..]),
+        _ => return None,
+    };
+    let (hours, minutes) = match digits.split_once(':') {
+        Some((hours, minutes)) if !hours.is_empty() && minutes.len() == 2 => {
+            (hours.parse::<i32>().ok()?, minutes.parse::<i32>().ok()?)
+        }
+        None if !digits.is_empty() => (digits.parse::<i32>().ok()?, 0),
+        _ => return None,
+    };
+    if hours > 23 || minutes > 59 {
+        return None;
+    }
+    Some(sign * (hours * 3600 + minutes * 60))
 }
 
 /// Наибольшее смещение от UTC, которое [`TimeZone`] вправе вернуть (см.

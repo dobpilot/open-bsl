@@ -46,7 +46,7 @@
 - [x] 5ar. Measure the reached `НайтиПоСсылкам` / `FindByRef` surface and delegate it to the rights-aware Session data adapter.
 - [x] 5as. Measure and add the reached `СтрЧислоВхождений` / `StrOccurrenceCount` base-runtime function using the existing string representation.
 - [x] 5at. Measure and add the complete `ТипПлатформы` / `PlatformType` system enumeration without adding host-platform detection.
-- [ ] 5au. Measure and add `СмещениеСтандартногоВремени` / `StandardTimeOffset` through the existing per-State time-zone capability.
+- [x] 5au. Measure and add `СмещениеСтандартногоВремени` / `StandardTimeOffset` through the existing per-State time-zone capability.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.

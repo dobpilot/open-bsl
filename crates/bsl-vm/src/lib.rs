@@ -4887,7 +4887,9 @@ fn call_builtin_with_format(
         other => match other.host_effect() {
             // Часы, часы в миллисекундах и аргументы запуска отвечают из
             // окружения прогона, а не из состояния процесса.
-            Some(bsl_rt::HostEffect::Env) => bsl_rt::call_builtin_env(other, host.env()?),
+            Some(bsl_rt::HostEffect::Env) => {
+                bsl_rt::call_builtin_env_with_args(other, args, host.env()?)
+            }
             // `ЗначениеВФайл`/`ЗначениеИзФайла` читают и пишут файл
             // целиком, а файловая система принадлежит прогону — как часы
             // и зона.

@@ -81,8 +81,9 @@ pub use application::{
 };
 pub use builtin::{
     BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, HostEffect, call_builtin_env,
-    call_builtin_files, call_builtin_fn, call_builtin_fn_ctx, call_builtin_method,
-    call_builtin_method_ctx, call_builtin_method_files, call_builtin_temp_file,
+    call_builtin_env_with_args, call_builtin_files, call_builtin_fn, call_builtin_fn_ctx,
+    call_builtin_method, call_builtin_method_ctx, call_builtin_method_files,
+    call_builtin_temp_file,
 };
 pub use component::{
     Arity, ByteStreamFactory, CallContext, CallOutcome, Capability, ComponentCall, ConstructorCode,

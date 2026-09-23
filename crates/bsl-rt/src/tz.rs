@@ -1,23 +1,22 @@
-//! Смещение локального часового пояса машины — минимальный читатель
-//! формата TZif (RFC 8536), заведённый ровно под одну задачу: датам JSON
-//! (`ЗаписатьДатуJSON`/`ПрочитатьДатуJSON`, вариант «со смещением» и
-//! «универсальная») нужен UTC-офсет машины на заданный момент, а не вся
-//! база часовых поясов — ни имён зон, ни правил перехода на летнее время
-//! за пределами уже записанных в файл переходов, ни секунд координации.
+//! Смещения часовых поясов — минимальный читатель формата TZif (RFC 8536).
+//! Датам JSON нужен фактический офсет машины на заданный момент, а
+//! `СмещениеСтандартногоВремени` дополнительно читает стандартный офсет
+//! текущей либо именованной зоны без сезонной поправки. Секунды координации
+//! и правила за пределами записанных в файл переходов не используются.
 //!
 //! # Почему свой разбор, а не библиотека времени
 //!
 //! В крейте нет внешних зависимостей (см. `AGENTS.md`), а `std` не даёт
 //! локального смещения вообще — только UTC. Источник истины на Linux один:
-//! `/etc/localtime`, символическая ссылка (или копия) на файл базы
-//! `tzdata` в формате TZif. Формат компактный: заголовок с счётчиками,
+//! `/etc/localtime` и именованные файлы базы `tzdata` в формате TZif.
+//! Формат компактный: заголовок с счётчиками,
 //! таблица переходов, таблица типов смещения — сотня строк разбора вместо
 //! внешнего крейта.
 //!
 //! # Ограничения (сознательные)
 //!
-//! * Только Linux, только `/etc/localtime`: платформенно-специфичный путь
-//!   просто не подключается там, где неприменим.
+//! * Только Linux, `/etc/localtime` и `/usr/share/zoneinfo`: системные пути
+//!   просто не подключаются там, где неприменимы.
 //! * POSIX-строка правил в хвосте файла (экстраполяция переходов ПОСЛЕ
 //!   последнего записанного в таблицу) не разбирается: для смещения на
 //!   момент новее последнего перехода берётся офсет этого последнего
@@ -29,20 +28,21 @@
 //!   для остального рантайма способность (в отличие от, скажем, разбора
 //!   байт-кода).
 //!
-//! Разобранная таблица переходов читается ОДИН РАЗ при создании
-//! [`SystemTimeZone`] и живёт вместе с ним: часовой пояс машины не
-//! меняется на лету, а `/etc/localtime` — файл в несколько килобайт,
-//! который незачем перечитывать на каждый вызов. Раньше таблица лежала в
+//! Таблица текущей зоны читается ОДИН РАЗ при создании [`SystemTimeZone`]
+//! и живёт вместе с ним: часовой пояс машины не меняется на лету, а
+//! `/etc/localtime` — файл в несколько килобайт, который незачем
+//! перечитывать на каждый вызов. Именованные зоны читаются по запросу;
+//! они нужны значительно реже текущей. Раньше таблица лежала в
 //! `OnceLock` на весь процесс — от этого пришлось отказаться не ради
 //! чистоты, а потому что зона стала возможностью ПРОГОНА: две `State`
 //! одного движка вправе видеть разные зоны (см. [`crate::TimeZone`]).
 
 /// Смещение от UTC одного типа `ttinfo` — секунды, положительное значение
-/// восточнее Гринвича. Имя зоны и признак летнего времени не хранятся: они
-/// не нужны ни для чего, кроме офсета.
+/// восточнее Гринвича, и признак сезонного времени.
 #[derive(Debug, Clone, Copy)]
 struct TzType {
     gmt_offset: i32,
+    is_dst: bool,
 }
 
 /// Разобранная таблица переходов одного файла TZif.
@@ -55,23 +55,46 @@ struct TzTable {
 }
 
 impl TzTable {
-    /// Смещение, действующее в момент `unix_seconds`.
-    fn offset_for(&self, unix_seconds: i64) -> i32 {
+    fn type_index_for(&self, unix_seconds: i64) -> Option<usize> {
         if self.types.is_empty() {
-            return 0;
+            return None;
         }
         let n = self
             .transitions
             .partition_point(|&(t, _)| t <= unix_seconds);
-        if n == 0 {
-            // До первого перехода RFC 8536 предписывает брать первый тип,
-            // не помеченный летним временем; специально её не ищем — тип
-            // с индексом 0 в подавляющем большинстве файлов и есть такой.
-            self.types[0].gmt_offset
+        Some(if n == 0 {
+            0
         } else {
-            let idx = self.transitions[n - 1].1 as usize;
-            self.types.get(idx).map_or(0, |t| t.gmt_offset)
+            self.transitions[n - 1].1 as usize
+        })
+    }
+
+    /// Смещение, действующее в момент `unix_seconds`.
+    fn offset_for(&self, unix_seconds: i64) -> i32 {
+        self.type_index_for(unix_seconds)
+            .and_then(|index| self.types.get(index))
+            .map_or(0, |kind| kind.gmt_offset)
+    }
+
+    /// Стандартное смещение без сезонной поправки в заданный момент.
+    fn standard_offset_for(&self, unix_seconds: i64) -> i32 {
+        let Some(current) = self.type_index_for(unix_seconds) else {
+            return 0;
+        };
+        if !self.types[current].is_dst {
+            return self.types[current].gmt_offset;
         }
+        let n = self
+            .transitions
+            .partition_point(|&(t, _)| t <= unix_seconds);
+        self.transitions[..n]
+            .iter()
+            .rev()
+            .chain(self.transitions[n..].iter())
+            .filter_map(|&(_, index)| self.types.get(index as usize))
+            .find(|kind| !kind.is_dst)
+            .or_else(|| self.types.iter().find(|kind| !kind.is_dst))
+            .map_or(0, |kind| kind.gmt_offset)
     }
 }
 
@@ -110,6 +133,30 @@ impl crate::TimeZone for SystemTimeZone {
         self.table
             .as_ref()
             .map_or(0, |t| t.offset_for(unix_seconds))
+    }
+
+    fn standard_offset_seconds(&self, unix_seconds: i64) -> i32 {
+        self.table
+            .as_ref()
+            .map_or(0, |table| table.standard_offset_for(unix_seconds))
+    }
+
+    fn named_standard_offset_seconds(&self, name: &str, unix_seconds: i64) -> Option<i32> {
+        if let Some(offset) = crate::env::parse_gmt_offset(name) {
+            return Some(offset);
+        }
+        let path = std::path::Path::new(name);
+        if path.as_os_str().is_empty()
+            || path
+                .components()
+                .any(|part| !matches!(part, std::path::Component::Normal(_)))
+        {
+            return None;
+        }
+        std::fs::read(std::path::Path::new("/usr/share/zoneinfo").join(path))
+            .ok()
+            .and_then(|bytes| parse_tzif(&bytes))
+            .map(|table| table.standard_offset_for(unix_seconds))
     }
 }
 
@@ -202,7 +249,8 @@ fn parse_body(data: &[u8], start: usize, h: &Header, time_width: usize) -> Optio
     for i in 0..typecnt {
         let off = pos + i * 6;
         let gmt_offset = i32::from_be_bytes(data.get(off..off + 4)?.try_into().ok()?);
-        types.push(TzType { gmt_offset });
+        let is_dst = *data.get(off + 4)? != 0;
+        types.push(TzType { gmt_offset, is_dst });
     }
 
     let mut transitions = Vec::with_capacity(timecnt);
@@ -231,7 +279,12 @@ mod tests {
     /// весь буфер; для V2/V3 вызывающий тест склеивает два таких блока —
     /// один с версией `b'2'` и 4-байтовыми переходами, второй следом с
     /// той же версией и 8-байтовыми.
-    fn block(version: u8, types: &[i32], transitions: &[(i64, u8)], time_width: usize) -> Vec<u8> {
+    fn block(
+        version: u8,
+        types: &[(i32, bool)],
+        transitions: &[(i64, u8)],
+        time_width: usize,
+    ) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(b"TZif");
         buf.push(version);
@@ -253,9 +306,9 @@ mod tests {
         for &(_, idx) in transitions {
             buf.push(idx);
         }
-        for &off in types {
+        for &(off, is_dst) in types {
             buf.extend_from_slice(&off.to_be_bytes());
-            buf.push(0); // isdst
+            buf.push(u8::from(is_dst));
             buf.push(0); // desigidx
         }
         buf
@@ -265,7 +318,7 @@ mod tests {
     fn v1_only_file_with_a_single_fixed_type_is_used_everywhere() {
         // Один тип, без переходов вовсе — то, что бывает у файлов вроде
         // `Etc/UTC` (офсет 0) или редких фиксированных зон.
-        let buf = block(0, &[4 * 3600], &[], 4);
+        let buf = block(0, &[(4 * 3600, false)], &[], 4);
         let table = parse_tzif(&buf).expect("буфер обязан разобраться");
         assert_eq!(table.offset_for(0), 4 * 3600);
         assert_eq!(table.offset_for(-1_000_000), 4 * 3600);
@@ -276,11 +329,12 @@ mod tests {
     fn transition_switches_the_offset_at_the_exact_moment() {
         // Типичный переход на летнее время: UTC+3 до 1000, UTC+4 с 1000
         // включительно.
-        let buf = block(0, &[3 * 3600, 4 * 3600], &[(1000, 1)], 4);
+        let buf = block(0, &[(3 * 3600, false), (4 * 3600, true)], &[(1000, 1)], 4);
         let table = parse_tzif(&buf).expect("буфер обязан разобраться");
         assert_eq!(table.offset_for(999), 3 * 3600);
         assert_eq!(table.offset_for(1000), 4 * 3600);
         assert_eq!(table.offset_for(1_000_000), 4 * 3600);
+        assert_eq!(table.standard_offset_for(1_000_000), 3 * 3600);
     }
 
     #[test]
@@ -289,8 +343,8 @@ mod tests {
         // так тест ловит и ошибку в подсчёте длины V1-блока (тогда
         // заголовок V2 не найдётся и разбор провалится), и то, что
         // разбор молча остался бы на V1-данных.
-        let v1 = block(b'2', &[3600], &[(500, 0)], 4);
-        let v2 = block(b'2', &[5 * 3600], &[(500, 0)], 8);
+        let v1 = block(b'2', &[(3600, false)], &[(500, 0)], 4);
+        let v2 = block(b'2', &[(5 * 3600, false)], &[(500, 0)], 8);
         let mut buf = v1;
         buf.extend_from_slice(&v2);
 

@@ -39,6 +39,19 @@ pub enum HostEffect {
 ///
 /// [`RtError::InvalidBytecode`], если сюда пришла не функция окружения.
 pub fn call_builtin_env(f: BuiltinFn, env: &mut HostEnv) -> RtResult<BslValue> {
+    call_builtin_env_with_args(f, &[], env)
+}
+
+/// Вызывает функцию окружения с её аргументами.
+///
+/// # Errors
+///
+/// Возвращает ошибку аргументов, возможности окружения либо байткода.
+pub fn call_builtin_env_with_args(
+    f: BuiltinFn,
+    args: &[BslValue],
+    env: &mut HostEnv,
+) -> RtResult<BslValue> {
     match f {
         BuiltinFn::CurrentDate => BslValue::current_date(env),
         BuiltinFn::CurrentSessionDate => BslValue::current_session_date(env),
@@ -52,10 +65,48 @@ pub fn call_builtin_env(f: BuiltinFn, env: &mut HostEnv) -> RtResult<BslValue> {
                 .map(|a| BslValue::Str(BslString::from_str(a)))
                 .collect(),
         )),
+        BuiltinFn::StandardTimeOffset => standard_time_offset(args, env),
         _ => Err(RtError::InvalidBytecode(
             "эта встроенная функция не относится к окружению прогона",
         )),
     }
+}
+
+fn standard_time_offset(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslValue> {
+    let [zone_name, utc_time] = args else {
+        return Err(RtError::InvalidBytecode(
+            "СмещениеСтандартногоВремени получила неверное число аргументов",
+        ));
+    };
+    let unix_seconds = match utc_time {
+        BslValue::Undefined => env.unix_millis().div_euclid(1000),
+        BslValue::Date(date) => crate::pseudo_unix_seconds(*date),
+        BslValue::Str(text) => crate::BslDate::parse_digits(&text.to_string())
+            .map(crate::pseudo_unix_seconds)
+            .ok_or(RtError::DateOutOfRange {
+                op: "СмещениеСтандартногоВремени",
+            })?,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Дата, Строка даты или Неопределено",
+                op: "СмещениеСтандартногоВремени",
+            });
+        }
+    };
+    let zone = env.zone();
+    let offset = match zone_name {
+        BslValue::Undefined => zone.standard_offset_seconds(unix_seconds),
+        BslValue::Str(name) => zone
+            .named_standard_offset_seconds(&name.to_string(), unix_seconds)
+            .ok_or_else(|| RtError::DynamicError(format!("часовой пояс «{name}» не найден")))?,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка или Неопределено",
+                op: "СмещениеСтандартногоВремени",
+            });
+        }
+    };
+    Ok(BslValue::number_from_i64(i64::from(offset)))
 }
 
 /// Встроенные функции, вызываемые по голому имени (`Sqrt(x)`, `Pow(x,y)`,
@@ -181,6 +232,9 @@ pub enum BuiltinFn {
     /// `ТекущаяДатаСеанса`/`CurrentSessionDate` — текущий момент в
     /// эффективном часовом поясе этого прогона.
     CurrentSessionDate,
+    /// `СмещениеСтандартногоВремени`/`StandardTimeOffset` — стандартное
+    /// смещение текущей или именованной зоны в секундах.
+    StandardTimeOffset,
     /// `ТекущаяУниверсальнаяДата`/`CurrentUniversalDate` — текущий момент
     /// UTC как значение `Дата`.
     CurrentUniversalDate,
@@ -402,6 +456,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("CurrentDate", BuiltinFn::CurrentDate),
     ("ТекущаяДатаСеанса", BuiltinFn::CurrentSessionDate),
     ("CurrentSessionDate", BuiltinFn::CurrentSessionDate),
+    ("СмещениеСтандартногоВремени", BuiltinFn::StandardTimeOffset),
+    ("StandardTimeOffset", BuiltinFn::StandardTimeOffset),
     ("ТекущаяУниверсальнаяДата", BuiltinFn::CurrentUniversalDate),
     ("CurrentUniversalDate", BuiltinFn::CurrentUniversalDate),
     (
@@ -712,7 +768,8 @@ impl BuiltinFn {
             | BuiltinFn::CurrentSessionDate
             | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
-            | BuiltinFn::CommandLineArguments => Some(HostEffect::Env),
+            | BuiltinFn::CommandLineArguments
+            | BuiltinFn::StandardTimeOffset => Some(HostEffect::Env),
             BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Some(HostEffect::Files),
             BuiltinFn::GetPathSeparator | BuiltinFn::TempFilesDir => Some(HostEffect::Files),
             BuiltinFn::CreateDirectory => Some(HostEffect::FileCreate),
@@ -812,6 +869,7 @@ impl BuiltinFn {
             | BuiltinFn::TempFilesDir
             | BuiltinFn::TempFilesDirAsync => (0, 0),
             BuiltinFn::GetTempFileName => (0, 1),
+            BuiltinFn::StandardTimeOffset => (0, 2),
             BuiltinFn::RunApp => (1, 4),
             BuiltinFn::RunAppAsync => (1, 3),
             BuiltinFn::FindFiles | BuiltinFn::FindFilesAsync => (1, 3),
@@ -1321,6 +1379,7 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // Rust-кода не должен ронять процесс.
         BuiltinFn::CurrentDate
         | BuiltinFn::CurrentSessionDate
+        | BuiltinFn::StandardTimeOffset
         | BuiltinFn::CurrentUniversalDate
         | BuiltinFn::CurrentUniversalDateInMilliseconds
         | BuiltinFn::CommandLineArguments => Err(RtError::InvalidBytecode(
