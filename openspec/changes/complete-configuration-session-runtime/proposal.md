@@ -13,8 +13,13 @@ Full session-parameter initialization calls manager modules, performs live queri
 - Provide the client settings-storage and home-page surface through an adapter explicitly attached to the current Session.
 - Execute data reads under the current principal's rights and RLS.
 - Start background jobs as separate sessions for an explicitly selected principal while copying the parent session parameters.
+- Expose the frozen current principal through the information-base users manager.
+- Provide the measured data-item send and receive system enumerations reached by configuration startup.
+- Route metadata access-right checks through the current Session's rights-aware adapter.
+- Expose the frozen Session principal name through the standard global function.
+- Support the measured mutable-map constructor from a fixed map reached by startup code.
 
 ## Impact
 The bridge extends the public open-bsl facade and existing call context but reuses the current compiler, VM, scheduler, State, and module instances. It adds no database knowledge to the interpreter and no second BSL dispatcher.
 
-`МенеджерПользователейИнформационнойБазы.ТекущийПользователь()` is not part of this change. Its syntax-helper description remains research input and does not authorize an implementation task.
+`МенеджерПользователейИнформационнойБазы.ТекущийПользователь()` is included because the recorded UNF startup graph reaches it. The returned description is backed by the principal already frozen for that Session; the change does not add user-catalog mutation or cross-session lookup.

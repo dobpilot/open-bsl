@@ -30,4 +30,16 @@ The ORM catalog stores the configuration compatibility mode as a typed immutable
 
 The immutable ORM catalog also records the complete configuration-extension view obtained during configuration acquisition: database extensions, the applied and disabled subsets for the session, and application issues. `РасширенияКонфигурации` reads only that snapshot. An explicitly complete empty snapshot produces empty arrays; absent or incomplete extension information is an error, so unavailable acquisition data cannot masquerade as a base without extensions. The source and scope system enums remain runtime values supplied by `bsl-rt`, while the extension objects and manager belong to `bsl-orm`.
 
-`--config-db` is an additive CLI modifier. Without it, script execution, commands, debugging, optimization, bytecode operation, and the REPL behave exactly as before. With it, the CLI loads the database configuration, selects the principal, starts a configuration session, and executes the supplied test script in that context. `--principal` is invalid without `--config-db`.
+`bsl-config-db` is the provider adapter between one `open-sdbl-db` acquisition and the two source-neutral factory inputs. It builds the existing `ConfigurationCodeSnapshot` and an immutable `bsl-orm::MetadataCatalog` from the same acquired resources and resolved metadata, assigning the same configuration identity to both. The adapter also converts `v8users` records into `PrincipalCandidate` values without changing the authentication rule owned by `open-sdbl`. Configuration object decoding and principal conversion stay outside `bsl-orm`; that crate remains independent of database formats and connections. Catalog construction happens once before `SessionFactory` is created, not for every Session.
+
+`--config-db` is an additive CLI modifier whose value is `postgres` or
+`mssql`. The same invocation supplies `--db-host`, `--db-name`, `--db-user`,
+and `--platform-version`; `--db-port` overrides the provider default. Passwords
+are consumed from `PGPASSWORD` or `MSSQL_PASSWORD`, never from process
+arguments. PostgreSQL plaintext and an unverified SQL Server certificate use
+explicit opt-ins, matching the transport policy of `open-sdbl`. Without
+`--config-db`, script execution, commands, debugging, optimization, bytecode
+operation, and the REPL behave exactly as before. With it, the CLI loads the
+database configuration, selects the principal, starts a thin-client
+configuration session, and executes the supplied test script in that context.
+`--principal` and every `--db-*` option are invalid without `--config-db`.

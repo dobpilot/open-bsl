@@ -59,6 +59,25 @@ Every session SHALL own a separate database connection, open-bsl State, module i
 - **WHEN** connection setup or the startup handler fails
 - **THEN** no usable session is returned
 
+### Requirement: Database acquisition adapter
+`bsl-config-db` SHALL derive the source-neutral code snapshot and immutable ORM metadata catalog from one acquired database configuration. Both results SHALL carry the same configuration identity. Catalog construction SHALL preserve the configuration objects, roles, session parameters, root properties, and complete extension snapshot required by session startup, and SHALL happen once before a reusable `SessionFactory` is built.
+
+The adapter SHALL convert information-base users into `PrincipalCandidate` values using `InfoBaseUser::can_authenticate()` as the authentication decision and preserving the user's stable identifier, name, and assigned role identifiers. `bsl-orm` and `bsl-session` SHALL NOT parse database storage formats.
+
+#### Scenario: One acquisition supplies factory inputs
+- **WHEN** a database configuration is loaded for session execution
+- **THEN** its code snapshot and ORM catalog are derived from that acquisition
+- **AND** `SessionFactory` accepts their matching configuration identities
+
+#### Scenario: Selectable database user
+- **WHEN** an acquired user has an enabled authentication method and assigned roles
+- **THEN** the adapter produces a selectable principal candidate with the same identifier, name, and role identifiers
+
+#### Scenario: User without authentication
+- **WHEN** an acquired user has no enabled authentication method
+- **THEN** the adapter preserves the candidate but marks it as not selectable
+- **AND** it does not infer eligibility from administrative or display flags
+
 ### Requirement: Explicit selectable principal
 A non-empty `v8users` catalog SHALL expose only users with at least one enabled authentication method as selectable principals. Selection SHALL accept a case-insensitive name or exact GUID. A single selectable user MAY be chosen automatically; multiple selectable users SHALL require an explicit choice. An empty user catalog SHALL produce the platform empty user with the configuration's main roles. A principal description SHALL remain unchanged for the lifetime of its session.
 
@@ -146,6 +165,13 @@ The ORM library SHALL provide the global `РасширенияКонфигура
 ### Requirement: Additive database CLI mode
 `bsl-cli` SHALL enable configuration-session execution only when `--config-db` is present. Without that option every existing command, script invocation, argument, and REPL behavior SHALL remain unchanged. `--principal` SHALL be accepted only with `--config-db`.
 
+The database form SHALL be `--config-db <postgres|mssql>` together with
+`--db-host`, `--db-name`, `--db-user`, and `--platform-version`. `--db-port`
+MAY override the provider default. Database passwords SHALL come from
+`PGPASSWORD` or `MSSQL_PASSWORD` and SHALL NOT be accepted as command-line
+arguments. PostgreSQL plaintext and an unverified SQL Server certificate
+SHALL require explicit provider-specific opt-in flags.
+
 #### Scenario: Ordinary script
 - **WHEN** the CLI is invoked with an existing script command and no `--config-db`
 - **THEN** it follows the existing execution path without loading a configuration or opening a database session
@@ -153,3 +179,11 @@ The ORM library SHALL provide the global `РасширенияКонфигура
 #### Scenario: Configuration test script
 - **WHEN** the CLI is invoked with `--config-db`, a valid principal, and a test script
 - **THEN** it starts the configuration session before executing that script in its context
+
+#### Scenario: Password on the command line
+- **WHEN** a database-mode invocation supplies a password-shaped option
+- **THEN** argument validation rejects it before a connection is attempted
+
+#### Scenario: Principal without database mode
+- **WHEN** an invocation supplies `--principal` without `--config-db`
+- **THEN** argument validation rejects it without changing ordinary script execution

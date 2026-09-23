@@ -9,7 +9,29 @@
 - [x] 5b. Expose the host-supplied information-base connection string through the current Session and fail explicitly when it is absent.
 - [x] 5c. Implement the measured `ХранилищеЗначения` and `СжатиеДанных` constructors and detached `Получить()` semantics through the existing serialized-value graph.
 - [x] 5d. Implement the measured current information-base session and its foreground/background job association.
-- [ ] 5e. Add only the remaining metadata, manager, register, constant, connection, security-mode, and diagnostic members reached by the recorded `demo`, `buh`, and `unf` startup scenarios, measuring platform semantics before implementation; do not add `МенеджерПользователейИнформационнойБазы.ТекущийПользователь()` in this change.
+- [ ] 5e. Add only the remaining metadata, manager, register, constant, connection, security-mode, diagnostic, current-user, and platform-value members reached by the recorded `demo`, `buh`, and `unf` startup scenarios, including measured frame-scoped safe-mode suppression and the reached data-composition field, comparison type, and standard beginning date, measuring platform semantics before implementation.
+- [x] 5k. Project configuration enumerations into the immutable catalog and expose their manager root through `Перечисления` / `Enums`; add value access only for members reached during startup.
+- [x] 5l. Measure and expose acquired common pictures through `БиблиотекаКартинок` / `PictureLib` without fabricating image content.
+- [x] 5m. Measure and add the reached `ТипФайлаТабличногоДокумента` values without claiming writer support for formats without an encoder.
+- [x] 5n. Expose the acquired main-versus-database configuration state through `КонфигурацияИзменена()` and fail explicitly while the provider state is unavailable.
+- [x] 5o. Add the measured reusable-value refresh procedure as the successful invalidation of the runtime's currently absent Session cache.
+- [x] 5p. Add the measured reached error-processing manager, Session-owned current-user settings snapshot, and error-reporting-mode enum.
+- [x] 5q. Add the measured Session-owned dynamic database-configuration update flag with explicit absence and no cross-Session inheritance.
+- [x] 5r. Expose acquired exchange-plan descriptors through `ПланыОбмена` / `ExchangePlans` and the root metadata collection using the existing manager path.
+- [x] 5s. Add the measured reached `БлокировкаДанных` surface and delegate named lock acquisition to the current Session's data adapter without an in-process substitute.
+- [x] 5t. Add the measured reached transaction procedures and delegate them to the same connection-bound Session data adapter.
+- [x] 5u. Add the measured closed data-item send and receive enumerations reached by configuration startup.
+- [x] 5v. Add `ПравоДоступа` / `AccessRight` and delegate effective metadata rights to the current Session's rights-aware data adapter.
+- [x] 5w. Add the measured `ИмяПользователя()` / `UserName()` function over the frozen Session principal.
+- [x] 5x. Add the measured `Соответствие` / `Map` copy constructor from a `ФиксированноеСоответствие` / `FixedMap`.
+- [x] 5y. Add the reached `ПредопределенноеЗначение` / `PredefinedValue` lookup over acquired configuration enumeration values and the existing system-enum table.
+- [x] 5z. Add the measured current-frame `ПолучитьОтключениеБезопасногоРежима` / `GetSafeModeDisabled` getter.
+- [x] 5aa. Add the measured getter and reached one-argument setter for connection-bound exclusive mode through `DataAccess`.
+- [x] 5ab. Add the reached `СервисыИнтеграции` / `IntegrationServices` manager and delegate processing and dynamic service resolution to the current Session adapter.
+- [x] 5ac. Add the measured information-base predefined-data update enum, getter, and exact-one-argument setter through `DataAccess`.
+- [x] 5ad. Add the measured zero-argument predefined-data initialization procedure through `DataAccess`.
+- [x] 5ae. Add the measured `ОписаниеНастроек` / `SettingsDescription` value in `bsl-session`.
+- [x] 5af. Add measured `ТекущаяДатаСеанса()` / `CurrentSessionDate()` using the existing per-State clock and effective zone.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.
@@ -18,5 +40,5 @@
 - [x] 6. Reject missing rights and unsupported runtime members explicitly instead of returning permissive placeholders.
 - [x] 7. Create background-job sessions with an explicit principal, copied parent parameters, a separate connection, and isolated module state.
 - [ ] 8. Run the full-start and selected-parameter `demo`, `buh`, and `unf` scenarios without changing existing regression expectations.
-- [x] 9. Run formatting, Clippy, workspace tests, rustdoc, API-reference generation, facade-consumer compilation, and dependency-tree checks.
+- [ ] 9. Run formatting, Clippy, workspace tests, rustdoc, API-reference generation, facade-consumer compilation, and dependency-tree checks.
 - [ ] 10. Validate with `openspec validate complete-configuration-session-runtime --strict` and archive the change only after every runtime and workspace gate passes.

@@ -50,6 +50,251 @@ Every ORM query, manager read, register read, and constant read SHALL use the se
 - **WHEN** rights for one of the principal's roles are unavailable
 - **THEN** the read fails instead of running without that role's restrictions
 
+### Requirement: Frozen current information-base user
+The ORM component SHALL expose `ПользователиИнформационнойБазы` / `InfoBaseUsers` as a library global. Its `ТекущийПользователь()` / `CurrentUser()` method SHALL return an immutable information-base user description whose `Имя` / `Name` equals the principal frozen for the current Session. The operation SHALL NOT re-read the user catalog, observe another Session, or permit mutation of the description.
+
+#### Scenario: Current user during startup
+- **WHEN** configuration startup calls `ПользователиИнформационнойБазы.ТекущийПользователь()`
+- **THEN** the returned description has the selected Session principal's name
+
+#### Scenario: Isolated sessions
+- **WHEN** two Sessions select different principals
+- **THEN** each Session observes only its own current-user description
+
+### Requirement: Configuration enumeration managers
+The ORM component SHALL expose `Перечисления` / `Enums` as a library global backed by the immutable configuration metadata catalog. Property access by a folded configuration enumeration name SHALL return that enumeration's manager and SHALL fail explicitly for an absent name. This startup slice SHALL NOT invent enumeration values that are absent from the acquired configuration metadata.
+
+#### Scenario: Resolve an enumeration manager
+- **WHEN** startup code reads an existing configuration enumeration through `Перечисления.<Имя>` or `Enums.<Name>`
+- **THEN** it receives the manager linked to that enumeration metadata object in the current Session catalog
+
+#### Scenario: Unknown enumeration
+- **WHEN** startup code requests an enumeration name absent from the current Session catalog
+- **THEN** property access fails explicitly
+
+### Requirement: Reached predefined values
+The ORM component SHALL provide `ПредопределенноеЗначение` / `PredefinedValue` with one required string argument. For a reached configuration enumeration path it SHALL resolve the owner and member from the immutable acquired metadata catalog and return the corresponding immutable enumeration reference. For a system-enumeration path it SHALL return the existing base-runtime enum member. An unknown path or a non-string argument SHALL fail explicitly. The implementation SHALL NOT reread configuration resources or fabricate a value absent from the acquired catalog.
+
+#### Scenario: Resolve a configuration enumeration member
+- **WHEN** startup code requests a reached configuration enumeration member by its full path
+- **THEN** it receives the member identified by the acquired owner and value GUIDs
+
+#### Scenario: Resolve a system enumeration member
+- **WHEN** code requests a system-enumeration member by its full path
+- **THEN** it receives the same base-runtime enum value as direct member access
+
+#### Scenario: Reject an unknown predefined value
+- **WHEN** the supplied path cannot be resolved as either a configuration value or a system-enumeration member
+- **THEN** execution fails explicitly
+
+### Requirement: Configuration exchange-plan managers
+The ORM component SHALL expose `ПланыОбмена` / `ExchangePlans` as a library global backed by the immutable metadata catalog. A folded property name matching an acquired exchange-plan metadata object SHALL return that object's existing manager value. `Метаданные.ПланыОбмена` / `Metadata.ExchangePlans` SHALL expose the same acquired descriptors through the existing metadata-collection behavior. An unknown configuration-defined name SHALL fail explicitly.
+
+#### Scenario: Resolve an acquired exchange-plan manager
+- **WHEN** startup code reads a configuration exchange plan through either language name
+- **THEN** it receives the manager value tied to that acquired metadata object
+
+#### Scenario: Read exchange-plan metadata
+- **WHEN** startup code reads the exchange-plan collection through the root metadata object
+- **THEN** it sees the acquired exchange-plan descriptors from the same catalog snapshot
+
+### Requirement: Reached configuration picture library
+The ORM component SHALL expose `БиблиотекаКартинок` / `PictureLib` as a library global. A folded property name matching an acquired common-picture metadata object SHALL return an immutable `Картинка` / `Picture` value. Repeated access through either language name SHALL compare equal for the same metadata object and unequal for a different one, and the value SHALL reproduce the measured type display, string representation, and filled state. The initial slice SHALL NOT fabricate picture bytes or platform-standard members that are absent from the acquired catalog.
+
+#### Scenario: Read a configuration picture
+- **WHEN** startup code reads an acquired common picture through either language name
+- **THEN** it receives the measured picture value associated with that metadata object
+
+#### Scenario: Unknown picture
+- **WHEN** startup code requests a picture absent from the acquired catalog
+- **THEN** property access fails explicitly
+
+### Requirement: Data composition field value
+The base runtime SHALL provide the `ПолеКомпоновкиДанных` / `DataCompositionField` constructor with exactly one string argument and the immutable value behavior measured on platform 8.3.27. Its string representation SHALL preserve the supplied data-path spelling, while equality SHALL compare paths without regard to case and remain consistent when the value is used as a map key. This value SHALL NOT create or imply a data-composition engine.
+
+#### Scenario: Construct a field from a data path
+- **WHEN** startup code constructs a data composition field from a string path
+- **THEN** it receives the standard data composition field value for that path
+
+#### Scenario: Compare fields
+- **WHEN** two separately constructed fields contain paths that the platform considers equal
+- **THEN** the runtime equality operation returns true
+
+### Requirement: Data composition comparison type
+The base runtime SHALL expose the closed system enum `ВидСравненияКомпоновкиДанных` / `DataCompositionComparisonType` with the complete member set and string representations measured on platform 8.3.27. Both language names SHALL resolve to the same enum values.
+
+#### Scenario: Read a comparison member
+- **WHEN** startup code reads a member through either language name
+- **THEN** it receives the corresponding standard enum value
+
+### Requirement: Reached standard beginning date surface
+The base runtime SHALL expose `СтандартнаяДатаНачала` / `StandardBeginningDate` with the one-argument constructor from `ВариантСтандартнойДатыНачала` / `StandardBeginningDateVariant` reached by the recorded startup graph. The closed variant enum SHALL contain the complete member set and string representations measured on platform 8.3.27. Zero-argument and date-based construction, property access, and relative-date evaluation are outside this startup slice.
+
+#### Scenario: Construct from a relative variant
+- **WHEN** startup code constructs a standard beginning date from a variant member
+- **THEN** it receives a standard beginning date value retaining that variant
+
+### Requirement: Reached spreadsheet file-type values
+The base runtime SHALL resolve the measured `ANSITXT`, `DOCX`, `HTML5`, `MXL`, `ODS`, `TXT`, `XLS`, and `XLSX` members of `ТипФайлаТабличногоДокумента` / `SpreadsheetDocumentFileType` reached by startup code independently of whether the spreadsheet component can write each format. Passing a value SHALL NOT imply export support for that format.
+
+#### Scenario: Read a reached file-type member
+- **WHEN** startup code reads a reached member through either language name
+- **THEN** it receives the same standard enum value with the measured representation
+
+### Requirement: Frozen configuration-changed state
+The ORM component SHALL provide `КонфигурацияИзменена()` / `ConfigurationChanged()` with zero arguments and return the configuration-change state acquired for the factory's metadata snapshot. The value SHALL be frozen with that snapshot and shared by Sessions opened from the factory. If the provider did not supply the state, the call SHALL fail explicitly instead of assuming either boolean value.
+
+#### Scenario: Provider reports a changed configuration
+- **WHEN** the acquired metadata snapshot records that the main configuration differs from the database configuration
+- **THEN** the function returns `Истина`
+
+#### Scenario: Change state is unavailable
+- **WHEN** the provider did not acquire the main-versus-database configuration state
+- **THEN** the function fails explicitly
+
+### Requirement: Refresh reusable values
+The configuration-session runtime SHALL provide the zero-argument global procedure `ОбновитьПовторноИспользуемыеЗначения()` / `RefreshReusableValues()`. Calling it SHALL invalidate all reusable-return-value state owned by the current Session. While the runtime does not cache reusable function results, the operation SHALL complete successfully and preserve the equivalent uncached behavior.
+
+#### Scenario: Runtime has no reusable-value cache
+- **WHEN** startup code calls the procedure in a Session whose functions always execute
+- **THEN** the call completes successfully and subsequent function calls continue to execute normally
+
+### Requirement: Session-local dynamic database-configuration change state
+The configuration-session runtime SHALL provide `КонфигурацияБазыДанныхИзмененаДинамически()` / `DataBaseConfigurationChangedDynamically()` with zero arguments. It SHALL return the explicit boolean state supplied for the current Session and SHALL fail explicitly when the host did not supply that state. A separately opened foreground or background Session SHALL receive its own state through its own resources and SHALL NOT inherit the value from another Session.
+
+#### Scenario: Host reports a dynamic update during the Session
+- **WHEN** the current Session's resources record that the database configuration was dynamically updated during its lifetime
+- **THEN** the function returns `Истина`
+
+#### Scenario: Dynamic-update state is unavailable
+- **WHEN** the current Session has no host-supplied dynamic-update state
+- **THEN** the function fails explicitly instead of assuming either boolean value
+
+#### Scenario: A background Session is opened separately
+- **WHEN** a background Session is opened with its own resources after a parent Session
+- **THEN** its dynamic-update state comes only from those resources while the separately specified session parameters retain their existing inheritance behavior
+
+### Requirement: Reached error-processing surface
+The configuration-session runtime SHALL expose the global `ОбработкаОшибок` / `ErrorProcessing` manager. Its reached brief and detailed description methods SHALL accept one `ИнформацияОбОшибке` / `ErrorInfo` value and return that value's existing brief and detailed representations. Its zero-argument `ПолучитьНастройкиПользователя()` / `GetUserSettings()` method SHALL return the current Session's explicitly supplied user-settings snapshot or fail when that snapshot is absent. The initial settings value SHALL expose the read-only reached properties `ОтправлятьОтчетНаКлиенте` / `SendReportOnClient` and `АдресСервисаОбработкиОшибок` / `ErrorProcessingServiceAddress`.
+
+The base runtime SHALL expose the complete measured `РежимОтправкиИнформацииОбОшибке` / `ErrorReportingMode` enum with `Авто` / `Auto`, `НеОтправлять` / `DontSend`, `СпрашиватьПользователя` / `AskUser`, and `Отправлять` / `Send`.
+
+#### Scenario: Format an error through the manager
+- **WHEN** startup code passes an error-information value to a reached description method
+- **THEN** the result equals the brief or detailed representation already stored in that value
+
+#### Scenario: Read current-user error settings
+- **WHEN** the Session has an explicit error-processing settings snapshot
+- **THEN** the manager returns its sending mode and service address without observing another Session
+
+#### Scenario: Error settings are absent
+- **WHEN** startup code requests user settings without a Session snapshot
+- **THEN** the method fails explicitly
+
+### Requirement: Reached transaction procedures
+The ORM component SHALL provide the reached zero-argument procedures `НачатьТранзакцию()` / `BeginTransaction()`, `ЗафиксироватьТранзакцию()` / `CommitTransaction()`, and `ОтменитьТранзакцию()` / `RollbackTransaction()`. Each operation SHALL delegate to the current Session's data-access adapter with its frozen principal and SHALL use the same concrete connection as managed data locks, queries, and constants. Missing transaction capability SHALL fail explicitly. Transaction nesting, commit, rollback, and release SHALL remain owned by that connection-bound adapter.
+
+#### Scenario: Commit a Session transaction
+- **WHEN** startup begins and commits a transaction with a capable adapter
+- **THEN** both operations execute in order on the current Session's connection
+
+#### Scenario: Roll back after a caught failure
+- **WHEN** startup begins a transaction and calls rollback from its exception handler
+- **THEN** the adapter rolls back that same Session transaction
+
+#### Scenario: Transaction capability is absent
+- **WHEN** startup invokes a transaction procedure without a capable data adapter
+- **THEN** execution fails explicitly instead of simulating a transaction in memory
+
+### Requirement: Connection-bound exclusive mode
+The ORM component SHALL provide `МонопольныйРежим()` / `ExclusiveMode()` and the reached one-boolean-argument form of `УстановитьМонопольныйРежим` / `SetExclusiveMode`. Both operations SHALL delegate to the current Session's data-access adapter and concrete connection. The runtime SHALL NOT emulate exclusive ownership with a process-local flag. Missing capability or a provider refusal SHALL fail explicitly.
+
+#### Scenario: Read and change exclusive mode
+- **WHEN** a capable adapter enters and then leaves exclusive mode
+- **THEN** the getter reports the state of that same Session connection after each operation
+
+#### Scenario: Exclusive-mode capability is absent
+- **WHEN** startup reads or changes exclusive mode without a capable adapter
+- **THEN** execution fails explicitly instead of reporting or storing a fabricated state
+
+### Requirement: Session-bound integration-services manager
+The ORM component SHALL provide the global read-only property `СервисыИнтеграции` / `IntegrationServices` as an integration-services manager. Its documented zero-argument methods `ВыполнитьОбработку` / `ExecuteProcessing` and `ОстановитьОбработку` / `StopProcessing` SHALL delegate to the current Session's data-access adapter and frozen principal. A dynamic integration-service property SHALL be resolved by that adapter for the same Session. The runtime SHALL NOT start jobs or retain service-manager state in a process-global substitute. Missing processing or service-resolution capability SHALL fail explicitly.
+
+#### Scenario: Start integration-service processing
+- **WHEN** startup calls `СервисыИнтеграции.ВыполнитьОбработку()` with a capable adapter
+- **THEN** the adapter starts processing for the current Session and principal
+
+#### Scenario: Resolve a configured integration service
+- **WHEN** startup reads a dynamic property of `СервисыИнтеграции`
+- **THEN** the current Session adapter resolves and returns that service manager
+
+#### Scenario: Integration-services capability is absent
+- **WHEN** startup calls a manager method or reads a service without a capable adapter
+- **THEN** execution fails explicitly instead of returning a fabricated manager
+
+### Requirement: Information-base predefined-data update mode
+The ORM component SHALL provide the closed `ОбновлениеПредопределенныхДанных` / `PredefinedDataUpdate` enumeration and the zero-argument getter `ПолучитьОбновлениеПредопределенныхДанныхИнформационнойБазы` / `GetInfoBasePredefinedData`. The reached setter `УстановитьОбновлениеПредопределенныхДанныхИнформационнойБазы` / `SetInfoBasePredefinedDataUpdate` SHALL require exactly one enumeration argument, matching the measured 8.3.27 behavior. Getter and setter SHALL delegate to the current Session's data-access adapter and concrete information-base connection. Missing capability SHALL fail explicitly.
+
+#### Scenario: Read and change the predefined-data update mode
+- **WHEN** a capable adapter changes the mode and the same Session reads it
+- **THEN** the getter returns the adapter's current closed enumeration value
+
+#### Scenario: Setter argument is omitted
+- **WHEN** startup calls the setter without an argument
+- **THEN** compilation fails with an arity error
+
+#### Scenario: Predefined-data update capability is absent
+- **WHEN** startup reads or changes the mode without a capable adapter
+- **THEN** execution fails explicitly instead of storing a process-local mode
+
+### Requirement: Initialize predefined data through the Session adapter
+The ORM component SHALL provide the zero-argument procedure `ИнициализироватьПредопределенныеДанные` / `InitializePredefinedData`. It SHALL delegate initialization to the current Session's data-access adapter with its frozen principal and concrete information-base connection. The runtime SHALL NOT fabricate predefined records or track initialization in process memory. Missing capability SHALL fail explicitly.
+
+#### Scenario: Initialize predefined data
+- **WHEN** startup calls the procedure with a capable adapter
+- **THEN** the adapter initializes predefined data for the current Session's information-base area
+
+#### Scenario: Initialization capability is absent
+- **WHEN** startup calls the procedure without a capable adapter
+- **THEN** execution fails explicitly
+
+### Requirement: Settings description value
+The Session component SHALL provide the zero-argument `ОписаниеНастроек` / `SettingsDescription` constructor. A new value SHALL have writable arbitrary `КлючОбъекта` / `ObjectKey` and `КлючНастроек` / `SettingsKey` properties initialized to `Неопределено`, writable string `Пользователь` / `User` and `Представление` / `Presentation` properties initialized to the empty string, and a read-only `ДополнительныеСвойства` / `AdditionalProperties` property containing a distinct mutable empty `Структура` / `Structure`.
+
+#### Scenario: Fill a settings description
+- **WHEN** startup constructs a description and assigns all four writable properties and inserts an additional property
+- **THEN** subsequent reads return those values
+
+#### Scenario: Replace the additional-properties object
+- **WHEN** startup assigns to `ДополнительныеСвойства` / `AdditionalProperties`
+- **THEN** execution fails because the property itself is read-only
+
+### Requirement: Current Session date
+The base runtime SHALL provide `ТекущаяДатаСеанса()` / `CurrentSessionDate()` as a zero-argument function returning the current instant converted to the effective Session time zone supplied by the host State. A fixed State clock and fixed time zone SHALL therefore produce a deterministic local `Дата` / `Date`. The runtime SHALL use the existing per-State clock and time-zone capabilities and SHALL NOT read a process-global Session zone.
+
+#### Scenario: Session zone differs from UTC
+- **WHEN** the State clock denotes a UTC instant and its effective Session zone has a positive offset
+- **THEN** the returned naive date is shifted from UTC by that offset
+
+#### Scenario: Two States use different Session zones
+- **WHEN** two States of the same Engine use the same fixed clock and different zones
+- **THEN** each call returns the local date for its own State
+
+### Requirement: Reached managed data locks
+The ORM component SHALL provide the zero-argument `БлокировкаДанных` / `DataLock` constructor with the measured `Data lock` type. Its reached `Добавить` / `Add` method SHALL accept zero or one string lock-space name and return a measured `Data lock item`. A one-argument call SHALL stage that lock space on the object. `Заблокировать()` / `Lock()` SHALL pass all staged named spaces to the current Session's data-access adapter together with its frozen principal and SHALL fail explicitly when no adapter can provide the lock. Locks SHALL remain owned by the adapter's concrete Session connection; the ORM value SHALL NOT emulate cross-Session exclusion in process memory.
+
+#### Scenario: Acquire staged lock spaces
+- **WHEN** startup stages named lock spaces and calls `Заблокировать()` in a Session with a data-lock-capable adapter
+- **THEN** the adapter acquires those spaces for that Session connection and principal
+
+#### Scenario: Data-lock capability is absent
+- **WHEN** startup calls `Заблокировать()` without an adapter that supports data locks
+- **THEN** execution fails explicitly instead of continuing without exclusion
+
+#### Scenario: Another Session opens separately
+- **WHEN** two Sessions create data-lock values
+- **THEN** each value delegates only to its own connection-bound adapter
+
 ### Requirement: Linear query result surface
 The ORM component SHALL provide the measured `Запрос` constructor with its writable `Текст` property and the `УстановитьПараметр` and `Выполнить` methods. Query execution SHALL delegate the text and the final case-insensitive parameter values to the current Session's data-access adapter. A tabular result SHALL support `Пустой`, direct `Выбрать`, direct `Выгрузить`, and a selection's `Следующий`, `Получить`, numeric indexing, and named fields. Unsupported traversal modes and unavailable data access SHALL fail explicitly.
 
@@ -184,7 +429,7 @@ The session component SHALL provide `ПолучитьТекущийСеансИ�
 - **AND** that job's `ИмяМетода` is `Модуль.Метод`
 
 ### Requirement: Frame-scoped security modes
-The session runtime SHALL provide the boolean startup surface `УстановитьБезопасныйРежим`/`SetSafeMode`, `БезопасныйРежим`/`SafeMode`, `УстановитьПривилегированныйРежим`/`SetPrivilegedMode`, and `ПривилегированныйРежим`/`PrivilegedMode` with the behavior measured on platform 8.3.27. Each enabling call SHALL increment a counter owned by the current BSL call frame. A disabling call SHALL decrement only that frame's counter and SHALL fail if the frame has no matching enable. Leaving a frame normally or by exception SHALL remove its remaining enables. An active safe mode SHALL make the privileged-mode query false without discarding privileged enables. Unsupported named security profiles SHALL fail explicitly until a profile catalog is supplied by the host.
+The session runtime SHALL provide the boolean startup surface `УстановитьБезопасныйРежим`/`SetSafeMode`, `БезопасныйРежим`/`SafeMode`, `УстановитьПривилегированныйРежим`/`SetPrivilegedMode`, and `ПривилегированныйРежим`/`PrivilegedMode` with the behavior measured on platform 8.3.27. It SHALL also provide `УстановитьОтключениеБезопасногоРежима`/`SetSafeModeDisabled` with exactly one boolean argument and `ПолучитьОтключениеБезопасногоРежима`/`GetSafeModeDisabled` with no arguments. Each enabling call SHALL increment a counter owned by the current BSL call frame. The getter SHALL report whether that counter is nonzero in the current frame only; it SHALL NOT report suppression inherited from a caller or the frame latch after the counter is balanced. A disabling call SHALL decrement only that frame's corresponding counter and SHALL fail if the frame has no matching enable or suppression. Calling `SetSafeModeDisabled(true)` SHALL latch safe-mode suppression for the rest of the current frame; balancing it with `false` SHALL NOT clear that latch. Leaving a frame normally or by exception SHALL remove its remaining enables, counters, and suppression latch. A safe-mode suppression SHALL make the safe-mode query false without deleting safe-mode enables. An effective safe mode SHALL make the privileged-mode query false without discarding privileged enables. Unsupported named security profiles SHALL fail explicitly until a profile catalog is supplied by the host.
 
 #### Scenario: Nested frame cannot disable its caller
 - **WHEN** a caller enables a mode and a nested function attempts to disable it without enabling it itself
@@ -200,6 +445,26 @@ The session runtime SHALL provide the boolean startup surface `Установи�
 - **THEN** `ПривилегированныйРежим()` returns false while safe mode is active
 - **AND** it returns true after safe mode is disabled in that frame
 
+#### Scenario: Current frame suppresses safe mode
+- **WHEN** a frame enables safe mode and then calls `УстановитьОтключениеБезопасногоРежима(Истина)`
+- **THEN** `БезопасныйРежим()` returns false until the frame exits
+- **AND** balancing the suppression with `Ложь` does not reveal the still-enabled safe mode inside that frame
+
+#### Scenario: Nested frame cannot balance its caller's suppression
+- **WHEN** a caller suppresses safe mode and a nested function calls `УстановитьОтключениеБезопасногоРежима(Ложь)` without its own suppression
+- **THEN** the nested call raises an error
+- **AND** the caller's suppression remains active
+
+#### Scenario: Suppression ends with its frame
+- **WHEN** a nested frame suppresses safe mode and then returns or raises an exception
+- **THEN** its caller observes the safe mode that was effective before entering the nested frame
+
+#### Scenario: Read current-frame suppression command
+- **WHEN** a caller enables suppression and invokes the getter directly and through a nested function
+- **THEN** the direct getter returns true
+- **AND** the nested getter returns false
+- **AND** the direct getter returns false after the caller balances its suppression counter
+
 ### Requirement: Background session isolation and parameter inheritance
 A background job SHALL run in a new Session for an explicitly supplied selectable principal. It SHALL use a separate database connection and module instances. Its initial session parameters SHALL be copied from the parent session, and later changes in either session SHALL not change the other.
 
@@ -210,3 +475,53 @@ A background job SHALL run in a new Session for an explicitly supplied selectabl
 #### Scenario: Independent mutation
 - **WHEN** the background session changes an inherited parameter
 - **THEN** the parent session retains its own value
+
+### Requirement: Data item send and receive enumerations
+The base runtime SHALL provide the closed `ОтправкаЭлементаДанных` / `DataItemSend` system enumeration with the members `Авто` / `Auto`, `Удалить` / `Delete`, and `Игнорировать` / `Ignore`. It SHALL also provide the closed `ПолучениеЭлементаДанных` / `DataItemReceive` system enumeration with the members `Авто` / `Auto`, `Принять` / `Accept`, and `Игнорировать` / `Ignore`. Both language names SHALL resolve to the same corresponding values, and their presentations and member types SHALL match the values measured on platform 8.3.27.
+
+#### Scenario: Ignore an exchange data item
+- **WHEN** configuration startup reads `ОтправкаЭлементаДанных.Игнорировать` or `DataItemSend.Ignore`
+- **THEN** both expressions return the same `DataItemSend` value with the measured `Ignore` presentation
+
+#### Scenario: Ignore a received exchange data item
+- **WHEN** configuration startup reads `ПолучениеЭлементаДанных.Игнорировать` or `DataItemReceive.Ignore`
+- **THEN** both expressions return the same `DataItemReceive` value with the measured `Ignore` presentation
+
+### Requirement: Metadata access-right checks
+The ORM component SHALL provide `ПравоДоступа` / `AccessRight` with two through four arguments: a right name, a configuration metadata object, an optional information-base user or configuration role, and an optional standard-attribute or standard-tabular-section path. An omitted or `Неопределено` subject SHALL select the frozen current Session principal. The operation SHALL delegate effective role rights and their hierarchy to the current Session's rights-aware adapter. An explicit subject SHALL retain its identity for the adapter's administrative-access check. A privileged BSL frame SHALL return true after validating the argument forms. Missing rights data or an unsupported subject SHALL fail explicitly rather than grant access.
+
+#### Scenario: Check the current principal
+- **WHEN** configuration code calls `ПравоДоступа` with a right and a metadata object and the Session adapter grants the effective right
+- **THEN** the call returns true
+- **AND** `AccessRight` with the corresponding English arguments returns the same value
+
+#### Scenario: Check an explicit role
+- **WHEN** configuration code supplies a role metadata object as the third argument
+- **THEN** the adapter receives that role identity separately from the current principal
+
+#### Scenario: Rights adapter is unavailable
+- **WHEN** configuration code calls `ПравоДоступа` in an ordinary frame without a Session data adapter
+- **THEN** the operation fails explicitly instead of returning true
+
+### Requirement: Current user name
+The ORM component SHALL provide the zero-argument `ИмяПользователя()` / `UserName()` function. It SHALL return the name from the immutable principal snapshot owned by the current Session. It SHALL return an empty string for the platform user with an empty name, and SHALL NOT reread the information-base user table during the Session.
+
+#### Scenario: Named session principal
+- **WHEN** a Session is opened for a selectable principal named `Operator`
+- **THEN** `ИмяПользователя()` and `UserName()` both return `Operator`
+
+#### Scenario: Empty platform user
+- **WHEN** a Session is opened for the platform user with an empty name
+- **THEN** `ИмяПользователя()` returns an empty string of the String type
+
+### Requirement: Mutable map from a fixed map
+The runtime SHALL accept `Новый Соответствие(ФиксированноеСоответствие)` and `New Map(FixedMap)`. The resulting mutable map SHALL contain the source pairs in source order. Replacing or removing a pair in the mutable result SHALL NOT change the fixed source. An explicit `Неопределено`, a mutable map, or another value type SHALL fail instead of constructing an empty map.
+
+#### Scenario: Copy and mutate a fixed map
+- **WHEN** a fixed map contains one pair and code constructs a mutable map from it and replaces that pair
+- **THEN** the mutable map contains the replacement
+- **AND** the fixed source retains its original value
+
+#### Scenario: Reject another source type
+- **WHEN** code passes `Неопределено` or a mutable map to the one-argument constructor
+- **THEN** construction fails explicitly
