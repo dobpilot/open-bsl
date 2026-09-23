@@ -555,3 +555,25 @@ The ORM component SHALL provide `ПолучитьФункциональнуюО�
 #### Scenario: Reject an unsupported adapter
 - **WHEN** configuration code calls the function and the current Session adapter does not implement functional-option evaluation
 - **THEN** the call fails explicitly instead of returning an invented disabled value
+
+### Requirement: A temporary-tables manager is bound to one Session adapter
+The ORM component SHALL provide the zero-argument `МенеджерВременныхТаблиц` / `TempTablesManager` constructor and its zero-argument `Закрыть` / `Close` method. Construction SHALL obtain an opaque manager handle from the current Session `DataAccess`; closing SHALL return that handle to the same adapter. After a successful close, further use SHALL fail explicitly.
+
+#### Scenario: Create and close a manager
+- **WHEN** configuration code constructs a temporary-tables manager and closes it
+- **THEN** the current Session adapter receives one create operation and one close operation for the same opaque handle
+
+#### Scenario: An unsupported adapter fails explicitly
+- **WHEN** configuration code constructs a temporary-tables manager and the current Session adapter does not implement it
+- **THEN** construction fails instead of creating an in-memory substitute
+
+### Requirement: Query execution carries its temporary-tables manager
+`Запрос.МенеджерВременныхТаблиц` / `Query.TempTablesManager` SHALL be a mutable property whose initial value is `Неопределено` / `Undefined`. It SHALL accept an open manager created by the same Session adapter. Query execution SHALL include that manager's opaque handle in `QueryRequest`. A manager from another Session adapter or a closed manager SHALL be rejected explicitly.
+
+#### Scenario: Execute two queries in one temporary-table scope
+- **WHEN** code assigns one manager to two Query objects and executes them
+- **THEN** both immutable requests carry the same adapter-issued handle
+
+#### Scenario: Reject a manager from another Session
+- **WHEN** code assigns a manager created through another Session adapter
+- **THEN** assignment fails before a query reaches either adapter
