@@ -57,7 +57,7 @@
 - [x] 5bc. Measure and add the complete `ДопустимыйЗнак` / `AllowedSign` system enumeration.
 - [x] 5bd. Measure and add the passive `КвалификаторыЧисла` / `NumberQualifiers` value required by UNF startup.
 - [x] 5be. Add the syntax-helper-defined `ХранилищеНастроекДанныхФорм` / `FormDataSettingsStorage` global through the existing Session-bound client-settings adapter.
-- [ ] 5bf. Expose the measured global `СериализаторXDTO` / `XDTOSerializer` through the existing configuration-factory path.
+- [x] 5bf. Expose the measured global `СериализаторXDTO` / `XDTOSerializer` through the existing configuration-factory path.
 - [ ] 5bg. Measure and add the complete `НазначениеТипаXML` / `XMLTypeAssignment` system enumeration.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.

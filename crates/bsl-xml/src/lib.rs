@@ -13,7 +13,8 @@ mod xsd;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, FunctionCode,
-    FunctionDescriptor, FunctionKind, LibraryDescriptor, RtError, RtResult, TypeDescriptor,
+    FunctionDescriptor, FunctionKind, GlobalDescriptor, LibraryDescriptor, RtError, RtResult,
+    TypeDescriptor,
 };
 
 pub use dom::{
@@ -155,6 +156,14 @@ fn call_configuration_factory(
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     configuration_factory()
+}
+
+fn call_configuration_serializer(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let factory = configuration_factory()?;
+    serializer_of_factory(&factory)
 }
 
 fn call_xml_string(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
@@ -344,7 +353,19 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: call_xml_type_of,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(6),
+        names: &["ПолучитьСериализаторXDTO"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: call_configuration_serializer,
+    },
 ];
+
+const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
+    names: &["СериализаторXDTO", "XDTOSerializer"],
+    function: FunctionCode::new(6),
+}];
 
 /// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
 const TYPES: &[&TypeDescriptor] = &[
@@ -450,6 +471,7 @@ pub const fn library() -> LibraryDescriptor {
         .with_functions(FUNCTIONS)
         .with_constructors(CONSTRUCTORS)
         .with_constructor_types(CONSTRUCTOR_TYPES)
+        .with_globals(GLOBALS)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
@@ -471,7 +493,9 @@ mod tests {
             .iter()
             .map(|function| function.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(functions, (1..=5).collect::<Vec<_>>());
+        assert_eq!(functions, (1..=6).collect::<Vec<_>>());
+        assert_eq!(library().globals()[0].names, GLOBALS[0].names);
+        assert_eq!(library().globals()[0].function, FunctionCode::new(6));
     }
 
     #[test]
