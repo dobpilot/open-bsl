@@ -3763,6 +3763,7 @@ fn collection_kind(name: &str) -> Option<MetadataKind> {
             MetadataKind::DocumentJournal,
         ),
         ("Отчеты", "Reports", MetadataKind::Report),
+        ("Обработки", "DataProcessors", MetadataKind::DataProcessor),
         (
             "РегистрыСведений",
             "InformationRegisters",
@@ -3845,6 +3846,10 @@ fn document_journals(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> 
 
 fn reports(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     managers(ctx, MetadataKind::Report)
+}
+
+fn data_processors(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::DataProcessor)
 }
 
 fn information_registers(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -4385,6 +4390,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: reports,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(31),
+        names: &["ПолучитьОбработкиORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: data_processors,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
@@ -4407,6 +4419,10 @@ const GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {
         names: &["Отчеты", "Reports"],
         function: FunctionCode::new(30),
+    },
+    GlobalDescriptor {
+        names: &["Обработки", "DataProcessors"],
+        function: FunctionCode::new(31),
     },
     GlobalDescriptor {
         names: &["РегистрыСведений", "InformationRegisters"],
