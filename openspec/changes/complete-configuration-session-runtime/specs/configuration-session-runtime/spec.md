@@ -835,3 +835,10 @@ The database configuration loader SHALL classify platform Sequence descriptors a
 #### Scenario: Resolve an acquired sequence
 - **WHEN** the acquired configuration contains a Sequence descriptor
 - **THEN** both manager-root language names and both metadata-root language names resolve that descriptor case-insensitively
+
+### Requirement: Allowed-sign values match the platform enumeration
+The base runtime SHALL expose the complete `ДопустимыйЗнак` / `AllowedSign` system enumeration with `Любой` / `Any` and `Неотрицательный` / `Nonnegative`. Each member SHALL have the presentation measured on platform 8.3.27 and both language names SHALL identify the same value.
+
+#### Scenario: Read every allowed-sign member
+- **WHEN** configuration code reads either member through its Russian or English name
+- **THEN** it receives the same typed enumeration value and measured presentation
