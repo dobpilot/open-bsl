@@ -108,6 +108,25 @@ pub enum EnumValue {
     DocumentWriteModePosting,
     DocumentWriteModeUndoPosting,
 
+    // --- ТипПлатформы ------------------------------------------------
+    PlatformTypeAndroidArm,
+    PlatformTypeAndroidArm64,
+    PlatformTypeAndroidX86,
+    PlatformTypeAndroidX86_64,
+    PlatformTypeIosArm,
+    PlatformTypeIosArm64,
+    PlatformTypeLinuxArm64,
+    PlatformTypeLinuxE2k,
+    PlatformTypeLinuxX86,
+    PlatformTypeLinuxX86_64,
+    PlatformTypeMacOsX86,
+    PlatformTypeMacOsX86_64,
+    PlatformTypeWindowsX86,
+    PlatformTypeWindowsX86_64,
+    PlatformTypeWinRtArm,
+    PlatformTypeWinRtX86,
+    PlatformTypeWinRtX86_64,
+
     // --- ВидСравненияКомпоновкиДанных ---------------------------------
     DataCompositionComparisonBeginsWith,
     DataCompositionComparisonContains,
@@ -560,6 +579,8 @@ pub enum EnumKind {
     DocumentPostingMode,
     /// Режим записи документа.
     DocumentWriteMode,
+    /// Тип операционной системы и архитектуры платформы.
+    PlatformType,
     /// Операция сравнения в настройках системы компоновки данных.
     DataCompositionComparisonType,
     /// Относительный период либо произвольная стандартная дата начала.
@@ -741,6 +762,7 @@ impl EnumKind {
             }
             EnumKind::DocumentPostingMode => ("РежимПроведенияДокумента", "DocumentPostingMode"),
             EnumKind::DocumentWriteMode => ("РежимЗаписиДокумента", "DocumentWriteMode"),
+            EnumKind::PlatformType => ("ТипПлатформы", "PlatformType"),
             EnumKind::DataCompositionComparisonType => (
                 "ВидСравненияКомпоновкиДанных",
                 "DataCompositionComparisonType",
@@ -846,6 +868,7 @@ impl EnumKind {
             EnumKind::PredefinedDataUpdate => "PredefinedDataUpdate",
             EnumKind::DocumentPostingMode => "DocumentPostingMode",
             EnumKind::DocumentWriteMode => "DocumentWriteMode",
+            EnumKind::PlatformType => "PlatformType",
             EnumKind::DataCompositionComparisonType => "DataCompositionComparisonType",
             EnumKind::StandardBeginningDateVariant => "StandardBeginningDateVariant",
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
@@ -1334,6 +1357,127 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "ОтменаПроведения",
         "UndoPosting",
         "Cancel posting",
+    ),
+    // Полный состав и представления измерены на платформе 8.3.27.2074
+    // пробой `measure-platform-type.bsl`.
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeAndroidArm,
+        "Android_ARM",
+        "Android_ARM",
+        "Android ARM",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeAndroidArm64,
+        "Android_ARM_64",
+        "Android_ARM_64",
+        "Android ARM_64",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeAndroidX86,
+        "Android_x86",
+        "Android_x86",
+        "Android x86",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeAndroidX86_64,
+        "Android_x86_64",
+        "Android_x86_64",
+        "Android x86_64",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeIosArm,
+        "iOS_ARM",
+        "iOS_ARM",
+        "iOS ARM",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeIosArm64,
+        "iOS_ARM_64",
+        "iOS_ARM_64",
+        "iOS ARM_64",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeLinuxArm64,
+        "Linux_ARM64",
+        "Linux_ARM64",
+        "Linux ARM64",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeLinuxE2k,
+        "Linux_E2K",
+        "Linux_E2K",
+        "Linux E2K",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeLinuxX86,
+        "Linux_x86",
+        "Linux_x86",
+        "Linux x86",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeLinuxX86_64,
+        "Linux_x86_64",
+        "Linux_x86_64",
+        "Linux x86-64",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeMacOsX86,
+        "MacOS_x86",
+        "MacOS_x86",
+        "MacOS x86",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeMacOsX86_64,
+        "MacOS_x86_64",
+        "MacOS_x86_64",
+        "MacOS x86-64",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeWindowsX86,
+        "Windows_x86",
+        "Windows_x86",
+        "Windows x86",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeWindowsX86_64,
+        "Windows_x86_64",
+        "Windows_x86_64",
+        "Windows x86-64",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeWinRtArm,
+        "WinRT_ARM",
+        "WinRT_ARM",
+        "WinRT ARM",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeWinRtX86,
+        "WinRT_x86",
+        "WinRT_x86",
+        "WinRT x86",
+    ),
+    (
+        EnumKind::PlatformType,
+        EnumValue::PlatformTypeWinRtX86_64,
+        "WinRT_x86_64",
+        "WinRT_x86_64",
+        "WinRT x86_64",
     ),
     // Состав, оба написания и представления измерены на платформе 8.3.27.2074
     // пробой `measure-data-composition-comparison-type.bsl`.
@@ -3481,6 +3625,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("DocumentPostingMode", EnumKind::DocumentPostingMode),
     ("РежимЗаписиДокумента", EnumKind::DocumentWriteMode),
     ("DocumentWriteMode", EnumKind::DocumentWriteMode),
+    ("ТипПлатформы", EnumKind::PlatformType),
+    ("PlatformType", EnumKind::PlatformType),
     (
         "ВидСравненияКомпоновкиДанных",
         EnumKind::DataCompositionComparisonType,
