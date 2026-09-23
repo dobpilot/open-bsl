@@ -37,6 +37,7 @@
 - [x] 5ai. Add the reached `МенеджерВременныхТаблиц` / `TempTablesManager`, Query property, and opaque `DataAccess` lifecycle.
 - [x] 5aj. Measure and add the reached `КвалификаторыСтроки` / `StringQualifiers` value and its closed allowed-length enumeration in the base runtime.
 - [x] 5ak. Measure and accept the reached three-argument `ОписаниеТипов` / `TypeDescription` form with string qualifiers.
+- [ ] 5al. Measure and add the reached `XMLТипЗнч` / `XMLTypeOf` mapping and immutable `ТипДанныхXML` / `XMLDataType` value in `bsl-xml`.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.

@@ -611,3 +611,18 @@ The base runtime SHALL accept the direct two-through-five-argument `Описан
 #### Scenario: Accept a supported qualifier across optional positions
 - **WHEN** configuration code supplies a date qualifier in the nominal String-qualifier position
 - **THEN** construction succeeds, as on platform 8.3.27
+
+### Requirement: XML type lookup reuses the XML component mapping
+The XML component SHALL provide `XMLТипЗнч` / `XMLTypeOf` with exactly one argument and the two-string `ТипДанныхXML` / `XMLDataType` constructor. A mapped primitive value SHALL return an immutable XML-data-type value containing the measured local name and namespace. Equal name and namespace pairs SHALL compare equal. A value without a measured mapping SHALL return `Неопределено` / `Undefined`. The mapping SHALL be shared with the XML/XDTO primitive mapping rather than maintained as a second table.
+
+#### Scenario: Resolve primitive XML Schema types
+- **WHEN** configuration code asks for the XML type of a String, Number, Boolean, or Date
+- **THEN** it receives `string`, `decimal`, `boolean`, or `dateTime` in the XML Schema namespace
+
+#### Scenario: Return Undefined for an unmapped value
+- **WHEN** configuration code asks for the XML type of Undefined or an unsupported object
+- **THEN** the function returns Undefined
+
+#### Scenario: Construct and compare an XML data type
+- **WHEN** configuration code constructs two XMLDataType values with equal names and namespaces
+- **THEN** their read-only properties match the supplied strings and the values compare equal
