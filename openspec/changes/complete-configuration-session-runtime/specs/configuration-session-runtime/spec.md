@@ -772,3 +772,18 @@ The ORM component SHALL expose `Документы` / `Documents` as a library g
 #### Scenario: Read document metadata
 - **WHEN** configuration code reads the same document through `Метаданные.Документы` or `Metadata.Documents`
 - **THEN** it receives the matching immutable metadata descriptor
+
+### Requirement: Acquired document journals use the existing manager path
+The ORM component SHALL expose `ЖурналыДокументов` / `DocumentJournals` as a library global backed by acquired `MetadataKind::DocumentJournal` descriptors. A folded property name matching a DocumentJournal SHALL return its existing manager value and SHALL dispatch through the same platform-first, exported-manager-module-second path as other configuration managers. `Метаданные.ЖурналыДокументов` / `Metadata.DocumentJournals` SHALL expose the same acquired descriptors through the existing metadata-collection behavior. Unknown names and members SHALL fail explicitly. This projection SHALL NOT imply journal selection, filtering, or form behavior.
+
+#### Scenario: Resolve a document-journal manager
+- **WHEN** configuration code reads an acquired document journal through either manager-root language name
+- **THEN** it receives the manager linked to that DocumentJournal descriptor
+
+#### Scenario: Call an exported document-journal manager method
+- **WHEN** configuration code calls an exported method not owned by the platform surface
+- **THEN** the existing manager-module instance handles the call with its manager as `ЭтотОбъект`
+
+#### Scenario: Read document-journal metadata
+- **WHEN** configuration code reads the same document journal through `Метаданные.ЖурналыДокументов` or `Metadata.DocumentJournals`
+- **THEN** it receives the matching immutable metadata descriptor
