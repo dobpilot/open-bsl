@@ -581,3 +581,22 @@ The ORM component SHALL provide the zero-argument `МенеджерВремен�
 #### Scenario: Reject a manager from another Session
 - **WHEN** code assigns a manager created through another Session adapter
 - **THEN** assignment fails before a query reaches either adapter
+
+### Requirement: Configuration code can construct string qualifiers
+The base runtime SHALL provide `КвалификаторыСтроки` / `StringQualifiers` with zero through two arguments. The value SHALL expose its measured numeric length and closed `ДопустимаяДлина` / `AllowedLength` member through read-only properties. Omitting arguments SHALL produce the measured zero length and variable-length member. The allowed-length enumeration SHALL contain the complete platform member set measured for this value.
+
+#### Scenario: Construct default string qualifiers
+- **WHEN** configuration code constructs string qualifiers without arguments
+- **THEN** the value reports zero length and the variable-length member
+
+#### Scenario: Construct fixed string qualifiers
+- **WHEN** configuration code supplies a positive length and the fixed-length member
+- **THEN** both read-only properties report those supplied values
+
+#### Scenario: Normalize the measured numeric lengths
+- **WHEN** configuration code supplies `-1` or `1.5` as the length
+- **THEN** the value reports `0` or `1`, respectively
+
+#### Scenario: Reject property mutation
+- **WHEN** configuration code attempts to replace either qualifier property
+- **THEN** the write fails explicitly
