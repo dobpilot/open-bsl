@@ -23,6 +23,49 @@ struct QueryAccessStub {
     calls: RefCell<Vec<QueryCall>>,
 }
 
+#[derive(Debug, Default)]
+struct FindByRefAccessStub {
+    calls: RefCell<Vec<FindByRefCall>>,
+}
+
+type FindByRefCall = (usize, bool, bool, bool, String);
+
+impl DataAccess for FindByRefAccessStub {
+    fn constant_value(
+        &self,
+        _: &MetadataObject,
+        _: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Err(RtError::DynamicError("константы не поддерживаются".into()))
+    }
+
+    fn find_by_ref(
+        &self,
+        request: &FindByRefRequest,
+        principal: &Principal,
+        _: &mut CallContext<'_>,
+    ) -> RtResult<QueryResultData> {
+        self.calls.borrow_mut().push((
+            request.references().collection_len()?,
+            request.search_area().is_some(),
+            request.include_objects().is_some(),
+            request.exclude_objects().is_some(),
+            principal.id().into(),
+        ));
+        QueryResultData::new(
+            vec![
+                "Ref".into(),
+                "Data".into(),
+                "Metadata".into(),
+                "DataSeparation".into(),
+            ],
+            Vec::new(),
+        )
+        .map_err(|error| RtError::DynamicError(error.to_string()))
+    }
+}
+
 type QueryCall = (String, Vec<(String, Value)>);
 
 impl DataAccess for QueryAccessStub {
@@ -1427,6 +1470,43 @@ fn current_language_uses_the_principal_then_the_configuration_fallback() {
         .host_data(Rc::new(SessionData::new(catalog, invalid)))
         .build();
     assert!(invalid_state.exec("Возврат ТекущийЯзык();").is_err());
+}
+
+#[test]
+fn find_by_ref_delegates_arrays_and_materializes_the_result_table() {
+    let engine = engine();
+    let access = Rc::new(FindByRefAccessStub::default());
+    let mut session_state = state_with_data_access(&engine, Some(access.clone()));
+    assert_eq!(
+        session_state
+            .exec(
+                r#"
+                Ссылки = Новый Массив;
+                Ссылки.Добавить(1);
+                Область = Новый Массив;
+                Результат = FindByRef(Ссылки, Область, , Новый Массив);
+                Возврат Результат.Количество() + Результат.Колонки.Количество();
+                "#,
+            )
+            .unwrap(),
+        Value::number_from_i64(4)
+    );
+    assert_eq!(
+        access.calls.borrow().as_slice(),
+        &[(1, true, false, true, "user".into())]
+    );
+
+    let mut unsupported = state(&engine);
+    assert!(
+        unsupported
+            .exec("Возврат НайтиПоСсылкам(Новый Массив);")
+            .is_err()
+    );
+    assert!(
+        session_state
+            .exec("Возврат НайтиПоСсылкам(Неопределено);")
+            .is_err()
+    );
 }
 
 #[test]

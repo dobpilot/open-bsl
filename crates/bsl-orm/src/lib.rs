@@ -897,6 +897,41 @@ pub struct QueryRequest {
     temp_tables_manager: Option<TempTablesManagerHandle>,
 }
 
+/// Запрос поиска ссылок в данных текущего сеанса.
+#[derive(Debug, Clone)]
+pub struct FindByRefRequest {
+    references: Value,
+    search_area: Option<Value>,
+    include_objects: Option<Value>,
+    exclude_objects: Option<Value>,
+}
+
+impl FindByRefRequest {
+    /// Возвращает массив искомых ссылок.
+    #[must_use]
+    pub const fn references(&self) -> &Value {
+        &self.references
+    }
+
+    /// Возвращает явно заданную область поиска.
+    #[must_use]
+    pub const fn search_area(&self) -> Option<&Value> {
+        self.search_area.as_ref()
+    }
+
+    /// Возвращает явно включённые объекты метаданных.
+    #[must_use]
+    pub const fn include_objects(&self) -> Option<&Value> {
+        self.include_objects.as_ref()
+    }
+
+    /// Возвращает явно исключённые объекты метаданных.
+    #[must_use]
+    pub const fn exclude_objects(&self) -> Option<&Value> {
+        self.exclude_objects.as_ref()
+    }
+}
+
 /// Непрозрачный идентификатор менеджера временных таблиц у адаптера данных.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TempTablesManagerHandle(u64);
@@ -1166,6 +1201,23 @@ pub trait DataAccess {
     ) -> RtResult<QueryResultData> {
         Err(RtError::DynamicError(
             "выполнение запросов не поддерживается адаптером данных".into(),
+        ))
+    }
+
+    /// Ищет ссылки в доступных текущему пользователю данных.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку источника данных, прав, разделения данных или
+    /// неподдерживаемой операции.
+    fn find_by_ref(
+        &self,
+        _request: &FindByRefRequest,
+        _principal: &Principal,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<QueryResultData> {
+        Err(RtError::DynamicError(
+            "поиск по ссылкам не поддерживается адаптером данных".into(),
         ))
     }
 
@@ -3315,19 +3367,58 @@ fn query_result_unload(
     _: &mut CallContext<'_>,
 ) -> RtResult<Value> {
     require_default_traversal(arguments, "РезультатЗапроса.Выгрузить")?;
-    let result = query_result(receiver)?;
+    query_result_data_to_table(&query_result(receiver)?.data)
+}
+
+fn query_result_data_to_table(result: &QueryResultData) -> RtResult<Value> {
     let table = Value::new_table();
     let columns = table.get_field_by_name("Колонки")?;
-    for name in result.data.columns.iter() {
+    for name in result.columns.iter() {
         columns.table_add_column(&Value::Str(name.as_ref().into()), &Value::Undefined)?;
     }
-    for values in result.data.rows.iter() {
+    for values in result.rows.iter() {
         let row = table.table_add_row()?;
-        for (name, value) in result.data.columns.iter().zip(values.iter()) {
+        for (name, value) in result.columns.iter().zip(values.iter()) {
             row.set_field_by_name(name, value.clone())?;
         }
     }
     Ok(table)
+}
+
+fn optional_array(value: &Value, operation: &'static str) -> RtResult<Option<Value>> {
+    match value {
+        Value::Undefined => Ok(None),
+        Value::Object(object) if matches!(&**object, BslObject::Array(_)) => {
+            Ok(Some(value.clone()))
+        }
+        _ => Err(RtError::TypeError {
+            expected: "Массив или Неопределено",
+            op: operation,
+        }),
+    }
+}
+
+fn find_by_ref(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let [references, search_area, include_objects, exclude_objects] = arguments else {
+        return Err(RtError::InvalidBytecode(
+            "НайтиПоСсылкам получила неверное число аргументов",
+        ));
+    };
+    if !matches!(references, Value::Object(object) if matches!(&**object, BslObject::Array(_))) {
+        return Err(RtError::TypeError {
+            expected: "Массив",
+            op: "НайтиПоСсылкам",
+        });
+    }
+    let request = FindByRefRequest {
+        references: references.clone(),
+        search_area: optional_array(search_area, "НайтиПоСсылкам")?,
+        include_objects: optional_array(include_objects, "НайтиПоСсылкам")?,
+        exclude_objects: optional_array(exclude_objects, "НайтиПоСсылкам")?,
+    };
+    let (principal, data_access) = current_data_access(context)?;
+    let result = data_access.find_by_ref(&request, &principal, context)?;
+    query_result_data_to_table(&result)
 }
 
 fn query_selection(receiver: &dyn ObjectProtocol) -> RtResult<&QuerySelectionValue> {
@@ -4246,6 +4337,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
         call: current_language,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(27),
+        names: &["НайтиПоСсылкам", "FindByRef"],
+        arity: Arity::range(1, 4),
+        kind: FunctionKind::Function,
+        call: find_by_ref,
     },
 ];
 
