@@ -1,0 +1,6 @@
+file.begin	session-time-zone-1
+TIME.SESSION.VALUE	Europe/Moscow
+TIME.SESSION.ENGLISH	Europe/Moscow
+TIME.SESSION.TYPE	String
+TIME.SESSION.SAME	Yes
+file.end	session-time-zone-1
