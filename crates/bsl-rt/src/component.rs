@@ -1639,6 +1639,13 @@ fn construct_string_qualifiers(
     crate::type_description::construct_string_qualifiers(arguments)
 }
 
+fn construct_number_qualifiers(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    crate::type_description::construct_number_qualifiers(arguments)
+}
+
 fn construct_qualified_type_description(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
@@ -1753,6 +1760,12 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::range(0, 2),
         call: construct_string_qualifiers,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(16),
+        names: &["КвалификаторыЧисла", "NumberQualifiers"],
+        arity: Arity::range(0, 3),
+        call: construct_number_qualifiers,
+    },
 ];
 
 const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
@@ -1798,6 +1811,10 @@ const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
         ConstructorCode::new(15),
         &crate::type_description::STRING_QUALIFIERS_TYPE,
     ),
+    (
+        ConstructorCode::new(16),
+        &crate::type_description::NUMBER_QUALIFIERS_TYPE,
+    ),
 ];
 
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
@@ -1818,6 +1835,7 @@ const CORE_TYPES: &[&crate::TypeDescriptor] = &[
     &crate::value_table_indexes::VALUE_TABLE_INDEX_TYPE,
     &crate::type_description::DATE_QUALIFIERS_TYPE,
     &crate::type_description::STRING_QUALIFIERS_TYPE,
+    &crate::type_description::NUMBER_QUALIFIERS_TYPE,
     &crate::data_composition::DATA_COMPOSITION_FIELD_TYPE,
     &crate::data_composition::STANDARD_BEGINNING_DATE_TYPE,
 ];

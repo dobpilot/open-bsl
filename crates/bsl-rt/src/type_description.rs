@@ -20,6 +20,13 @@ pub(crate) static STRING_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["StringQualifiers"],
 };
 
+pub(crate) static NUMBER_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КвалификаторыЧисла",
+    type_display: "Number qualifiers",
+    type_names: &["NumberQualifiers"],
+};
+
 #[derive(Debug)]
 pub(crate) struct DateQualifiersObject {
     fractions: EnumValue,
@@ -35,6 +42,33 @@ impl ObjectProtocol for DateQualifiersObject {
 struct StringQualifiersObject {
     length: BslNumber,
     allowed_length: EnumValue,
+}
+
+#[derive(Debug)]
+struct NumberQualifiersObject {
+    digits: BslNumber,
+    fraction_digits: BslNumber,
+    allowed_sign: EnumValue,
+}
+
+impl ObjectProtocol for NumberQualifiersObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &NUMBER_QUALIFIERS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        NUMBER_QUALIFIERS_PROPERTIES
+    }
+
+    fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        crate::get_property_from_table(
+            NUMBER_QUALIFIERS_PROPERTIES,
+            "КвалификаторыЧисла",
+            self,
+            name,
+            context,
+        )
+    }
 }
 
 impl ObjectProtocol for StringQualifiersObject {
@@ -86,9 +120,98 @@ static STRING_QUALIFIERS_PROPERTIES: &[PropertyDescriptor] = &[
     },
 ];
 
-pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] =
-    &[ObjectMembersDescriptor::new(&STRING_QUALIFIERS_TYPE)
-        .with_properties(STRING_QUALIFIERS_PROPERTIES)];
+fn get_number_digits(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let qualifiers = receiver_of::<NumberQualifiersObject>(receiver, "Разрядность")?;
+    Ok(BslValue::Number(qualifiers.digits.clone()))
+}
+
+fn get_number_fraction_digits(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let qualifiers = receiver_of::<NumberQualifiersObject>(receiver, "РазрядностьДробнойЧасти")?;
+    Ok(BslValue::Number(qualifiers.fraction_digits.clone()))
+}
+
+fn get_number_allowed_sign(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let qualifiers = receiver_of::<NumberQualifiersObject>(receiver, "ДопустимыйЗнак")?;
+    Ok(BslValue::Enum(qualifiers.allowed_sign))
+}
+
+static NUMBER_QUALIFIERS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Разрядность", "Digits"],
+        get: get_number_digits,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["РазрядностьДробнойЧасти", "FractionDigits"],
+        get: get_number_fraction_digits,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ДопустимыйЗнак", "AllowedSign"],
+        get: get_number_allowed_sign,
+        set: None,
+    },
+];
+
+pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] = &[
+    ObjectMembersDescriptor::new(&STRING_QUALIFIERS_TYPE)
+        .with_properties(STRING_QUALIFIERS_PROPERTIES),
+    ObjectMembersDescriptor::new(&NUMBER_QUALIFIERS_TYPE)
+        .with_properties(NUMBER_QUALIFIERS_PROPERTIES),
+];
+
+fn normalized_count(value: Option<&BslValue>) -> RtResult<BslNumber> {
+    match value {
+        None => Ok(BslNumber::from_i64(0)),
+        Some(BslValue::Number(number)) => {
+            let truncated = number.trunc_to_scale(0);
+            let zero = BslNumber::from_i64(0);
+            Ok(if truncated.cmp(&zero).is_lt() {
+                zero
+            } else {
+                truncated
+            })
+        }
+        Some(_) => Err(RtError::TypeError {
+            expected: "Число",
+            op: "Новый КвалификаторыЧисла",
+        }),
+    }
+}
+
+pub(crate) fn construct_number_qualifiers(arguments: &[BslValue]) -> RtResult<BslValue> {
+    let digits = normalized_count(arguments.first())?;
+    let fraction_digits = normalized_count(arguments.get(1))?;
+    let fraction_digits = if fraction_digits.cmp(&digits).is_gt() {
+        digits.clone()
+    } else {
+        fraction_digits
+    };
+    let allowed_sign = match arguments.get(2) {
+        None => EnumValue::AllowedSignAny,
+        Some(BslValue::Enum(value)) if value.kind() == EnumKind::AllowedSign => *value,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "ДопустимыйЗнак",
+                op: "Новый КвалификаторыЧисла",
+            });
+        }
+    };
+    Ok(BslValue::new_object(NumberQualifiersObject {
+        digits,
+        fraction_digits,
+        allowed_sign,
+    }))
+}
 
 pub(crate) fn construct_string_qualifiers(arguments: &[BslValue]) -> RtResult<BslValue> {
     let length = match arguments.first() {

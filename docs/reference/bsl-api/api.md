@@ -193,6 +193,7 @@
 | `ПолеКомпоновкиДанных`, `DataCompositionField` | 1 |
 | `СтандартнаяДатаНачала`, `StandardBeginningDate` | 1 |
 | `КвалификаторыСтроки`, `StringQualifiers` | 0…2 |
+| `КвалификаторыЧисла`, `NumberQualifiers` | 0…3 |
 
 #### Типы объектов
 
@@ -215,6 +216,7 @@
 | `ИндексТаблицыЗначений` | `Value table index` | `ValueTableIndex` |
 | `КвалификаторыДаты` | `Date qualifiers` | `DateQualifiers` |
 | `КвалификаторыСтроки` | `String qualifiers` | `StringQualifiers` |
+| `КвалификаторыЧисла` | `Number qualifiers` | `NumberQualifiers` |
 | `ПолеКомпоновкиДанных` | `Data composition field` | `DataCompositionField` |
 | `СтандартнаяДатаНачала` | `Standard beginning date` | `StandardBeginningDate` |
 
@@ -408,6 +410,14 @@
 |---|---|
 | `Длина`, `Length` | только чтение |
 | `ДопустимаяДлина`, `AllowedLength` | только чтение |
+
+##### `КвалификаторыЧисла`
+
+| Свойство | Доступ |
+|---|---|
+| `Разрядность`, `Digits` | только чтение |
+| `РазрядностьДробнойЧасти`, `FractionDigits` | только чтение |
+| `ДопустимыйЗнак`, `AllowedSign` | только чтение |
 
 ### `bsl-binbuf` 0.2.0
 
