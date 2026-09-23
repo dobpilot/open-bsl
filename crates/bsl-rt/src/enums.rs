@@ -99,6 +99,10 @@ pub enum EnumValue {
     PredefinedDataUpdateAutoUpdate,
     PredefinedDataUpdateDontAutoUpdate,
 
+    // --- РежимПроведенияДокумента ------------------------------------
+    DocumentPostingModeOperational,
+    DocumentPostingModeNonOperational,
+
     // --- ВидСравненияКомпоновкиДанных ---------------------------------
     DataCompositionComparisonBeginsWith,
     DataCompositionComparisonContains,
@@ -547,6 +551,8 @@ pub enum EnumKind {
     DataItemReceive,
     /// Режим обновления предопределённых данных.
     PredefinedDataUpdate,
+    /// Режим проведения документа.
+    DocumentPostingMode,
     /// Операция сравнения в настройках системы компоновки данных.
     DataCompositionComparisonType,
     /// Относительный период либо произвольная стандартная дата начала.
@@ -726,6 +732,7 @@ impl EnumKind {
             EnumKind::PredefinedDataUpdate => {
                 ("ОбновлениеПредопределенныхДанных", "PredefinedDataUpdate")
             }
+            EnumKind::DocumentPostingMode => ("РежимПроведенияДокумента", "DocumentPostingMode"),
             EnumKind::DataCompositionComparisonType => (
                 "ВидСравненияКомпоновкиДанных",
                 "DataCompositionComparisonType",
@@ -829,6 +836,7 @@ impl EnumKind {
             EnumKind::DataItemSend => "DataItemSend",
             EnumKind::DataItemReceive => "DataItemReceive",
             EnumKind::PredefinedDataUpdate => "PredefinedDataUpdate",
+            EnumKind::DocumentPostingMode => "DocumentPostingMode",
             EnumKind::DataCompositionComparisonType => "DataCompositionComparisonType",
             EnumKind::StandardBeginningDateVariant => "StandardBeginningDateVariant",
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
@@ -1282,6 +1290,20 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "НеОбновлятьАвтоматически",
         "DontAutoUpdate",
         "Auto update off",
+    ),
+    (
+        EnumKind::DocumentPostingMode,
+        EnumValue::DocumentPostingModeOperational,
+        "Оперативный",
+        "RealTime",
+        "Real-time",
+    ),
+    (
+        EnumKind::DocumentPostingMode,
+        EnumValue::DocumentPostingModeNonOperational,
+        "Неоперативный",
+        "Regular",
+        "Regular",
     ),
     // Состав, оба написания и представления измерены на платформе 8.3.27.2074
     // пробой `measure-data-composition-comparison-type.bsl`.
@@ -3425,6 +3447,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
         EnumKind::PredefinedDataUpdate,
     ),
     ("PredefinedDataUpdate", EnumKind::PredefinedDataUpdate),
+    ("РежимПроведенияДокумента", EnumKind::DocumentPostingMode),
+    ("DocumentPostingMode", EnumKind::DocumentPostingMode),
     (
         "ВидСравненияКомпоновкиДанных",
         EnumKind::DataCompositionComparisonType,
