@@ -435,6 +435,8 @@ fn catalog() -> Arc<MetadataCatalog> {
             "configuration",
             vec![
                 MetadataObject::new("role-user", "Пользователь", MetadataKind::Role),
+                MetadataObject::new("language-ru", "Русский", MetadataKind::Language),
+                MetadataObject::new("language-en", "English", MetadataKind::Language),
                 MetadataObject::new("role-admin", "Администратор", MetadataKind::Role),
                 MetadataObject::new("enum-statuses", "Статусы", MetadataKind::Enumeration),
                 MetadataObject::new("exchange-plan-main", "Основной", MetadataKind::ExchangePlan),
@@ -468,6 +470,8 @@ fn catalog() -> Arc<MetadataCatalog> {
             CompatibilityMode::Version8_3_24,
             ["role-user".into()],
         )
+        .unwrap()
+        .with_primary_language("language-ru")
         .unwrap()
         .with_enumeration_values(vec![ConfigurationEnumValue::new(
             "enum-statuses",
@@ -1381,6 +1385,48 @@ fn configuration_metadata_exposes_name_version_language_and_main_roles() {
             .unwrap(),
         Value::Boolean(true)
     );
+}
+
+#[test]
+fn current_language_uses_the_principal_then_the_configuration_fallback() {
+    let engine = engine();
+    let catalog = catalog();
+    let mut fallback = engine
+        .state_builder()
+        .host_data(Rc::new(SessionData::new(
+            Arc::clone(&catalog),
+            Principal::new("user", "Тест", Vec::new()),
+        )))
+        .build();
+    assert_eq!(
+        fallback
+            .exec("Возврат ТекущийЯзык() = Метаданные.Языки.Русский И CurrentLanguage().Имя = \"Русский\";")
+            .unwrap(),
+        Value::Boolean(true)
+    );
+
+    let principal =
+        Principal::new("user", "Тест", Vec::new()).with_interface_language_id("language-en");
+    let mut selected = engine
+        .state_builder()
+        .host_data(Rc::new(SessionData::new(Arc::clone(&catalog), principal)))
+        .build();
+    assert_eq!(
+        selected.exec("Возврат Строка(ТекущийЯзык());").unwrap(),
+        Value::Str("English".into())
+    );
+    assert_eq!(
+        fallback.exec("Возврат Строка(CurrentLanguage());").unwrap(),
+        Value::Str("Русский".into())
+    );
+
+    let invalid =
+        Principal::new("user", "Тест", Vec::new()).with_interface_language_id("language-missing");
+    let mut invalid_state = engine
+        .state_builder()
+        .host_data(Rc::new(SessionData::new(catalog, invalid)))
+        .build();
+    assert!(invalid_state.exec("Возврат ТекущийЯзык();").is_err());
 }
 
 #[test]

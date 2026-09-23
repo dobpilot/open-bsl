@@ -29,6 +29,7 @@ const STYLE_ITEM: &str = "58848766-36ea-4076-8800-e91eb49590d7";
 const SCHEDULED_JOB: &str = "11bdaf85-d5ad-4d91-bb24-aa0eee139052";
 const ENUMERATION: &str = "f6a80749-5ad7-400b-8519-39dc5dff2542";
 const COMMON_PICTURE: &str = "7dcd43d9-aca5-4926-b549-1842e6a4e8cf";
+const LANGUAGE: &str = "9cd510ce-abfc-11d4-9434-004095e12fc7";
 
 /// Преобразует записи `v8users` в кандидатов для выбора пользователя сеанса.
 ///
@@ -201,6 +202,11 @@ fn load_catalog_base(
             .ok_or_else(|| malformed(&root_resource, "нет режима совместимости"))?,
     )
     .ok_or_else(|| malformed(&root_resource, "неизвестен режим совместимости"))?;
+    let primary_language = properties
+        .get(10)
+        .and_then(first_guid)
+        .filter(|id| !id.bytes().all(|byte| byte == b'0' || byte == b'-'))
+        .map(str::to_ascii_lowercase);
     MetadataCatalog::new(identity, objects)
         .and_then(|catalog| {
             catalog.with_configuration(
@@ -210,6 +216,10 @@ fn load_catalog_base(
                 compatibility_mode,
                 main_roles,
             )
+        })
+        .and_then(|catalog| match primary_language {
+            Some(primary_language) => catalog.with_primary_language(primary_language),
+            None => Ok(catalog),
         })
         .and_then(|catalog| {
             ConfigurationExtensionsSnapshot::new(Vec::new(), Vec::new(), Vec::new(), Vec::new())
@@ -504,6 +514,7 @@ fn configuration_name(properties: &[Value]) -> Option<&str> {
 
 fn metadata_kind(class: &str) -> Option<MetadataKind> {
     match class.to_ascii_lowercase().as_str() {
+        LANGUAGE => Some(MetadataKind::Language),
         ENUMERATION => Some(MetadataKind::Enumeration),
         COMMON_PICTURE => Some(MetadataKind::CommonPicture),
         "cf4abea6-37b2-11d4-940f-008048da11f9" => Some(MetadataKind::Catalog),

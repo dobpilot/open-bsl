@@ -405,6 +405,8 @@ impl ConfigurationExtensionsSnapshot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MetadataKind {
+    /// Язык конфигурации.
+    Language,
     /// Перечисление конфигурации.
     Enumeration,
     /// Общая картинка.
@@ -585,6 +587,7 @@ struct ConfigurationDescription {
     script_variant: ScriptVariant,
     compatibility_mode: CompatibilityMode,
     main_role_ids: Arc<[Arc<str>]>,
+    primary_language_id: Option<Arc<str>>,
 }
 
 impl MetadataCatalog {
@@ -724,8 +727,38 @@ impl MetadataCatalog {
             script_variant,
             compatibility_mode,
             main_role_ids: roles.into(),
+            primary_language_id: None,
         });
         Ok(self)
+    }
+
+    /// Связывает свойства конфигурации с её основным языком.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, если идентификатор отсутствует в каталоге или
+    /// обозначает объект другого вида.
+    pub fn with_primary_language(mut self, id: impl Into<String>) -> Result<Self, CatalogError> {
+        let id = id.into();
+        let language_id = Arc::clone(
+            &self
+                .object_by_id(&id)
+                .filter(|object| object.kind == MetadataKind::Language)
+                .ok_or_else(|| CatalogError::UnknownPrimaryLanguage(id.clone()))?
+                .id,
+        );
+        let description = self
+            .configuration
+            .as_mut()
+            .ok_or(CatalogError::UnknownPrimaryLanguage(id))?;
+        description.primary_language_id = Some(language_id);
+        Ok(self)
+    }
+
+    /// Возвращает идентификатор основного языка конфигурации.
+    #[must_use]
+    pub fn primary_language_id(&self) -> Option<&str> {
+        self.configuration.as_ref()?.primary_language_id.as_deref()
     }
 
     /// Добавляет полный снимок расширений конфигурации текущего сеанса.
@@ -796,6 +829,7 @@ pub struct Principal {
     id: Arc<str>,
     name: Arc<str>,
     role_ids: Arc<[Arc<str>]>,
+    interface_language_id: Option<Arc<str>>,
 }
 
 impl Principal {
@@ -814,7 +848,15 @@ impl Principal {
                 .map(Arc::<str>::from)
                 .collect::<Vec<_>>()
                 .into(),
+            interface_language_id: None,
         }
+    }
+
+    /// Сохраняет выбранный для пользователя язык интерфейса.
+    #[must_use]
+    pub fn with_interface_language_id(mut self, id: impl Into<String>) -> Self {
+        self.interface_language_id = Some(Arc::from(id.into()));
+        self
     }
 
     #[must_use]
@@ -832,6 +874,12 @@ impl Principal {
     /// Перечисляет идентификаторы назначенных ролей.
     pub fn role_ids(&self) -> impl Iterator<Item = &str> {
         self.role_ids.iter().map(AsRef::as_ref)
+    }
+
+    /// Возвращает идентификатор выбранного языка интерфейса.
+    #[must_use]
+    pub fn interface_language_id(&self) -> Option<&str> {
+        self.interface_language_id.as_deref()
     }
 
     fn has_role(&self, id: &str) -> bool {
@@ -1497,6 +1545,8 @@ pub enum CatalogError {
     UnknownMainRole(String),
     /// Основная роль повторяется.
     DuplicateMainRole(String),
+    /// Основной язык отсутствует или ссылается не на язык.
+    UnknownPrimaryLanguage(String),
     /// Имя расширения пусто.
     EmptyExtensionName,
     /// Идентификатор расширения повторяется.
@@ -1557,6 +1607,12 @@ impl fmt::Display for CatalogError {
             }
             Self::DuplicateMainRole(role) => {
                 write!(formatter, "основная роль `{role}` повторяется")
+            }
+            Self::UnknownPrimaryLanguage(language) => {
+                write!(
+                    formatter,
+                    "основной язык `{language}` отсутствует в метаданных"
+                )
             }
             Self::EmptyExtensionName => formatter.write_str("имя расширения пусто"),
             Self::DuplicateExtensionIdentity => {
@@ -1966,6 +2022,16 @@ impl ObjectProtocol for MetadataValue {
             .iter()
             .position(|object| object.id == self.object_id)?;
         Some((Arc::as_ptr(&self.catalog) as usize, index))
+    }
+
+    fn display(&self) -> String {
+        self.catalog
+            .object_by_id(&self.object_id)
+            .filter(|object| object.kind == MetadataKind::Language)
+            .map_or_else(
+                || METADATA_VALUE_TYPE.name.into(),
+                |object| object.name().into(),
+            )
     }
 }
 
@@ -3617,6 +3683,7 @@ fn collection_kind(name: &str) -> Option<MetadataKind> {
             MetadataKind::FunctionalOption,
         ),
         ("ЭлементыСтиля", "StyleItems", MetadataKind::StyleItem),
+        ("Языки", "Languages", MetadataKind::Language),
         ("Роли", "Roles", MetadataKind::Role),
         (
             "ПараметрыСеанса",
@@ -3736,6 +3803,23 @@ fn current_user_name(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> 
 
 fn user_name(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::Str(session(context)?.principal().name().into()))
+}
+
+fn current_language(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let session = session(context)?;
+    let id = session
+        .principal()
+        .interface_language_id()
+        .or_else(|| session.catalog().primary_language_id())
+        .ok_or_else(|| RtError::DynamicError("текущий язык не предоставлен сеансом".into()))?;
+    let language = session
+        .catalog()
+        .object_by_id(id)
+        .filter(|object| object.kind() == MetadataKind::Language)
+        .ok_or_else(|| {
+            RtError::DynamicError("текущий язык отсутствует в каталоге метаданных".into())
+        })?;
+    Ok(metadata_object_value(session.catalog(), language))
 }
 
 fn predefined_value(context: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
@@ -4155,6 +4239,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
         call: transaction_active,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(26),
+        names: &["ТекущийЯзык", "CurrentLanguage"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: current_language,
     },
 ];
 

@@ -24,6 +24,14 @@ fn common_picture_metadata_class_is_projected() {
     );
 }
 
+#[test]
+fn language_metadata_class_is_projected() {
+    assert_eq!(
+        metadata_kind("9cd510ce-abfc-11d4-9434-004095e12fc7"),
+        Some(bsl_orm::MetadataKind::Language)
+    );
+}
+
 fn resource(name: &str, bytes: &[u8]) -> ConfigResource {
     ConfigResource {
         file_name: name.into(),
