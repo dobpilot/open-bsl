@@ -787,3 +787,18 @@ The ORM component SHALL expose `ЖурналыДокументов` / `DocumentJ
 #### Scenario: Read document-journal metadata
 - **WHEN** configuration code reads the same document journal through `Метаданные.ЖурналыДокументов` or `Metadata.DocumentJournals`
 - **THEN** it receives the matching immutable metadata descriptor
+
+### Requirement: Acquired reports use the existing manager path
+The ORM component SHALL expose `Отчеты` / `Reports` as a library global backed by acquired `MetadataKind::Report` descriptors. A folded property name matching a Report SHALL return its existing manager value and SHALL dispatch through the same platform-first, exported-manager-module-second path as other configuration managers. `Метаданные.Отчеты` / `Metadata.Reports` SHALL expose the same acquired descriptors through the existing metadata-collection behavior. Unknown names and members SHALL fail explicitly. This projection SHALL NOT imply report-form opening or data-composition execution.
+
+#### Scenario: Resolve a report manager
+- **WHEN** configuration code reads an acquired report through either manager-root language name
+- **THEN** it receives the manager linked to that Report descriptor
+
+#### Scenario: Call an exported report-manager method
+- **WHEN** configuration code calls an exported method not owned by the platform surface
+- **THEN** the existing manager-module instance handles the call with its manager as `ЭтотОбъект`
+
+#### Scenario: Read report metadata
+- **WHEN** configuration code reads the same report through `Метаданные.Отчеты` or `Metadata.Reports`
+- **THEN** it receives the matching immutable metadata descriptor
