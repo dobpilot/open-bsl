@@ -503,6 +503,8 @@ fn catalog() -> Arc<MetadataCatalog> {
                     MetadataKind::DocumentJournal,
                 )
                 .with_manager_module("ЗаказыЖурналМенеджер"),
+                MetadataObject::new("report-sales", "Продажи", MetadataKind::Report)
+                    .with_manager_module("ПродажиОтчетМенеджер"),
                 MetadataObject::new("constant-answer", "Ответ", MetadataKind::Constant)
                     .with_manager_module("ОтветМенеджер"),
                 MetadataObject::new(
@@ -609,6 +611,20 @@ fn engine() -> open_bsl::Engine {
             Функция Проверить(Добавка) Экспорт
                 Если ЭтотОбъект.Имя <> "Заказы" Тогда
                     ВызватьИсключение "неверный менеджер журнала документов";
+                КонецЕсли;
+                Вызовов = Вызовов + 1;
+                Возврат Добавка + Вызовов;
+            КонецФункции
+            "#,
+        )
+        .common_module(
+            "ПродажиОтчетМенеджер",
+            r#"
+            Перем Вызовов;
+            Вызовов = 0;
+            Функция Проверить(Добавка) Экспорт
+                Если ЭтотОбъект.Имя <> "Продажи" Тогда
+                    ВызватьИсключение "неверный менеджер отчета";
                 КонецЕсли;
                 Вызовов = Вызовов + 1;
                 Возврат Добавка + Вызовов;
@@ -1701,6 +1717,28 @@ fn document_journal_root_and_metadata_use_the_existing_manager_path() {
             )
             .unwrap(),
         Value::number_from_i64(63)
+    );
+}
+
+#[test]
+fn report_root_and_metadata_use_the_existing_manager_path() {
+    let engine = engine();
+    let mut state = state(&engine);
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Первый = Отчеты.Продажи.Проверить(40);
+                Второй = Reports.пРоДаЖи.Проверить(40);
+                Если Метаданные.Отчеты.Продажи.Имя <> "Продажи"
+                    Или Metadata.Reports.пРоДаЖи.Name <> "Продажи" Тогда
+                    ВызватьИсключение "metadata";
+                КонецЕсли;
+                Возврат Первый + Второй;
+                "#,
+            )
+            .unwrap(),
+        Value::number_from_i64(83)
     );
 }
 
