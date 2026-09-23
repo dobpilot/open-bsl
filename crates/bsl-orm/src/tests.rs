@@ -495,6 +495,8 @@ fn catalog() -> Arc<MetadataCatalog> {
                 ),
                 MetadataObject::new("catalog-versions", "Версии", MetadataKind::Catalog)
                     .with_manager_module("ВерсииМенеджер"),
+                MetadataObject::new("document-order", "Заказ", MetadataKind::Document)
+                    .with_manager_module("ЗаказМенеджер"),
                 MetadataObject::new("constant-answer", "Ответ", MetadataKind::Constant)
                     .with_manager_module("ОтветМенеджер"),
                 MetadataObject::new(
@@ -576,6 +578,20 @@ fn engine() -> open_bsl::Engine {
             r#"
             Функция Получить() Экспорт
                 Возврат 999;
+            КонецФункции
+            "#,
+        )
+        .common_module(
+            "ЗаказМенеджер",
+            r#"
+            Перем Вызовов;
+            Вызовов = 0;
+            Функция Проверить(Добавка) Экспорт
+                Если ЭтотОбъект.Имя <> "Заказ" Тогда
+                    ВызватьИсключение "неверный менеджер документа";
+                КонецЕсли;
+                Вызовов = Вызовов + 1;
+                Возврат Добавка + Вызовов;
             КонецФункции
             "#,
         )
@@ -1621,6 +1637,28 @@ fn manager_export_runs_in_the_session_module_instance() {
     assert_eq!(
         instance.call(&mut state, "Проверка", vec![]).unwrap().0,
         Value::number_from_i64(12)
+    );
+}
+
+#[test]
+fn document_root_and_metadata_use_the_existing_manager_path() {
+    let engine = engine();
+    let mut state = state(&engine);
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Первый = Документы.Заказ.Проверить(20);
+                Второй = Documents.зАкАз.Проверить(20);
+                Если Метаданные.Документы.Заказ.Имя <> "Заказ"
+                    Или Metadata.Documents.зАкАз.Name <> "Заказ" Тогда
+                    ВызватьИсключение "metadata";
+                КонецЕсли;
+                Возврат Первый + Второй;
+                "#,
+            )
+            .unwrap(),
+        Value::number_from_i64(43)
     );
 }
 

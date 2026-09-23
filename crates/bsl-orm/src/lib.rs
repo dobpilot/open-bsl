@@ -3756,6 +3756,7 @@ fn method_exists(methods: &[MethodDescriptor], name: &str) -> bool {
 fn collection_kind(name: &str) -> Option<MetadataKind> {
     [
         ("Справочники", "Catalogs", MetadataKind::Catalog),
+        ("Документы", "Documents", MetadataKind::Document),
         (
             "РегистрыСведений",
             "InformationRegisters",
@@ -3826,6 +3827,10 @@ fn managers(ctx: &mut CallContext<'_>, kind: MetadataKind) -> RtResult<Value> {
 
 fn catalogs(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     managers(ctx, MetadataKind::Catalog)
+}
+
+fn documents(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    managers(ctx, MetadataKind::Document)
 }
 
 fn information_registers(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -4345,6 +4350,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: find_by_ref,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(28),
+        names: &["ПолучитьДокументыORM"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: documents,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
@@ -4355,6 +4367,10 @@ const GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {
         names: &["Справочники", "Catalogs"],
         function: FunctionCode::new(2),
+    },
+    GlobalDescriptor {
+        names: &["Документы", "Documents"],
+        function: FunctionCode::new(28),
     },
     GlobalDescriptor {
         names: &["РегистрыСведений", "InformationRegisters"],
