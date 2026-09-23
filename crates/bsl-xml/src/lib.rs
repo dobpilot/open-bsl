@@ -7,6 +7,7 @@ pub mod core;
 mod dom;
 mod xdto;
 mod xml;
+mod xml_data_type;
 mod xpath;
 mod xsd;
 
@@ -134,6 +135,13 @@ fn construct_serializer(
     serializer_of_factory(&arguments[0])
 }
 
+fn construct_xml_data_type(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    xml_data_type::construct(arguments)
+}
+
 fn call_create_factory(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
@@ -176,6 +184,10 @@ fn call_find_disallowed_xml_characters(
         });
     };
     Ok(BslValue::Boolean(has_disallowed_xml_characters(text)))
+}
+
+fn call_xml_type_of(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    Ok(xml_data_type::type_of(&arguments[0]))
 }
 
 fn has_disallowed_xml_characters(text: &bsl_rt::BslString) -> bool {
@@ -288,6 +300,12 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::range(0, 3),
         call: construct_xml_writer_settings,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(14),
+        names: &["ТипДанныхXML", "XMLDataType"],
+        arity: Arity::exact(2),
+        call: construct_xml_data_type,
+    },
 ];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
@@ -319,10 +337,18 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: call_find_disallowed_xml_characters,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(5),
+        names: &["XMLТипЗнч", "XMLTypeOf"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_xml_type_of,
+    },
 ];
 
 /// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
 const TYPES: &[&TypeDescriptor] = &[
+    &crate::xml_data_type::XML_DATA_TYPE,
     &crate::xsd::ANNOTATION_TYPE,
     &crate::xsd::APP_INFO_TYPE,
     &crate::xsd::ATTRIBUTE_TYPE,
@@ -403,9 +429,14 @@ const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
     (ConstructorCode::new(11), &crate::xml::READER_TYPE),
     (ConstructorCode::new(12), &crate::xml::WRITER_TYPE),
     (ConstructorCode::new(13), &crate::xml::SETTINGS_TYPE),
+    (
+        ConstructorCode::new(14),
+        &crate::xml_data_type::XML_DATA_TYPE,
+    ),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[
+    crate::xml_data_type::API_MEMBERS,
     crate::xml::API_MEMBERS,
     crate::xpath::API_MEMBERS,
     crate::dom::API_MEMBERS,
@@ -434,13 +465,13 @@ mod tests {
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(constructors, (1..=13).collect::<Vec<_>>());
+        assert_eq!(constructors, (1..=14).collect::<Vec<_>>());
         let functions = library()
             .functions()
             .iter()
             .map(|function| function.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(functions, (1..=4).collect::<Vec<_>>());
+        assert_eq!(functions, (1..=5).collect::<Vec<_>>());
     }
 
     #[test]

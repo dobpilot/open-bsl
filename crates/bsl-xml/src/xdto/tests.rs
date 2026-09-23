@@ -2949,7 +2949,7 @@ fn xdto_serializer_says_plainly_what_it_does_not_implement() {
     // не обнаружен» на компиляции, а перехватываемая ошибка. Причины у
     // них РАЗНЫЕ, и текст обязан их различать.
     let s = serializer();
-    // Этим двум нужен тип `ТипДанныхXML`, которого здесь нет.
+    // Эти два ещё не подключены к реализованному `ТипДанныхXML`.
     for method in ["XMLТип", "XMLТипЗнч"] {
         let err = serializer_unsupported(ob(&s), method).to_string();
         assert!(err.contains("не поддерживается"), "{err}");

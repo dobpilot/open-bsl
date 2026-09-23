@@ -560,7 +560,11 @@ pub(crate) fn slot_for<'a>(
 /// число -> `xs:decimal`, булево -> `xs:boolean`, дата -> `xs:dateTime`,
 /// двоичные данные -> `xs:base64Binary`).
 pub(crate) fn builtin_index_for(model: &Rc<XdtoModel>, value: &BslValue) -> Option<usize> {
-    let name = match value {
+    model.find(XSD_NS, builtin_name_for_value(value)?)
+}
+
+pub(crate) fn builtin_name_for_value(value: &BslValue) -> Option<&'static str> {
+    Some(match value {
         BslValue::Str(_) => "string",
         BslValue::Number(_) => "decimal",
         BslValue::Boolean(_) => "boolean",
@@ -570,8 +574,7 @@ pub(crate) fn builtin_index_for(model: &Rc<XdtoModel>, value: &BslValue) -> Opti
             _ => return None,
         },
         _ => return None,
-    };
-    model.find(XSD_NS, name)
+    })
 }
 
 /// Лексическая форма значения для записи — обратная к
