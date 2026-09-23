@@ -842,3 +842,18 @@ The base runtime SHALL expose the complete `ДопустимыйЗнак` / `All
 #### Scenario: Read every allowed-sign member
 - **WHEN** configuration code reads either member through its Russian or English name
 - **THEN** it receives the same typed enumeration value and measured presentation
+
+### Requirement: Number qualifiers preserve measured values
+The base runtime SHALL provide `Новый КвалификаторыЧисла` / `New NumberQualifiers` with zero through three arguments and read-only `Разрядность` / `Digits`, `РазрядностьДробнойЧасти` / `FractionDigits`, and `ДопустимыйЗнак` / `AllowedSign` properties. Omitted counts SHALL be zero and the omitted sign SHALL be `ДопустимыйЗнак.Любой`. Numeric counts SHALL be truncated to integers, clamped to zero, and the fractional count SHALL be capped at the total count. A supplied sign of another type SHALL fail explicitly.
+
+#### Scenario: Construct explicit number qualifiers
+- **WHEN** configuration code supplies total digits, fractional digits, and an allowed sign
+- **THEN** both language property names expose the normalized counts and the same typed sign
+
+#### Scenario: Construct default number qualifiers
+- **WHEN** configuration code omits every argument
+- **THEN** both counts are zero and the sign is `ДопустимыйЗнак.Любой`
+
+#### Scenario: Reject mutation
+- **WHEN** configuration code assigns any number-qualifier property
+- **THEN** the assignment fails explicitly

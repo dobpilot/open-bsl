@@ -55,6 +55,7 @@
 - [x] 5ba. Project every remaining database-backed manager kind already acquired by `bsl-config-db` through its standard root and metadata collection.
 - [x] 5bb. Acquire Sequence descriptors and project `Последовательности` / `Sequences` through the existing manager and metadata paths.
 - [x] 5bc. Measure and add the complete `ДопустимыйЗнак` / `AllowedSign` system enumeration.
+- [ ] 5bd. Measure and add the passive `КвалификаторыЧисла` / `NumberQualifiers` value required by UNF startup.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.
