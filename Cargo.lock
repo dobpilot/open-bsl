@@ -242,6 +242,8 @@ name = "bsl-config-db"
 version = "0.1.0"
 dependencies = [
  "bsl-config",
+ "bsl-orm",
+ "bsl-session",
  "open-sdbl",
  "open-sdbl-db",
 ]

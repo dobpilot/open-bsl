@@ -10,11 +10,46 @@ use std::{collections::HashMap, error::Error, fmt, sync::Arc};
 use bsl_config::{
     ConfigurationCodeSnapshot, ConfigurationModule, ModuleExecution, ModuleKind, SnapshotError,
 };
-use open_sdbl::metadata::{Value, inflate_raw_deflate, parse_config_descriptor, parse_serialized};
+use bsl_orm::{
+    CatalogError, CompatibilityMode, ConfigurationEnumValue, ConfigurationExtensionsSnapshot,
+    MetadataCatalog, MetadataKind, MetadataObject, Principal, ScriptVariant,
+};
+use bsl_session::PrincipalCandidate;
+use open_sdbl::metadata::{
+    InfoBaseUser, Value, inflate_raw_deflate, parse_config_descriptor, parse_serialized,
+};
 use open_sdbl_db::{AcquiredConfiguration, ConfigResource};
 
 const COMMON: &str = "0fe48980-252d-11d6-a3c7-0050bae0a776";
 const CONFIGURATION: &str = "9cd510cd-abfc-11d4-9434-004095e12fc7";
+const ROLE: &str = "09736b02-9cac-4e3f-b4f7-d3e9576ab948";
+const SESSION_PARAMETER: &str = "24c43748-c938-45d0-8d14-01424a72b11e";
+const FUNCTIONAL_OPTION: &str = "af547940-3268-434f-a3e7-e47d6d2638c3";
+const STYLE_ITEM: &str = "58848766-36ea-4076-8800-e91eb49590d7";
+const SCHEDULED_JOB: &str = "11bdaf85-d5ad-4d91-bb24-aa0eee139052";
+const ENUMERATION: &str = "f6a80749-5ad7-400b-8519-39dc5dff2542";
+const COMMON_PICTURE: &str = "7dcd43d9-aca5-4926-b549-1842e6a4e8cf";
+
+/// Преобразует записи `v8users` в кандидатов для выбора пользователя сеанса.
+///
+/// Идентификатор, имя и роли копируются в неизменяемый снимок principal.
+/// Допустимость входа остаётся решением [`InfoBaseUser::can_authenticate`].
+#[must_use]
+pub fn principal_candidates(users: &[InfoBaseUser]) -> Vec<PrincipalCandidate> {
+    users
+        .iter()
+        .map(|user| {
+            PrincipalCandidate::new(
+                Principal::new(
+                    user.data.id.as_str(),
+                    user.name.clone(),
+                    user.data.roles.iter().map(|role| role.as_str().to_owned()),
+                ),
+                user.can_authenticate(),
+            )
+        })
+        .collect()
+}
 
 /// Строит снимок исходников из одного результата приобретения.
 ///
@@ -43,6 +78,144 @@ pub fn load(acquired: &AcquiredConfiguration) -> Result<ConfigurationCodeSnapsho
         apply_source_overlay(&mut resources, &extension.name, &extension.resources)?;
     }
     load_base(&resources)
+}
+
+/// Строит неизменяемый ORM-каталог из того же приобретения конфигурации.
+///
+/// # Errors
+///
+/// Возвращает ошибку при повреждённом корне, неизвестном режиме свойств,
+/// неполных данных расширения или нарушении целостности каталога.
+pub fn load_catalog(acquired: &AcquiredConfiguration) -> Result<MetadataCatalog, LoadError> {
+    if let Some(extension) = acquired.extensions.first() {
+        return Err(LoadError::IncompleteExtensionMetadata(
+            extension.name.clone(),
+        ));
+    }
+    let code = load(acquired)?;
+    let catalog = load_catalog_base(&acquired.config_resources, &code)?;
+    let values = acquired
+        .metadata
+        .values()
+        .iter()
+        .filter(|value| {
+            acquired
+                .metadata
+                .object_by_id(value.owner)
+                .is_some_and(|owner| {
+                    owner.kind == Some(open_sdbl::metadata::MetadataKind::Enumeration)
+                })
+        })
+        .map(|value| {
+            ConfigurationEnumValue::new(
+                value.owner.to_string(),
+                value.guid.as_str(),
+                value.name.clone(),
+            )
+        })
+        .collect();
+    catalog
+        .with_enumeration_values(values)
+        .map_err(LoadError::Catalog)
+}
+
+fn load_catalog_base(
+    source: &[ConfigResource],
+    code: &ConfigurationCodeSnapshot,
+) -> Result<MetadataCatalog, LoadError> {
+    let resources = Resources::new(source)?;
+    let root = parse_serialized(&resources.decoded("root")?).map_err(|e| malformed("root", e))?;
+    let root_resource = first_guid(&root)
+        .ok_or_else(|| malformed("root", "нет GUID конфигурации"))?
+        .to_ascii_lowercase();
+    let root_value = parse_serialized(&resources.decoded(&root_resource)?)
+        .map_err(|e| malformed(&root_resource, e))?;
+    let identity = configuration_identity(&root_value)
+        .ok_or_else(|| malformed(&root_resource, "нет GUID объекта конфигурации"))?
+        .to_ascii_lowercase();
+    let properties = configuration_properties(&root_value)
+        .ok_or_else(|| malformed(&root_resource, "нет свойств конфигурации"))?;
+    let configuration_name = configuration_name(properties)
+        .ok_or_else(|| malformed(&root_resource, "нет имени конфигурации"))?;
+
+    let mut objects = Vec::new();
+    for include in collections(&root_value)
+        .ok_or_else(|| malformed(&root_resource, "нет каталога объектов"))?
+    {
+        let count = scalar(include.get(2).expect("проверено при разборе"))
+            .and_then(|value| value.parse::<usize>().ok())
+            .expect("проверено при разборе");
+        for collection in include.iter().skip(3).take(count) {
+            let Some((class, ids)) = collection_ids(collection) else {
+                continue;
+            };
+            let Some(kind) = metadata_kind(class) else {
+                continue;
+            };
+            for id in ids {
+                let descriptor = parse_config_descriptor(id, resources.compressed(id)?)
+                    .map_err(|e| malformed(id, e))?
+                    .ok_or_else(|| malformed(id, "нет описателя объекта"))?;
+                let mut object =
+                    MetadataObject::new(id.to_ascii_lowercase(), descriptor.name, kind);
+                if let Some(module) = code.modules().iter().find(|module| {
+                    module.kind() == ModuleKind::Manager
+                        && module
+                            .owner()
+                            .is_some_and(|owner| owner.eq_ignore_ascii_case(id))
+                }) {
+                    object = object.with_manager_module(module.name());
+                }
+                objects.push(object);
+            }
+        }
+    }
+
+    let role_ids = objects
+        .iter()
+        .filter(|object| object.kind() == MetadataKind::Role)
+        .map(|object| object.id().to_owned())
+        .collect::<std::collections::HashSet<_>>();
+    let main_roles = properties
+        .get(39)
+        .map(|value| collect_known_guids(value, &role_ids))
+        .unwrap_or_default();
+    let version = properties
+        .get(15)
+        .and_then(scalar)
+        .ok_or_else(|| malformed(&root_resource, "нет версии конфигурации"))?;
+    let script_variant = match properties.get(3).and_then(scalar) {
+        Some("1") => ScriptVariant::Russian,
+        Some("0") => ScriptVariant::English,
+        _ => {
+            return Err(malformed(
+                &root_resource,
+                "неизвестен вариант встроенного языка",
+            ));
+        }
+    };
+    let compatibility_mode = compatibility_mode(
+        properties
+            .get(26)
+            .and_then(scalar)
+            .ok_or_else(|| malformed(&root_resource, "нет режима совместимости"))?,
+    )
+    .ok_or_else(|| malformed(&root_resource, "неизвестен режим совместимости"))?;
+    MetadataCatalog::new(identity, objects)
+        .and_then(|catalog| {
+            catalog.with_configuration(
+                configuration_name,
+                version,
+                script_variant,
+                compatibility_mode,
+                main_roles,
+            )
+        })
+        .and_then(|catalog| {
+            ConfigurationExtensionsSnapshot::new(Vec::new(), Vec::new(), Vec::new(), Vec::new())
+                .map(|extensions| catalog.with_configuration_extensions(extensions))
+        })
+        .map_err(LoadError::Catalog)
 }
 
 fn apply_source_overlay(
@@ -312,6 +485,119 @@ fn configuration_identity(value: &Value) -> Option<&str> {
     guid(identity).then_some(identity)
 }
 
+fn configuration_properties(value: &Value) -> Option<&[Value]> {
+    let root = list(value)?;
+    let count = scalar(root.get(2)?)?.parse::<usize>().ok()?;
+    let configuration = root.iter().skip(3).take(count).find(|group| {
+        list(group)
+            .and_then(|group| group.first())
+            .and_then(scalar)
+            .is_some_and(|class| class.eq_ignore_ascii_case(CONFIGURATION))
+    })?;
+    list_path(configuration, &[1, 1])
+}
+
+fn configuration_name(properties: &[Value]) -> Option<&str> {
+    let descriptor = list_path(properties.get(1)?, &[1])?;
+    scalar(descriptor.get(2)?)
+}
+
+fn metadata_kind(class: &str) -> Option<MetadataKind> {
+    match class.to_ascii_lowercase().as_str() {
+        ENUMERATION => Some(MetadataKind::Enumeration),
+        COMMON_PICTURE => Some(MetadataKind::CommonPicture),
+        "cf4abea6-37b2-11d4-940f-008048da11f9" => Some(MetadataKind::Catalog),
+        "061d872a-5787-460e-95ac-ed74ea3a3e84" => Some(MetadataKind::Document),
+        "4612bd75-71b7-4a5c-8cc5-2b0b65f9fa0d" => Some(MetadataKind::DocumentJournal),
+        "13134201-f60b-11d5-a3c7-0050bae0a776" => Some(MetadataKind::InformationRegister),
+        "b64d9a40-1642-11d6-a3c7-0050bae0a776" => Some(MetadataKind::AccumulationRegister),
+        "2deed9b8-0056-4ffe-a473-c20a6c32a0bc" => Some(MetadataKind::AccountingRegister),
+        "f2de87a8-64e5-45eb-a22d-b3aedab050e7" => Some(MetadataKind::CalculationRegister),
+        "238e7e88-3c5f-48b2-8a3b-81ebbecb20ed" => Some(MetadataKind::ChartOfAccounts),
+        "82a1b659-b220-4d94-a9bd-14d757b95a48" => Some(MetadataKind::ChartOfCharacteristicTypes),
+        "30b100d6-b29f-47ac-aec7-cb8ca8a54767" => Some(MetadataKind::ChartOfCalculationTypes),
+        "857c4a91-e5f4-4fac-86ec-787626f1e108" => Some(MetadataKind::ExchangePlan),
+        "0195e80c-b157-11d4-9435-004095e12fc7" => Some(MetadataKind::Constant),
+        "631b75a0-29e2-11d6-a3c7-0050bae0a776" => Some(MetadataKind::Report),
+        "bf845118-327b-4682-b5c6-285d2a0eb296" => Some(MetadataKind::DataProcessor),
+        "fcd3404e-1523-48ce-9bc0-ecdb822684a1" => Some(MetadataKind::BusinessProcess),
+        "3e63355c-1378-4953-be9b-1deb5fb6bec5" => Some(MetadataKind::Task),
+        "46b4cd97-fd13-4eaa-aba2-3bddd7699218" => Some(MetadataKind::SettingsStorage),
+        FUNCTIONAL_OPTION => Some(MetadataKind::FunctionalOption),
+        STYLE_ITEM => Some(MetadataKind::StyleItem),
+        ROLE => Some(MetadataKind::Role),
+        SESSION_PARAMETER => Some(MetadataKind::SessionParameter),
+        COMMON => Some(MetadataKind::CommonModule),
+        SCHEDULED_JOB => Some(MetadataKind::ScheduledJob),
+        _ => None,
+    }
+}
+
+fn collect_known_guids(value: &Value, known: &std::collections::HashSet<String>) -> Vec<String> {
+    let mut result = Vec::new();
+    collect_known_guids_into(value, known, &mut result);
+    result
+}
+
+fn collect_known_guids_into(
+    value: &Value,
+    known: &std::collections::HashSet<String>,
+    result: &mut Vec<String>,
+) {
+    match value {
+        Value::Atom(value) | Value::String(value) => {
+            let value = value.to_ascii_lowercase();
+            if known.contains(&value) && !result.contains(&value) {
+                result.push(value);
+            }
+        }
+        Value::List(values) => {
+            for value in values {
+                collect_known_guids_into(value, known, result);
+            }
+        }
+        Value::Null => {}
+    }
+}
+
+fn compatibility_mode(value: &str) -> Option<CompatibilityMode> {
+    Some(match value {
+        "80100" => CompatibilityMode::Version8_1,
+        "80213" => CompatibilityMode::Version8_2_13,
+        "80216" => CompatibilityMode::Version8_2_16,
+        "80301" => CompatibilityMode::Version8_3_1,
+        "80302" => CompatibilityMode::Version8_3_2,
+        "80303" => CompatibilityMode::Version8_3_3,
+        "80304" => CompatibilityMode::Version8_3_4,
+        "80305" => CompatibilityMode::Version8_3_5,
+        "80306" => CompatibilityMode::Version8_3_6,
+        "80307" => CompatibilityMode::Version8_3_7,
+        "80308" => CompatibilityMode::Version8_3_8,
+        "80309" => CompatibilityMode::Version8_3_9,
+        "80310" => CompatibilityMode::Version8_3_10,
+        "80311" => CompatibilityMode::Version8_3_11,
+        "80312" => CompatibilityMode::Version8_3_12,
+        "80313" => CompatibilityMode::Version8_3_13,
+        "80314" => CompatibilityMode::Version8_3_14,
+        "80315" => CompatibilityMode::Version8_3_15,
+        "80316" => CompatibilityMode::Version8_3_16,
+        "80317" => CompatibilityMode::Version8_3_17,
+        "80318" => CompatibilityMode::Version8_3_18,
+        "80319" => CompatibilityMode::Version8_3_19,
+        "80320" => CompatibilityMode::Version8_3_20,
+        "80321" => CompatibilityMode::Version8_3_21,
+        "80322" => CompatibilityMode::Version8_3_22,
+        "80323" => CompatibilityMode::Version8_3_23,
+        "80324" => CompatibilityMode::Version8_3_24,
+        "80325" => CompatibilityMode::Version8_3_25,
+        "80326" => CompatibilityMode::Version8_3_26,
+        // ИЗМЕРЕНО на 8.3.27.2342: `НеИспользовать` хранится как
+        // текущая версия формата, а объект метаданных возвращает `DontUse`.
+        "80327" => CompatibilityMode::DontUse,
+        _ => return None,
+    })
+}
+
 fn collection_ids(value: &Value) -> Option<(&str, Vec<&str>)> {
     let values = list(value)?;
     let class = scalar(values.first()?)?;
@@ -546,8 +832,12 @@ pub enum LoadError {
         /// Распознан ли признак активности.
         activity_known: bool,
     },
+    /// Приобретение не содержит всех свойств расширения для ORM-снимка.
+    IncompleteExtensionMetadata(String),
     /// Итоговый нейтральный снимок некорректен.
     Snapshot(SnapshotError),
+    /// Итоговый ORM-каталог некорректен.
+    Catalog(CatalogError),
 }
 impl fmt::Display for LoadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -565,16 +855,21 @@ impl fmt::Display for LoadError {
                 name,
                 activity_known: false,
             } => write!(f, "у расширения `{name}` не распознана активность"),
+            Self::IncompleteExtensionMetadata(name) => write!(
+                f,
+                "приобретение не содержит полного описания расширения `{name}`"
+            ),
             Self::Snapshot(e) => write!(f, "снимок кода некорректен: {e}"),
+            Self::Catalog(e) => write!(f, "каталог метаданных некорректен: {e}"),
         }
     }
 }
 impl Error for LoadError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        if let Self::Snapshot(e) = self {
-            Some(e)
-        } else {
-            None
+        match self {
+            Self::Snapshot(error) => Some(error),
+            Self::Catalog(error) => Some(error),
+            _ => None,
         }
     }
 }

@@ -1,14 +1,141 @@
 use std::sync::Arc;
 
+use open_sdbl::metadata::{InfoBaseUser, UserRow};
 use open_sdbl_db::ConfigResource;
 
-use super::{LoadError, apply_source_overlay, common_execution, load_base};
+use super::{
+    LoadError, apply_source_overlay, common_execution, load_base, load_catalog_base, metadata_kind,
+    principal_candidates,
+};
+
+#[test]
+fn enumeration_metadata_class_is_projected() {
+    assert_eq!(
+        metadata_kind("f6a80749-5ad7-400b-8519-39dc5dff2542"),
+        Some(bsl_orm::MetadataKind::Enumeration)
+    );
+}
+
+#[test]
+fn common_picture_metadata_class_is_projected() {
+    assert_eq!(
+        metadata_kind("7dcd43d9-aca5-4926-b549-1842e6a4e8cf"),
+        Some(bsl_orm::MetadataKind::CommonPicture)
+    );
+}
 
 fn resource(name: &str, bytes: &[u8]) -> ConfigResource {
     ConfigResource {
         file_name: name.into(),
         compressed: Arc::from(bytes),
     }
+}
+
+fn text_resource(name: &str, text: &str) -> ConfigResource {
+    let bytes = text.as_bytes();
+    assert!(bytes.len() <= u16::MAX as usize);
+    let length = bytes.len() as u16;
+    let mut compressed = vec![1];
+    compressed.extend_from_slice(&length.to_le_bytes());
+    compressed.extend_from_slice(&(!length).to_le_bytes());
+    compressed.extend_from_slice(bytes);
+    resource(name, &compressed)
+}
+
+#[test]
+fn catalog_is_projected_from_the_same_root_and_links_default_roles() {
+    let root = r#"{2,{11111111-1111-1111-1111-111111111111},1,{9cd510cd-abfc-11d4-9434-004095e12fc7,{1,{68,{0,{3,{1,0,44444444-4444-4444-4444-444444444444},"Конфигурация"}},"",1,{0,0},{0,0},{0,0},{0,0},{0,0},00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,0,"Поставщик","1.2.3","",1,{0,0},1,{0,0},1,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,80324,{0,0},1,0,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,{0,0},00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,2,00000000-0000-0000-0000-000000000000,2,{1,55555555-5555-5555-5555-555555555555},{0,0},0,"",80327,1,0,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,1,00000000-0000-0000-0000-000000000000,{0,0},{0,0},{0,0},{0,0},00000000-0000-0000-0000-000000000000,"",0,1,{0,0},1},2,{0fe48980-252d-11d6-a3c7-0050bae0a776,1,22222222-2222-2222-2222-222222222222},{09736b02-9cac-4e3f-b4f7-d3e9576ab948,1,55555555-5555-5555-5555-555555555555}}}}"#;
+    let resources = vec![
+        text_resource("root", "{1,{11111111-1111-1111-1111-111111111111}}"),
+        text_resource("11111111-1111-1111-1111-111111111111", root),
+        text_resource(
+            "22222222-2222-2222-2222-222222222222",
+            r#"{1,{12,{2,{1,0,22222222-2222-2222-2222-222222222222},"Общий",{1,"ru","Общий"},"",0,0,33333333-3333-3333-3333-333333333333},1,0,1,0,0,1,0,0},0}"#,
+        ),
+        text_resource(
+            "55555555-5555-5555-5555-555555555555",
+            r#"{1,{12,{2,{1,0,55555555-5555-5555-5555-555555555555},"Основная",{1,"ru","Основная"},"",0,0,66666666-6666-6666-6666-666666666666},0}}"#,
+        ),
+    ];
+    let code = load_base(&resources).expect("снимок кода");
+    let catalog = load_catalog_base(&resources, &code).expect("каталог метаданных");
+
+    assert_eq!(catalog.identity(), code.identity());
+    assert_eq!(catalog.objects().len(), 2);
+    assert_eq!(
+        catalog.main_role_ids().collect::<Vec<_>>(),
+        ["55555555-5555-5555-5555-555555555555"]
+    );
+}
+
+fn user(
+    id: &str,
+    name: &str,
+    roles: &[&str],
+    standard_authentication: bool,
+    os_name: &str,
+) -> InfoBaseUser {
+    let role_count = roles.len();
+    let roles = roles
+        .iter()
+        .map(|role| format!(",{role}"))
+        .collect::<String>();
+    let record = format!(r#"{{{id},"{name}","Полное имя",{{{role_count}{roles}}}}}"#);
+    let key = 0x5a;
+    let mut encoded = vec![1, key];
+    encoded.extend(record.as_bytes().iter().map(|byte| byte ^ key));
+    InfoBaseUser::new(
+        UserRow {
+            name,
+            description: "Полное имя",
+            os_name,
+            email: "",
+            show_in_list: false,
+            standard_authentication,
+            administrative: true,
+        },
+        &encoded,
+    )
+    .unwrap()
+}
+
+#[test]
+fn principal_candidates_preserve_identity_roles_and_authentication_decision() {
+    let role = "22222222-2222-2222-2222-222222222222";
+    let users = [
+        user(
+            "11111111-1111-1111-1111-111111111111",
+            "Стандартный",
+            &[role],
+            true,
+            "",
+        ),
+        user(
+            "33333333-3333-3333-3333-333333333333",
+            "ОперационнаяСистема",
+            &[],
+            false,
+            " DOMAIN\\user ",
+        ),
+        user(
+            "44444444-4444-4444-4444-444444444444",
+            "Запрещённый",
+            &[],
+            false,
+            " ",
+        ),
+    ];
+
+    let candidates = principal_candidates(&users);
+
+    assert_eq!(candidates[0].principal().name(), "Стандартный");
+    assert_eq!(
+        candidates[0].principal().role_ids().collect::<Vec<_>>(),
+        [role]
+    );
+    assert!(candidates[0].can_authenticate());
+    assert!(candidates[1].can_authenticate());
+    assert!(!candidates[2].can_authenticate());
 }
 
 #[test]

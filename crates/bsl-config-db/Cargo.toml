@@ -6,5 +6,7 @@ license.workspace = true
 
 [dependencies]
 bsl-config = { path = "../bsl-config" }
+bsl-orm = { path = "../bsl-orm" }
+bsl-session = { path = "../bsl-session" }
 open-sdbl = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.8.0" }
 open-sdbl-db = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.8.0" }
