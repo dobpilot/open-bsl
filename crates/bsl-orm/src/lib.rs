@@ -1926,6 +1926,12 @@ static QUERY_TYPE: TypeDescriptor = TypeDescriptor {
     type_display: "Query",
     type_names: &["Query"],
 };
+static QUERY_SCHEMA_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-orm",
+    name: "СхемаЗапроса",
+    type_display: "Query schema",
+    type_names: &["QuerySchema"],
+};
 static TEMP_TABLES_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "МенеджерВременныхТаблиц",
@@ -2946,6 +2952,12 @@ fn new_query(_: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
             temp_tables_manager: None,
         }),
     }))
+}
+
+fn new_query_schema(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Err(RtError::DynamicError(
+        "объектная модель схемы запроса не реализована".into(),
+    ))
 }
 
 fn new_temp_tables_manager(context: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -4244,6 +4256,12 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: new_temp_tables_manager,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(6),
+        names: &["СхемаЗапроса", "QuerySchema"],
+        arity: Arity::exact(0),
+        call: new_query_schema,
+    },
 ];
 
 const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
@@ -4252,6 +4270,7 @@ const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
     (ConstructorCode::new(3), &VALUE_STORAGE_TYPE),
     (ConstructorCode::new(4), &DATA_LOCK_TYPE),
     (ConstructorCode::new(5), &TEMP_TABLES_MANAGER_TYPE),
+    (ConstructorCode::new(6), &QUERY_SCHEMA_TYPE),
 ];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
@@ -4671,6 +4690,7 @@ const TYPES: &[&TypeDescriptor] = &[
     &CONFIGURATION_EXTENSION_TYPE,
     &EXTENSION_APPLICATION_ISSUE_TYPE,
     &QUERY_TYPE,
+    &QUERY_SCHEMA_TYPE,
     &TEMP_TABLES_MANAGER_TYPE,
     &QUERY_RESULT_TYPE,
     &QUERY_SELECTION_TYPE,

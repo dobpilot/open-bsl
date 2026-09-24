@@ -1082,6 +1082,10 @@ impl SessionFactory {
         let engine = Engine::builder()
             .register_library(bsl_orm::library())
             .register_library(library())
+            // Фабрика исполняет модуль сеанса на сервере. Дефолтный
+            // standalone-контекст фасада дополнительно включает внешнее
+            // соединение, поэтому его ветви здесь нужно явно выключить.
+            .preproc_symbol("ВнешнееСоединение", false)
             .configuration(ModuleGraphRecipe {
                 modules,
                 eager_init: false,
@@ -2355,6 +2359,12 @@ fn refresh_reusable_values(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Val
     Ok(Value::Undefined)
 }
 
+fn attach_add_in(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Err(RtError::DynamicError(
+        "загрузчик внешних компонент не передан хостом".into(),
+    ))
+}
+
 fn database_configuration_changed_dynamically(
     ctx: &mut CallContext<'_>,
     _: &[Value],
@@ -3305,6 +3315,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         arity: Arity::exact(2),
         kind: FunctionKind::Procedure,
         call: set_data_separation_safe_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(21),
+        names: &["ПодключитьВнешнююКомпоненту", "AttachAddIn"],
+        arity: Arity::range(1, 4),
+        kind: FunctionKind::Function,
+        call: attach_add_in,
     },
 ];
 

@@ -344,6 +344,11 @@ fn resolve_program_impl(
     imports: &[ImportedModule],
 ) -> Result<ResolvedProgram, SemaError> {
     let links = std::cell::RefCell::new(LinkAccumulator::default());
+    // Платформа откладывает ошибку голого имени импортируемого
+    // общего модуля до инициализации модуля. Ячейка общая для всех тел:
+    // одной ошибки достаточно, чтобы весь модуль не мог завершить старт.
+    let deferred_module_error = std::cell::RefCell::new(None::<String>);
+    let deferred_module_dependencies = std::cell::RefCell::new(Vec::<u32>::new());
     let mut sigs: HashMap<String, FuncSig> = HashMap::new();
     let mut func_items: Vec<&Item> = Vec::new();
     let mut top_stmts: Vec<AStmt> = Vec::new();
@@ -462,6 +467,8 @@ fn resolve_program_impl(
             labels: &labels,
             imports,
             links: Some(&links),
+            deferred_module_error: Some(&deferred_module_error),
+            deferred_module_dependencies: Some(&deferred_module_dependencies),
         };
         for p in params {
             r.declare(&p.name);
@@ -519,9 +526,20 @@ fn resolve_program_impl(
         labels: &top_labels,
         imports,
         links: Some(&links),
+        deferred_module_error: Some(&deferred_module_error),
+        deferred_module_dependencies: Some(&deferred_module_dependencies),
     };
-    let top_body = r.resolve_block(&top_stmts)?;
+    let mut top_body = r.resolve_block(&top_stmts)?;
     used_libraries.extend(r.used_libraries.iter().cloned());
+    if let Some(message) = deferred_module_error.borrow_mut().take() {
+        top_body.insert(
+            0,
+            RStmt {
+                kind: RStmtKind::Raise(Some(RExpr::Str(message))),
+                line: 0,
+            },
+        );
+    }
     let top_level = Resolved {
         uses_dynamic: crate::resolved::block_uses_dynamic(&top_body),
         locals: r.locals,
@@ -538,6 +556,7 @@ fn resolve_program_impl(
         module_vars,
         module_var_exports,
         links: links.into_inner().entries,
+        deferred_module_dependencies: deferred_module_dependencies.into_inner(),
         imports: imports
             .iter()
             .map(|module| (module.alias.clone(), module.module, module.global))
@@ -592,6 +611,8 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         labels: &labels,
         imports: &[],
         links: None,
+        deferred_module_error: None,
+        deferred_module_dependencies: None,
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
@@ -876,6 +897,8 @@ fn resolve_snippet_stmts_imports_impl(
         labels: &labels,
         imports,
         links: Some(&links),
+        deferred_module_error: None,
+        deferred_module_dependencies: None,
     };
     let body = r.resolve_block(stmts)?;
     let requirements = match registry {
@@ -1067,6 +1090,13 @@ struct Resolver<'a> {
     imports: &'a [ImportedModule],
     /// Аккумулятор связей программы; `None` там, где импортов нет.
     links: Option<&'a std::cell::RefCell<LinkAccumulator>>,
+    /// Ошибка, которую платформа проявляет лишь при первой инициализации
+    /// модуля. `None` сохраняет строгую диагностику одиночных скриптов и
+    /// фрагментов `Выполнить`/`Вычислить`.
+    deferred_module_error: Option<&'a std::cell::RefCell<Option<String>>>,
+    /// Целевые модули тех же отложенных ошибок. Список нужен только
+    /// при вычислении статического замыкания корневого графа.
+    deferred_module_dependencies: Option<&'a std::cell::RefCell<Vec<u32>>>,
 }
 
 impl<'a> Resolver<'a> {
@@ -1675,6 +1705,35 @@ impl<'a> Resolver<'a> {
                             args: Vec::new(),
                         })
                     }
+                    // Голое имя импортируемого общего модуля не является
+                    // значением. Измерено на 8.3.27: конфигурация загружается,
+                    // а ошибка возникает при первой инициализации именно этого модуля.
+                    // Проверки локальных и модульных переменных выше сохраняют их
+                    // прежний приоритет.
+                    None if self.deferred_module_error.is_some()
+                        && self.import_alias(name).is_some() =>
+                    {
+                        let module = self
+                            .import_alias(name)
+                            .expect("наличие проверено в guard")
+                            .module;
+                        let message = SemaError::UndefinedVariable(name.clone()).to_string();
+                        let mut deferred = self
+                            .deferred_module_error
+                            .expect("наличие проверено в guard")
+                            .borrow_mut();
+                        if deferred.is_none() {
+                            *deferred = Some(message);
+                        }
+                        let mut dependencies = self
+                            .deferred_module_dependencies
+                            .expect("ячейки отложенной ошибки создаются вместе")
+                            .borrow_mut();
+                        if !dependencies.contains(&module) {
+                            dependencies.push(module);
+                        }
+                        Ok(RExpr::Undefined)
+                    }
                     None => Err(SemaError::UndefinedVariable(name.clone())),
                 },
             },
@@ -2014,14 +2073,17 @@ impl<'a> Resolver<'a> {
                 let rest = &args[1..];
                 let values = if rest.is_empty() {
                     keys.iter().map(|_| RExpr::Undefined).collect()
+                } else if rest.len() != keys.len() {
+                    // Платформа одинаково дополняет и отбрасывает значения
+                    // для литерального и вычисляемого списка полей. Готовый
+                    // динамический путь заодно вычисляет лишние выражения.
+                    return Ok(RExpr::NewDynamicStructure {
+                        args: args
+                            .iter()
+                            .map(|argument| self.resolve_expr(argument))
+                            .collect::<Result<_, _>>()?,
+                    });
                 } else {
-                    if rest.len() != keys.len() {
-                        return Err(SemaError::ArgumentCountMismatch {
-                            name: "Новый Структура".to_string(),
-                            expected: keys.len(),
-                            found: rest.len(),
-                        });
-                    }
                     let mut vs = Vec::with_capacity(rest.len());
                     for a in rest {
                         vs.push(self.resolve_expr(a)?);
@@ -3367,6 +3429,23 @@ mod tests {
                 },
             }
         );
+    }
+
+    #[test]
+    fn new_structure_with_literal_and_mismatched_values_uses_dynamic_path() {
+        for source in [
+            r#"s = Новый Структура("x,y", 1);"#,
+            r#"s = Новый Структура("x,y", 1, 2, 3);"#,
+        ] {
+            let r = resolve_src(source);
+            assert!(matches!(
+                r.body[0].kind,
+                RStmtKind::AssignLocal {
+                    value: RExpr::NewDynamicStructure { .. },
+                    ..
+                }
+            ));
+        }
     }
 
     #[test]

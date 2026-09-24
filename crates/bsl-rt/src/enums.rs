@@ -334,6 +334,8 @@ pub enum EnumValue {
     SortDirectionAscending,
 
     // --- ЧастиДаты -------------------------------------------------------
+    DateFractionsTime,
+    DateFractionsDate,
     DateFractionsDateTime,
 
     // --- ДопустимаяДлина -------------------------------------------------
@@ -2639,6 +2641,20 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
     ),
     (
         EnumKind::DateFractions,
+        EnumValue::DateFractionsTime,
+        "Время",
+        "Time",
+        "Time",
+    ),
+    (
+        EnumKind::DateFractions,
+        EnumValue::DateFractionsDate,
+        "Дата",
+        "Date",
+        "Date",
+    ),
+    (
+        EnumKind::DateFractions,
         EnumValue::DateFractionsDateTime,
         "ДатаВремя",
         "DateTime",
@@ -3938,6 +3954,28 @@ mod tests {
         assert_eq!(
             EnumKind::ConfigurationExtensionApplicationIssueSeverity.meta_ru_name(),
             "EnumConfigurationExtensionApplicationIssueSeverity"
+        );
+    }
+
+    #[test]
+    fn date_fractions_match_the_measured_platform_surface() {
+        assert_eq!(
+            lookup_member(EnumKind::DateFractions, "Time"),
+            Some(EnumValue::DateFractionsTime)
+        );
+        assert_eq!(
+            lookup_member(EnumKind::DateFractions, "Дата"),
+            Some(EnumValue::DateFractionsDate)
+        );
+        assert_eq!(
+            lookup_member(EnumKind::DateFractions, "DateTime"),
+            Some(EnumValue::DateFractionsDateTime)
+        );
+        assert_eq!(EnumValue::DateFractionsTime.display_text(), "Time");
+        assert_eq!(EnumValue::DateFractionsDate.display_text(), "Date");
+        assert_eq!(
+            EnumValue::DateFractionsDateTime.display_text(),
+            "Date and time"
         );
     }
 

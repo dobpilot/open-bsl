@@ -1,0 +1,7 @@
+file.begin	date-fractions-1
+DATE.FRACTIONS.TIME	Time
+DATE.FRACTIONS.DATE	Date
+DATE.FRACTIONS.DATETIME	Date and time
+DATE.FRACTIONS.TYPE	DateFractions
+DATE.FRACTIONS.ENGLISH	OK
+file.end	date-fractions-1

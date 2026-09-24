@@ -910,3 +910,36 @@ The Session runtime SHALL provide zero-argument `Новый ОписаниеЗа
 #### Scenario: Reject another property type
 - **WHEN** configuration code assigns a non-Boolean value
 - **THEN** the assignment fails explicitly and preserves the preceding value
+
+### Requirement: Reached external-component attachment calls are explicit
+The Session runtime SHALL resolve `ПодключитьВнешнююКомпоненту` / `AttachAddIn`
+with the documented one-through-four-argument family so the recorded
+configuration startup graph can compile. Until the host supplies an audited
+external-component loader, invoking any form SHALL fail explicitly and SHALL
+NOT report a successful attachment or load process code implicitly.
+
+#### Scenario: Compile every documented attachment form
+- **WHEN** configuration code uses the identifier form or the location-and-name form with its optional arguments
+- **THEN** semantic resolution accepts one through four arguments through both language names
+
+#### Scenario: Invoke attachment without a host loader
+- **WHEN** configuration code invokes the function in a Session without an external-component loader
+- **THEN** the call fails explicitly without loading code or reporting success
+
+### Requirement: Reached query-schema construction is explicit
+The ORM runtime SHALL resolve the documented zero-argument `Новый СхемаЗапроса` / `New QuerySchema` constructor so the recorded configuration startup graph can compile. Until the query-schema object model is implemented, invoking the constructor SHALL fail explicitly and SHALL NOT return a partial or unrelated query value.
+
+#### Scenario: Compile query-schema construction
+- **WHEN** configuration code constructs `СхемаЗапроса` through either language name
+- **THEN** semantic resolution accepts exactly zero arguments
+
+#### Scenario: Invoke query-schema construction before its object model exists
+- **WHEN** configuration code invokes the constructor
+- **THEN** the call fails explicitly without returning a partial object
+
+### Requirement: Date fractions match the complete platform enumeration
+The base runtime SHALL expose the complete `ЧастиДаты` / `DateFractions` system enumeration with `Время` / `Time`, `Дата` / `Date`, and `ДатаВремя` / `DateTime`. Each member SHALL have the presentation measured on platform 8.3.27, and both language names SHALL identify the same typed values.
+
+#### Scenario: Read every date-fraction member
+- **WHEN** configuration code reads any member through its Russian or English name
+- **THEN** it receives the same typed enumeration value and measured presentation

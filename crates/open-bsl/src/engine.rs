@@ -892,11 +892,23 @@ fn rooted_recipe(
             .iter()
             .position(|module| bsl_rt::folded_eq(&module.name, name))
     };
-    let syntax = modules
+    // Для выбора замыкания нужны только малые экспортные поверхности.
+    // Не держим AST всего каталога: в большой конфигурации он на порядки
+    // больше замыкания модуля сеанса. Полный AST повторно строится ниже
+    // только для модулей, до которых дошёл статический обход.
+    let surfaces = modules
         .iter()
-        .map(|module| bsl_syntax::parse_with_symbols(&module.source, symbols))
-        .collect::<Result<Vec<_>, _>>()?;
-    let surfaces = module_surfaces(modules, &syntax)?;
+        .enumerate()
+        .map(|(i, module)| {
+            let syntax = bsl_syntax::parse_with_symbols(&module.source, symbols)?;
+            imported_module_from_syntax(
+                &module.name,
+                i as u32,
+                &syntax.items,
+                module.visibility == ModuleVisibility::Global,
+            )
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
     reject_duplicate_global_exports(modules, &surfaces)?;
 
     let mut selected = vec![false; modules.len()];
@@ -929,14 +941,21 @@ fn rooted_recipe(
             }
         }
         let imports = module_imports(modules, &surfaces, current, &index_of)?;
-        let resolved =
-            bsl_sema::resolve_program_with_imports(&syntax[current].items, registry, &imports)?;
+        let syntax = bsl_syntax::parse_with_symbols(&modules[current].source, symbols)?;
+        let resolved = bsl_sema::resolve_program_with_imports(&syntax.items, registry, &imports)?;
         for link in &resolved.links {
             let target = match link {
                 bsl_sema::ResolvedLink::Function { module, .. }
                 | bsl_sema::ResolvedLink::Variable { module, .. } => *module as usize,
                 bsl_sema::ResolvedLink::ObjectMethod { .. } => continue,
             };
+            if !selected[target] {
+                selected[target] = true;
+                pending.push(target);
+            }
+        }
+        for &target in &resolved.deferred_module_dependencies {
+            let target = target as usize;
             if !selected[target] {
                 selected[target] = true;
                 pending.push(target);

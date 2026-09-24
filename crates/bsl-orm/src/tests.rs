@@ -870,6 +870,30 @@ fn data_lock_delegates_named_spaces_to_the_current_session_adapter() {
 }
 
 #[test]
+fn query_schema_constructor_compiles_both_names_and_fails_explicitly() {
+    let engine = engine();
+    let mut state = state(&engine);
+
+    for source in ["Возврат Новый СхемаЗапроса;", "Возврат New QuerySchema;"]
+    {
+        assert!(
+            state
+                .exec(source)
+                .unwrap_err()
+                .to_string()
+                .contains("объектная модель схемы запроса не реализована")
+        );
+    }
+    assert!(
+        state
+            .exec("Возврат Новый СхемаЗапроса(1);")
+            .unwrap_err()
+            .to_string()
+            .contains("принимает аргументов: 0")
+    );
+}
+
+#[test]
 fn transaction_procedures_delegate_to_the_current_session_adapter() {
     let engine = engine();
     let access = Rc::new(RecordingDataLocks::default());

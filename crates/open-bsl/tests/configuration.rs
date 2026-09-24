@@ -342,6 +342,84 @@ fn rooted_catalog_compiles_transitive_static_dependencies() {
 }
 
 #[test]
+fn bare_named_module_value_fails_only_when_its_owner_is_initialized() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Корень".into(),
+                    source: "Функция Запуск() Экспорт Если Ложь Тогда Ошибочный.Коснуться(); КонецЕсли; Возврат 42; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Explicit,
+                },
+                ModuleRecipe {
+                    name: "Ошибочный".into(),
+                    source: "Процедура Коснуться() Экспорт Массив = Новый Массив; Массив.Добавить(Цель); КонецПроцедуры".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+                ModuleRecipe {
+                    name: "Цель".into(),
+                    source: "Процедура Коснуться() Экспорт КонецПроцедуры".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+            ],
+            eager_init: false,
+        })
+        .configuration_roots(["Корень"])
+        .build()
+        .expect("ошибка в незапущенном модуле не отвергает весь граф");
+
+    let root = engine.compile_entry("Возврат Корень.Запуск();").unwrap();
+    assert_eq!(
+        engine.new_state().run(&root).unwrap(),
+        open_bsl::Value::number_from_i64(42)
+    );
+
+    let failing = engine
+        .compile_entry("Ошибочный.Коснуться();")
+        .expect("точка входа компилируется");
+    let error = engine
+        .new_state()
+        .run(&failing)
+        .expect_err("модуль падает при первой инициализации");
+    assert!(error.to_string().contains("переменная «Цель»"), "{error}");
+}
+
+#[test]
+fn ordinary_unknown_name_remains_a_build_error_with_named_modules() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let error = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Корень".into(),
+                    source: "Функция Запуск() Экспорт Возврат НеизвестноеИмя; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Explicit,
+                },
+                ModuleRecipe {
+                    name: "Сервис".into(),
+                    source: "Функция Ответ() Экспорт Возврат 1; КонецФункции".into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+            ],
+            eager_init: false,
+        })
+        .configuration_roots(["Корень"])
+        .build()
+        .err()
+        .expect("обычное неизвестное имя по-прежнему отвергается");
+
+    assert!(error.to_string().contains("переменная «НеизвестноеИмя»"));
+}
+
+#[test]
 fn rooted_catalog_retains_explicit_imports_for_dynamic_code() {
     use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
 

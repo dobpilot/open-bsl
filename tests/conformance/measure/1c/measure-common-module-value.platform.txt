@@ -1,0 +1,4 @@
+file.begin	common-module-value-1
+MODULE.VALUE.JOB.STATE	Job failed
+MODULE.VALUE.JOB.ERROR.TYPE	Error information
+file.end	common-module-value-1

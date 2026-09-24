@@ -42,6 +42,30 @@ fn entry(engine: &Engine, source: &str) -> open_bsl::Module {
 }
 
 #[test]
+fn external_component_attachment_compiles_all_forms_and_fails_explicitly() {
+    let engine = engine("");
+    for source in [
+        r#"Возврат ПодключитьВнешнююКомпоненту("Prog.Id");"#,
+        r#"Возврат ПодключитьВнешнююКомпоненту("Место", "Имя");"#,
+        r#"Возврат ПодключитьВнешнююКомпоненту("Место", "Имя", Неопределено);"#,
+        r#"Возврат AttachAddIn("Place", "Name", Неопределено, Неопределено);"#,
+    ] {
+        let module = entry(&engine, source);
+        let mut state = engine.state_builder().build();
+        let error = state.run(&module).unwrap_err().to_string();
+        assert!(error.contains("загрузчик внешних компонент"), "{error}");
+    }
+    let error = engine
+        .compile(
+            r#"Возврат ПодключитьВнешнююКомпоненту("Место", "Имя", Неопределено, Неопределено, Неопределено);"#,
+        )
+        .err()
+        .expect("пятый аргумент отвергается")
+        .to_string();
+    assert!(error.contains("принимает аргументов: 4"), "{error}");
+}
+
+#[test]
 fn settings_description_matches_the_measured_surface() {
     let engine = engine("");
     let mut state = engine.state_builder().build();
@@ -637,6 +661,29 @@ fn factory_validates_once_and_opens_isolated_started_sessions() {
     assert_eq!(
         first.call(&module, "Значение", vec![]).unwrap().0,
         Value::number_from_i64(9)
+    );
+}
+
+#[test]
+fn factory_compiles_session_module_without_external_connection_branches() {
+    let source = r#"
+        Процедура УстановкаПараметровСеанса(Требуемые) Экспорт
+            #Если ВнешнееСоединение Тогда
+                НеизвестнаяВеткаВнешнегоСоединения();
+            #КонецЕсли
+            ПараметрыСеанса.Запущен = Истина;
+        КонецПроцедуры
+    "#;
+
+    assert!(
+        SessionFactory::new(
+            code_snapshot(source),
+            metadata_catalog("configuration"),
+            "МодульСеанса",
+            SessionKind::WebClient,
+            PLATFORM_VERSION,
+        )
+        .is_ok()
     );
 }
 

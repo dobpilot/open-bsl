@@ -61,6 +61,11 @@
 - [x] 5bg. Measure and add the complete `НазначениеТипаXML` / `XMLTypeAssignment` system enumeration.
 - [x] 5bh. Add the reached frame-scoped data-separation safe mode with explicit Session common-attribute validation.
 - [x] 5bi. Add the reached unsafe-operation protection description and its Boolean property.
+- [x] 5bj. Resolve the documented external-component attachment call family reached by UNF and fail explicitly while no host loader is supplied.
+- [x] 5bk. Resolve the documented zero-argument query-schema constructor reached by UNF and fail explicitly until its object model exists.
+- [x] 5bl. Measure and add the complete `ЧастиДаты` / `DateFractions` system enumeration reached by UNF.
+- [x] 5bm. Measure literal Structure value-count behavior and reuse the existing dynamic constructor path for mismatched counts.
+- [x] 5bn. Preserve the measured lazy initialization failure for a bare imported-module name without weakening ordinary unknown-variable diagnostics.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.
