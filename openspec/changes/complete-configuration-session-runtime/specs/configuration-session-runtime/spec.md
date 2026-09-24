@@ -901,11 +901,11 @@ The base runtime SHALL provide `Новый КвалификаторыЧисла`
 - **THEN** the assignment fails explicitly
 
 ### Requirement: Unsafe-operation protection descriptions are mutable values
-The Session runtime SHALL provide zero-argument `Новый ОписаниеЗащитыОтОпасныхДействий` / `New UnsafeOperationProtectionDescription`. The resulting value SHALL expose the Boolean read-write property `ПредупреждатьОбОпасныхДействиях` / `UnsafeOperationWarnings`; another assigned type SHALL fail explicitly. The value SHALL be independent of the host process and SHALL NOT itself disable runtime safety checks.
+The Session runtime SHALL provide zero-argument `Новый ОписаниеЗащитыОтОпасныхДействий` / `New UnsafeOperationProtectionDescription`. The resulting value SHALL expose the Boolean read-write property `ПредупреждатьОбОпасныхДействиях` / `UnsafeOperationWarnings`, initially `Истина`; another assigned type SHALL fail explicitly. The value SHALL be independent of the host process and SHALL NOT itself disable runtime safety checks.
 
 #### Scenario: Construct and change the protection description
 - **WHEN** configuration startup constructs the value and assigns a Boolean through either property name
-- **THEN** both property names read the assigned value from that instance
+- **THEN** the property initially reads `Истина` and both property names read the assigned value from that instance
 
 #### Scenario: Reject another property type
 - **WHEN** configuration code assigns a non-Boolean value

@@ -138,6 +138,7 @@ fn unsafe_operation_protection_description_is_a_mutable_boolean_value() {
             .exec(
                 r#"
                 Описание = Новый ОписаниеЗащитыОтОпасныхДействий;
+                Начальное = Описание.ПредупреждатьОбОпасныхДействиях;
                 Описание.ПредупреждатьОбОпасныхДействиях = Ложь;
                 Попытка
                     Описание.UnsafeOperationWarnings = 1;
@@ -145,13 +146,13 @@ fn unsafe_operation_protection_description_is_a_mutable_boolean_value() {
                 КонецПопытки;
                 EnglishDescription = New UnsafeOperationProtectionDescription();
                 EnglishDescription.UnsafeOperationWarnings = Истина;
-                Возврат Строка(ТипЗнч(Описание)) + ":"
+                Возврат Строка(ТипЗнч(Описание)) + ":" + Строка(Начальное) + ":"
                     + Строка(Описание.ПредупреждатьОбОпасныхДействиях) + ":"
                     + Строка(EnglishDescription.ПредупреждатьОбОпасныхДействиях);
                 "#,
             )
             .unwrap(),
-        Value::Str("Unsafe operation protection description:Нет:Да".into())
+        Value::Str("Unsafe operation protection description:Да:Нет:Да".into())
     );
 }
 

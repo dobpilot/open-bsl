@@ -1,0 +1,7 @@
+file.begin	unsafe-operation-protection-1
+SECURITY.UNSAFE_PROTECTION.TYPE	Unsafe operation protection description
+SECURITY.UNSAFE_PROTECTION.DEFAULT	Yes
+SECURITY.UNSAFE_PROTECTION.FALSE	No
+SECURITY.UNSAFE_PROTECTION.ENGLISH	Yes
+SECURITY.UNSAFE_PROTECTION.ENGLISH_TYPE	Unsafe operation protection description
+file.end	unsafe-operation-protection-1

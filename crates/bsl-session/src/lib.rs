@@ -2614,9 +2614,6 @@ fn construct_unsafe_operation_protection_description(
     _: &mut CallContext<'_>,
     _: &[Value],
 ) -> RtResult<Value> {
-    // НЕ ИЗМЕРЕНО(SECURITY.UNSAFE_OPERATION_PROTECTION_DEFAULT) —
-    // достигнутый код сразу записывает свойство; начальное
-    // значение остаётся до платформенного замера.
     Ok(Value::new_object(
         UnsafeOperationProtectionDescriptionObject {
             warnings: Cell::new(true),
