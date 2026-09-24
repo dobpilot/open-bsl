@@ -129,6 +129,33 @@ fn job_schedule_matches_the_measured_passive_surface() {
 }
 
 #[test]
+fn unsafe_operation_protection_description_is_a_mutable_boolean_value() {
+    let engine = engine("");
+    let mut state = engine.state_builder().build();
+
+    assert_eq!(
+        state
+            .exec(
+                r#"
+                Описание = Новый ОписаниеЗащитыОтОпасныхДействий;
+                Описание.ПредупреждатьОбОпасныхДействиях = Ложь;
+                Попытка
+                    Описание.UnsafeOperationWarnings = 1;
+                Исключение
+                КонецПопытки;
+                EnglishDescription = New UnsafeOperationProtectionDescription();
+                EnglishDescription.UnsafeOperationWarnings = Истина;
+                Возврат Строка(ТипЗнч(Описание)) + ":"
+                    + Строка(Описание.ПредупреждатьОбОпасныхДействиях) + ":"
+                    + Строка(EnglishDescription.ПредупреждатьОбОпасныхДействиях);
+                "#,
+            )
+            .unwrap(),
+        Value::Str("Unsafe operation protection description:Нет:Да".into())
+    );
+}
+
+#[test]
 fn unset_nested_cycle_retry_clear_and_non_rollback_match_the_measurement() {
     let parameters = Rc::new(
         SessionParameters::new(

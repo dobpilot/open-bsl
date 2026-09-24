@@ -899,3 +899,14 @@ The base runtime SHALL provide `Новый КвалификаторыЧисла`
 #### Scenario: Reject mutation
 - **WHEN** configuration code assigns any number-qualifier property
 - **THEN** the assignment fails explicitly
+
+### Requirement: Unsafe-operation protection descriptions are mutable values
+The Session runtime SHALL provide zero-argument `Новый ОписаниеЗащитыОтОпасныхДействий` / `New UnsafeOperationProtectionDescription`. The resulting value SHALL expose the Boolean read-write property `ПредупреждатьОбОпасныхДействиях` / `UnsafeOperationWarnings`; another assigned type SHALL fail explicitly. The value SHALL be independent of the host process and SHALL NOT itself disable runtime safety checks.
+
+#### Scenario: Construct and change the protection description
+- **WHEN** configuration startup constructs the value and assigns a Boolean through either property name
+- **THEN** both property names read the assigned value from that instance
+
+#### Scenario: Reject another property type
+- **WHEN** configuration code assigns a non-Boolean value
+- **THEN** the assignment fails explicitly and preserves the preceding value

@@ -60,6 +60,7 @@
 - [x] 5bf. Expose the measured global `СериализаторXDTO` / `XDTOSerializer` through the existing configuration-factory path.
 - [x] 5bg. Measure and add the complete `НазначениеТипаXML` / `XMLTypeAssignment` system enumeration.
 - [x] 5bh. Add the reached frame-scoped data-separation safe mode with explicit Session common-attribute validation.
+- [x] 5bi. Add the reached unsafe-operation protection description and its Boolean property.
 - [x] 5f. Expose the measured information-base connection number from the concrete foreground or background Session connection.
 - [x] 5g. Implement the measured frame-scoped boolean safe and privileged modes through the facade call context and existing VM frames.
 - [x] 5h. Expose the measured authorized information-base connection snapshot and reject unavailable, denied, or inconsistent snapshots.

@@ -1115,6 +1115,7 @@
 | `СоставФормНачальнойСтраницы`, `HomePageForms` | 0 |
 | `ОписаниеНастроек`, `SettingsDescription` | 0 |
 | `РасписаниеРегламентногоЗадания`, `JobSchedule` | 0 |
+| `ОписаниеЗащитыОтОпасныхДействий`, `UnsafeOperationProtectionDescription` | 0 |
 
 #### Типы объектов
 
@@ -1132,6 +1133,7 @@
 | `НастройкиОбработкиОшибок` | `Settings of error processing on the client` | `ErrorProcessingSettings` |
 | `ОписаниеНастроек` | `Setting description` | `SettingsDescription` |
 | `РасписаниеРегламентногоЗадания` | `Job schedule` | `JobSchedule` |
+| `ОписаниеЗащитыОтОпасныхДействий` | `Unsafe operation protection description` | `UnsafeOperationProtectionDescription` |
 
 #### Члены объектов
 
@@ -1242,6 +1244,12 @@
 | `ПериодНедель`, `WeeksPeriod` | чтение и запись |
 | `ПериодПовтораВТечениеДня`, `RepeatPeriodInDay` | чтение и запись |
 | `ПериодПовтораДней`, `DaysRepeatPeriod` | чтение и запись |
+
+##### `ОписаниеЗащитыОтОпасныхДействий`
+
+| Свойство | Доступ |
+|---|---|
+| `ПредупреждатьОбОпасныхДействиях`, `UnsafeOperationWarnings` | чтение и запись |
 
 ### `bsl-spreadsheet` 0.2.0
 

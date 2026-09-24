@@ -1559,6 +1559,11 @@ struct JobScheduleObject {
     days_repeat_period: RefCell<Value>,
 }
 
+#[derive(Debug)]
+struct UnsafeOperationProtectionDescriptionObject {
+    warnings: Cell<bool>,
+}
+
 static PARAMETERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-session", "ПараметрыСеанса");
 static SYSTEM_INFORMATION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-session", "СистемнаяИнформация");
@@ -1621,6 +1626,12 @@ static JOB_SCHEDULE_TYPE: TypeDescriptor = TypeDescriptor {
     name: "РасписаниеРегламентногоЗадания",
     type_display: "Job schedule",
     type_names: &["JobSchedule"],
+};
+static UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ОписаниеЗащитыОтОпасныхДействий",
+    type_display: "Unsafe operation protection description",
+    type_names: &["UnsafeOperationProtectionDescription"],
 };
 
 impl ObjectProtocol for ParametersObject {
@@ -1710,6 +1721,16 @@ impl ObjectProtocol for JobScheduleObject {
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         JOB_SCHEDULE_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for UnsafeOperationProtectionDescriptionObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        UNSAFE_OPERATION_PROTECTION_DESCRIPTION_PROPERTIES
     }
 }
 
@@ -2589,6 +2610,56 @@ fn construct_job_schedule(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Valu
     }))
 }
 
+fn construct_unsafe_operation_protection_description(
+    _: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    // НЕ ИЗМЕРЕНО(SECURITY.UNSAFE_OPERATION_PROTECTION_DEFAULT) —
+    // достигнутый код сразу записывает свойство; начальное
+    // значение остаётся до платформенного замера.
+    Ok(Value::new_object(
+        UnsafeOperationProtectionDescriptionObject {
+            warnings: Cell::new(true),
+        },
+    ))
+}
+
+fn unsafe_operation_protection_description(
+    receiver: &dyn ObjectProtocol,
+) -> RtResult<&UnsafeOperationProtectionDescriptionObject> {
+    receiver
+        .downcast_ref::<UnsafeOperationProtectionDescriptionObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn unsafe_operation_warnings(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Boolean(
+        unsafe_operation_protection_description(receiver)?
+            .warnings
+            .get(),
+    ))
+}
+
+fn set_unsafe_operation_warnings(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let Value::Boolean(value) = value else {
+        return Err(RtError::TypeError {
+            expected: "Булево",
+            op: "ОписаниеЗащитыОтОпасныхДействий.ПредупреждатьОбОпасныхДействиях",
+        });
+    };
+    unsafe_operation_protection_description(receiver)?
+        .warnings
+        .set(value);
+    Ok(())
+}
+
 fn job_schedule(receiver: &dyn ObjectProtocol) -> RtResult<&JobScheduleObject> {
     receiver
         .downcast_ref::<JobScheduleObject>()
@@ -2792,6 +2863,15 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: construct_job_schedule,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(6),
+        names: &[
+            "ОписаниеЗащитыОтОпасныхДействий",
+            "UnsafeOperationProtectionDescription",
+        ],
+        arity: Arity::exact(0),
+        call: construct_unsafe_operation_protection_description,
+    },
 ];
 
 const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
@@ -2800,6 +2880,10 @@ const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
     (ConstructorCode::new(3), &HOME_PAGE_FORMS_TYPE),
     (ConstructorCode::new(4), &SETTINGS_DESCRIPTION_TYPE),
     (ConstructorCode::new(5), &JOB_SCHEDULE_TYPE),
+    (
+        ConstructorCode::new(6),
+        &UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE,
+    ),
 ];
 
 static SYSTEM_INFORMATION_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
@@ -2913,6 +2997,13 @@ static JOB_SCHEDULE_PROPERTIES: &[PropertyDescriptor] = &[
         set: Some(set_job_schedule_days_repeat_period),
     },
 ];
+
+static UNSAFE_OPERATION_PROTECTION_DESCRIPTION_PROPERTIES: &[PropertyDescriptor] =
+    &[PropertyDescriptor {
+        names: &["ПредупреждатьОбОпасныхДействиях", "UnsafeOperationWarnings"],
+        get: unsafe_operation_warnings,
+        set: Some(set_unsafe_operation_warnings),
+    }];
 
 static INFOBASE_SESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     &["ПолучитьФоновоеЗадание", "GetBackgroundJob"],
@@ -3256,6 +3347,7 @@ const TYPES: &[&TypeDescriptor] = &[
     &ERROR_PROCESSING_SETTINGS_TYPE,
     &SETTINGS_DESCRIPTION_TYPE,
     &JOB_SCHEDULE_TYPE,
+    &UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -3281,6 +3373,8 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&SETTINGS_DESCRIPTION_TYPE)
         .with_properties(SETTINGS_DESCRIPTION_PROPERTIES),
     ObjectMembersDescriptor::new(&JOB_SCHEDULE_TYPE).with_properties(JOB_SCHEDULE_PROPERTIES),
+    ObjectMembersDescriptor::new(&UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE)
+        .with_properties(UNSAFE_OPERATION_PROTECTION_DESCRIPTION_PROPERTIES),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
