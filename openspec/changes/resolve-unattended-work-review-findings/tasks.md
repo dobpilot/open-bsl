@@ -38,9 +38,9 @@
 - [ ] 5.7 Record the legal position on decompiling vendor module images in `decompile-native-module-images` before that change resumes.
 
 ## 6. Facade and jobs
-- [ ] 6.1 Resolve background-job target chunks by method name; share the server common-module filter with `EngineBuilder::configuration_source`.
+- [x] 6.1 Resolve background-job target chunks by method name; share the server common-module filter with `EngineBuilder::configuration_source`.
 - [x] 6.2 Report a failed runtime build from `EngineJobService`; reset `preparing` through a guard.
-- [ ] 6.3 Specify `Error::InModule` in the execution-engine specification; drop facade re-exports with no external user (`ExecutionCatalog`, the whole `uuid` module).
+- [x] 6.3 Specify `Error::InModule` in the execution-engine specification; drop facade re-exports with no external user (`ExecutionCatalog`; the `uuid` module stays, `bsl-cli`, `bsl-config-db` and the consumer use it).
 
 ## 7. Tests and tooling
 - [ ] 7.1 Merge single-probe integration test files into table-driven targets per crate; record `target/` size of one debug test run before and after.

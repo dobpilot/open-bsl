@@ -19,9 +19,18 @@ pub(crate) struct TargetTable {
 
 struct TargetFunction {
     name: String,
-    chunk: u16,
     exported: bool,
     is_async: bool,
+}
+
+/// Цель задания: модуль каталога и каноническое имя экспортного метода.
+/// Чанк находится по имени в собранной программе модуля при подготовке
+/// задания: позиция объявления в тексте не становится скрытым контрактом
+/// с порядком чанков компилятора.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct JobTarget {
+    pub module: u32,
+    pub method: Arc<str>,
 }
 
 impl TargetTable {
@@ -39,7 +48,6 @@ impl TargetTable {
                         .enumerate()
                         .map(|(i, name)| TargetFunction {
                             name: name.clone(),
-                            chunk: (i + 1) as u16,
                             exported: module.program.exported_functions[i],
                             is_async: module.program.chunks[i + 1].is_async,
                         })
@@ -52,7 +60,7 @@ impl TargetTable {
 
     /// Разрешает «Модуль.Метод»: неглобальный общий модуль, экспортная
     /// не-async цель. Детали validation — за `JOB.EXECUTE.VALIDATION`.
-    pub(super) fn resolve(&self, method_name: &str) -> Result<(u32, u16), String> {
+    pub(super) fn resolve(&self, method_name: &str) -> Result<JobTarget, String> {
         if let Some((indexed, symbols)) = &self.indexed {
             let (module_name, _) = method_name
                 .split_once('.')
@@ -62,9 +70,7 @@ impl TargetTable {
                 .index()
                 .modules()
                 .iter()
-                .filter(|module| {
-                    module.kind() != bsl_config::ModuleKind::Common || module.execution().server()
-                })
+                .filter(|module| crate::engine::executes_on_server(module))
                 .collect::<Vec<_>>();
             let (target, module) = declarations
                 .iter()
@@ -77,25 +83,20 @@ impl TargetTable {
             let functions = surface
                 .functions
                 .into_iter()
-                .enumerate()
-                .map(|(position, function)| {
-                    Ok(TargetFunction {
-                        name: function.name,
-                        chunk: (position + 1)
-                            .try_into()
-                            .map_err(|_| "слишком много методов модуля".to_string())?,
-                        exported: function.export,
-                        is_async: function.is_async,
-                    })
+                .map(|function| TargetFunction {
+                    name: function.name,
+                    exported: function.export,
+                    is_async: function.is_async,
                 })
-                .collect::<Result<Vec<_>, String>>()?;
+                .collect();
             let table = Self {
                 modules: vec![(module.name().into(), functions)],
                 indexed: None,
             };
-            return table
-                .resolve(method_name)
-                .map(|(_, chunk)| (target as u32, chunk));
+            return table.resolve(method_name).map(|resolved| JobTarget {
+                module: target as u32,
+                ..resolved
+            });
         }
         let Some((module_name, function_name)) = method_name.split_once('.') else {
             return Err(format!("цель «{method_name}» не в форме «Модуль.Метод»"));
@@ -136,7 +137,10 @@ impl TargetTable {
                     .to_string(),
             );
         }
-        Ok((module_index as u32, function.chunk))
+        Ok(JobTarget {
+            module: module_index as u32,
+            method: function.name.as_str().into(),
+        })
     }
 }
 
@@ -212,7 +216,7 @@ pub(super) fn prepare_job(
     shared: &Arc<JobRuntimeShared>,
     engine: &crate::Engine,
     id: JobId,
-    target: (u32, u16),
+    target: JobTarget,
     params: &SerializedValueGraph,
     caller_token: Option<[u8; 16]>,
     profile_index: u32,
@@ -221,12 +225,20 @@ pub(super) fn prepare_job(
         .execution_catalog()
         .expect("worker строится только с каталогом");
     let target_program = &catalog
-        .module_code(bsl_bytecode::ModuleId::new(target.0))
+        .module_code(bsl_bytecode::ModuleId::new(target.module))
         .map_err(|error| JobErrorDto::from_text(error.to_string()))?
         .program;
+    // Чанк метода — позиция в `function_names` плюс один: тот же инвариант
+    // `Program`, по которому связываются межмодульные вызовы.
+    let target_chunk = target_program
+        .function_names
+        .iter()
+        .position(|name| bsl_rt::folded_eq(name, &target.method))
+        .and_then(|index| u16::try_from(index + 1).ok())
+        .ok_or_else(|| JobErrorDto::from_text("цель задания вне каталога"))?;
     let callee = target_program
         .chunks
-        .get(target.1 as usize)
+        .get(target_chunk as usize)
         .ok_or_else(|| JobErrorDto::from_text("цель задания вне каталога"))?;
     let n_params = callee.n_params as usize;
     let argc = params.root_count();
@@ -306,8 +318,8 @@ pub(super) fn prepare_job(
         exported_module_vars: Vec::new(),
         imports: Default::default(),
         links: vec![bsl_bytecode::LinkEntry::Function {
-            module: bsl_bytecode::ModuleId::new(target.0),
-            func: target.1,
+            module: bsl_bytecode::ModuleId::new(target.module),
+            func: target_chunk,
         }],
         // Entry-программа воркера собирается в рантайме, отлаживать её
         // отдельно от вызывающей программы нечем и незачем.
@@ -418,7 +430,7 @@ pub(super) fn prepare_job(
 pub(crate) fn resolve_target(
     catalog: &bsl_bytecode::ConfigurationProgram,
     method_name: &str,
-) -> Result<(u32, u16), String> {
+) -> Result<JobTarget, String> {
     let Some((module_name, function_name)) = method_name.split_once('.') else {
         return Err(format!("цель «{method_name}» не в форме «Модуль.Метод»"));
     };
@@ -449,7 +461,10 @@ pub(crate) fn resolve_target(
                 .to_string(),
         );
     }
-    Ok((module_id.index() as u32, chunk))
+    Ok(JobTarget {
+        module: module_id.index() as u32,
+        method: program.function_names[index].as_str().into(),
+    })
 }
 
 /// Runtime для движка с каталогом: рецепт — публичный текстовый образ

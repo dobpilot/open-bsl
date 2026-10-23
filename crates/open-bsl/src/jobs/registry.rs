@@ -23,8 +23,8 @@ pub(crate) struct JobRecord {
     /// Байты записи, зарезервированные в live-бюджете до terminal:
     /// payload, ключ и строки снимка (имя метода, наименование).
     pub base_bytes: usize,
-    /// Цель вызова числами: модуль каталога и индекс чанка.
-    pub target: (u32, u16),
+    /// Цель вызова: модуль каталога и имя метода.
+    pub target: super::prepare::JobTarget,
     /// Host-профиль сеанса задания: 0 — системный, `i` — профиль `i - 1`
     /// таблицы движка. Дочернее задание наследует профиль родителя и
     /// повысить возможности не может — другого значения ему взять негде.
@@ -49,7 +49,7 @@ pub(crate) struct JobRecord {
 
 /// Ключ уникальности: пара «цель + снимок ключа» резервируется до
 /// terminal transition (`JOB.KEY.QUEUED` уточнит участие queued).
-type KeyReservation = (u32, u16, JobKeyDto);
+type KeyReservation = (u32, Arc<str>, JobKeyDto);
 
 /// Реестр под одним синхронным мьютексом: записи, очередь, ключи,
 /// бюджеты, история. История хранит `Arc`-снимки: листинг клонирует
@@ -116,7 +116,7 @@ impl JobRegistry {
         &mut self,
         id: JobId,
         method_name: String,
-        target: (u32, u16),
+        target: super::prepare::JobTarget,
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
@@ -168,7 +168,7 @@ impl JobRegistry {
             }
         }
         if let Some(key) = &key {
-            let reservation = (target.0, target.1, (**key).clone());
+            let reservation = (target.module, Arc::clone(&target.method), (**key).clone());
             if self
                 .keys
                 .iter()
@@ -418,6 +418,13 @@ mod tests {
     use super::*;
     use bsl_rt::{GraphLimits, RuntimeShapes};
 
+    fn target() -> super::super::prepare::JobTarget {
+        super::super::prepare::JobTarget {
+            module: 0,
+            method: "Ф".into(),
+        }
+    }
+
     fn graph(bytes_hint: usize) -> Arc<SerializedValueGraph> {
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let value = bsl_rt::BslValue::Str(bsl_rt::BslString::from_str(&"ы".repeat(bytes_hint / 2)));
@@ -441,7 +448,7 @@ mod tests {
             .admit(
                 id(1),
                 "М.Ф".into(),
-                (0, 1),
+                target(),
                 params.clone(),
                 None,
                 None,
@@ -454,7 +461,7 @@ mod tests {
             .admit(
                 id(2),
                 "М.Ф".into(),
-                (0, 1),
+                target(),
                 params.clone(),
                 None,
                 None,
@@ -467,7 +474,7 @@ mod tests {
             registry.admit(
                 id(3),
                 "М.Ф".into(),
-                (0, 1),
+                target(),
                 params.clone(),
                 None,
                 None,
@@ -482,7 +489,7 @@ mod tests {
             "terminal transition ровно один раз"
         );
         registry
-            .admit(id(3), "М.Ф".into(), (0, 1), params, None, None, None, 0)
+            .admit(id(3), "М.Ф".into(), target(), params, None, None, None, 0)
             .map_err(|_| ())
             .expect("слот освобождён");
         assert_eq!(registry.history_len(), 1);
@@ -514,7 +521,7 @@ mod tests {
             .admit(
                 id(1),
                 "М.Ф".into(),
-                (0, 1),
+                target(),
                 params.clone(),
                 Some(key.clone()),
                 None,
@@ -527,7 +534,7 @@ mod tests {
             registry.admit(
                 id(2),
                 "М.Ф".into(),
-                (0, 1),
+                target(),
                 params.clone(),
                 Some(key.clone()),
                 None,
@@ -541,7 +548,10 @@ mod tests {
             .admit(
                 id(3),
                 "М.Д".into(),
-                (0, 2),
+                super::super::prepare::JobTarget {
+                    module: 0,
+                    method: "Д".into(),
+                },
                 params.clone(),
                 Some(key.clone()),
                 None,
@@ -555,7 +565,7 @@ mod tests {
             .admit(
                 id(4),
                 "М.Ф".into(),
-                (0, 1),
+                target(),
                 params,
                 Some(key),
                 None,
@@ -578,7 +588,7 @@ mod tests {
                 .admit(
                     id(i),
                     "М.Ф".into(),
-                    (0, 1),
+                    target(),
                     params.clone(),
                     None,
                     None,
@@ -621,7 +631,7 @@ mod tests {
             .admit(
                 id(1),
                 "Модуль.Метод".into(),
-                (0, 1),
+                target(),
                 params.clone(),
                 Some(key.clone()),
                 Some("наименование".into()),
@@ -686,7 +696,16 @@ mod tests {
         });
         for i in 1..=3u8 {
             registry
-                .admit(id(i), "М.Ф".into(), (0, 1), graph(64), None, None, None, 0)
+                .admit(
+                    id(i),
+                    "М.Ф".into(),
+                    target(),
+                    graph(64),
+                    None,
+                    None,
+                    None,
+                    0,
+                )
                 .map_err(|_| ())
                 .expect("принято");
             registry.finish(id(i), JobStateDto::Completed, None, None);
@@ -731,7 +750,7 @@ mod tests {
                 .admit(
                     job,
                     "Модуль.Метод".to_string(),
-                    (0, 1),
+                    target(),
                     graph(64),
                     None,
                     None,
@@ -779,7 +798,7 @@ mod tests {
             .admit(
                 loser,
                 "Модуль.Метод".to_string(),
-                (0, 1),
+                target(),
                 graph(64),
                 None,
                 None,
@@ -824,7 +843,7 @@ mod tests {
             .admit(
                 id(1),
                 "Модуль.Метод".to_string(),
-                (0, 1),
+                target(),
                 graph(64),
                 None,
                 None,

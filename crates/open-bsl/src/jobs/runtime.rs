@@ -234,7 +234,7 @@ impl JobRuntimeShared {
     pub(crate) fn submit_shared(
         &self,
         method_name: &str,
-        target: (u32, u16),
+        target: super::prepare::JobTarget,
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
@@ -609,7 +609,7 @@ impl JobRuntime {
     pub(crate) fn submit(
         &self,
         method_name: &str,
-        target: (u32, u16),
+        target: super::prepare::JobTarget,
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
@@ -996,7 +996,7 @@ mod pool_tests {
         let snapshot = runtime
             .submit(
                 "Служебный.Сложить",
-                target,
+                target.clone(),
                 params(&[number(1), number(2)]),
                 None,
                 None,
@@ -1043,7 +1043,7 @@ mod pool_tests {
         let snapshot = runtime
             .submit(
                 "Служебный.Сложить",
-                target,
+                target.clone(),
                 params(&[number(1), number(2)]),
                 None,
                 None,
@@ -1136,7 +1136,7 @@ mod pool_tests {
         let snapshot = runtime
             .submit(
                 "Служебный.Сложить",
-                target,
+                target.clone(),
                 params(&[number(1), number(2)]),
                 None,
                 None,
@@ -1157,7 +1157,7 @@ mod pool_tests {
         let error = runtime
             .submit(
                 "Служебный.Сложить",
-                target,
+                target.clone(),
                 params(&[number(1), number(2)]),
                 None,
                 None,
@@ -1178,7 +1178,7 @@ mod pool_tests {
         let snapshot = runtime
             .submit(
                 "Служебный.Сложить",
-                target,
+                target.clone(),
                 params(&[number(2), number(3)]),
                 None,
                 None,
@@ -1238,7 +1238,7 @@ mod pool_tests {
         let snapshot = runtime
             .submit(
                 "Служебный.Сложить",
-                target,
+                target.clone(),
                 params(&[number(1)]),
                 None,
                 None,
@@ -1283,7 +1283,7 @@ mod pool_tests {
                 runtime
                     .submit(
                         "Служебный.Сложить",
-                        target,
+                        target.clone(),
                         params(&[number(i), number(i)]),
                         None,
                         None,

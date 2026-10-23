@@ -707,9 +707,7 @@ impl EngineBuilder {
             .index()
             .modules()
             .iter()
-            .filter(|module| {
-                module.kind() != bsl_config::ModuleKind::Common || module.execution().server()
-            })
+            .filter(|module| executes_on_server(module))
             .map(|module| ModuleRecipe {
                 name: module.name().into(),
                 source: String::new(),
@@ -2100,6 +2098,13 @@ fn image_init_order(catalog: &bsl_bytecode::ConfigurationProgram) -> Vec<u32> {
         visit(catalog, &mut state, &mut order, i);
     }
     order
+}
+
+/// Входит ли модуль индекса в серверный каталог движка: общий модуль — только
+/// с флагом «Сервер», остальные виды модулей — всегда. Тот же отбор задаёт
+/// номера модулей, по которым фоновые задания находят свою цель.
+pub(crate) fn executes_on_server(module: &bsl_config::ConfigurationModuleDeclaration) -> bool {
+    module.kind() != bsl_config::ModuleKind::Common || module.execution().server()
 }
 
 #[cfg(test)]

@@ -421,7 +421,7 @@ fn start_job(
                 record.snapshot.begin = begin;
                 started = true;
                 Some((
-                    record.target,
+                    record.target.clone(),
                     Arc::clone(&record.snapshot.params),
                     Arc::clone(&record.cancel_requested),
                     record.caller_token,

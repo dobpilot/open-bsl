@@ -60,7 +60,6 @@ pub use bsl_vm::{DebugAction, DebugHook, DebugPosition, DebugValues, ROOT_MODULE
 // — лексическую и синтаксическую ошибку с их видами, а `Value` — типы
 // своих вариантов. Без этих имён хост получил бы ошибку или значение и не
 // смог бы написать по нему `match`.
-pub use bsl_bytecode::ExecutionCatalog;
 pub use bsl_bytecode::TextError;
 pub use bsl_compiler::CompileError;
 pub use bsl_config::{

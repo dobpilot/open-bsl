@@ -167,6 +167,7 @@ fn unselected_syntax_errors_still_fail_before_unknown_root_diagnostics() {
         .build()
         .err()
         .unwrap();
+    assert!(error.to_string().starts_with("модуль «Сломанный»:"), "{error}");
     assert!(matches!(error, Error::InModule { source, .. } if matches!(*source, Error::Parse(_))));
 }
 
