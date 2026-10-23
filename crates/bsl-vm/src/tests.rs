@@ -66,9 +66,9 @@ fn module_argument_cells_are_released_on_return_and_exception() {
             "Перем Счетчик Экспорт; Процедура Изменить(Аргумент) Экспорт {body} КонецПроцедуры
              Функция Ссылка() Экспорт Возврат ЭтотОбъект; КонецФункции Счетчик = 0;"
         );
-        let service = bsl_sema::resolve_program_with_registry(
+        let service = bsl_sema::resolve_program_with(
             &parse(&service_source).unwrap().items,
-            &registry,
+            &bsl_sema::ResolveOptions::new(&registry),
         )
         .unwrap();
         let imports = [bsl_sema::ImportedModule::from_resolved(
@@ -91,10 +91,9 @@ fn module_argument_cells_are_released_on_return_and_exception() {
                  КонецЦикла;
                  Возврат Собственная + Служебный.Счетчик;"
             );
-            let entry = bsl_sema::resolve_program_with_imports(
+            let entry = bsl_sema::resolve_program_with(
                 &parse(&source).unwrap().items,
-                &registry,
-                &imports,
+                &bsl_sema::ResolveOptions::new(&registry).imports(&imports),
             )
             .unwrap();
             for optimizations in [
@@ -1006,7 +1005,8 @@ fn the_front_end_compiles_and_runs_a_configuration_end_to_end() {
     .expect("синтаксис служебного модуля")
     .items;
     let service =
-        bsl_sema::resolve_program_with_registry(&service_items, &registry).expect("sema модуля");
+        bsl_sema::resolve_program_with(&service_items, &bsl_sema::ResolveOptions::new(&registry))
+            .expect("sema модуля");
 
     let imports = vec![bsl_sema::ImportedModule::from_resolved(
         "Служебный",
@@ -1019,8 +1019,11 @@ fn the_front_end_compiles_and_runs_a_configuration_end_to_end() {
     )
     .expect("синтаксис entry")
     .items;
-    let entry = bsl_sema::resolve_program_with_imports(&entry_items, &registry, &imports)
-        .expect("sema entry");
+    let entry = bsl_sema::resolve_program_with(
+        &entry_items,
+        &bsl_sema::ResolveOptions::new(&registry).imports(&imports),
+    )
+    .expect("sema entry");
 
     let (catalog, entry_program) = bsl_compiler::compile_configuration(
         &[("Служебный".to_string(), &service)],
@@ -1163,8 +1166,9 @@ fn run_src_with_json(src: &str) -> BslValue {
         .register(bsl_json::library());
     let registry = builder.build().expect("композиция bsl-rt + bsl-json");
     let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
-    let resolved = bsl_sema::resolve_program_with_registry(&prog.items, &registry)
-        .unwrap_or_else(|e| panic!("sema error: {e:?}"));
+    let resolved =
+        bsl_sema::resolve_program_with(&prog.items, &bsl_sema::ResolveOptions::new(&registry))
+            .unwrap_or_else(|e| panic!("sema error: {e:?}"));
     let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
     run_with_dynamic_and_registry(&program, &registry)
         .unwrap_or_else(|e| panic!("runtime error: {e:?}"))
@@ -1395,8 +1399,9 @@ fn test_component_registry() -> bsl_rt::RuntimeRegistry {
 
 fn compile_with_registry(src: &str, registry: &bsl_rt::RuntimeRegistry) -> Program {
     let parsed = parse(src).unwrap_or_else(|error| panic!("parse error: {error:?}"));
-    let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, registry)
-        .unwrap_or_else(|error| panic!("sema error: {error:?}"));
+    let resolved =
+        bsl_sema::resolve_program_with(&parsed.items, &bsl_sema::ResolveOptions::new(registry))
+            .unwrap_or_else(|error| panic!("sema error: {error:?}"));
     compile_program(&resolved).unwrap_or_else(|error| panic!("compile error: {error:?}"))
 }
 
@@ -1404,7 +1409,9 @@ fn compile_with_registry(src: &str, registry: &bsl_rt::RuntimeRegistry) -> Progr
 fn component_function_resolves_compiles_links_and_runs() {
     let registry = test_component_registry();
     let parsed = parse("Возврат ОтветПриложения();").unwrap();
-    let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+    let resolved =
+        bsl_sema::resolve_program_with(&parsed.items, &bsl_sema::ResolveOptions::new(&registry))
+            .unwrap();
     let program = compile_program(&resolved).unwrap();
 
     assert_eq!(program.requirements.len(), 2);
@@ -1520,7 +1527,9 @@ fn array_set_keeps_result_use_on_the_open_path() {
 fn component_mismatch_is_rejected_before_execution() {
     let registry = test_component_registry();
     let parsed = parse("Возврат ОтветПриложения();").unwrap();
-    let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+    let resolved =
+        bsl_sema::resolve_program_with(&parsed.items, &bsl_sema::ResolveOptions::new(&registry))
+            .unwrap();
     let mut program = compile_program(&resolved).unwrap();
     program.requirements[1].version = "9.9.9".to_string();
 
@@ -1534,7 +1543,9 @@ fn component_mismatch_is_rejected_before_execution() {
 fn component_constructor_resolves_compiles_links_and_runs() {
     let registry = test_component_registry();
     let parsed = parse("Возврат Новый ТестовыйОбъект();").unwrap();
-    let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+    let resolved =
+        bsl_sema::resolve_program_with(&parsed.items, &bsl_sema::ResolveOptions::new(&registry))
+            .unwrap();
     let program = compile_program(&resolved).unwrap();
 
     assert!(program.chunks[0].instrs.iter().any(|instruction| matches!(

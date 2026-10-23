@@ -8780,7 +8780,7 @@ fn settings_storage_load(
     // цели; ошибки подготовки возвращаются в исходном виде. Прочие классы
     // ошибок обработчика ещё требуют отдельных нативных замеров.
     // НЕ ИЗМЕРЕНО(SETTINGSSTORAGE.LOAD_HANDLER_ERROR)
-    let (_, parameters) = context.call_configuration_handler_with_mode(
+    let (_, parameters) = context.call_configuration_handler(
         module,
         handler,
         vec![

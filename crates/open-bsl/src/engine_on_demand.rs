@@ -364,8 +364,12 @@ impl OnDemandCatalog {
     pub(super) fn compile_entry(&self, source: &str) -> Result<Program, Error> {
         let syntax = bsl_syntax::parse_with_symbols(source, &self.symbols)?;
         let imports = self.imports(None)?;
-        let resolved =
-            bsl_sema::resolve_program_with_provider(&syntax.items, &self.registry, &imports, self)?;
+        let resolved = bsl_sema::resolve_program_with(
+            &syntax.items,
+            &bsl_sema::ResolveOptions::new(&self.registry)
+                .imports(&imports)
+                .provider(Some(self)),
+        )?;
         for target in resolved_configuration_dependencies(&resolved) {
             let module = ModuleId::new(target as u32);
             if self.prepared_module(module).is_none() {
@@ -461,17 +465,20 @@ impl OnDemandCatalog {
             let properties = self.properties(index)?;
             times[4] += elapsed(start);
             let start = phase();
-            let mut resolved = bsl_sema::resolve_configuration_module_with_provider(
+            let mut resolved = bsl_sema::resolve_program_with(
                 &syntax.items,
-                &self.registry,
-                &imports,
-                properties,
-                self.defer_name_errors
-                    && matches!(
-                        recipe.visibility,
-                        ModuleVisibility::Named | ModuleVisibility::Global
-                    ),
-                self,
+                &bsl_sema::ResolveOptions::new(&self.registry)
+                    .imports(&imports)
+                    .configuration_module()
+                    .receiver_properties(properties)
+                    .defer_name_errors(
+                        self.defer_name_errors
+                            && matches!(
+                                recipe.visibility,
+                                ModuleVisibility::Named | ModuleVisibility::Global
+                            ),
+                    )
+                    .provider(Some(self)),
             )
             .map_err(|error| preparation::Failure::Semantic(error).in_module(&recipe.name))?;
             times[5] += elapsed(start);

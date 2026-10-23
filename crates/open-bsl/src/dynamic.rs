@@ -134,14 +134,15 @@ impl DynamicCompiler for DynamicCode {
             .scope
             .module
             .map_or(&[][..], |module| self.engine.receiver_properties(module));
-        let unit = Rc::new(bsl_compiler::compile_dynamic_snippet_with_import_provider(
+        let unit = Rc::new(bsl_compiler::compile_dynamic_snippet_with(
             request,
             Some(self.engine.registry()),
             &self.engine.preproc_symbols(),
             scope,
-            &imports,
-            properties,
-            self.engine.imported_provider(),
+            &bsl_compiler::DynamicSnippetOptions::default()
+                .imports(&imports)
+                .receiver_properties(properties)
+                .provider(self.engine.imported_provider()),
         )?);
         self.cache.insert(key, Rc::clone(&unit));
         Ok(unit)

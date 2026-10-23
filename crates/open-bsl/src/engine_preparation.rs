@@ -154,15 +154,18 @@ impl Analyzer<'_> {
         let module = &self.modules[current];
         let syntax =
             bsl_syntax::parse_with_symbols(&module.source, self.symbols).map_err(Failure::Parse)?;
-        let mut resolved = bsl_sema::resolve_configuration_module_with_name_error_policy(
+        let mut resolved = bsl_sema::resolve_program_with(
             &syntax.items,
-            self.registry,
-            &imports,
-            receiver_properties(self.property_contexts, &module.name),
-            self.defer_name_errors
-                && matches!(
-                    module.visibility,
-                    ModuleVisibility::Named | ModuleVisibility::Global
+            &bsl_sema::ResolveOptions::new(self.registry)
+                .imports(&imports)
+                .configuration_module()
+                .receiver_properties(receiver_properties(self.property_contexts, &module.name))
+                .defer_name_errors(
+                    self.defer_name_errors
+                        && matches!(
+                            module.visibility,
+                            ModuleVisibility::Named | ModuleVisibility::Global
+                        ),
                 ),
         )
         .map_err(Failure::Semantic)?;

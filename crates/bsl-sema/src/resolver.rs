@@ -174,9 +174,6 @@ impl std::fmt::Display for SemaError {
 
 impl std::error::Error for SemaError {}
 
-pub type ResolvedSnippetWithRequirements =
-    (Vec<String>, Vec<RStmt>, Vec<bsl_rt::LibraryRequirement>);
-
 /// Сигнатура функции/процедуры, собранная до резолвинга тел — нужна, чтобы
 /// вызовы разрешались независимо от порядка объявления (в том числе
 /// рекурсия и взаимные вызовы).
@@ -233,87 +230,105 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     resolve_program_impl(items, None, &[], false, &[], false, None)
 }
 
-/// Разрешает модуль с каталогом функций и конструкторов собранного
-/// runtime. [`resolve_program`] без реестра видит только ядровые дескрипторы, а этот
-/// вход добавляет к ним функции и конструкторы зарегистрированных компонентов.
-///
-/// # Errors
-///
-/// Возвращает [`SemaError`] по тем же правилам, что и [`resolve_program`].
-pub fn resolve_program_with_registry(
-    items: &[Item],
-    registry: &bsl_rt::RuntimeRegistry,
-) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(items, Some(registry), &[], false, &[], false, None)
+/// Настройки разрешения модуля для [`resolve_program_with`]. Каждая
+/// настройка независима; значения по умолчанию дают обычный строгий модуль
+/// без импортов.
+#[derive(Clone, Copy)]
+pub struct ResolveOptions<'a> {
+    registry: &'a bsl_rt::RuntimeRegistry,
+    imports: &'a [ImportedModule],
+    configuration_module: bool,
+    receiver_properties: &'a [String],
+    defer_name_errors: bool,
+    provider: Option<&'a dyn ImportedModuleProvider>,
 }
 
-/// То же с импортным окружением: модуль видит экспортные символы модулей,
-/// перечисленных в `imports`, по их псевдонимам. Локальная или модульная
-/// переменная с именем псевдонима затеняет его — как у `Символы` и имён
-/// перечислений.
+impl<'a> ResolveOptions<'a> {
+    /// Разрешение с каталогом функций и конструкторов собранного runtime.
+    /// [`resolve_program`] без реестра видит только ядровые дескрипторы, а
+    /// реестр добавляет к ним функции и конструкторы зарегистрированных
+    /// компонентов.
+    #[must_use]
+    pub fn new(registry: &'a bsl_rt::RuntimeRegistry) -> Self {
+        Self {
+            registry,
+            imports: &[],
+            configuration_module: false,
+            receiver_properties: &[],
+            defer_name_errors: false,
+            provider: None,
+        }
+    }
+
+    /// Импортное окружение: модуль видит экспортные символы модулей,
+    /// перечисленных в `imports`, по их псевдонимам. Локальная или модульная
+    /// переменная с именем псевдонима затеняет его — как у `Символы` и имён
+    /// перечислений.
+    #[must_use]
+    pub fn imports(self, imports: &'a [ImportedModule]) -> Self {
+        Self { imports, ..self }
+    }
+
+    /// Модуль конфигурации: ошибки арности в теле метода откладываются, и
+    /// разрешён измеренный случай `Для Каждого X Из X`. Самостоятельные
+    /// точки входа остаются строгими.
+    #[must_use]
+    pub fn configuration_module(self) -> Self {
+        Self {
+            configuration_module: true,
+            ..self
+        }
+    }
+
+    /// Конечная таблица свойств получателя модуля. Объявленные переменные
+    /// и параметры сохраняют прежний приоритет.
+    #[must_use]
+    pub fn receiver_properties(self, receiver_properties: &'a [String]) -> Self {
+        Self {
+            receiver_properties,
+            ..self
+        }
+    }
+
+    /// Явно выбранный отложенный отказ неизвестных имён. При включённой
+    /// политике отказ относится ко всему модулю при его инициализации.
+    #[must_use]
+    pub fn defer_name_errors(self, defer_name_errors: bool) -> Self {
+        Self {
+            defer_name_errors,
+            ..self
+        }
+    }
+
+    /// Адресная загрузка экспортных объявлений. Приоритет переменных и
+    /// выбор псевдонима остаются в обычном резолвере; источник вызывается
+    /// только после выбора конкретного импортируемого модуля.
+    #[must_use]
+    pub fn provider(self, provider: Option<&'a dyn ImportedModuleProvider>) -> Self {
+        Self { provider, ..self }
+    }
+}
+
+/// Разрешает модуль по правилам [`resolve_program`] с настройками `options`.
 ///
 /// # Errors
 ///
 /// Все ошибки [`resolve_program`], плюс ошибки квалифицированных обращений:
-/// неизвестный символ, арность, процедура в выражении.
-pub fn resolve_program_with_imports(
+/// неизвестный символ, арность, процедура в выражении. Для модуля
+/// конфигурации — все ошибки методов, кроме неверной арности и указанной
+/// самоссылки цикла; с источником объявлений — также ошибка источника.
+pub fn resolve_program_with(
     items: &[Item],
-    registry: &bsl_rt::RuntimeRegistry,
-    imports: &[ImportedModule],
-) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(items, Some(registry), imports, false, &[], false, None)
-}
-
-/// Разрешает модуль конфигурации с отложенными ошибками арности в теле метода
-/// и измеренным случаем `Для Каждого X Из X`. Самостоятельные точки входа
-/// остаются строгими.
-///
-/// # Errors
-///
-/// Возвращает ошибки объявлений, тела модуля и все ошибки методов, кроме
-/// неверной арности и указанной самоссылки цикла.
-pub fn resolve_configuration_module_with_imports(
-    items: &[Item],
-    registry: &bsl_rt::RuntimeRegistry,
-    imports: &[ImportedModule],
-) -> Result<ResolvedProgram, SemaError> {
-    resolve_configuration_module_with_receiver_property_names(items, registry, imports, &[])
-}
-
-/// Разрешает модуль конфигурации с конечной таблицей свойств своего получателя.
-/// Объявленные переменные и параметры сохраняют прежний приоритет.
-///
-/// # Errors
-/// Возвращает ошибки обычного разрешения модуля конфигурации.
-pub fn resolve_configuration_module_with_receiver_property_names(
-    items: &[Item],
-    registry: &bsl_rt::RuntimeRegistry,
-    imports: &[ImportedModule],
-    properties: &[String],
-) -> Result<ResolvedProgram, SemaError> {
-    resolve_configuration_module_with_name_error_policy(items, registry, imports, properties, false)
-}
-
-/// Разрешает модуль с явно выбранным отложенным отказом неизвестных имён.
-/// При включённой политике отказ относится ко всему модулю при его инициализации.
-///
-/// # Errors
-/// Возвращает остальные ошибки обычного разрешения модуля конфигурации.
-pub fn resolve_configuration_module_with_name_error_policy(
-    items: &[Item],
-    registry: &bsl_rt::RuntimeRegistry,
-    imports: &[ImportedModule],
-    properties: &[String],
-    defer_name_errors: bool,
+    options: &ResolveOptions<'_>,
 ) -> Result<ResolvedProgram, SemaError> {
     resolve_program_impl(
         items,
-        Some(registry),
-        imports,
-        true,
-        properties,
-        defer_name_errors,
-        None,
+        Some(options.registry),
+        options.imports,
+        options.configuration_module,
+        options.receiver_properties,
+        options.defer_name_errors,
+        options.provider,
     )
 }
 
@@ -324,53 +339,6 @@ pub trait ImportedModuleProvider {
     /// # Errors
     /// Возвращает ошибку загрузки или объявления выбранного модуля.
     fn module_surface(&self, module: u32) -> Result<&ImportedModule, SemaError>;
-}
-
-/// Разрешает модуль с адресной загрузкой экспортных объявлений.
-///
-/// Приоритет переменных и выбор псевдонима остаются в обычном резолвере.
-/// Источник вызывается только после выбора конкретного импортируемого модуля.
-///
-/// # Errors
-/// Возвращает обычные семантические ошибки либо ошибку источника объявлений.
-pub fn resolve_configuration_module_with_provider(
-    items: &[Item],
-    registry: &bsl_rt::RuntimeRegistry,
-    imports: &[ImportedModule],
-    properties: &[String],
-    defer_name_errors: bool,
-    provider: &dyn ImportedModuleProvider,
-) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(
-        items,
-        Some(registry),
-        imports,
-        true,
-        properties,
-        defer_name_errors,
-        Some(provider),
-    )
-}
-
-/// Разрешает входной текст с адресной загрузкой объявлений импортов.
-///
-/// # Errors
-/// Возвращает обычные семантические ошибки либо ошибку источника объявлений.
-pub fn resolve_program_with_provider(
-    items: &[Item],
-    registry: &bsl_rt::RuntimeRegistry,
-    imports: &[ImportedModule],
-    provider: &dyn ImportedModuleProvider,
-) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(
-        items,
-        Some(registry),
-        imports,
-        false,
-        &[],
-        false,
-        Some(provider),
-    )
 }
 
 /// Экспортная функция чужого модуля, видимая при резолвинге импортёра.
@@ -861,6 +829,76 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
     })
 }
 
+/// Результат фрагмента с собственными межмодульными связями.
+pub type ResolvedImportedSnippet = (
+    Vec<String>,
+    Vec<RStmt>,
+    Vec<bsl_rt::LibraryRequirement>,
+    Vec<crate::resolved::ResolvedLink>,
+);
+
+/// Настройки разрешения фрагмента для [`resolve_snippet_with`]. Значения по
+/// умолчанию — строгий синхронный фрагмент `Выполнить` без реестра и
+/// импортов.
+#[derive(Clone, Copy, Default)]
+pub struct SnippetOptions<'a> {
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    repl: bool,
+    allow_await: bool,
+    imports: &'a [ImportedModule],
+    receiver_properties: &'a [String],
+    provider: Option<&'a dyn ImportedModuleProvider>,
+}
+
+impl<'a> SnippetOptions<'a> {
+    /// Тот же каталог компонентов, что и у основной программы; фрагмент
+    /// возвращает собственное замыкание требований.
+    #[must_use]
+    pub fn registry(self, registry: Option<&'a bsl_rt::RuntimeRegistry>) -> Self {
+        Self { registry, ..self }
+    }
+
+    /// Правила строки REPL: голый вызов функции встроенного языка
+    /// (`СтрДлина("аб")`) не отвергается — REPL печатает его значение.
+    /// Платформенное правило про оператор относится к компиляции модуля, а
+    /// строка REPL модулем не является; фрагменты `Выполнить` остаются
+    /// строгими, как на платформе (ИЗМЕРЕНО, якорь `CALL.STMT.INTRINSIC`).
+    #[must_use]
+    pub fn repl(self) -> Self {
+        Self { repl: true, ..self }
+    }
+
+    /// Фрагмент, вызванный из async-метода: внутри него разрешён `Ждать`.
+    #[must_use]
+    pub fn allow_await(self) -> Self {
+        Self {
+            allow_await: true,
+            ..self
+        }
+    }
+
+    /// Точное импортное окружение фрагмента.
+    #[must_use]
+    pub fn imports(self, imports: &'a [ImportedModule]) -> Self {
+        Self { imports, ..self }
+    }
+
+    /// Те же свойства получателя, что и у модуля фрагмента.
+    #[must_use]
+    pub fn receiver_properties(self, receiver_properties: &'a [String]) -> Self {
+        Self {
+            receiver_properties,
+            ..self
+        }
+    }
+
+    /// Адресный источник объявлений выбранного импорта.
+    #[must_use]
+    pub fn provider(self, provider: Option<&'a dyn ImportedModuleProvider>) -> Self {
+        Self { provider, ..self }
+    }
+}
+
 /// Разрешает имена во фрагменте кода для `Выполнить`/`Вычислить`: `existing_locals` —
 /// уже объявленные переменные окружающего скрипта, которые первыми добавляются в таблицу имён
 /// первыми, поэтому ссылки на них в фрагменте попадают на ТЕ ЖЕ слоты, а
@@ -878,254 +916,33 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
 /// `Program::chunks[1..]`. Пустой список означает «функций нет» (так зовёт
 /// REPL до первого объявления), а не «вызывать нельзя».
 ///
+/// Кроме имён, возвращает требования фрагмента к компонентам и его
+/// собственные межмодульные связи; остальное задаёт `options`.
+///
 /// # Errors
 ///
 /// Возвращает [`SemaError`] по тем же причинам, что и [`resolve_script`], а также если фрагмент
-/// вызывает функцию, которой нет в `signatures`.
-pub fn resolve_snippet_stmts(
+/// вызывает функцию, которой нет в `signatures`; ошибки экспорта, арности и
+/// видимости импортов и ошибку источника выбранного импорта. В режиме REPL
+/// [`SemaError::BuiltinFunctionAsStatement`] не возникает.
+pub fn resolve_snippet_with(
     existing_locals: &[String],
     module_vars: &[String],
     stmts: &[AStmt],
     signatures: &[SnippetSignature],
-) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
-    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, true, false)
-}
-
-/// Вариант [`resolve_snippet_stmts`] для фрагмента, вызванного из
-/// async-метода: внутри него разрешён `Ждать`.
-pub fn resolve_async_snippet_stmts(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
-    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, true, true)
-}
-
-/// То же, что [`resolve_snippet_stmts`], но для строки REPL: голый вызов
-/// функции встроенного языка (`СтрДлина("аб")`) не отвергается — REPL
-/// печатает его значение. Платформенное правило про оператор относится к
-/// компиляции модуля, а строка REPL модулем не является; фрагменты
-/// `Выполнить` остаются строгими, как на платформе (ИЗМЕРЕНО, якорь
-/// `CALL.STMT.INTRINSIC`).
-///
-/// # Errors
-///
-/// Возвращает [`SemaError`] по тем же причинам, что и
-/// [`resolve_snippet_stmts`], кроме [`SemaError::BuiltinFunctionAsStatement`].
-pub fn resolve_repl_stmts(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
-    resolve_snippet_stmts_mode(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        false,
-        false,
-    )
-}
-
-/// Разрешает динамический фрагмент с тем же каталогом компонентов, что и
-/// основную программу, и возвращает его собственное замыкание требований.
-///
-/// # Errors
-///
-/// Возвращает [`SemaError`] по тем же причинам, что
-/// [`resolve_snippet_stmts`].
-pub fn resolve_snippet_stmts_with_registry(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    registry: &bsl_rt::RuntimeRegistry,
-) -> Result<ResolvedSnippetWithRequirements, SemaError> {
-    resolve_snippet_stmts_mode_registry(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        true,
-        false,
-        Some(registry),
-    )
-}
-
-/// Вариант [`resolve_snippet_stmts_with_registry`] для async-кадра.
-pub fn resolve_async_snippet_stmts_with_registry(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    registry: &bsl_rt::RuntimeRegistry,
-) -> Result<ResolvedSnippetWithRequirements, SemaError> {
-    resolve_snippet_stmts_mode_registry(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        true,
-        true,
-        Some(registry),
-    )
-}
-
-/// То же, что [`resolve_snippet_stmts_with_registry`], но по правилам
-/// REPL: голый вызов функции встроенного языка не отвергается.
-///
-/// # Errors
-///
-/// Возвращает [`SemaError`] по тем же причинам, что и
-/// [`resolve_repl_stmts`].
-pub fn resolve_repl_stmts_with_registry(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    registry: &bsl_rt::RuntimeRegistry,
-) -> Result<ResolvedSnippetWithRequirements, SemaError> {
-    resolve_snippet_stmts_mode_registry(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        false,
-        false,
-        Some(registry),
-    )
-}
-
-fn resolve_snippet_stmts_mode(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    strict_stmt_calls: bool,
-    allow_await: bool,
-) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
-    let (locals, body, _) = resolve_snippet_stmts_mode_registry(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        strict_stmt_calls,
-        allow_await,
-        None,
-    )?;
-    Ok((locals, body))
-}
-
-fn resolve_snippet_stmts_mode_registry(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    strict_stmt_calls: bool,
-    allow_await: bool,
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-) -> Result<ResolvedSnippetWithRequirements, SemaError> {
-    let (locals, body, requirements, _) = resolve_snippet_stmts_imports_impl(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        strict_stmt_calls,
-        allow_await,
-        registry,
-        &[],
-        &[],
-        None,
-    )?;
-    Ok((locals, body, requirements))
-}
-
-/// Результат фрагмента с собственными межмодульными связями.
-pub type ResolvedImportedSnippet = (
-    Vec<String>,
-    Vec<RStmt>,
-    Vec<bsl_rt::LibraryRequirement>,
-    Vec<crate::resolved::ResolvedLink>,
-);
-
-/// Разрешает синхронный динамический текст с точным импортным окружением.
-///
-/// # Errors
-/// Ошибки обычного резолвинга, экспорта, арности и видимости импортов.
-pub fn resolve_snippet_stmts_with_imports(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-    imports: &[ImportedModule],
-) -> Result<ResolvedImportedSnippet, SemaError> {
-    resolve_snippet_stmts_with_receiver_property_names(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        registry,
-        imports,
-        &[],
-    )
-}
-
-/// Разрешает динамический фрагмент с теми же свойствами получателя, что и модуль.
-///
-/// # Errors
-/// Возвращает ошибки обычного разрешения фрагмента и импортов.
-pub fn resolve_snippet_stmts_with_receiver_property_names(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-    imports: &[ImportedModule],
-    properties: &[String],
+    options: &SnippetOptions<'_>,
 ) -> Result<ResolvedImportedSnippet, SemaError> {
     resolve_snippet_stmts_imports_impl(
         existing_locals,
         module_vars,
         stmts,
         signatures,
-        true,
-        false,
-        registry,
-        imports,
-        properties,
-        None,
-    )
-}
-
-/// Разрешает динамический фрагмент с адресным источником объявлений.
-///
-/// # Errors
-/// Возвращает ошибки фрагмента или источника выбранного импорта.
-#[allow(clippy::too_many_arguments)]
-pub fn resolve_snippet_stmts_with_provider(
-    existing_locals: &[String],
-    module_vars: &[String],
-    stmts: &[AStmt],
-    signatures: &[SnippetSignature],
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-    imports: &[ImportedModule],
-    properties: &[String],
-    provider: Option<&dyn ImportedModuleProvider>,
-) -> Result<ResolvedImportedSnippet, SemaError> {
-    resolve_snippet_stmts_imports_impl(
-        existing_locals,
-        module_vars,
-        stmts,
-        signatures,
-        true,
-        false,
-        registry,
-        imports,
-        properties,
-        provider,
+        !options.repl,
+        options.allow_await,
+        options.registry,
+        options.imports,
+        options.receiver_properties,
+        options.provider,
     )
 }
 
@@ -3406,7 +3223,7 @@ mod tests {
 
         let resolve = |src: &str| {
             let prog = parse(src).unwrap();
-            resolve_program_with_registry(&prog.items, &registry)
+            resolve_program_with(&prog.items, &ResolveOptions::new(&registry))
         };
         assert!(resolve("x = Новый Тестовый(1, 2);").is_ok());
         assert_eq!(
@@ -3451,7 +3268,7 @@ mod tests {
             for prefix in ["Новый Раздельный", "Раздельная"] {
                 let source = format!("x = {prefix}({arguments});");
                 let parsed = parse(&source).unwrap();
-                let resolved = resolve_program_with_registry(&parsed.items, &registry);
+                let resolved = resolve_program_with(&parsed.items, &ResolveOptions::new(&registry));
                 assert_eq!(
                     resolved.is_ok(),
                     [0, 2, 3, 5].contains(&count),
@@ -3469,7 +3286,7 @@ mod tests {
         let registry = synthetic_registry();
         let resolve = |src: &str| {
             let prog = parse(src).unwrap();
-            resolve_program_with_registry(&prog.items, &registry)
+            resolve_program_with(&prog.items, &ResolveOptions::new(&registry))
         };
         assert!(resolve("ТестоваяПроцедура(1);").is_ok());
         assert_eq!(
@@ -3668,9 +3485,11 @@ mod tests {
         let registry = synthetic_registry();
 
         let caller = parse("x = М.Ф(1, , 3);").unwrap();
-        let resolved =
-            resolve_program_with_imports(&caller.items, &registry, std::slice::from_ref(&imported))
-                .unwrap();
+        let resolved = resolve_program_with(
+            &caller.items,
+            &ResolveOptions::new(&registry).imports(std::slice::from_ref(&imported)),
+        )
+        .unwrap();
         let RStmtKind::AssignLocal {
             value: RExpr::CallImported { args, .. },
             ..
@@ -3682,10 +3501,9 @@ mod tests {
 
         let caller = parse("x = М.Ф(1);").unwrap();
         assert_eq!(
-            resolve_program_with_imports(
+            resolve_program_with(
                 &caller.items,
-                &registry,
-                std::slice::from_ref(&imported),
+                &ResolveOptions::new(&registry).imports(std::slice::from_ref(&imported))
             )
             .unwrap_err(),
             SemaError::MissingRequiredArgument {
@@ -3911,7 +3729,13 @@ mod tests {
         ];
         let snippet = |src: &str| {
             let prog = parse(src).unwrap();
-            resolve_snippet_stmts(&[], &[], &items_to_stmts(prog.items), &sigs)
+            resolve_snippet_with(
+                &[],
+                &[],
+                &items_to_stmts(prog.items),
+                &sigs,
+                &SnippetOptions::default(),
+            )
         };
         assert!(matches!(
             snippet("Х = П();").unwrap_err(),
@@ -3922,15 +3746,17 @@ mod tests {
     }
 
     /// REPL мягче модуля: голый вызов функции языка там печатает значение,
-    /// а строгий фрагмент `Выполнить` идёт через `resolve_snippet_stmts` и
+    /// а строгий фрагмент `Выполнить` идёт через `resolve_snippet_with` и
     /// отвергает его, как платформа.
     #[test]
     fn the_repl_keeps_bare_intrinsic_calls() {
         let prog = parse("СтрДлина(\"аб\");").unwrap();
         let stmts = items_to_stmts(prog.items);
-        assert!(resolve_repl_stmts(&[], &[], &stmts, &[]).is_ok());
+        assert!(
+            resolve_snippet_with(&[], &[], &stmts, &[], &SnippetOptions::default().repl()).is_ok()
+        );
         assert!(matches!(
-            resolve_snippet_stmts(&[], &[], &stmts, &[]),
+            resolve_snippet_with(&[], &[], &stmts, &[], &SnippetOptions::default()),
             Err(SemaError::BuiltinFunctionAsStatement(_))
         ));
     }
@@ -4195,7 +4021,8 @@ mod tests {
         let existing = vec!["x".to_string()];
         let prog = parse("x = x + 1;\ny = 2;").unwrap();
         let stmts = items_to_stmts(prog.items);
-        let (locals, body) = resolve_snippet_stmts(&existing, &[], &stmts, &[]).unwrap();
+        let (locals, body, _, _) =
+            resolve_snippet_with(&existing, &[], &stmts, &[], &SnippetOptions::default()).unwrap();
         assert_eq!(locals, vec!["x".to_string(), "y".to_string()]);
         assert_eq!(
             body[0].kind,
@@ -4351,7 +4178,7 @@ mod tests {
     fn opens_with_registry(src: &str) -> Vec<(String, bool)> {
         let registry = synthetic_registry();
         let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
-        let resolved = resolve_program_with_registry(&prog.items, &registry)
+        let resolved = resolve_program_with(&prog.items, &ResolveOptions::new(&registry))
             .unwrap_or_else(|e| panic!("sema error: {e:?}"));
         call_opens(&resolved)
     }
@@ -4423,7 +4250,7 @@ mod tests {
         builder.register(bsl_rt::core_library()).register(LIBRARY);
         let registry = builder.build().unwrap();
         let prog = parse("м = Новый Массив;\nм.Добавить(1);").unwrap();
-        let resolved = resolve_program_with_registry(&prog.items, &registry).unwrap();
+        let resolved = resolve_program_with(&prog.items, &ResolveOptions::new(&registry)).unwrap();
         assert_eq!(call_opens(&resolved), vec![("Добавить".to_string(), true)]);
     }
 

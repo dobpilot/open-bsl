@@ -58,7 +58,7 @@ fn critical_entry_preserves_preexisting_noncatchable_error_classes_in_both_phase
                 .host_data(Rc::new(fault.clone()))
                 .build();
             let error = state
-                .call_configuration_handler_with_mode(
+                .call_configuration_handler(
                     "Контекст",
                     "Обработчик",
                     vec![],
@@ -87,7 +87,12 @@ fn inherited_entry_keeps_ordinary_raised_errors_unchanged_in_both_phases() {
             .host_data(Rc::new(fault.clone()))
             .build();
         let error = state
-            .call_configuration_handler("Контекст", "Обработчик", vec![])
+            .call_configuration_handler(
+                "Контекст",
+                "Обработчик",
+                vec![],
+                open_bsl::ConfigurationHandlerEntryMode::Inherit,
+            )
             .unwrap_err();
         assert!(matches!(error, Error::Runtime(actual) if actual == fault));
         assert_eq!(
@@ -107,7 +112,7 @@ fn exception_caught_inside_critical_handler_does_not_escape_or_terminate_the_sta
         .host_data(Rc::new(RtError::Raised(Value::Str("caught-probe".into()))))
         .build();
     let result = state
-        .call_configuration_handler_with_mode(
+        .call_configuration_handler(
             "Контекст",
             "Обработчик",
             vec![],
@@ -132,7 +137,7 @@ fn critical_host_entry_preserves_errors_from_target_preparation() {
         .host_data(Rc::new(fault.clone()))
         .build();
     let error = state
-        .call_configuration_handler_with_mode(
+        .call_configuration_handler(
             "Контекст",
             "Обработчик",
             vec![],

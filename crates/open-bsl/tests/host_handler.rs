@@ -16,11 +16,21 @@ fn host_calls_a_private_handler_without_exposing_it_to_bsl() {
         .unwrap();
     let mut state = engine.new_state();
     state
-        .call_configuration_handler("сЛуЖеБнЫй", "оБрАбОтЧиК", vec![Value::number_from_i64(2)])
+        .call_configuration_handler(
+            "сЛуЖеБнЫй",
+            "оБрАбОтЧиК",
+            vec![Value::number_from_i64(2)],
+            open_bsl::ConfigurationHandlerEntryMode::Inherit,
+        )
         .unwrap();
     assert_eq!(
         state
-            .call_configuration_handler("Служебный", "Прочитать", vec![])
+            .call_configuration_handler(
+                "Служебный",
+                "Прочитать",
+                vec![],
+                open_bsl::ConfigurationHandlerEntryMode::Inherit
+            )
             .unwrap()
             .0,
         Value::number_from_i64(2)

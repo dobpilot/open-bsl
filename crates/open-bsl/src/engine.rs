@@ -121,8 +121,10 @@ impl Engine {
     /// Возвращает ошибку синтаксиса, семантики или генерации байт-кода.
     pub fn compile(&self, source: &str) -> Result<Module, Error> {
         let syntax = bsl_syntax::parse_with_symbols(source, &self.inner.symbols)?;
-        let resolved =
-            bsl_sema::resolve_program_with_registry(&syntax.items, &self.inner.registry)?;
+        let resolved = bsl_sema::resolve_program_with(
+            &syntax.items,
+            &bsl_sema::ResolveOptions::new(&self.inner.registry),
+        )?;
         let program = if let Some(indexed) = &self.indexed {
             indexed.compile_resolved(&resolved)?
         } else {
@@ -172,14 +174,15 @@ impl Engine {
             return self.compile(source);
         };
         let syntax = bsl_syntax::parse_with_symbols(source, &self.inner.symbols)?;
-        let resolved = bsl_sema::resolve_program_with_imports(
+        let resolved = bsl_sema::resolve_program_with(
             &syntax.items,
-            &self.inner.registry,
-            &self
-                .configuration
-                .as_ref()
-                .expect("каталог проверен веткой выше")
-                .entry_imports,
+            &bsl_sema::ResolveOptions::new(&self.inner.registry).imports(
+                &self
+                    .configuration
+                    .as_ref()
+                    .expect("каталог проверен веткой выше")
+                    .entry_imports,
+            ),
         )?;
         let base = catalog
             .modules
@@ -1557,8 +1560,10 @@ fn rooted_recipe(
         imports.extend(component_imports.iter().cloned());
         for source in entry_sources {
             let syntax = bsl_syntax::parse_with_symbols(source, symbols)?;
-            let resolved =
-                bsl_sema::resolve_program_with_imports(&syntax.items, registry, &imports)?;
+            let resolved = bsl_sema::resolve_program_with(
+                &syntax.items,
+                &bsl_sema::ResolveOptions::new(registry).imports(&imports),
+            )?;
             for target in resolved_configuration_dependencies(&resolved) {
                 if !selected[target] {
                     selected[target] = true;
@@ -1790,15 +1795,18 @@ fn compile_whole_catalog(
     for (i, parsed) in syntax.into_iter().enumerate() {
         let imports = module_imports(modules, &surfaces, i, &index_of, method_contexts)?;
         resolved.push(
-            bsl_sema::resolve_configuration_module_with_name_error_policy(
+            bsl_sema::resolve_program_with(
                 &parsed.items,
-                registry,
-                &imports,
-                receiver_properties(property_contexts, &modules[i].name),
-                defer_name_errors
-                    && matches!(
-                        modules[i].visibility,
-                        ModuleVisibility::Named | ModuleVisibility::Global
+                &bsl_sema::ResolveOptions::new(registry)
+                    .imports(&imports)
+                    .configuration_module()
+                    .receiver_properties(receiver_properties(property_contexts, &modules[i].name))
+                    .defer_name_errors(
+                        defer_name_errors
+                            && matches!(
+                                modules[i].visibility,
+                                ModuleVisibility::Named | ModuleVisibility::Global
+                            ),
                     ),
             )
             .map_err(|error| Error::InModule {

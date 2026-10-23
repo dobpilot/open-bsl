@@ -180,9 +180,10 @@ fn semantic_transfer_preserves_resolvable_conformance_sources() {
         let Ok(syntax) = bsl_syntax::parse(&source) else {
             continue;
         };
-        let Ok(resolved) =
-            bsl_sema::resolve_program_with_registry(&syntax.items, &engine.inner.registry)
-        else {
+        let Ok(resolved) = bsl_sema::resolve_program_with(
+            &syntax.items,
+            &bsl_sema::ResolveOptions::new(&engine.inner.registry),
+        ) else {
             continue;
         };
         let expected = resolved.clone();

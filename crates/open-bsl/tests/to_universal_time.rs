@@ -50,7 +50,12 @@ fn time_zone_conversion_preserves_fractional_ticks_through_the_facade() {
     };
     let local = open_bsl::BslDate::from_ticks(base.ticks() + 123).unwrap();
     let (utc, _) = state
-        .call_configuration_handler("Время", "Перевести", vec![Value::Date(local)])
+        .call_configuration_handler(
+            "Время",
+            "Перевести",
+            vec![Value::Date(local)],
+            open_bsl::ConfigurationHandlerEntryMode::Inherit,
+        )
         .unwrap();
     let Value::Date(utc) = utc else {
         panic!("ожидалась дата UTC")

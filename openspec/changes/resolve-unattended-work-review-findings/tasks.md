@@ -21,7 +21,7 @@
 - [x] 3.4 Resolve `GetImportedModule` targets through an index fixed at verification.
 - [x] 3.5 Move `bind_program_shapes` from `bsl-bytecode` to `bsl-vm`.
 - [x] 3.6 Replace the `include!` copy in `bsl-sema/src/sendable.rs` with a single resolved-tree definition that can cross threads.
-- [ ] 3.7 Collapse the `resolve_*_with_*`, `compile_dynamic_snippet_with_*` and `call_configuration_handler_with_*` families into options-struct entry points.
+- [x] 3.7 Collapse the `resolve_*_with_*`, `compile_dynamic_snippet_with_*` and `call_configuration_handler_with_*` families into options-struct entry points.
 - [x] 3.8 Remove the per-lexer keyword map layered over the global one, unless an A/B shows it pays; delete `crates/bsl-compiler/examples/name_table_storage.rs`.
 
 ## 4. Runtime

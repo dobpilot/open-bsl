@@ -126,6 +126,7 @@ fn a_generic_handler_call_keeps_its_ordinary_default() {
             "МодульСеанса",
             "УстановкаПараметровСеанса",
             vec![Value::Undefined],
+            open_bsl::ConfigurationHandlerEntryMode::Inherit,
         )
         .unwrap();
     assert_eq!(

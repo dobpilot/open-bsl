@@ -30,7 +30,7 @@ fn explicit_handler_entry_is_available_through_the_facade_and_scoped_to_one_call
     let mut state = engine.new_state();
     assert_eq!(
         state
-            .call_configuration_handler_with_mode(
+            .call_configuration_handler(
                 "ПроизвольныйМодуль",
                 "Проверить",
                 vec![],
@@ -42,7 +42,12 @@ fn explicit_handler_entry_is_available_through_the_facade_and_scoped_to_one_call
     );
     assert_eq!(
         state
-            .call_configuration_handler("ПроизвольныйМодуль", "Проверить", vec![])
+            .call_configuration_handler(
+                "ПроизвольныйМодуль",
+                "Проверить",
+                vec![],
+                open_bsl::ConfigurationHandlerEntryMode::Inherit
+            )
             .unwrap()
             .0,
         Value::Boolean(false)

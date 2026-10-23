@@ -1799,71 +1799,16 @@ fn drive_linked(
 
 /// Вызывает обработчик каталожного модуля из хоста в существующем сеансе.
 /// Тело модуля инициализируется при первом обращении; состояние остаётся в
-/// `session` даже при ошибке исполнения.
+/// `session` даже при ошибке исполнения. `entry_mode` принадлежит только
+/// этому вызову: безопасный и привилегированный режимы тела модуля не
+/// меняются. `runtime` — таблицы имён и форм явного сеанса, если они есть.
 ///
 /// # Errors
-/// Возвращает ошибку поиска, арности, связывания или исполнения обработчика.
+/// Возвращает ошибки загрузки, поиска, арности, связывания и исполнения
+/// обработчика. Критическая политика входа различает отказ подготовки модуля
+/// и неперехваченное исключение самого обработчика.
 #[allow(clippy::too_many_arguments)]
-pub fn call_configuration_handler_with_registry_and_io(
-    catalog: &dyn bsl_bytecode::ExecutionCatalog,
-    session: &mut SessionModules,
-    module: &str,
-    handler: &str,
-    args: Vec<BslValue>,
-    registry: &bsl_rt::RuntimeRegistry,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    dynamic: &mut dyn DynamicCompiler,
-    host_env: &mut bsl_rt::HostEnv,
-) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    call_configuration_handler_with_mode_and_registry_and_io(
-        catalog,
-        session,
-        module,
-        handler,
-        args,
-        bsl_rt::ConfigurationHandlerEntryMode::Inherit,
-        registry,
-        stdout,
-        stderr,
-        dynamic,
-        host_env,
-    )
-}
-
-/// Вызывает обработчик с режимом входа, принадлежащим только этому вызову.
-/// Безопасный и привилегированный режимы тела модуля не меняются.
-///
-/// # Errors
-/// Возвращает ошибки поиска, арности, связывания и исполнения обработчика.
-/// Критическая политика входа различает отказ подготовки модуля и
-/// неперехваченное исключение самого обработчика.
-#[allow(clippy::too_many_arguments)]
-pub fn call_configuration_handler_with_mode_and_registry_and_io(
-    catalog: &dyn bsl_bytecode::ExecutionCatalog,
-    session: &mut SessionModules,
-    module: &str,
-    handler: &str,
-    args: Vec<BslValue>,
-    entry_mode: bsl_rt::ConfigurationHandlerEntryMode,
-    registry: &bsl_rt::RuntimeRegistry,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    dynamic: &mut dyn DynamicCompiler,
-    host_env: &mut bsl_rt::HostEnv,
-) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    call_configuration_handler_with_runtime(
-        catalog, session, module, handler, args, entry_mode, registry, stdout, stderr, dynamic,
-        host_env, None,
-    )
-}
-
-/// Вызывает обработчик с таблицами имён и форм явного сеанса.
-///
-/// # Errors
-/// Возвращает ошибки загрузки, связывания и исполнения обработчика.
-#[allow(clippy::too_many_arguments)]
-pub fn call_configuration_handler_with_runtime(
+pub fn call_configuration_handler(
     catalog: &dyn bsl_bytecode::ExecutionCatalog,
     session: &mut SessionModules,
     module: &str,

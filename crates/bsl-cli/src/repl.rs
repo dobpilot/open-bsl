@@ -318,12 +318,14 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         }
     }
 
-    let (new_locals, body, requirements) = bsl_sema::resolve_repl_stmts_with_registry(
+    let (new_locals, body, requirements, _) = bsl_sema::resolve_snippet_with(
         &session.locals,
         &[],
         &stmts,
         &[],
-        session.engine.registry(),
+        &bsl_sema::SnippetOptions::default()
+            .registry(Some(session.engine.registry()))
+            .repl(),
     )
     .map_err(|e| format!("{e}"))?;
     // Формы — ВСЕГДА свежие для этой строки (см. doc comment на

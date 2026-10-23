@@ -188,7 +188,7 @@ impl SessionParameters {
                     .collect(),
             )
         });
-        let result = context.call_configuration_handler_with_mode(
+        let result = context.call_configuration_handler(
             &self.handler_module,
             "УстановкаПараметровСеанса",
             vec![argument],
@@ -2252,7 +2252,7 @@ impl SessionFactory {
         // НЕ ИЗМЕРЕНО(SESSION.INIT.WEB_PRIVILEGE): автоматический режим
         // измерен для тонкого клиента и фонового задания; веб-вход требует
         // отдельного нативного контроля в опубликованной базе.
-        state.call_configuration_handler_with_mode(
+        state.call_configuration_handler(
             &self.session_module,
             "УстановкаПараметровСеанса",
             vec![Value::Undefined],

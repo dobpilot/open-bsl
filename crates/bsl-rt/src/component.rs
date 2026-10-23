@@ -828,33 +828,16 @@ impl<'a> CallContext<'a> {
     /// Вызывает обработчик конфигурации в текущем сеансе без требования
     /// `Экспорт`. Только платформенный компонент должен пользоваться этой
     /// точкой входа; обычный BSL-вызов сохраняет правило экспорта.
-    ///
-    /// # Errors
-    /// Возвращает ошибку отсутствующей возможности, поиска, арности или
-    /// исполнения обработчика.
-    pub fn call_configuration_handler(
-        &mut self,
-        module: &str,
-        handler: &str,
-        args: Vec<BslValue>,
-    ) -> RtResult<(BslValue, Vec<BslValue>)> {
-        self.call_configuration_handler_with_mode(
-            module,
-            handler,
-            args,
-            ConfigurationHandlerEntryMode::Inherit,
-        )
-    }
-
-    /// Вызывает обработчик с явно выбранным режимом только этого входа.
-    /// Режим вызывающего кадра не изменяется даже при ошибке обработчика.
+    /// `entry_mode` задаёт режим только этого входа
+    /// ([`ConfigurationHandlerEntryMode::Inherit`] — режим вызывающего);
+    /// режим вызывающего кадра не изменяется даже при ошибке обработчика.
     ///
     /// # Errors
     /// Возвращает ошибки доступности, поиска, арности и исполнения обработчика.
     /// В режиме [`ConfigurationHandlerEntryMode::Critical`] неперехваченные
     /// BSL-ошибки обработчика превращаются в [`crate::RtError::CriticalConfiguration`];
     /// ошибки подготовки модуля возвращаются без изменения.
-    pub fn call_configuration_handler_with_mode(
+    pub fn call_configuration_handler(
         &mut self,
         module: &str,
         handler: &str,

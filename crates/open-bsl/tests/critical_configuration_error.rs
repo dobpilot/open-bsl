@@ -72,7 +72,12 @@ fn cannot_reenter(state: &mut State, engine: &Engine, count: &Cell<usize>) {
     critical(&state.eval("ОтметитьПробу()").unwrap_err());
     critical(
         &state
-            .call_configuration_handler("Контекст", "Хорошо", vec![])
+            .call_configuration_handler(
+                "Контекст",
+                "Хорошо",
+                vec![],
+                open_bsl::ConfigurationHandlerEntryMode::Inherit,
+            )
             .unwrap_err(),
     );
     assert_eq!(count.get(), 0);
@@ -124,7 +129,12 @@ fn critical_failure_from_initialization_export_and_configuration_handler_is_term
                 instance.call(&mut state, "Сбой", vec![]).unwrap_err()
             }
             _ => state
-                .call_configuration_handler("Контекст", "Сбой", vec![])
+                .call_configuration_handler(
+                    "Контекст",
+                    "Сбой",
+                    vec![],
+                    open_bsl::ConfigurationHandlerEntryMode::Inherit,
+                )
                 .unwrap_err(),
         };
         critical(&error);

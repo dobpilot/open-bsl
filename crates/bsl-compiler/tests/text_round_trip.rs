@@ -122,12 +122,11 @@ fn compilation_error_program(optimizations: bsl_compiler::Optimizations) -> Prog
          Функция Ошибка() Экспорт Возврат СовсемНеизвестноеИмя; КонецФункции",
     )
     .unwrap();
-    let resolved = bsl_sema::resolve_configuration_module_with_name_error_policy(
+    let resolved = bsl_sema::resolve_program_with(
         &parsed.items,
-        &registry,
-        &[],
-        &[],
-        true,
+        &bsl_sema::ResolveOptions::new(&registry)
+            .configuration_module()
+            .defer_name_errors(true),
     )
     .unwrap();
     bsl_compiler::compile_program_with(&resolved, optimizations).unwrap()
@@ -409,7 +408,9 @@ fn component_constructor_without_a_result_type_keeps_methods_open() {
                о.ТекущаяПозиция();\n\
                результат = о.ТекущаяПозиция();";
     let parsed = bsl_syntax::parse(src).unwrap();
-    let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+    let resolved =
+        bsl_sema::resolve_program_with(&parsed.items, &bsl_sema::ResolveOptions::new(&registry))
+            .unwrap();
     let program = bsl_compiler::compile_program(&resolved).unwrap();
 
     let mut open = Vec::new();

@@ -126,17 +126,19 @@ fn indexed_handler_prepares_only_target_and_reuses_code_with_isolated_state() {
     let mut first = SessionModules::for_catalog(&catalog);
     let call =
         |session: &mut SessionModules, env: &mut bsl_rt::HostEnv, dynamic: &mut NoDynamic| {
-            call_configuration_handler_with_registry_and_io(
+            call_configuration_handler(
                 &catalog,
                 session,
                 "мОДУЛЬ17",
                 "Следующее",
                 Vec::new(),
+                bsl_rt::ConfigurationHandlerEntryMode::Inherit,
                 &registry,
                 &mut Vec::new(),
                 &mut Vec::new(),
                 dynamic,
                 env,
+                None,
             )
             .unwrap()
             .0

@@ -33,60 +33,65 @@ pub fn compile_dynamic_snippet(
     symbols: &bsl_syntax::PreprocSymbols,
     scope: std::num::NonZeroU64,
 ) -> Result<DynamicUnit, String> {
-    compile_dynamic_snippet_with_imports(request, registry, symbols, scope, &[])
-}
-
-/// Компилирует фрагмент с экспортными поверхностями ровно объявленных импортов.
-///
-/// # Errors
-/// Ошибки обычного фрагмента или несовпадение переданного окружения с запросом.
-pub fn compile_dynamic_snippet_with_imports(
-    request: &DynamicRequest<'_>,
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-    symbols: &bsl_syntax::PreprocSymbols,
-    scope: std::num::NonZeroU64,
-    imports: &[bsl_sema::ImportedModule],
-) -> Result<DynamicUnit, String> {
-    compile_dynamic_snippet_with_receiver_property_names(
+    compile_dynamic_snippet_with(
         request,
         registry,
         symbols,
         scope,
+        &DynamicSnippetOptions::default(),
+    )
+}
+
+/// Окружение фрагмента для [`compile_dynamic_snippet_with`]. По умолчанию
+/// импортов, свойств получателя и источника объявлений нет.
+#[derive(Clone, Copy, Default)]
+pub struct DynamicSnippetOptions<'a> {
+    imports: &'a [bsl_sema::ImportedModule],
+    receiver_properties: &'a [String],
+    provider: Option<&'a dyn bsl_sema::ImportedModuleProvider>,
+}
+
+impl<'a> DynamicSnippetOptions<'a> {
+    /// Экспортные поверхности ровно объявленных импортов.
+    #[must_use]
+    pub fn imports(self, imports: &'a [bsl_sema::ImportedModule]) -> Self {
+        Self { imports, ..self }
+    }
+
+    /// Конечный контекст свойств получателя модуля фрагмента.
+    #[must_use]
+    pub fn receiver_properties(self, receiver_properties: &'a [String]) -> Self {
+        Self {
+            receiver_properties,
+            ..self
+        }
+    }
+
+    /// Загрузка объявлений импортов только по обращению.
+    #[must_use]
+    pub fn provider(self, provider: Option<&'a dyn bsl_sema::ImportedModuleProvider>) -> Self {
+        Self { provider, ..self }
+    }
+}
+
+/// Компилирует фрагмент, как [`compile_dynamic_snippet`], в окружении
+/// `options`.
+///
+/// # Errors
+/// Возвращает ошибки обычного фрагмента, несовпадения импортного окружения с
+/// запросом либо адресного источника объявлений.
+pub fn compile_dynamic_snippet_with(
+    request: &DynamicRequest<'_>,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    symbols: &bsl_syntax::PreprocSymbols,
+    scope: std::num::NonZeroU64,
+    options: &DynamicSnippetOptions<'_>,
+) -> Result<DynamicUnit, String> {
+    let DynamicSnippetOptions {
         imports,
-        &[],
-    )
-}
-
-/// Компилирует фрагмент с конечным контекстом свойств получателя его модуля.
-///
-/// # Errors
-/// Возвращает ошибки обычного фрагмента и несовпадения импортного окружения.
-pub fn compile_dynamic_snippet_with_receiver_property_names(
-    request: &DynamicRequest<'_>,
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-    symbols: &bsl_syntax::PreprocSymbols,
-    scope: std::num::NonZeroU64,
-    imports: &[bsl_sema::ImportedModule],
-    properties: &[String],
-) -> Result<DynamicUnit, String> {
-    compile_dynamic_snippet_with_import_provider(
-        request, registry, symbols, scope, imports, properties, None,
-    )
-}
-
-/// Компилирует фрагмент, загружая объявления импортов только по обращению.
-///
-/// # Errors
-/// Возвращает ошибки обычного фрагмента либо адресного источника объявлений.
-pub fn compile_dynamic_snippet_with_import_provider(
-    request: &DynamicRequest<'_>,
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-    symbols: &bsl_syntax::PreprocSymbols,
-    scope: std::num::NonZeroU64,
-    imports: &[bsl_sema::ImportedModule],
-    properties: &[String],
-    provider: Option<&dyn bsl_sema::ImportedModuleProvider>,
-) -> Result<DynamicUnit, String> {
+        receiver_properties: properties,
+        provider,
+    } = *options;
     // Собственный контекст не является BSL-импортом. Он привязан к
     // владельцу фрагмента и не открывает функции или переменные модулей.
     if imports
@@ -160,18 +165,18 @@ pub fn compile_dynamic_snippet_with_import_provider(
     // ИЗМЕРЕНО на 1С 8.3.27: строка не наследует разрешение Ждать из
     // async-метода. Ошибка должна предшествовать исполнению всего фрагмента,
     // включая инструкции до Ждать (dynamic-async-await 2026-09-17).
-    let (all_locals, body, fragment_requirements, links) =
-        bsl_sema::resolve_snippet_stmts_with_provider(
-            request.locals,
-            request.module_vars,
-            &stmts,
-            &signatures,
-            registry,
-            imports,
-            properties,
-            provider,
-        )
-        .map_err(|error| error.to_string())?;
+    let (all_locals, body, fragment_requirements, links) = bsl_sema::resolve_snippet_with(
+        request.locals,
+        request.module_vars,
+        &stmts,
+        &signatures,
+        &bsl_sema::SnippetOptions::default()
+            .registry(registry)
+            .imports(imports)
+            .receiver_properties(properties)
+            .provider(provider),
+    )
+    .map_err(|error| error.to_string())?;
     let requirements = merge_requirements(request.requirements, &fragment_requirements)?;
     let callee_params: Vec<Vec<bool>> = request
         .functions

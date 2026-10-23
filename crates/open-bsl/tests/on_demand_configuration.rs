@@ -97,7 +97,12 @@ fn reached_contexts_are_acquired_at_first_body_access_without_unused_modules() {
     let (value, _) = engine
         .state_builder()
         .build()
-        .call_configuration_handler("МодульСеанса", "Старт", vec![Value::Str("Цель".into())])
+        .call_configuration_handler(
+            "МодульСеанса",
+            "Старт",
+            vec![Value::Str("Цель".into())],
+            open_bsl::ConfigurationHandlerEntryMode::Inherit,
+        )
         .unwrap();
     assert_eq!(value, Value::number_from_i64(3));
     let groups = contexts.groups.lock().unwrap();
@@ -129,14 +134,24 @@ fn source_preparation_follows_static_dependencies_and_loads_dynamic_target_at_fi
     let mut first = engine.state_builder().build();
     for expected in [1, 2] {
         let (value, _) = first
-            .call_configuration_handler("МодульСеанса", "Старт", vec![Value::Str("Цель".into())])
+            .call_configuration_handler(
+                "МодульСеанса",
+                "Старт",
+                vec![Value::Str("Цель".into())],
+                open_bsl::ConfigurationHandlerEntryMode::Inherit,
+            )
             .unwrap();
         assert_eq!(value, Value::number_from_i64(expected));
     }
     let mut second = engine.state_builder().build();
     assert_eq!(
         second
-            .call_configuration_handler("МодульСеанса", "Старт", vec![Value::Str("Цель".into())])
+            .call_configuration_handler(
+                "МодульСеанса",
+                "Старт",
+                vec![Value::Str("Цель".into())],
+                open_bsl::ConfigurationHandlerEntryMode::Inherit
+            )
             .unwrap()
             .0,
         Value::number_from_i64(1)
@@ -201,7 +216,12 @@ fn runtime_created_fields_do_not_collide_with_names_of_a_later_module() {
         .unwrap();
     let result = engine
         .new_state()
-        .call_configuration_handler("МодульСеанса", "Старт", vec![Value::Str("Цель".into())])
+        .call_configuration_handler(
+            "МодульСеанса",
+            "Старт",
+            vec![Value::Str("Цель".into())],
+            open_bsl::ConfigurationHandlerEntryMode::Inherit,
+        )
         .unwrap()
         .0;
     assert_eq!(result, Value::number_from_i64(17));
@@ -237,7 +257,12 @@ fn delayed_module_values_keep_their_names_across_handler_calls() {
     for name in ["Первый", "Другой"] {
         assert_eq!(
             session
-                .call_configuration_handler("МодульСеанса", "Старт", vec![Value::Str(name.into())])
+                .call_configuration_handler(
+                    "МодульСеанса",
+                    "Старт",
+                    vec![Value::Str(name.into())],
+                    open_bsl::ConfigurationHandlerEntryMode::Inherit
+                )
                 .unwrap()
                 .0,
             Value::number_from_i64(17)
@@ -361,7 +386,12 @@ fn semantic_dependency_cycles_share_stable_module_identities() {
     assert_eq!(
         engine
             .new_state()
-            .call_configuration_handler("МодульСеанса", "Старт", vec![Value::Undefined])
+            .call_configuration_handler(
+                "МодульСеанса",
+                "Старт",
+                vec![Value::Undefined],
+                open_bsl::ConfigurationHandlerEntryMode::Inherit
+            )
             .unwrap()
             .0,
         Value::number_from_i64(17)
@@ -464,7 +494,8 @@ fn dynamically_constructed_call_prepares_only_its_actual_module() {
                 .call_configuration_handler(
                     "МодульСеанса",
                     "Старт",
-                    vec![Value::Str("Цель".into())]
+                    vec![Value::Str("Цель".into())],
+                    open_bsl::ConfigurationHandlerEntryMode::Inherit
                 )
                 .unwrap()
                 .0,

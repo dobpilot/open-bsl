@@ -27,7 +27,9 @@ fn open_calls_preserve_reference_candidates_and_omitted_positions() {
     let registry = builder.build().unwrap();
     let source = "Перем Модульная; Процедура Тест(Объект, Локальная) Объект.Обработать(Локальная, Модульная, , Неопределено); КонецПроцедуры";
     let parsed = bsl_syntax::parse(source).unwrap();
-    let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+    let resolved =
+        bsl_sema::resolve_program_with(&parsed.items, &bsl_sema::ResolveOptions::new(&registry))
+            .unwrap();
     for optimizations in [
         bsl_compiler::Optimizations::default(),
         bsl_compiler::Optimizations::all(),
