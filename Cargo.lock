@@ -210,6 +210,8 @@ version = "0.4.0"
 dependencies = [
  "bsl-bytecode",
  "bsl-compiler",
+ "bsl-config",
+ "bsl-config-db",
  "bsl-format",
  "bsl-orm",
  "bsl-rt",
@@ -218,6 +220,9 @@ dependencies = [
  "bsl-syntax",
  "bsl-vm",
  "open-bsl",
+ "open-sdbl",
+ "open-sdbl-db",
+ "rustls",
  "rustyline",
  "serde_json",
 ]
@@ -244,6 +249,8 @@ dependencies = [
  "bsl-config",
  "bsl-orm",
  "bsl-session",
+ "bsl-syntax",
+ "open-bsl",
  "open-sdbl",
  "open-sdbl-db",
 ]
@@ -251,10 +258,18 @@ dependencies = [
 [[package]]
 name = "bsl-config-edt"
 version = "0.1.0"
+dependencies = [
+ "bsl-config",
+ "bsl-config-xml",
+]
 
 [[package]]
 name = "bsl-config-xml"
 version = "0.1.0"
+dependencies = [
+ "bsl-config",
+ "bsl-xml",
+]
 
 [[package]]
 name = "bsl-crypto"
@@ -1550,6 +1565,9 @@ dependencies = [
  "bsl-binbuf",
  "bsl-bytecode",
  "bsl-compiler",
+ "bsl-config",
+ "bsl-config-edt",
+ "bsl-config-xml",
  "bsl-crypto",
  "bsl-format",
  "bsl-http",
@@ -1576,13 +1594,13 @@ dependencies = [
 
 [[package]]
 name = "open-sdbl"
-version = "0.8.0"
-source = "git+https://github.com/dobpilot/open-sdbl?tag=v0.8.0#34542d1d9166e3adb307fa3a7797f70af31fbfbf"
+version = "0.9.44"
+source = "git+https://github.com/dobpilot/open-sdbl?tag=v0.9.44#1902e3ef560253d6f6fba8301405747f0ff49817"
 
 [[package]]
 name = "open-sdbl-db"
-version = "0.8.0"
-source = "git+https://github.com/dobpilot/open-sdbl?tag=v0.8.0#34542d1d9166e3adb307fa3a7797f70af31fbfbf"
+version = "0.9.44"
+source = "git+https://github.com/dobpilot/open-sdbl?tag=v0.9.44#1902e3ef560253d6f6fba8301405747f0ff49817"
 dependencies = [
  "futures-util",
  "open-sdbl",
@@ -2007,9 +2025,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.43"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0283386ce02abc0151e1761d08802dfe86c173b0b494af5cbc086574e453da06"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -2417,7 +2435,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -2943,9 +2961,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "f5f280bbb2b287bc8e7de7e3852945a0ff50d1bbcb5ed42b6c7a568c546df171"
 dependencies = [
  "rustls-pki-types",
 ]
