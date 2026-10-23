@@ -106,6 +106,8 @@ pub struct XmlWriterObject {
 #[derive(Debug)]
 pub struct XmlWriterSettingsObject {
     settings: XmlWriterSettings,
+    indent_attributes: bool,
+    indent_chars: String,
 }
 
 fn as_reader(v: &dyn ObjectProtocol) -> RtResult<&RefCell<XmlReaderState>> {
@@ -168,9 +170,13 @@ pub fn new_xml_writer(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     })
 }
 
-/// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
+/// Создаёт настройки записи XML со стандартным оформлением атрибутов.
 pub fn new_xml_writer_settings(settings: XmlWriterSettings) -> BslValue {
-    BslValue::new_object(XmlWriterSettingsObject { settings })
+    BslValue::new_object(XmlWriterSettingsObject {
+        settings,
+        indent_attributes: false,
+        indent_chars: "\t".to_string(),
+    })
 }
 
 /// Настройки из аргументов конструктора — прежние проверки типов.
@@ -182,6 +188,28 @@ pub fn writer_settings_from_args(
     encoding: &BslValue,
     version: &BslValue,
     indent: &BslValue,
+) -> RtResult<BslValue> {
+    writer_settings_from_five_args(
+        encoding,
+        version,
+        indent,
+        &BslValue::Undefined,
+        &BslValue::Undefined,
+    )
+}
+
+/// Разбирает пять документированных параметров BSL-конструктора.
+///
+/// # Errors
+///
+/// Возвращает ошибку при неверном типе аргумента или недопустимом символе
+/// в строке отступа.
+pub(crate) fn writer_settings_from_five_args(
+    encoding: &BslValue,
+    version: &BslValue,
+    indent: &BslValue,
+    indent_attributes: &BslValue,
+    indent_chars: &BslValue,
 ) -> RtResult<BslValue> {
     let mut settings = XmlWriterSettings::default();
     match encoding {
@@ -214,7 +242,37 @@ pub fn writer_settings_from_args(
             });
         }
     }
-    Ok(new_xml_writer_settings(settings))
+    let indent_attributes = match indent_attributes {
+        BslValue::Undefined => false,
+        BslValue::Boolean(value) => *value,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: "Новый ПараметрыЗаписиXML",
+            });
+        }
+    };
+    let indent_chars = match indent_chars {
+        BslValue::Undefined => "\t".to_string(),
+        BslValue::Str(value) => value.to_utf8_string(),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый ПараметрыЗаписиXML",
+            });
+        }
+    };
+    if !indent_chars
+        .chars()
+        .all(|ch| matches!(ch, ' ' | '\t' | '\r' | '\n'))
+    {
+        return Err(RtError::Xml("недопустимые символы отступа XML".into()));
+    }
+    Ok(BslValue::new_object(XmlWriterSettingsObject {
+        settings,
+        indent_attributes,
+        indent_chars,
+    }))
 }
 
 fn need_str(arg: Option<&BslValue>, op: &'static str) -> RtResult<String> {
@@ -287,14 +345,20 @@ fn reader_utf16_input_matches_the_utf8_conversion() {
 }
 
 /// Настройки из аргумента `УстановитьСтроку([Параметры])`.
-fn settings_from(arg: Option<&BslValue>) -> RtResult<XmlWriterSettings> {
+fn settings_from(arg: Option<&BslValue>) -> RtResult<(XmlWriterSettings, bool, String)> {
     match arg {
-        None | Some(BslValue::Undefined) => Ok(XmlWriterSettings::default()),
+        None | Some(BslValue::Undefined) => {
+            Ok((XmlWriterSettings::default(), false, "\t".to_string()))
+        }
         Some(value @ BslValue::Object(_)) => match value
             .object_ref()
             .and_then(|object| object.downcast_ref::<XmlWriterSettingsObject>())
         {
-            Some(settings) => Ok(settings.settings.clone()),
+            Some(settings) => Ok((
+                settings.settings.clone(),
+                settings.indent_attributes,
+                settings.indent_chars.clone(),
+            )),
             None => Err(RtError::TypeError {
                 expected: "ПараметрыЗаписиXML",
                 op: "УстановитьСтроку",
@@ -325,7 +389,9 @@ pub fn set_string(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
         return Ok(());
     }
     let writer = as_writer(obj)?;
-    *writer.borrow_mut() = Some(XmlWriter::to_string_target(settings_from(args.first())?));
+    let (settings, indent_attributes, indent_chars) = settings_from(args.first())?;
+    *writer.borrow_mut() =
+        Some(XmlWriter::to_string_target(settings).with_layout(indent_attributes, indent_chars));
     Ok(())
 }
 
@@ -428,6 +494,69 @@ pub fn skip(obj: &dyn ObjectProtocol) -> RtResult<()> {
             return Ok(());
         }
     }
+}
+
+// Начальная позиция и пробельный текст продвигаются до узла, но обычный
+// текст не пропускается: это наблюдаемый контракт `ПолучитьXMLТип` на 1С.
+pub(crate) fn get_xml_type(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
+    loop {
+        let advance = with_reader(obj, |state| {
+            Ok(state.current.is_none()
+                || matches!(&state.current, Some(XmlEvent::Text(text)) if text.trim().is_empty()))
+        })?;
+        if !advance {
+            break;
+        }
+        if read(obj)? == BslValue::Boolean(false) {
+            return Ok(BslValue::Undefined);
+        }
+    }
+    with_reader(obj, |state| {
+        let Some(XmlEvent::ElementStart { name, uri, attrs }) = &state.current else {
+            return Ok(BslValue::Undefined);
+        };
+        if state.attr_cursor.is_some() {
+            return Ok(BslValue::Undefined);
+        }
+        let parser = state
+            .parser
+            .as_ref()
+            .ok_or_else(|| bad("источник для ЧтениеXML не задан"))?;
+        let instance_attribute = |local: &str| {
+            attrs.iter().find(|attr| {
+                local_of(&attr.name) == local
+                    && !prefix_of(&attr.name).is_empty()
+                    && parser.namespace_of(prefix_of(&attr.name))
+                        == "http://www.w3.org/2001/XMLSchema-instance"
+            })
+        };
+        if instance_attribute("nil").is_some_and(|attr| matches!(attr.value.as_str(), "true" | "1"))
+        {
+            return Ok(BslValue::Undefined);
+        }
+        if let Some(attr) = instance_attribute("type") {
+            let prefix = prefix_of(&attr.value);
+            let namespace = parser.namespace_of(prefix);
+            if !prefix.is_empty() && namespace.is_empty() {
+                return Ok(BslValue::Undefined);
+            }
+            return Ok(super::xml_data_type::new_value(
+                local_of(&attr.value),
+                &namespace,
+            ));
+        }
+        let local = local_of(name);
+        let namespace = if uri.is_empty()
+            && super::xdto::BUILTIN_TYPES
+                .iter()
+                .any(|builtin| builtin.name == local)
+        {
+            super::xsd::XSD_NS
+        } else {
+            uri
+        };
+        Ok(super::xml_data_type::new_value(local, namespace))
+    })
 }
 
 /// `ПрочитатьАтрибут()` — курсор по атрибутам текущего элемента.
@@ -968,6 +1097,81 @@ pub(crate) static SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["XMLWriterSettings"],
 };
 
+fn writer_settings(receiver: &dyn ObjectProtocol) -> RtResult<&XmlWriterSettingsObject> {
+    receiver
+        .downcast_ref::<XmlWriterSettingsObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn settings_encoding(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<BslValue> {
+    let encoding = writer_settings(receiver)?
+        .settings
+        .encoding
+        .as_deref()
+        .unwrap_or("UTF-8");
+    Ok(BslValue::Str(BslString::from_utf8_string(
+        encoding.to_string(),
+    )))
+}
+
+fn settings_version(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<BslValue> {
+    Ok(BslValue::Str(BslString::from_utf8_string(
+        writer_settings(receiver)?.settings.version.clone(),
+    )))
+}
+
+fn settings_indent(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<BslValue> {
+    Ok(BslValue::Boolean(
+        writer_settings(receiver)?.settings.indent,
+    ))
+}
+
+fn settings_indent_attributes(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(BslValue::Boolean(
+        writer_settings(receiver)?.indent_attributes,
+    ))
+}
+
+fn settings_indent_chars(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(BslValue::Str(BslString::from_utf8_string(
+        writer_settings(receiver)?.indent_chars.clone(),
+    )))
+}
+
+static SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Кодировка", "Encoding"],
+        get: settings_encoding,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Версия", "Version"],
+        get: settings_version,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Отступ", "Indent"],
+        get: settings_indent,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ОтступАтрибутов", "IndentAttributes"],
+        get: settings_indent_attributes,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["СимволыОтступа", "IndentChars"],
+        get: settings_indent_chars,
+        set: None,
+    },
+];
+
 impl ObjectProtocol for XmlReaderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &READER_TYPE
@@ -1363,6 +1567,10 @@ impl ObjectProtocol for XmlWriterSettingsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &SETTINGS_TYPE
     }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        SETTINGS_PROPERTIES
+    }
 }
 
 pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
@@ -1370,4 +1578,5 @@ pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
         .with_properties(READER_PROPERTIES)
         .with_methods(READER_METHODS),
     bsl_rt::ObjectMembersDescriptor::new(&WRITER_TYPE).with_methods(WRITER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&SETTINGS_TYPE).with_properties(SETTINGS_PROPERTIES),
 ];

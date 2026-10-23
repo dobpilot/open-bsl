@@ -267,6 +267,10 @@ fn message_send(
     if let Some(sink) = ctx.message_sink().map(std::rc::Rc::clone) {
         let dto = message.to_dto(ctx, sink.message_bytes_left())?;
         sink.enqueue(&dto).map_err(crate::HostError::raise)?;
+        if sink.also_write_to_stdout() {
+            writeln!(ctx.stdout()?, "{}", dto.text)
+                .map_err(|error| crate::RtError::IoError(error.to_string()))?;
+        }
         return Ok(BslValue::Undefined);
     }
     let text = message.text.borrow().clone();
@@ -301,18 +305,80 @@ pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] =
         .with_properties(USER_MESSAGE_PROPERTIES)
         .with_methods(USER_MESSAGE_METHODS)];
 
-/// Глобальная `ПолучитьСообщенияПользователю(УдалятьПолученные = Ложь)`
-/// — по выписке синтакс-помощника возвращает `ФиксированныйМассив`
-/// «ещё не выведенных» сообщений и НЕ пересекается с историей сообщений
-/// фонового задания. open-bsl выводит сообщения немедленно (stdout
-/// сеанса), поэтому накопленных нет — возвращается пустой массив;
-/// накопление внутри сеанса задания — остаток `JOB.MESSAGES`.
+/// Приёмник ожидающих сообщений одного сеанса.
+/// Отправка сохраняет владеющий снимок DTO. Повторное чтение возвращает
+/// те же объекты сообщений, как измерено на платформе 8.3.27.
+/// Приёмник не выводит сообщения самостоятельно и не хранит историю заданий.
+#[derive(Debug, Default)]
+pub struct PendingUserMessages {
+    entries: RefCell<Vec<PendingMessage>>,
+}
+
+#[derive(Debug)]
+enum PendingMessage {
+    Queued(crate::UserMessageDto),
+    Materialized(BslValue),
+}
+
+impl crate::UserMessageSink for PendingUserMessages {
+    fn enqueue(&self, message: &crate::UserMessageDto) -> Result<(), crate::HostError> {
+        self.entries
+            .borrow_mut()
+            .push(PendingMessage::Queued(message.clone()));
+        Ok(())
+    }
+
+    fn pending_messages(
+        &self,
+        remove: bool,
+        context: &mut CallContext<'_>,
+    ) -> RtResult<Vec<BslValue>> {
+        let mut entries = self.entries.borrow_mut();
+        let mut messages = Vec::with_capacity(entries.len());
+        for entry in entries.iter_mut() {
+            if let PendingMessage::Queued(dto) = entry {
+                *entry = PendingMessage::Materialized(BslValue::new_object(
+                    UserMessageObject::from_dto(dto, context)?,
+                ));
+            }
+            if let PendingMessage::Materialized(value) = entry {
+                messages.push(value.clone());
+            }
+        }
+        // При ошибке материализации очередь остаётся доступной; удаление
+        // выполняется только после успешного построения всего результата.
+        if remove {
+            entries.clear();
+        }
+        Ok(messages)
+    }
+}
+
+/// Возвращает ожидающие сообщения внедрённого хоста. Без приёмника
+/// сохраняется прежний путь немедленного вывода с пустым результатом.
 pub(crate) fn get_user_messages(
-    _ctx: &mut CallContext<'_>,
-    _args: &[BslValue],
+    ctx: &mut CallContext<'_>,
+    args: &[BslValue],
 ) -> RtResult<BslValue> {
+    let messages = if let Some(sink) = ctx.message_sink().map(std::rc::Rc::clone) {
+        // Измерено на 8.3.27: флаг принимает только Булево;
+        // явное Неопределено не заменяет пропущенный аргумент.
+        let remove = match args.first() {
+            None => false,
+            Some(BslValue::Boolean(value)) => *value,
+            Some(_) => {
+                return Err(crate::RtError::TypeError {
+                    expected: "Булево",
+                    op: "ПолучитьСообщенияПользователю",
+                });
+            }
+        };
+        sink.pending_messages(remove, ctx)?
+    } else {
+        Vec::new()
+    };
     Ok(BslValue::new_object(
-        crate::fixed_array::FixedArrayObject::new(Vec::new()),
+        crate::fixed_array::FixedArrayObject::new(messages),
     ))
 }
 

@@ -244,6 +244,7 @@ mod attrs;
 mod bridge;
 mod build;
 mod create;
+pub(crate) mod html;
 mod model;
 mod mutate;
 mod objects;
@@ -264,3 +265,5 @@ pub(crate) use serialize::*;
 
 // Наружу крейта уходят только конструкторы — их реэкспортирует `lib.rs`.
 pub use create::{new_builder, new_document, new_writer};
+
+pub(crate) mod canonical;

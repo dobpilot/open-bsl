@@ -3,18 +3,21 @@
 //! `ЧтениеXML`/`ЗаписьXML`) переезжают сюда следующими шагами, парсерное
 //! ядро остаётся в `bsl_rt::xml`.
 
+mod canonicalization;
 pub mod core;
 mod dom;
+mod legacy_canonicalization;
 mod xdto;
 mod xml;
 mod xml_data_type;
+mod xml_string_processing;
 mod xpath;
 mod xsd;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, FunctionCode,
     FunctionDescriptor, FunctionKind, GlobalDescriptor, LibraryDescriptor, RtError, RtResult,
-    TypeDescriptor,
+    TypeDescriptor, TypeId, TypeRef,
 };
 
 pub use dom::{
@@ -90,6 +93,20 @@ fn construct_dom_document(
     Ok(new_dom_document())
 }
 
+fn construct_html_document(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    crate::dom::html::new_document(arguments)
+}
+
+fn construct_html_writer(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(crate::dom::html::new_writer())
+}
+
 fn construct_dom_writer(
     _context: &mut CallContext<'_>,
     _arguments: &[BslValue],
@@ -118,15 +135,61 @@ fn construct_xml_writer(
     Ok(new_xml_writer(context.files_rc()?))
 }
 
+fn construct_fast_infoset_writer(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Обычная `ЗаписьXML` выдаёт другой формат; успешный конструктор без
+    // кодировщика Fast Infoset скрыл бы неверный результат записи.
+    Err(RtError::DynamicError(
+        "запись Fast Infoset пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_fast_infoset_reader(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Обычное `ЧтениеXML` не разбирает бинарный Fast Infoset; его подмена
+    // скрыла бы отсутствие декодера до первого чтения.
+    Err(RtError::DynamicError(
+        "чтение Fast Infoset пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_xsl_transform(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Объект должен выполнять XSLT 1.0; пустая оболочка отложила бы ошибку
+    // до загрузки таблицы стилей и выдала бы ложную готовность преобразования.
+    Err(RtError::DynamicError(
+        "преобразование XSL пока не поддерживается этим хостом".into(),
+    ))
+}
+
 fn construct_xml_writer_settings(
     _context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    xml::writer_settings_from_args(
+    xml::writer_settings_from_five_args(
         argument(arguments, 0),
         argument(arguments, 1),
         argument(arguments, 2),
+        argument(arguments, 3),
+        argument(arguments, 4),
     )
+}
+
+fn construct_xml_reader_settings(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // ЧтениеXML пока не принимает настройки; фиктивный объект молча
+    // проигнорировал бы ограничения чтения, заданные прикладным кодом.
+    Err(RtError::DynamicError(
+        "параметры чтения XML пока не поддерживаются этим хостом".into(),
+    ))
 }
 
 fn construct_serializer(
@@ -192,20 +255,93 @@ fn call_find_disallowed_xml_characters(
             op: "НайтиНедопустимыеСимволыXML",
         });
     };
-    Ok(BslValue::Boolean(has_disallowed_xml_characters(text)))
+    Ok(BslValue::Boolean(
+        xml_string_processing::has_disallowed_xml_characters(text),
+    ))
 }
 
 fn call_xml_type_of(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
     Ok(xml_data_type::type_of(&arguments[0]))
 }
 
-fn has_disallowed_xml_characters(text: &bsl_rt::BslString) -> bool {
-    char::decode_utf16(text.units().iter().copied()).any(|decoded| {
-        let Ok(ch) = decoded else {
-            return true;
-        };
-        !matches!(ch as u32, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
-    })
+fn call_get_xml_type(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    xml::get_xml_type(xml::arg_object(&arguments[0])?)
+}
+
+fn call_from_xml_type(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    xml_data_type::from_type(arguments)
+}
+
+fn call_xml_type(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Тип метаданных конфигурации нельзя вывести из XML-типа значения:
+    // для него требуется отдельное сопоставление с моделью конфигурации.
+    Err(RtError::DynamicError(
+        "глобальное сопоставление типа с XML пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn call_xml_value(context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    let BslValue::Str(lexical) = &arguments[1] else {
+        return Err(RtError::Xdto(
+            "XMLЗначение требует строковое представление XML".into(),
+        ));
+    };
+    let lexical = lexical.to_string();
+    let kind = match &arguments[0] {
+        BslValue::Type(TypeRef::Native(TypeId::Number)) => xdto::BuiltinBsl::Number,
+        BslValue::Type(TypeRef::Native(TypeId::Boolean)) => xdto::BuiltinBsl::Boolean,
+        BslValue::Type(TypeRef::Native(TypeId::String)) => xdto::BuiltinBsl::Str,
+        BslValue::Type(TypeRef::Native(TypeId::Date)) => xdto::BuiltinBsl::DateTime,
+        _ => {
+            return Err(RtError::Xdto(
+                "XMLЗначение для указанного типа не поддерживается".into(),
+            ));
+        }
+    };
+    // У глобальной функции пустая числовая лексика — ошибка. Парсер XDTO
+    // принимает её как ноль, поэтому это различие проверяется до делегирования.
+    if kind == xdto::BuiltinBsl::Number && lexical.is_empty() {
+        return Err(RtError::Xdto(
+            "пустая числовая лексическая форма XMLЗначение".into(),
+        ));
+    }
+    xdto::builtin_from_lexical(kind, &lexical, context.zone_rc()?.as_ref())
+}
+
+fn call_write_xml(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Значение может быть объектом конфигурации с правами текущего сеанса;
+    // частичная запись примитива вместо полного объекта была бы обманчивой.
+    Err(RtError::DynamicError(
+        "глобальная запись значения XML пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn call_read_xml(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Нельзя возвращать `Неопределено`, когда содержимое потока не разобрано.
+    Err(RtError::DynamicError(
+        "глобальное чтение значения XML пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn call_can_read_xml(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Ответ определяется XML-типом в текущем положении читателя; без
+    // сопоставления этому типу BSL-значения `Ложь` была бы выдуманным ответом.
+    Err(RtError::DynamicError(
+        "глобальная проверка возможности чтения XML пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn call_xml_string_processing(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(xml_string_processing::new_manager())
 }
 
 /// Глобальная `ФабрикаXDTO` — фабрика КОНФИГУРАЦИИ, а конфигурации здесь
@@ -306,7 +442,7 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
         code: ConstructorCode::new(13),
         names: &["ПараметрыЗаписиXML", "XMLWriterSettings"],
-        arity: Arity::range(0, 3),
+        arity: Arity::range(0, 5),
         call: construct_xml_writer_settings,
     },
     ConstructorDescriptor {
@@ -314,6 +450,63 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         names: &["ТипДанныхXML", "XMLDataType"],
         arity: Arity::exact(2),
         call: construct_xml_data_type,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(15),
+        names: &["ПараметрыЧтенияXML", "XMLReaderSettings"],
+        arity: Arity::range(0, 11),
+        call: construct_xml_reader_settings,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(16),
+        names: &["ЗаписьFastInfoset", "FastInfosetWriter"],
+        arity: Arity::exact(0),
+        call: construct_fast_infoset_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(17),
+        names: &["ЧтениеFastInfoset", "FastInfosetReader"],
+        arity: Arity::exact(0),
+        call: construct_fast_infoset_reader,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(18),
+        names: &["ПреобразованиеXSL", "XSLTransform"],
+        arity: Arity::exact(0),
+        call: construct_xsl_transform,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(19),
+        names: &["ДокументHTML", "HTMLDocument"],
+        arity: Arity::range(0, 1),
+        call: construct_html_document,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(20),
+        names: &["ЗаписьHTML", "HTMLWriter"],
+        arity: Arity::exact(0),
+        call: construct_html_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(21),
+        names: &[
+            "ПреобразованиеККаноническомуXML",
+            "ConversionToCanonicalXML",
+        ],
+        arity: Arity::exact(0),
+        call: canonicalization::construct,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(22),
+        names: &["КаноническаяЗаписьXML", "XMLCanonicalizingWriter"],
+        arity: Arity::exact(0),
+        call: legacy_canonicalization::construct_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(23),
+        names: &["КаноническийDOM", "DOMCanonicalization"],
+        arity: Arity::exact(0),
+        call: legacy_canonicalization::construct_dom,
     },
 ];
 
@@ -360,16 +553,90 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: call_configuration_serializer,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(7),
+        names: &["ПолучитьОбработкуСтрокиXML"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: call_xml_string_processing,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(8),
+        names: &["XMLЗначение", "XMLValue"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_xml_value,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(9),
+        names: &["ЗаписатьXML", "WriteXML"],
+        arity: Arity::range(2, 5),
+        kind: FunctionKind::Procedure,
+        call: call_write_xml,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(10),
+        names: &["ПрочитатьXML", "ReadXML"],
+        arity: Arity::range(1, 2),
+        kind: FunctionKind::Function,
+        call: call_read_xml,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(11),
+        names: &["ВозможностьЧтенияXML", "CanReadXML"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_can_read_xml,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(12),
+        names: &["XMLТип", "XMLType"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_xml_type,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(13),
+        names: &["ИзXMLТипа", "FromXMLType"],
+        arity: Arity::range(1, 2),
+        kind: FunctionKind::Function,
+        call: call_from_xml_type,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(14),
+        names: &["ПолучитьXMLТип", "GetXMLType"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_get_xml_type,
+    },
 ];
 
-const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
-    names: &["СериализаторXDTO", "XDTOSerializer"],
-    function: FunctionCode::new(6),
-}];
+const GLOBALS: &[GlobalDescriptor] = &[
+    GlobalDescriptor {
+        names: &["СериализаторXDTO", "XDTOSerializer"],
+        function: FunctionCode::new(6),
+    },
+    GlobalDescriptor {
+        names: &["ОбработкаСтрокиXML", "XMLStringProcessing"],
+        function: FunctionCode::new(7),
+    },
+];
 
 /// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
 const TYPES: &[&TypeDescriptor] = &[
+    &legacy_canonicalization::WRITER_TYPE,
+    &legacy_canonicalization::DOM_TYPE,
+    &canonicalization::TYPE,
+    &crate::dom::html::DOCUMENT_TYPE,
+    &crate::dom::html::DOCUMENT_TYPE_DEFINITION_TYPE,
+    &crate::dom::html::WRITER_TYPE,
+    &crate::dom::html::BODY_TYPE,
+    &crate::dom::html::ROOT_TYPE,
+    &crate::dom::html::HEAD_TYPE,
+    &crate::dom::html::DIV_TYPE,
+    &crate::dom::html::ELEMENT_TYPE,
     &crate::xml_data_type::XML_DATA_TYPE,
+    &crate::xml_string_processing::TYPE,
     &crate::xsd::ANNOTATION_TYPE,
     &crate::xsd::APP_INFO_TYPE,
     &crate::xsd::ATTRIBUTE_TYPE,
@@ -434,6 +701,14 @@ const TYPES: &[&TypeDescriptor] = &[
 ];
 
 const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (
+        ConstructorCode::new(22),
+        &legacy_canonicalization::WRITER_TYPE,
+    ),
+    (ConstructorCode::new(23), &legacy_canonicalization::DOM_TYPE),
+    (ConstructorCode::new(21), &canonicalization::TYPE),
+    (ConstructorCode::new(20), &crate::dom::html::WRITER_TYPE),
+    (ConstructorCode::new(19), &crate::dom::html::DOCUMENT_TYPE),
     (ConstructorCode::new(1), &crate::xdto::objects::FACTORY_TYPE),
     (
         ConstructorCode::new(2),
@@ -457,7 +732,11 @@ const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[
+    legacy_canonicalization::API_MEMBERS,
+    canonicalization::API_MEMBERS,
+    crate::dom::html::API_MEMBERS,
     crate::xml_data_type::API_MEMBERS,
+    crate::xml_string_processing::API_MEMBERS,
     crate::xml::API_MEMBERS,
     crate::xpath::API_MEMBERS,
     crate::dom::API_MEMBERS,
@@ -487,20 +766,26 @@ mod tests {
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(constructors, (1..=14).collect::<Vec<_>>());
+        assert_eq!(constructors, (1..=23).collect::<Vec<_>>());
         let functions = library()
             .functions()
             .iter()
             .map(|function| function.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(functions, (1..=6).collect::<Vec<_>>());
+        assert_eq!(functions, (1..=14).collect::<Vec<_>>());
         assert_eq!(library().globals()[0].names, GLOBALS[0].names);
         assert_eq!(library().globals()[0].function, FunctionCode::new(6));
+        assert_eq!(library().globals()[1].names, GLOBALS[1].names);
+        assert_eq!(library().globals()[1].function, FunctionCode::new(7));
     }
 
     #[test]
     fn xml_character_ranges_match_the_platform_contract() {
-        assert!(!has_disallowed_xml_characters(&"\t\n\r😀".into()));
-        assert!(has_disallowed_xml_characters(&"\0".into()));
+        assert!(!xml_string_processing::has_disallowed_xml_characters(
+            &"\t\n\r😀".into()
+        ));
+        assert!(xml_string_processing::has_disallowed_xml_characters(
+            &"\0".into()
+        ));
     }
 }

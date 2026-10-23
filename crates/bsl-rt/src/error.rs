@@ -67,6 +67,12 @@ pub enum RtError {
     /// `Исключение` и код после неё не выполнялись. Разматывание проходит
     /// мимо обработчиков и доводит отмену до драйвера.
     Canceled,
+    /// Ошибка компиляции общего модуля, обнаруженная при первом обращении.
+    /// Не перехватывается `Попытка/Исключение`: нативная проба
+    /// `measure-module-transitive-called.bsl` завершилась модальным отказом
+    /// компиляции дочернего модуля внутри защищённого вызова.
+    /// Исправный экспорт родителя при этом доступен до обращения к дочернему.
+    ModuleCompilation(String),
     /// Обращение к `СтрокаТаблицы`, чья строка уже удалена (`row_id` не
     /// не резолвится обратным индексом) — не тихое чтение чужих данных.
     RowInvalidated,
@@ -230,6 +236,14 @@ pub enum RtError {
         capability: crate::component::Capability,
         path: crate::component::ContextKind,
     },
+    /// Критический отказ конфигурационного обработчика. Не перехватывается
+    /// BSL-кодом; фасад запрещает дальнейшее исполнение в этом состоянии.
+    CriticalConfiguration {
+        /// Операция, в которой возник критический отказ.
+        operation: &'static str,
+        /// Исходная ошибка обработчика без потери её типа и сообщения.
+        cause: Box<RtError>,
+    },
 }
 
 impl RtError {
@@ -237,7 +251,11 @@ impl RtError {
     /// (`InvalidBytecode`) — не пользовательское исключение: если его
     /// поймать, битый байт-код уйдёт наружу с признаком успеха, а это ровно
     /// тот класс «недостоверному входу доверяют», который периметр образа и
-    /// закрывает. Всё остальное приходит из пользовательских данных или
+    /// закрывает. Ошибка компиляции модуля также не становится ловимым
+    /// исключением при отложенной проверке. Критический отказ конфигурации
+    /// также должен дойти до владельца сеанса без перехвата BSL. Остальные
+    /// ошибки приходят из
+    /// пользовательских данных или
     /// чужого слоя (`Link`, `StackOverflow`, `DynamicError`, ошибки
     /// форматов) и ловится штатно.
     ///
@@ -248,6 +266,8 @@ impl RtError {
         match self {
             RtError::InvalidBytecode(_) => false,
             RtError::Canceled => false,
+            RtError::ModuleCompilation(_) => false,
+            RtError::CriticalConfiguration { .. } => false,
             RtError::ResourceLimit(_) => true,
             // Ошибки host-границы фоновых заданий — один класс ловимого
             // исключения (план, «Переносимый host-контракт»).
@@ -302,6 +322,10 @@ impl fmt::Display for RtError {
             RtError::ResourceLimit(what) => write!(f, "превышен ресурсный лимит: {what}"),
             RtError::Host(error) => write!(f, "{error}"),
             RtError::Canceled => write!(f, "выполнение отменено"),
+            RtError::ModuleCompilation(message) => write!(f, "ошибка компиляции модуля: {message}"),
+            RtError::CriticalConfiguration { operation, cause } => {
+                write!(f, "критическая ошибка «{operation}»: {cause}")
+            }
             RtError::TypeError { expected, op } => {
                 write!(f, "ожидался тип «{expected}» для операции «{op}»")
             }
@@ -363,6 +387,7 @@ impl fmt::Display for RtError {
                         "вызов модуля конфигурации"
                     }
                     crate::component::Capability::Random => "источник случайности",
+                    crate::component::Capability::Clock => "часы",
                     crate::component::Capability::Network => "сеть",
                     crate::component::Capability::HostData => "данные хоста",
                     crate::component::Capability::HostPromises => "host-обещания",
@@ -381,6 +406,13 @@ impl fmt::Display for RtError {
     }
 }
 
-impl std::error::Error for RtError {}
+impl std::error::Error for RtError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::CriticalConfiguration { cause, .. } => Some(cause.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 pub type RtResult<T> = Result<T, RtError>;

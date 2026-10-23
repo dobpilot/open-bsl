@@ -32,6 +32,17 @@ impl BslValue {
         BslValue::Object(Rc::new(BslObject::ValueTable(ValueTableData::new())))
     }
 
+    /// Создаёт пустую таблицу с готовой типизированной схемой результата хоста.
+    /// Имена и типы сохраняются в переданном порядке, включая повторные имена,
+    /// встречающиеся в нативных результатах платформенных методов.
+    /// Обычное добавление колонок из BSL по-прежнему проверяет уникальность.
+    #[must_use]
+    pub fn new_table_with_typed_columns(columns: Vec<(String, Vec<crate::ColumnType>)>) -> Self {
+        Self::Object(Rc::new(BslObject::ValueTable(
+            ValueTableData::from_typed_columns(columns),
+        )))
+    }
+
     /// `ТаблицаЗначений.Добавить()` -> новая строка.
     pub fn table_add_row(&self) -> RtResult<BslValue> {
         match self {
@@ -64,7 +75,14 @@ impl BslValue {
                     let value_types = match value_type {
                         BslValue::Undefined => None,
                         BslValue::Object(value) => match &**value {
-                            BslObject::TypeDescription(types) => Some(types.clone()),
+                            BslObject::TypeDescription(types) => Some(
+                                types
+                                    .iter()
+                                    .cloned()
+                                    .map(crate::table::ColumnType::plain)
+                                    .collect(),
+                            ),
+                            BslObject::QualifiedTypeDescription(types) => Some(types.clone()),
                             _ => {
                                 return Err(RtError::TypeError {
                                     expected: "ОписаниеТипов",
@@ -79,7 +97,7 @@ impl BslValue {
                             });
                         }
                     };
-                    data.borrow_mut().add_typed_column(&name, value_types);
+                    data.borrow_mut().add_constrained_column(&name, value_types);
                     Ok(())
                 }
                 _ => Err(RtError::MethodNotApplicable {
@@ -516,3 +534,7 @@ impl BslValue {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "tables_host_tests.rs"]
+mod host_tests;

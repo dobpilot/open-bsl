@@ -27,6 +27,12 @@ impl FixedArrayObject {
     }
 }
 
+/// Создаёт неизменяемый массив из уже подготовленных значений.
+#[must_use]
+pub fn fixed_array_from_values(items: Vec<BslValue>) -> BslValue {
+    BslValue::new_object(FixedArrayObject::new(items))
+}
+
 impl std::fmt::Debug for FixedArrayObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ФиксированныйМассив[{}]", self.items.len())
@@ -138,5 +144,5 @@ pub(crate) fn construct_fixed_array(
         });
     };
     let snapshot = items.borrow().clone();
-    Ok(BslValue::new_object(FixedArrayObject::new(snapshot)))
+    Ok(fixed_array_from_values(snapshot))
 }

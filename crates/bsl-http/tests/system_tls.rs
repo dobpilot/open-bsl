@@ -144,6 +144,7 @@ fn exercise(
         proxy: ProxyMode::Direct,
         timeout: Some(Duration::from_secs(5)),
         tls,
+        server_certificate_revocation_check_mode: None,
         client_identity: identity,
         use_os_authentication: false,
     })?;

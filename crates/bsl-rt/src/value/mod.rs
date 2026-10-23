@@ -32,8 +32,8 @@ pub enum BslValue {
     /// Тип как ЗНАЧЕНИЕ (`ТипЗнч(х)`, `Тип("Массив")`) — не тег этого
     /// перечисления, а полноценное значение, которое можно сравнить,
     /// положить в переменную и напечатать (`Строка(ТипЗнч(1))` -> `Число`).
-    /// `TypeRef` — `Copy` в размер указателя, поэтому вариант ничего не
-    /// добавляет к размеру `BslValue`.
+    /// Владеющий `TypeRef` сохраняет прежний размер варианта и не
+    /// увеличивает `BslValue`.
     Type(TypeRef),
     /// Член платформенного перечисления (`ТипЗначенияJSON.Строка`). Как и
     /// `Type`, это ЗНАЧЕНИЕ, а не тег: его можно сравнить, положить в
@@ -60,23 +60,108 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::ScriptVariant => TypeId::ScriptVariant,
         EnumKind::CompatibilityMode => TypeId::CompatibilityMode,
         EnumKind::ClientRunMode => TypeId::ClientRunMode,
+        EnumKind::ApplicationFormsOpenningMode => TypeId::ApplicationFormsOpenningMode,
+        EnumKind::ClientApplicationInterfaceVariant => TypeId::ClientApplicationInterfaceVariant,
+        EnumKind::SectionsPanelRepresentation => TypeId::SectionsPanelRepresentation,
         EnumKind::ConfigurationExtensionsSource => TypeId::ConfigurationExtensionsSource,
         EnumKind::ConfigurationExtensionScope => TypeId::ConfigurationExtensionScope,
+        EnumKind::ConfigurationExtensionPurpose => TypeId::ConfigurationExtensionPurpose,
         EnumKind::ConfigurationExtensionApplicationIssueSeverity => {
             TypeId::ConfigurationExtensionApplicationIssueSeverity
         }
         EnumKind::EventLogLevel => TypeId::EventLogLevel,
         EnumKind::EventLogEntryTransactionMode => TypeId::EventLogEntryTransactionMode,
+        EnumKind::EventLogEntryTransactionStatus => TypeId::EventLogEntryTransactionStatus,
         EnumKind::ErrorReportingMode => TypeId::ErrorReportingMode,
         EnumKind::DataItemSend => TypeId::DataItemSend,
         EnumKind::DataItemReceive => TypeId::DataItemReceive,
         EnumKind::PredefinedDataUpdate => TypeId::PredefinedDataUpdate,
         EnumKind::DocumentPostingMode => TypeId::DocumentPostingMode,
         EnumKind::DocumentWriteMode => TypeId::DocumentWriteMode,
+        EnumKind::QueryResultIteration => TypeId::QueryResultIteration,
+        EnumKind::DataCompositionDataSetsLinkType => TypeId::DataCompositionDataSetsLinkType,
+        EnumKind::ChartValuesBySeriesConnectionType => TypeId::ChartValuesBySeriesConnectionType,
+        EnumKind::DataCompositionChartLegendPlacement => {
+            TypeId::DataCompositionChartLegendPlacement
+        }
+        EnumKind::QueryRecordType => TypeId::QueryRecordType,
+        EnumKind::DataLockMode => TypeId::DataLockMode,
+        EnumKind::AccountType => TypeId::AccountType,
+        EnumKind::RoundMode => TypeId::RoundMode,
+        EnumKind::NumericValueType => TypeId::NumericValueType,
+        EnumKind::ErrorMessageDisplayVariant => TypeId::ErrorMessageDisplayVariant,
+        EnumKind::CommandParameterUseMode => TypeId::CommandParameterUseMode,
+        EnumKind::SearchStringModeOnInputByString => TypeId::SearchStringModeOnInputByString,
+        EnumKind::RepresentableDocumentBatchFileType => TypeId::RepresentableDocumentBatchFileType,
+        EnumKind::FontType => TypeId::FontType,
+        EnumKind::PictureType => TypeId::PictureType,
+        EnumKind::FullTextSearchMetadataUse => TypeId::FullTextSearchMetadataUse,
+        EnumKind::LinkedValueChangeMode => TypeId::LinkedValueChangeMode,
+        EnumKind::InternetMailAttachmentEncodingMode => TypeId::InternetMailAttachmentEncodingMode,
+        EnumKind::AutoSaveFormDataInSettings => TypeId::AutoSaveFormDataInSettings,
+        EnumKind::PDFDocumentFileType => TypeId::PDFDocumentFileType,
         EnumKind::AllowedSign => TypeId::AllowedSign,
+        EnumKind::AutoChangeRecord => TypeId::AutoChangeRecord,
+        EnumKind::ButtonRepresentation => TypeId::ButtonRepresentation,
+        EnumKind::PasswordPolicyComplianceCheckResult => {
+            TypeId::PasswordPolicyComplianceCheckResult
+        }
+        EnumKind::TableRepresentation => TypeId::TableRepresentation,
+        EnumKind::FormFieldType => TypeId::FormFieldType,
+        EnumKind::FormGroupType => TypeId::FormGroupType,
+        EnumKind::ItemHorizontalLocation => TypeId::ItemHorizontalLocation,
+        EnumKind::ItemVerticalAlign => TypeId::ItemVerticalAlign,
+        EnumKind::FormItemSpacing => TypeId::FormItemSpacing,
+        EnumKind::ButtonShapeRepresentation => TypeId::ButtonShapeRepresentation,
+        EnumKind::UsualGroupRepresentation => TypeId::UsualGroupRepresentation,
+        EnumKind::DisplayImportance => TypeId::DisplayImportance,
+        EnumKind::PictureFormat => TypeId::PictureFormat,
+        EnumKind::InternetMailTextType => TypeId::InternetMailTextType,
+        EnumKind::InternetMailNonAsciiEncodingMode => TypeId::InternetMailNonAsciiEncodingMode,
+        EnumKind::InternetMailMessageImportance => TypeId::InternetMailMessageImportance,
+        EnumKind::AdditionalShowMode => TypeId::AdditionalShowMode,
+        EnumKind::ServerTlsCertificateRevocationCheckMode => {
+            TypeId::ServerTlsCertificateRevocationCheckMode
+        }
+        EnumKind::DataCompositionFilterApplicationType => {
+            TypeId::DataCompositionFilterApplicationType
+        }
+        EnumKind::DataCompositionSettingsItemState => TypeId::DataCompositionSettingsItemState,
+        EnumKind::DataCompositionSettingsItemViewMode => {
+            TypeId::DataCompositionSettingsItemViewMode
+        }
+        EnumKind::DataCompositionSettingsRefreshMethod => {
+            TypeId::DataCompositionSettingsRefreshMethod
+        }
+        EnumKind::DataCompositionTextPlacementType => TypeId::DataCompositionTextPlacementType,
+        EnumKind::DataCompositionTextOutputType => TypeId::DataCompositionTextOutputType,
+        EnumKind::ViewScalingMode => TypeId::ViewScalingMode,
+        EnumKind::DataCompositionTotalPlacement => TypeId::DataCompositionTotalPlacement,
+        EnumKind::PictureSize => TypeId::PictureSize,
+        EnumKind::SpreadsheetDocumentShiftType => TypeId::SpreadsheetDocumentShiftType,
+        EnumKind::ChartType => TypeId::ChartType,
+        EnumKind::ChartLabelsOrientation => TypeId::ChartLabelsOrientation,
+        EnumKind::BoundaryType => TypeId::BoundaryType,
+        EnumKind::MaxSeries => TypeId::MaxSeries,
+        EnumKind::ChartLabelType => TypeId::ChartLabelType,
+        EnumKind::ChartLineType => TypeId::ChartLineType,
+        EnumKind::FormButtonType => TypeId::FormButtonType,
         EnumKind::XmlTypeAssignment => TypeId::XmlTypeAssignment,
         EnumKind::PlatformType => TypeId::PlatformType,
         EnumKind::DataCompositionComparisonType => TypeId::DataCompositionComparisonType,
+        EnumKind::ComparisonType => TypeId::ComparisonType,
+        EnumKind::ClientConnectionSpeed => TypeId::ClientConnectionSpeed,
+        EnumKind::SpreadsheetDocumentCellAreaType => TypeId::SpreadsheetDocumentCellAreaType,
+        EnumKind::AddInConnectionType => TypeId::AddInConnectionType,
+        EnumKind::FillChecking => TypeId::FillChecking,
+        EnumKind::FoldersAndItems => TypeId::FoldersAndItems,
+        EnumKind::XmlCanonicalizationType => TypeId::XmlCanonicalizationType,
+        EnumKind::Pop3AuthenticationMode => TypeId::Pop3AuthenticationMode,
+        EnumKind::SmtpAuthenticationMode => TypeId::SmtpAuthenticationMode,
+        EnumKind::InternetMailProtocol => TypeId::InternetMailProtocol,
+        EnumKind::DataCompositionDetailsProcessingAction => {
+            TypeId::DataCompositionDetailsProcessingAction
+        }
         EnumKind::StandardBeginningDateVariant => TypeId::StandardBeginningDateVariant,
         EnumKind::JsonValueType => TypeId::JsonValueType,
         EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
@@ -87,10 +172,139 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::DomNodeType => TypeId::DomNodeType,
         EnumKind::SpreadFileType => TypeId::SpreadFileType,
         EnumKind::DrawingKind => TypeId::DrawingKind,
+        EnumKind::TimeScaleDayFormat => TypeId::TimeScaleDayFormat,
+        EnumKind::TimeScaleUnitType => TypeId::TimeScaleUnitType,
+        EnumKind::GanttChartVerticalStretch => TypeId::GanttChartVerticalStretch,
+        EnumKind::ChartLegendPlacement => TypeId::ChartLegendPlacement,
+        EnumKind::GanttChartIntervalRepresentation => TypeId::GanttChartIntervalRepresentation,
         EnumKind::PageOrientation => TypeId::PageOrientation,
         EnumKind::TextEncoding => TypeId::TextEncoding,
         EnumKind::StringEncodingMethod => TypeId::StringEncodingMethod,
         EnumKind::SortDirection => TypeId::SortDirection,
+        EnumKind::UseOutput => TypeId::UseOutput,
+        EnumKind::FormPagesRepresentation => TypeId::FormPagesRepresentation,
+        EnumKind::GraphicalSchemaShapes => TypeId::GraphicalSchemaShapes,
+        EnumKind::ConnectorLineType => TypeId::ConnectorLineType,
+        EnumKind::ConnectorTextLocation => TypeId::ConnectorTextLocation,
+        EnumKind::ArrowStyle => TypeId::ArrowStyle,
+        EnumKind::GraphicalSchemaItemPictureLocation => TypeId::GraphicalSchemaItemPictureLocation,
+        EnumKind::FormButtonPictureLocation => TypeId::FormButtonPictureLocation,
+        EnumKind::SpreadsheetDocumentDrawingLineType => TypeId::SpreadsheetDocumentDrawingLineType,
+        EnumKind::CheckBoxType => TypeId::CheckBoxType,
+        EnumKind::DeliverableNotificationSubscriberType => {
+            TypeId::DeliverableNotificationSubscriberType
+        }
+        EnumKind::SoundAlert => TypeId::SoundAlert,
+        EnumKind::ThroughAlign => TypeId::ThroughAlign,
+        EnumKind::ButtonShape => TypeId::ButtonShape,
+        EnumKind::DataCompositionFilterItemsGroupType => {
+            TypeId::DataCompositionFilterItemsGroupType
+        }
+        EnumKind::Key => TypeId::Key,
+        EnumKind::ControlBorderType => TypeId::ControlBorderType,
+        EnumKind::ColorType => TypeId::ColorType,
+        EnumKind::SpreadsheetDocumentCellLineType => TypeId::SpreadsheetDocumentCellLineType,
+        EnumKind::CryptoCertificateStoreType => TypeId::CryptoCertificateStoreType,
+        EnumKind::InternetMailTextProcessing => TypeId::InternetMailTextProcessing,
+        EnumKind::DuplexPrintingType => TypeId::DuplexPrintingType,
+        EnumKind::SecondAuthenticationFactorSettingsProcessingType => {
+            TypeId::SecondAuthenticationFactorSettingsProcessingType
+        }
+        EnumKind::FileDragMode => TypeId::FileDragMode,
+        EnumKind::ButtonGroupRepresentation => TypeId::ButtonGroupRepresentation,
+        EnumKind::StandardPeriodVariant => TypeId::StandardPeriodVariant,
+        EnumKind::TableHeightControlVariant => TypeId::TableHeightControlVariant,
+        EnumKind::FullTextSearchVersion => TypeId::FullTextSearchVersion,
+        EnumKind::VerticalFormScroll => TypeId::VerticalFormScroll,
+        EnumKind::VerticalAlign => TypeId::VerticalAlign,
+        EnumKind::AccumulationRecordType => TypeId::AccumulationRecordType,
+        EnumKind::AccountingRecordType => TypeId::AccountingRecordType,
+        EnumKind::TextPositionRelativeToPicture => TypeId::TextPositionRelativeToPicture,
+        EnumKind::HorizontalAlign => TypeId::HorizontalAlign,
+        EnumKind::ColumnsGroup => TypeId::ColumnsGroup,
+        EnumKind::AllowedMessageNo => TypeId::AllowedMessageNo,
+        EnumKind::FoldersAndItemsUse => TypeId::FoldersAndItemsUse,
+        EnumKind::DataCompositionParameterUse => TypeId::DataCompositionParameterUse,
+        EnumKind::ScrollBarUse => TypeId::ScrollBarUse,
+        EnumKind::CurrentRowUse => TypeId::CurrentRowUse,
+        EnumKind::QuerySchemaOrderDirection => TypeId::QuerySchemaOrderDirection,
+        EnumKind::InitialTreeView => TypeId::InitialTreeView,
+        EnumKind::UpdateOnDataChange => TypeId::UpdateOnDataChange,
+        EnumKind::EditTextUpdate => TypeId::EditTextUpdate,
+        EnumKind::WarningOnEditRepresentation => TypeId::WarningOnEditRepresentation,
+        EnumKind::SearchInTableOnInput => TypeId::SearchInTableOnInput,
+        EnumKind::FormCommandBarLabelLocation => TypeId::FormCommandBarLabelLocation,
+        EnumKind::FormItemCommandBarLabelLocation => TypeId::FormItemCommandBarLabelLocation,
+        EnumKind::GaugeChartValuesScaleLabelsLocation => {
+            TypeId::GaugeChartValuesScaleLabelsLocation
+        }
+        EnumKind::ShowInChartLegend => TypeId::ShowInChartLegend,
+        EnumKind::ChartPlotAreaPlacement => TypeId::ChartPlotAreaPlacement,
+        EnumKind::AccessTokenSignAlgorithm => TypeId::AccessTokenSignAlgorithm,
+        EnumKind::SpreadsheetDocumentPatternType => TypeId::SpreadsheetDocumentPatternType,
+        EnumKind::ChartLabelLocation => TypeId::ChartLabelLocation,
+        EnumKind::ChartScaleLabelLocation => TypeId::ChartScaleLabelLocation,
+        EnumKind::SpreadsheetDocumentDetailUse => TypeId::SpreadsheetDocumentDetailUse,
+        EnumKind::ViewStatusLocation => TypeId::ViewStatusLocation,
+        EnumKind::SearchStringLocation => TypeId::SearchStringLocation,
+        EnumKind::SearchControlLocation => TypeId::SearchControlLocation,
+        EnumKind::AutoTimeMode => TypeId::AutoTimeMode,
+        EnumKind::TableRowInputMode => TypeId::TableRowInputMode,
+        EnumKind::CryptoCertificateIncludeMode => TypeId::CryptoCertificateIncludeMode,
+        EnumKind::TableRowSelectionMode => TypeId::TableRowSelectionMode,
+        EnumKind::TableSelectionMode => TypeId::TableSelectionMode,
+        EnumKind::ReplacementMode => TypeId::ReplacementMode,
+        EnumKind::SizeChangeMode => TypeId::SizeChangeMode,
+        EnumKind::FormWindowOpeningMode => TypeId::FormWindowOpeningMode,
+        EnumKind::DataCompositionSettingsViewMode => TypeId::DataCompositionSettingsViewMode,
+        EnumKind::ReportResultViewMode => TypeId::ReportResultViewMode,
+        EnumKind::FullTextSearchMode => TypeId::FullTextSearchMode,
+        EnumKind::CryptoCertificateCheckMode => TypeId::CryptoCertificateCheckMode,
+        EnumKind::ColumnEditMode => TypeId::ColumnEditMode,
+        EnumKind::InfoBaseUserPasswordRecoveryMethod => TypeId::InfoBaseUserPasswordRecoveryMethod,
+        EnumKind::SpreadsheetDocumentAreaFillType => TypeId::SpreadsheetDocumentAreaFillType,
+        EnumKind::QuerySchemaUnionType => TypeId::QuerySchemaUnionType,
+        EnumKind::CryptoSignatureType => TypeId::CryptoSignatureType,
+        EnumKind::SpreadsheetDocumentTextPlacementType => {
+            TypeId::SpreadsheetDocumentTextPlacementType
+        }
+        EnumKind::QuerySchemaJoinType => TypeId::QuerySchemaJoinType,
+        EnumKind::ReportFormType => TypeId::ReportFormType,
+        EnumKind::FormattedDocumentItemType => TypeId::FormattedDocumentItemType,
+        EnumKind::FixingInTable => TypeId::FixingInTable,
+        EnumKind::DataCompositionSortDirection => TypeId::DataCompositionSortDirection,
+        EnumKind::DataCompositionGroupType => TypeId::DataCompositionGroupType,
+        EnumKind::DataCompositionGroupPlacement => TypeId::DataCompositionGroupPlacement,
+        EnumKind::DataCompositionGroupFieldsPlacement => {
+            TypeId::DataCompositionGroupFieldsPlacement
+        }
+        EnumKind::DataCompositionAttributesPlacement => TypeId::DataCompositionAttributesPlacement,
+        EnumKind::FormDecorationType => TypeId::FormDecorationType,
+        EnumKind::RadioButtonType => TypeId::RadioButtonType,
+        EnumKind::ChildFormItemsGroup => TypeId::ChildFormItemsGroup,
+        EnumKind::ChoiceHistoryOnInput => TypeId::ChoiceHistoryOnInput,
+        EnumKind::ChoiceButtonRepresentation => TypeId::ChoiceButtonRepresentation,
+        EnumKind::UsualGroupControlRepresentation => TypeId::UsualGroupControlRepresentation,
+        EnumKind::UsualGroupBehavior => TypeId::UsualGroupBehavior,
+        EnumKind::FormItemTitleLocation => TypeId::FormItemTitleLocation,
+        EnumKind::ButtonLocationInCommandBar => TypeId::ButtonLocationInCommandBar,
+        EnumKind::DataCompositionResourcesPlacement => TypeId::DataCompositionResourcesPlacement,
+        EnumKind::CommonAttributeDataSeparation => TypeId::CommonAttributeDataSeparation,
+        EnumKind::CommonAttributeAutoUse => TypeId::CommonAttributeAutoUse,
+        EnumKind::CommonAttributeUse => TypeId::CommonAttributeUse,
+        EnumKind::DataCompositionConditionalAppearanceUse => {
+            TypeId::DataCompositionConditionalAppearanceUse
+        }
+        EnumKind::DataCompositionFieldPlacement => TypeId::DataCompositionFieldPlacement,
+        EnumKind::DataCompositionAccountingBalanceType => {
+            TypeId::DataCompositionAccountingBalanceType
+        }
+        EnumKind::DataCompositionBalanceType => TypeId::DataCompositionBalanceType,
+        EnumKind::DataCompositionPeriodType => TypeId::DataCompositionPeriodType,
+        EnumKind::DataCompositionPeriodAdditionType => TypeId::DataCompositionPeriodAdditionType,
+        EnumKind::ColorDepth => TypeId::ColorDepth,
+        EnumKind::ToolTipRepresentation => TypeId::ToolTipRepresentation,
+        EnumKind::ClientApplicationType => TypeId::ClientApplicationType,
         EnumKind::BackgroundJobState => TypeId::BackgroundJobState,
         EnumKind::MessageStatus => TypeId::MessageStatus,
         EnumKind::ErrorCategory => TypeId::ErrorCategory,
@@ -113,6 +327,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::DomXPathResultType => TypeId::DomXPathResultType,
         EnumKind::SearchDirection => TypeId::SearchDirection,
         EnumKind::ZipRestorePathsMode => TypeId::ZipRestorePathsMode,
+        EnumKind::ArchiveFileRestorePathsMode => TypeId::ArchiveFileRestorePathsMode,
         EnumKind::PdfAttachmentRelation => TypeId::PdfAttachmentRelation,
         EnumKind::ArchiveFileType => TypeId::ArchiveFileType,
         EnumKind::ZipCompressionMethod => TypeId::ZipCompressionMethod,
@@ -121,6 +336,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::ZipSubDirProcessingMode => TypeId::ZipSubDirProcessingMode,
         EnumKind::ZipEncryptionMethod => TypeId::ZipEncryptionMethod,
         EnumKind::ZipFileNamesEncoding => TypeId::ZipFileNamesEncoding,
+        EnumKind::FormattedDocumentFileType => TypeId::FormattedDocumentFileType,
         EnumKind::ByteOrderMarkUse => TypeId::ByteOrderMarkUse,
     }
 }
@@ -152,7 +368,9 @@ impl BslValue {
                 BslObject::TableColumns(_) => "КоллекцияКолонокТаблицыЗначений",
                 BslObject::TableColumn(..) => "КолонкаТаблицыЗначений",
                 BslObject::TableRow(_, _) => "СтрокаТаблицыЗначений",
-                BslObject::TypeDescription(_) => "ОписаниеТипов",
+                BslObject::TypeDescription(_) | BslObject::QualifiedTypeDescription(_) => {
+                    "ОписаниеТипов"
+                }
                 BslObject::ValueComparison => "СравнениеЗначений",
                 BslObject::Map(_) => "Соответствие",
                 BslObject::KeyValuePair(_, _) => "КлючИЗначение",
@@ -349,6 +567,8 @@ impl BslValue {
         // нельзя — это ДРУГОЙ режим.
         let mode = match mode {
             BslValue::Undefined => bsl_number::DEFAULT_ROUND_MODE,
+            BslValue::Enum(EnumValue::RoundModeRound15as10) => bsl_number::RoundMode::HalfDown,
+            BslValue::Enum(EnumValue::RoundModeRound15as20) => bsl_number::RoundMode::HalfUp,
             other => match Self::round_arg_as_i32(other)? {
                 0 => bsl_number::RoundMode::HalfDown,
                 1 => bsl_number::RoundMode::HalfUp,
@@ -576,6 +796,7 @@ impl BslValue {
                 BslObject::TableRow(..)
                 | BslObject::TableColumn(..)
                 | BslObject::TypeDescription(..)
+                | BslObject::QualifiedTypeDescription(..)
                 | BslObject::ValueComparison
                 | BslObject::KeyValuePair(..)
                 | BslObject::TextWriter(..) => true,
@@ -604,7 +825,7 @@ impl BslValue {
                 // ни у официального типа, ни у host-типа больше нет
                 // строки в закрытом реестре `TypeId` ядра.
                 BslObject::Extension(object) => {
-                    return Ok(BslValue::Type(TypeRef::Object(object.type_descriptor())));
+                    return Ok(BslValue::Type(object.value_type()));
                 }
                 BslObject::VstrOpaque(_) => TypeId::VstrOpaque,
                 BslObject::Array(_) => TypeId::Array,
@@ -614,7 +835,9 @@ impl BslValue {
                 BslObject::TableColumns(_) => TypeId::ValueTableColumns,
                 BslObject::TableColumn(..) => TypeId::ValueTableColumn,
                 BslObject::TableRow(..) => TypeId::ValueTableRow,
-                BslObject::TypeDescription(_) => TypeId::TypeDescription,
+                BslObject::TypeDescription(_) | BslObject::QualifiedTypeDescription(_) => {
+                    TypeId::TypeDescription
+                }
                 BslObject::ValueComparison => TypeId::ValueComparison,
                 BslObject::KeyValuePair(..) => TypeId::KeyAndValue,
                 BslObject::TextWriter(..) => {
@@ -707,6 +930,14 @@ impl BslValue {
         Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(types))))
     }
 
+    /// Создаёт описание приобретённых типов с сохранением квалификаторов.
+    /// Состав типов и квалификаторы задаёт хост из метаданных конфигурации.
+    /// Доступ к строковым и числовым квалификаторам использует те же объекты,
+    /// что конструкторы BSL; неизмеренные политики дают явную ошибку.
+    pub fn new_qualified_type_description(types: Vec<crate::table::ColumnType>) -> Self {
+        Self::Object(Rc::new(BslObject::QualifiedTypeDescription(types)))
+    }
+
     pub fn new_value_comparison() -> Self {
         BslValue::Object(Rc::new(BslObject::ValueComparison))
     }
@@ -721,7 +952,7 @@ impl BslValue {
     ///
     /// [`RtError::TypeError`], если аргумент не строка, не идентификатор и
     /// не `Неопределено`, либо строка не в канонической форме.
-    pub(crate) fn new_uuid(arg: &BslValue, random: &RandomHandle) -> RtResult<Self> {
+    pub fn new_uuid(arg: &BslValue, random: &RandomHandle) -> RtResult<Self> {
         let bytes = match arg {
             BslValue::Undefined => {
                 let mut bytes = [0u8; 16];
@@ -752,7 +983,7 @@ impl BslValue {
 
     /// Индекс должен быть целым неотрицательным числом — `1С` использует
     /// `Число` для индексов, отдельного целочисленного типа нет.
-    fn index_as_usize(idx: &BslValue) -> RtResult<usize> {
+    pub(crate) fn index_as_usize(idx: &BslValue) -> RtResult<usize> {
         let n = idx.as_number("[]").map_err(|_| RtError::BadIndex)?;
         let i = n.to_i64_exact().ok_or(RtError::BadIndex)?;
         usize::try_from(i).map_err(|_| RtError::BadIndex)
@@ -960,7 +1191,9 @@ impl fmt::Display for BslValue {
                 BslObject::TableColumns(_) => write!(f, "КоллекцияКолонокТаблицыЗначений"),
                 BslObject::TableColumn(..) => write!(f, "КолонкаТаблицыЗначений"),
                 BslObject::TableRow(_, _) => write!(f, "СтрокаТаблицыЗначений"),
-                BslObject::TypeDescription(_) => write!(f, "ОписаниеТипов"),
+                BslObject::TypeDescription(_) | BslObject::QualifiedTypeDescription(_) => {
+                    write!(f, "ОписаниеТипов")
+                }
                 BslObject::ValueComparison => write!(f, "СравнениеЗначений"),
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
@@ -1244,6 +1477,7 @@ mod tests {
                 | BslObject::TableColumn(..)
                 | BslObject::TableRow(..)
                 | BslObject::TypeDescription(_)
+                | BslObject::QualifiedTypeDescription(_)
                 | BslObject::ValueComparison
                 | BslObject::Map(_)
                 | BslObject::KeyValuePair(..)

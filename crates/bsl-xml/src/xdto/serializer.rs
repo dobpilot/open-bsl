@@ -293,15 +293,20 @@ pub fn serializer_write_xml(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtRe
 /// `Тип("Неопределено")` платформа отвечает «Отсутствует отображение для
 /// типа», то есть отображения нет и у неё.
 pub(crate) fn builtin_index_of_type(model: &Rc<XdtoModel>, id: TypeId) -> Option<usize> {
-    let name = match id {
+    model.find(XSD_NS, canonical_xml_name(id)?)
+}
+
+/// Каноническое XML-имя нативного типа. Обратное отображение не включает
+/// производные XSD-типы: это измерено отдельно от разбора лексических форм.
+pub(crate) fn canonical_xml_name(id: TypeId) -> Option<&'static str> {
+    Some(match id {
         TypeId::String => "string",
         TypeId::Number => "decimal",
         TypeId::Boolean => "boolean",
         TypeId::Date => "dateTime",
         TypeId::BinaryData => "base64Binary",
         _ => return None,
-    };
-    model.find(XSD_NS, name)
+    })
 }
 
 /// `СериализаторXDTO.ПрочитатьXML(ЧтениеXML[, Тип])`.

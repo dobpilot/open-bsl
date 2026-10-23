@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use bsl_rt::{
     BslString, BslValue, CallContext, ObjectMembersDescriptor, ObjectProtocol, ObjectRef,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, receiver_of,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId, receiver_of,
 };
 
 pub(crate) static XML_DATA_TYPE: TypeDescriptor = TypeDescriptor {
@@ -80,7 +80,7 @@ static PROPERTIES: &[PropertyDescriptor] = &[
 pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] =
     &[ObjectMembersDescriptor::new(&XML_DATA_TYPE).with_properties(PROPERTIES)];
 
-fn new_value(name: &str, namespace: &str) -> BslValue {
+pub(crate) fn new_value(name: &str, namespace: &str) -> BslValue {
     BslValue::new_object(XmlDataTypeObject {
         name: name.into(),
         namespace: namespace.into(),
@@ -102,3 +102,43 @@ pub(crate) fn type_of(value: &BslValue) -> BslValue {
         new_value(name, super::xsd::XSD_NS)
     })
 }
+
+pub(crate) fn from_type(arguments: &[BslValue]) -> RtResult<BslValue> {
+    let invalid = || RtError::TypeError {
+        expected: "ТипДанныхXML либо две строки",
+        op: "ИзXMLТипа",
+    };
+    let (name, namespace) = match arguments {
+        [value] => {
+            let value = value
+                .object_ref()
+                .and_then(|object| object.downcast_ref::<XmlDataTypeObject>())
+                .ok_or_else(invalid)?;
+            (value.name.to_string(), value.namespace.to_string())
+        }
+        [BslValue::Str(name), BslValue::Str(namespace)] => {
+            (name.to_string(), namespace.to_string())
+        }
+        _ => return Err(invalid()),
+    };
+    // У канонического имени есть обратное отображение, у производного
+    // лексического XSD-типа его нет. Сравнение имён и URI точное.
+    if namespace == super::xsd::XSD_NS {
+        for id in [
+            TypeId::String,
+            TypeId::Number,
+            TypeId::Boolean,
+            TypeId::Date,
+            TypeId::BinaryData,
+        ] {
+            if super::xdto::canonical_xml_name(id) == Some(name.as_str()) {
+                return Ok(BslValue::Type(bsl_rt::TypeRef::Native(id)));
+            }
+        }
+    }
+    Ok(BslValue::Undefined)
+}
+
+#[cfg(test)]
+#[path = "xml_data_type_tests.rs"]
+mod tests;

@@ -307,6 +307,15 @@ pub(crate) fn xdto_sequence_property(
     sequence_property(receiver, arguments)
 }
 
+pub(crate) fn xdto_from_xml_type(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    serializer_model(receiver, "ИзXMLТипа")?;
+    crate::xml_data_type::from_type(arguments)
+}
+
 // Три измеренных члена сериализатора, до которых очередь не дошла: у
 // своего получателя — честный отказ «не поддерживается».
 pub(crate) fn xdto_xml_type(
@@ -395,6 +404,23 @@ pub(crate) const XDTO_METHODS: &[MethodDescriptor] = &[
     ),
 ];
 
+// Общие методы остаются в одной таблице; новый метод принадлежит
+// только сериализатору и не расширяет остальные типы XDTO.
+const SERIALIZER_METHODS: [MethodDescriptor; XDTO_METHODS.len() + 1] = {
+    let extra = MethodDescriptor::new(
+        &["ИзXMLТипа", "FromXMLType"],
+        Arity::range(1, 2),
+        xdto_from_xml_type,
+    );
+    let mut methods = [extra; XDTO_METHODS.len() + 1];
+    let mut index = 0;
+    while index < XDTO_METHODS.len() {
+        methods[index] = XDTO_METHODS[index];
+        index += 1;
+    }
+    methods
+};
+
 impl ObjectProtocol for XdtoShell {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         match &self.repr {
@@ -432,7 +458,11 @@ impl ObjectProtocol for XdtoShell {
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
-        XDTO_METHODS
+        if matches!(self.repr, XdtoRepr::Serializer(_)) {
+            &SERIALIZER_METHODS
+        } else {
+            XDTO_METHODS
+        }
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
@@ -513,7 +543,7 @@ pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
         .with_methods(XDTO_METHODS)
         .with_dynamic_properties(),
     bsl_rt::ObjectMembersDescriptor::new(&SERIALIZER_TYPE)
-        .with_methods(XDTO_METHODS)
+        .with_methods(&SERIALIZER_METHODS)
         .with_dynamic_properties(),
     bsl_rt::ObjectMembersDescriptor::new(&OBJECT_TYPE)
         .with_methods(XDTO_METHODS)

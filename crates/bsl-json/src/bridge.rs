@@ -1419,7 +1419,7 @@ mod tests {
         let (first_shape, first_slots) = match &first {
             BslValue::Object(value) => match &**value {
                 BslObject::Structure(storage) => match &*storage.borrow() {
-                    StructureStorage::Shaped { shape, slots } => (shape.clone(), slots.clone()),
+                    StructureStorage::Shaped { shape, slots, .. } => (shape.clone(), slots.clone()),
                     StructureStorage::Dictionary { .. } => panic!("ожидалась форма"),
                 },
                 _ => panic!("ожидалась структура"),

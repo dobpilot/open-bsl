@@ -614,6 +614,7 @@ enum Axis {
     Following,
     Preceding,
     Attribute,
+    Namespace,
     Selff,
 }
 
@@ -631,6 +632,7 @@ impl Axis {
             "following" => Axis::Following,
             "preceding" => Axis::Preceding,
             "attribute" => Axis::Attribute,
+            "namespace" => Axis::Namespace,
             "self" => Axis::Selff,
             _ => return None,
         })
@@ -789,6 +791,7 @@ enum Expr {
 // --- Разбор ---------------------------------------------------------------
 
 struct Parser {
+    namespace_axis: bool,
     toks: Vec<Tok>,
     pos: usize,
     depth: usize,
@@ -1100,7 +1103,7 @@ impl Parser {
         } else if let Some(Tok::Name(name)) = self.peek().cloned() {
             if self.toks.get(self.pos + 1) == Some(&Tok::ColonColon) {
                 self.pos += 2;
-                if name == "namespace" {
+                if name == "namespace" && !self.namespace_axis {
                     return Err(bad(
                         "ось `namespace::` в выражениях XPath не поддерживается",
                     ));
@@ -1196,12 +1199,64 @@ fn descendant_or_self_step() -> Step {
     }
 }
 
+// Внутренние namespace-узлы служат только выбору канонизатора: они не
+// вставляются в DOM и не подменяют публичный тип результата XPath.
+fn namespace_nodes(element: &Rc<DomNode>) -> Vec<Rc<DomNode>> {
+    if element.kind != DomKind::Element {
+        return Vec::new();
+    }
+    let mut bindings = std::collections::BTreeMap::new();
+    let mut ancestor = Some(element.clone());
+    while let Some(node) = ancestor {
+        for attr in node
+            .attrs
+            .borrow()
+            .iter()
+            .filter(|attr| attr.uri == crate::dom::XMLNS_URI)
+        {
+            let prefix = if attr.name == "xmlns" {
+                ""
+            } else {
+                &attr.local
+            };
+            bindings
+                .entry(prefix.to_owned())
+                .or_insert_with(|| attr.attr_value());
+        }
+        ancestor = node.parent.borrow().upgrade();
+    }
+    bindings.insert("xml".into(), "http://www.w3.org/XML/1998/namespace".into());
+    bindings
+        .into_iter()
+        .filter(|(_, uri)| !uri.is_empty())
+        .map(|(prefix, uri)| {
+            let node = DomNode::raw(
+                DomKind::Attribute,
+                prefix.clone(),
+                prefix,
+                String::new(),
+                crate::dom::XMLNS_URI.into(),
+                None,
+            );
+            *node.parent.borrow_mut() = Rc::downgrade(element);
+            let text = DomNode::new(DomKind::Text, "#text".into(), String::new(), Some(uri));
+            node.children.borrow_mut().push(text);
+            node
+        })
+        .collect()
+}
+
 fn parse(text: &str) -> RtResult<Expr> {
+    parse_with_namespaces(text, false)
+}
+
+fn parse_with_namespaces(text: &str, namespace_axis: bool) -> RtResult<Expr> {
     let toks = lex(text)?;
     if toks.is_empty() {
         return Err(bad("пустое выражение XPath"));
     }
     let mut p = Parser {
+        namespace_axis,
         toks,
         pos: 0,
         depth: 0,
@@ -1502,6 +1557,7 @@ impl<'a> Evaluator<'a> {
                 }
                 out
             }
+            Axis::Namespace => namespace_nodes(node),
             Axis::Attribute => {
                 let mut attrs = node.xp_attributes();
                 attrs.retain(|a| !a.xp_is_namespace_declaration());
@@ -1523,7 +1579,7 @@ impl<'a> Evaluator<'a> {
                 // Проверка имени применима только к узлам «главного вида»
                 // оси: у `attribute::` это атрибуты, у остальных —
                 // элементы.
-                let wanted_kind = if axis == Axis::Attribute {
+                let wanted_kind = if matches!(axis, Axis::Attribute | Axis::Namespace) {
                     DomKind::Attribute
                 } else {
                     DomKind::Element
@@ -1548,7 +1604,7 @@ impl<'a> Evaluator<'a> {
                     // вот имя без префикса — только узлы БЕЗ пространства
                     // имён (тоже измерено: `//цена` не находит ничего).
                     None => {
-                        if local.is_some() && !node.xs_uri().is_empty() {
+                        if axis != Axis::Namespace && local.is_some() && !node.xs_uri().is_empty() {
                             return false;
                         }
                     }
@@ -2216,6 +2272,9 @@ fn need_expression_text(arg: Option<&BslValue>) -> RtResult<String> {
 /// документа (измерено), текстовый узел контекстом быть не может, а узел
 /// чужого документа — ошибка.
 fn context_node(arg: Option<&BslValue>, doc: &Rc<DomNode>) -> RtResult<Rc<DomNode>> {
+    if doc.html_document.get() {
+        return Err(bad("вычисление XPath для HTML пока не реализовано"));
+    }
     let Some((node, node_doc)) = arg.and_then(as_node) else {
         return Err(RtError::TypeError {
             expected: "узел DOM",
@@ -2242,6 +2301,9 @@ fn context_node(arg: Option<&BslValue>, doc: &Rc<DomNode>) -> RtResult<Rc<DomNod
         | DomKind::Comment
         | DomKind::ProcessingInstruction
         | DomKind::EntityReference => Ok(node),
+        DomKind::DocumentType => Err(bad(
+            "вычисление XPath для определения HTML пока не реализовано",
+        )),
     }
 }
 
@@ -2425,6 +2487,67 @@ pub fn evaluate_expression(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
     let context = context_node(args.first(), &expr.doc)?;
     let kind = requested_kind(args.get(1))?;
     run(&expr.ast, &context, &expr.resolver, kind, expr.doc.clone())
+}
+
+// Канонизатору нужен набор исходных узлов, а не новая BSL-обёртка
+// результата. Разбор и вычисление остаются общими с публичным XPath.
+pub(crate) fn canonical_selection(
+    doc: &Rc<DomNode>,
+    text: &str,
+) -> RtResult<Option<Vec<Rc<DomNode>>>> {
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let resolver = XPathResolver {
+        scope: crate::dom::document_element(doc),
+        doc: doc.clone(),
+    };
+    let ast = parse_with_namespaces(text, true)?;
+    check_prefixes(&ast, &resolver)?;
+    let evaluator = Evaluator::new(doc.clone(), &resolver);
+    let context = Ctx {
+        node: doc.clone(),
+        position: None,
+        size: None,
+    };
+    match evaluator.eval(&ast, &context)? {
+        XValue::Nodes(nodes) => Ok(Some(evaluator.sort_unique(nodes))),
+        // Нативные контроли скалярного XPath сохраняют весь документ.
+        XValue::Number(_) | XValue::Str(_) | XValue::Bool(_) => Ok(None),
+    }
+}
+
+pub(crate) fn canonical_result_selection(value: &BslValue) -> RtResult<Option<Vec<Rc<DomNode>>>> {
+    if as_result(value, "Канонизация XML").is_ok() {
+        // Нативные контроли узлового и трёх скалярных результатов
+        // сохраняют весь документ; готовый набор здесь не применяется.
+        return Ok(None);
+    }
+    // Эти два нестроковых значения дают пустой набор в нативных контролях.
+    if matches!(value, BslValue::Boolean(false)) || value.type_name() == "Структура" {
+        return Ok(Some(Vec::new()));
+    }
+    Err(RtError::TypeError {
+        expected: "Строка или РезультатXPath",
+        op: "Канонизация XML",
+    })
+}
+
+pub(crate) fn legacy_canonical_selection(value: &BslValue) -> RtResult<Vec<Rc<DomNode>>> {
+    let result = as_result(value, "Канонизировать")?;
+    if !result.kind.is_nodes() {
+        return Err(RtError::TypeError {
+            expected: "Узловой РезультатXPath",
+            op: "Канонизировать",
+        });
+    }
+    let mut nodes = result.nodes.clone();
+    for node in &result.nodes {
+        // Legacy XPathResult выбирает сами элементы, а namespace-ось
+        // переносится отдельно согласно нативному контракту писателя.
+        nodes.extend(namespace_nodes(node));
+    }
+    Ok(nodes)
 }
 
 fn run(

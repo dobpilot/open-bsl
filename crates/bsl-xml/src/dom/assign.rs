@@ -60,6 +60,7 @@ pub fn set_property(obj: &BslValue, name: &str, val: &BslValue) -> RtResult<()> 
             | DomKind::Document
             | DomKind::ProcessingInstruction
             | DomKind::EntityReference => Ok(()),
+            DomKind::DocumentType => Err(bad("изменение определения HTML пока не реализовано")),
         };
     }
     if is("Данные", "Data") {
@@ -89,6 +90,7 @@ pub fn set_property(obj: &BslValue, name: &str, val: &BslValue) -> RtResult<()> 
             // У документа читается `Неопределено`, и присваивание ничего не
             // делает (измерено).
             DomKind::Document | DomKind::ProcessingInstruction => Ok(()),
+            DomKind::DocumentType => Err(bad("изменение определения HTML пока не реализовано")),
         };
     }
     Err(unknown())

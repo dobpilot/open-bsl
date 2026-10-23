@@ -194,8 +194,66 @@ pub type FunctionCaller<'a> = dyn for<'call> FnMut(
     ) -> RtResult<(BslValue, Vec<BslValue>)>
     + 'a;
 
+/// Режим входа в обработчик конфигурации для отдельного вызова хоста.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ConfigurationHandlerEntryMode {
+    /// Сохраняет унаследованные режимы вызывающего кода.
+    #[default]
+    Inherit,
+    /// Запрашивает привилегированный вход, сохраняя подавление безопасным режимом.
+    Privileged,
+    /// Делает неперехваченный BSL-отказ обработчика критическим для сеанса.
+    /// Классификация ошибки подготовки модуля не меняется.
+    /// Строка задаёт имя операции для диагностики; отмена и ошибки компиляции
+    /// сохраняют свою классификацию.
+    Critical(&'static str),
+}
+
+/// Политика входа в обработчик экземпляра конфигурации.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ConfigurationInstanceEntryMode {
+    /// Сохраняет режимы вызывающего кода.
+    #[default]
+    Inherit,
+    /// Сохраняет существующее подавление режима для основного события.
+    WithoutSafeMode,
+    /// Применяет приобретённую настройку собственного объекта расширения.
+    /// Выключенная настройка создаёт один локальный уровень подавления.
+    OwnExtensionSafeMode(bool),
+}
+
 /// Цель обратного вызова из runtime-компонента в BSL.
 pub enum FunctionCall<'call> {
+    /// Проверка экспортной поверхности уже скомпилированного модуля без исполнения.
+    ConfigurationHasExport {
+        module: &'call str,
+        name: &'call str,
+    },
+    /// Число объявленных параметров функции без исполнения модуля.
+    ConfigurationFunctionParameterCount {
+        module: &'call str,
+        name: &'call str,
+    },
+    /// Чтение (`None`) или запись экспортной переменной экземпляра.
+    ConfigurationInstanceVariable {
+        module: &'call str,
+        name: &'call str,
+        instance: &'call crate::ConfigurationInstance,
+        value: Option<BslValue>,
+    },
+    /// Инициализация тела (`None`) или экспорт конкретного модуля объекта.
+    ConfigurationInstance {
+        module: &'call str,
+        export: Option<&'call str>,
+        /// Обычный вызов требует экспорта; платформенное событие не требует.
+        require_export: bool,
+        /// Режимы только этого вложенного обработчика.
+        entry_mode: ConfigurationInstanceEntryMode,
+        instance: &'call crate::ConfigurationInstance,
+        this_object: BslValue,
+        /// Контекст имён и форм вызывающего; `CallContext` заполняет его перед вызовом.
+        runtime_shapes: Option<&'call mut RuntimeShapes>,
+    },
     /// Функция того модуля, из которого вызван компонент.
     Current(&'call str),
     /// Экспорт именованного модуля текущей конфигурации с явным
@@ -204,6 +262,17 @@ pub enum FunctionCall<'call> {
         module: &'call str,
         export: &'call str,
         this_object: Option<BslValue>,
+        /// Пространство имён вызывающего; заполняется `CallContext` перед вызовом.
+        runtime_shapes: Option<&'call mut RuntimeShapes>,
+    },
+    /// Обработчик модуля конфигурации, вызванный платформенным компонентом.
+    /// Для него не требуется объявление `Экспорт`.
+    ConfigurationHandler {
+        module: &'call str,
+        handler: &'call str,
+        entry_mode: ConfigurationHandlerEntryMode,
+        /// Пространство имён вызывающего; заполняется `CallContext` перед вызовом.
+        runtime_shapes: Option<&'call mut RuntimeShapes>,
     },
 }
 
@@ -289,6 +358,8 @@ pub enum Capability {
     FunctionCaller,
     ConfigurationModuleCaller,
     Random,
+    /// Часы текущего прогона.
+    Clock,
     Network,
     HostPromises,
     /// Режимы безопасности текущего кадра BSL.
@@ -361,6 +432,7 @@ pub struct CallContext<'a> {
     /// спрашивает контекст на каждом вызове метода.
     files: Option<&'a Rc<dyn crate::FileSystem>>,
     random: Option<&'a crate::RandomHandle>,
+    clock: Option<&'a crate::ClockHandle>,
     network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
     host_data: Option<&'a Rc<dyn std::any::Any>>,
     host_promises: Option<&'a mut dyn crate::HostPromiseSpawner>,
@@ -384,6 +456,7 @@ impl<'a> CallContext<'a> {
             zone: Some(services.zone),
             files: Some(services.files),
             random: Some(services.random),
+            clock: None,
             network: services.network,
             host_data: services.host_data,
             host_promises: services.host_promises,
@@ -411,6 +484,7 @@ impl<'a> CallContext<'a> {
             zone: None,
             files: None,
             random: None,
+            clock: None,
             network: None,
             host_data: None,
             host_promises: None,
@@ -549,6 +623,318 @@ impl<'a> CallContext<'a> {
         args: Vec<BslValue>,
         this_object: Option<BslValue>,
     ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        self.call_configuration_target(
+            FunctionCall::Configuration {
+                module,
+                export,
+                this_object,
+                runtime_shapes: None,
+            },
+            args,
+        )
+    }
+
+    /// Исполняет тело модуля конкретного объекта один раз в текущем сеансе.
+    /// Экземпляр должен храниться в объекте до вызова, чтобы `ЭтотОбъект`
+    /// мог обращаться к своей памяти. Соединение не сохраняется в экземпляре.
+    ///
+    /// # Errors
+    /// Возвращает ошибку отсутствующего исполнителя, чужого сеанса,
+    /// несовпадающего модуля или исполнения тела.
+    pub fn initialize_configuration_instance(
+        &mut self,
+        module: &str,
+        instance: &crate::ConfigurationInstance,
+        this_object: BslValue,
+    ) -> RtResult<()> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationInstance {
+                module,
+                export: None,
+                require_export: true,
+                entry_mode: ConfigurationInstanceEntryMode::Inherit,
+                instance,
+                this_object,
+                runtime_shapes: None,
+            },
+            Vec::new(),
+        )
+        .map(|_| ())
+    }
+
+    /// Читает экспортную переменную инициализированного экземпляра текущего сеанса.
+    ///
+    /// # Errors
+    /// Возвращает ошибку чужого сеанса, модуля, неинициализированной памяти
+    /// или отсутствующей экспортной переменной.
+    pub fn read_configuration_instance_variable(
+        &mut self,
+        module: &str,
+        instance: &crate::ConfigurationInstance,
+        name: &str,
+    ) -> RtResult<BslValue> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationInstanceVariable {
+                module,
+                name,
+                instance,
+                value: None,
+            },
+            Vec::new(),
+        )
+        .map(|(value, _)| value)
+    }
+
+    /// Записывает экспортную переменную инициализированного экземпляра текущего сеанса.
+    ///
+    /// # Errors
+    /// Возвращает ошибку чужого сеанса, модуля, неинициализированной памяти
+    /// или отсутствующей экспортной переменной.
+    pub fn write_configuration_instance_variable(
+        &mut self,
+        module: &str,
+        instance: &crate::ConfigurationInstance,
+        name: &str,
+        value: BslValue,
+    ) -> RtResult<()> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationInstanceVariable {
+                module,
+                name,
+                instance,
+                value: Some(value),
+            },
+            Vec::new(),
+        )
+        .map(|_| ())
+    }
+
+    /// Проверяет наличие экспортного имени в скомпилированном модуле.
+    /// Не исполняет тело модуля или процедуру.
+    ///
+    /// # Errors
+    /// Возвращает ошибку отсутствующего исполнителя, модуля или недопустимого
+    /// ответа исполнителя на проверку экспортной поверхности.
+    pub fn configuration_has_export(&mut self, module: &str, name: &str) -> RtResult<bool> {
+        let (value, _) = self.call_configuration_target(
+            FunctionCall::ConfigurationHasExport { module, name },
+            Vec::new(),
+        )?;
+        match value {
+            BslValue::Boolean(value) => Ok(value),
+            _ => Err(RtError::InvalidBytecode(
+                "проверка экспорта не вернула Булево",
+            )),
+        }
+    }
+
+    /// Читает число параметров функции уже скомпилированного модуля.
+    /// Учитывает неэкспортные обработчики; отсутствующее имя даёт `None`.
+    /// Не исполняет тело модуля и не создаёт его экземпляр.
+    ///
+    /// # Errors
+    /// Возвращает ошибку отсутствующего исполнителя, модуля либо
+    /// недопустимого ответа исполнителя.
+    pub fn configuration_function_parameter_count(
+        &mut self,
+        module: &str,
+        name: &str,
+    ) -> RtResult<Option<usize>> {
+        let (value, _) = self.call_configuration_target(
+            FunctionCall::ConfigurationFunctionParameterCount { module, name },
+            Vec::new(),
+        )?;
+        match value {
+            BslValue::Undefined => Ok(None),
+            BslValue::Number(number) => number
+                .to_i64_exact()
+                .and_then(|value| usize::try_from(value).ok())
+                .map(Some)
+                .ok_or(RtError::InvalidBytecode(
+                    "число параметров функции недопустимо",
+                )),
+            _ => Err(RtError::InvalidBytecode(
+                "проверка параметров функции не вернула число",
+            )),
+        }
+    }
+
+    /// Вызывает экспорт модуля конкретного объекта с его переменными.
+    /// Возвращает результат и конечные значения параметров.
+    ///
+    /// # Errors
+    /// Возвращает ошибку отсутствующего исполнителя, чужого сеанса,
+    /// неизвестного или неэкспортного имени, арности либо исполнения.
+    pub fn call_configuration_instance(
+        &mut self,
+        module: &str,
+        instance: &crate::ConfigurationInstance,
+        name: &str,
+        args: Vec<BslValue>,
+        this_object: BslValue,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationInstance {
+                module,
+                export: Some(name),
+                require_export: true,
+                entry_mode: ConfigurationInstanceEntryMode::Inherit,
+                instance,
+                this_object,
+                runtime_shapes: None,
+            },
+            args,
+        )
+    }
+
+    /// Вызывает платформенный обработчик конкретного объекта без `Экспорт`.
+    /// Получатель и память модуля остаются привязаны к переданному экземпляру.
+    /// Обычный вызов метода объекта сохраняет проверку экспорта.
+    /// Возвращает результат и конечные значения параметров обработчика.
+    ///
+    /// # Errors
+    /// Возвращает ошибку отсутствующего исполнителя, чужого сеанса,
+    /// несовпадающего или неинициализированного модуля, поиска, арности
+    /// либо исполнения обработчика.
+    pub fn call_configuration_instance_handler(
+        &mut self,
+        module: &str,
+        instance: &crate::ConfigurationInstance,
+        handler: &str,
+        args: Vec<BslValue>,
+        this_object: BslValue,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationInstance {
+                module,
+                export: Some(handler),
+                require_export: false,
+                entry_mode: ConfigurationInstanceEntryMode::Inherit,
+                instance,
+                this_object,
+                runtime_shapes: None,
+            },
+            args,
+        )
+    }
+
+    /// Вызывает обработчик основной конфигурации с временно отключённым
+    /// безопасным режимом. Режимы вызывающего сохраняются при возврате
+    /// результата и при ошибке; другие вызовы обработчиков не меняются.
+    /// Компонент обязан предварительно установить происхождение обработчика:
+    /// для обработчика расширения эта точка входа неприменима.
+    ///
+    /// # Errors
+    /// Возвращает ошибки обычного вызова обработчика экземпляра.
+    pub fn call_configuration_instance_handler_without_safe_mode(
+        &mut self,
+        module: &str,
+        instance: &crate::ConfigurationInstance,
+        handler: &str,
+        args: Vec<BslValue>,
+        this_object: BslValue,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationInstance {
+                module,
+                export: Some(handler),
+                require_export: false,
+                entry_mode: ConfigurationInstanceEntryMode::WithoutSafeMode,
+                instance,
+                this_object,
+                runtime_shapes: None,
+            },
+            args,
+        )
+    }
+
+    /// Вызывает событие собственного объекта расширения с приобретённой
+    /// настройкой безопасности источника. Режимы вызывающего не меняются;
+    /// политика не распространяется на обычные экспортные методы объекта.
+    ///
+    /// # Errors
+    /// Возвращает ошибки обычного вызова обработчика экземпляра.
+    pub fn call_configuration_instance_handler_with_safe_mode(
+        &mut self,
+        module: &str,
+        instance: &crate::ConfigurationInstance,
+        handler: &str,
+        args: Vec<BslValue>,
+        this_object: BslValue,
+        safe_mode: bool,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationInstance {
+                module,
+                export: Some(handler),
+                require_export: false,
+                entry_mode: ConfigurationInstanceEntryMode::OwnExtensionSafeMode(safe_mode),
+                instance,
+                this_object,
+                runtime_shapes: None,
+            },
+            args,
+        )
+    }
+
+    /// Вызывает обработчик конфигурации в текущем сеансе без требования
+    /// `Экспорт`. Только платформенный компонент должен пользоваться этой
+    /// точкой входа; обычный BSL-вызов сохраняет правило экспорта.
+    ///
+    /// # Errors
+    /// Возвращает ошибку отсутствующей возможности, поиска, арности или
+    /// исполнения обработчика.
+    pub fn call_configuration_handler(
+        &mut self,
+        module: &str,
+        handler: &str,
+        args: Vec<BslValue>,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        self.call_configuration_handler_with_mode(
+            module,
+            handler,
+            args,
+            ConfigurationHandlerEntryMode::Inherit,
+        )
+    }
+
+    /// Вызывает обработчик с явно выбранным режимом только этого входа.
+    /// Режим вызывающего кадра не изменяется даже при ошибке обработчика.
+    ///
+    /// # Errors
+    /// Возвращает ошибки доступности, поиска, арности и исполнения обработчика.
+    /// В режиме [`ConfigurationHandlerEntryMode::Critical`] неперехваченные
+    /// BSL-ошибки обработчика превращаются в [`crate::RtError::CriticalConfiguration`];
+    /// ошибки подготовки модуля возвращаются без изменения.
+    pub fn call_configuration_handler_with_mode(
+        &mut self,
+        module: &str,
+        handler: &str,
+        args: Vec<BslValue>,
+        entry_mode: ConfigurationHandlerEntryMode,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        self.call_configuration_target(
+            FunctionCall::ConfigurationHandler {
+                module,
+                handler,
+                entry_mode,
+                runtime_shapes: None,
+            },
+            args,
+        )
+    }
+
+    fn call_configuration_target<'call>(
+        &'call mut self,
+        mut target: FunctionCall<'call>,
+        args: Vec<BslValue>,
+    ) -> RtResult<(BslValue, Vec<BslValue>)> {
+        if let FunctionCall::ConfigurationInstance { runtime_shapes, .. }
+        | FunctionCall::Configuration { runtime_shapes, .. }
+        | FunctionCall::ConfigurationHandler { runtime_shapes, .. } = &mut target
+        {
+            *runtime_shapes = Some(&mut *self.runtime_shapes);
+        }
         let path = self.path;
         let caller = self
             .function_caller
@@ -571,16 +957,7 @@ impl<'a> CallContext<'a> {
                 capability: Capability::Stderr,
                 path,
             })?;
-        caller(
-            FunctionCall::Configuration {
-                module,
-                export,
-                this_object,
-            },
-            args,
-            stdout,
-            stderr,
-        )
+        caller(target, args, stdout, stderr)
     }
 
     /// Подключает учёт временных файлов исходного сеанса без изменения
@@ -610,10 +987,12 @@ impl<'a> CallContext<'a> {
     ///
     /// [`RtError::CapabilityMissing`] с путём вызова.
     pub fn background_jobs(&self) -> RtResult<&Rc<dyn crate::BackgroundJobService>> {
-        self.background_jobs.ok_or(RtError::CapabilityMissing {
-            capability: Capability::BackgroundJobs,
-            path: self.path,
-        })
+        self.background_jobs
+            .filter(|service| service.is_ready())
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::BackgroundJobs,
+                path: self.path,
+            })
     }
 
     /// Сеансовое временное хранилище.
@@ -671,6 +1050,11 @@ impl<'a> CallContext<'a> {
     }
 
     pub fn format_value(&self, value: &BslValue, spec: Option<&str>) -> RtResult<String> {
+        if let BslValue::Object(object) = value
+            && let crate::BslObject::Extension(component) = object.as_ref()
+        {
+            return component.presentation_with_context(self);
+        }
         (self.formatter)(value, spec)
     }
 
@@ -731,6 +1115,27 @@ impl<'a> CallContext<'a> {
             capability: Capability::FileSystem,
             path: self.path,
         })
+    }
+
+    /// Подключает разделяемые часы прогона к контексту компонента.
+    #[must_use]
+    pub fn with_clock(mut self, clock: &'a crate::ClockHandle) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
+    /// Возвращает текущий момент по внедрённым часам прогона.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`] с [`Capability::Clock`], если часы отсутствуют.
+    pub fn unix_millis(&self) -> RtResult<i64> {
+        self.clock
+            .map(crate::ClockHandle::unix_millis)
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Clock,
+                path: self.path,
+            })
     }
 
     /// Источник случайности прогона. Расстановку битов версии UUID делает
@@ -1668,6 +2073,273 @@ fn construct_value_list(
     Ok(crate::value_list::new_value_list())
 }
 
+fn construct_com_object(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Конструктор нужен резолверу для кода под `Попытка`; активация COM
+    // требует внешнего приложения и не подменяется фиктивным объектом.
+    Err(RtError::DynamicError(
+        "создание COM-объекта не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_font(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Описание шрифта требуется для разбора модулей конфигурации; без
+    // объектной модели оформления нельзя выдавать фиктивное значение.
+    Err(RtError::DynamicError(
+        "создание шрифта не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_line(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Внутренняя линия табличного документа не представляет BSL-значение
+    // с типом, толщиной и отступом для всех платформенных потребителей.
+    Err(RtError::DynamicError(
+        "создание линии не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_processing_picture(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Без модели кадров и формата нельзя выдавать пустую картинку за
+    // результат обработки исходного изображения.
+    Err(RtError::DynamicError(
+        "обработка картинки не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_value_tree(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Плоская таблица значений не заменяет иерархию строк дерева.
+    Err(RtError::DynamicError(
+        "дерево значений пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_random_number_generator(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Без измеренной последовательности и источника энтропии нельзя выдавать
+    // другой генератор за платформенный объект.
+    Err(RtError::DynamicError(
+        "генератор случайных чисел пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_formatted_document(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Без модели форматированного документа нельзя выдавать другой объект
+    // за значение платформы.
+    Err(RtError::DynamicError(
+        "форматированный документ пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_deliverable_notification(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Заглушка без адресатов и тела не заменяет объект доставляемого
+    // уведомления платформы.
+    Err(RtError::DynamicError(
+        "доставляемое уведомление пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_ws_definitions(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Имя конструктора нужно для разрешения модуля; чтение WSDL требует
+    // отдельной объектной модели и транспорта.
+    Err(RtError::DynamicError(
+        "WS-определения пока не поддерживаются этим хостом".into(),
+    ))
+}
+
+fn construct_ws_proxy(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Фиктивный прокси скрыл бы отсутствие вызовов веб-сервиса.
+    Err(RtError::DynamicError(
+        "WS-прокси пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_crypto_certificate(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Без разбора сертификата нельзя выдавать замену платформенному значению.
+    Err(RtError::DynamicError(
+        "сертификат криптографии пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_shortcut(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Клиентское сочетание клавиш нельзя заменить числом или строкой.
+    Err(RtError::DynamicError(
+        "сочетание клавиш пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_border(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Рамка элемента управления требует объектной модели управляемой формы.
+    Err(RtError::DynamicError(
+        "рамка элемента управления пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_crypto_manager(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Менеджер нельзя создавать без поставщика криптографии: его методы
+    // зависели бы от несуществующего модуля и ключей текущего сеанса.
+    Err(RtError::DynamicError(
+        "менеджер криптографии не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_html_reader(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Пустой объект скрыл бы отсутствие разбора HTML, необходимого
+    // `ПостроительDOM.Прочитать` после открытия источника.
+    Err(RtError::DynamicError(
+        "чтение HTML пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_representable_document_batch(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Пакет требует модели состава и вывода документов; фиктивный объект
+    // нельзя считать успешной подготовкой печати.
+    Err(RtError::DynamicError(
+        "пакет отображаемых документов пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_data_composition_details_data(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Данные расшифровки хранят настройки и элементы; пустое значение
+    // скрыло бы отсутствие обеих частей объектной модели.
+    Err(RtError::DynamicError(
+        "данные расшифровки компоновки данных пока не поддерживаются этим хостом".into(),
+    ))
+}
+
+fn construct_internet_mail(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Почтового транспорта и объектной модели нет; успешное создание
+    // фиктивного значения скрыло бы невозможность последующего вызова.
+    Err(RtError::DynamicError(
+        "интернет-почта не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_internet_mail_profile(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Профиль хранит изменяемые настройки; пустая подмена лишила бы
+    // вызывающий код возможности обнаружить отсутствие объектной модели.
+    Err(RtError::DynamicError(
+        "интернет-почтовый профиль не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_form_attribute(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Реквизит формы связан с моделью управляемой формы; объект без неё
+    // не смог бы сохранить или отдать свои описанные свойства.
+    Err(RtError::DynamicError(
+        "реквизит формы не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_type_link(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Путь связывает поле формы или метаданные с типом значения; без модели
+    // источника нельзя выдавать объект, который будто бы хранит эту связь.
+    Err(RtError::DynamicError(
+        "связь по типу не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_choice_parameter_link(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Связь должна изменять значение по пути данных формы; без модели формы
+    // объект ошибочно выглядел бы работоспособным.
+    Err(RtError::DynamicError(
+        "связь параметра выбора не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_ftp_connection(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Без транспорта хоста объект соединения не сможет выполнять FTP-операции.
+    Err(RtError::DynamicError(
+        "FTP-соединение не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_com_safe_array(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Массив BSL не сохраняет COM-тип элементов и размерности для маршалинга.
+    Err(RtError::DynamicError(
+        "COMSafeArray не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_choice_parameter(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Параметр выбора имеет собственный тип и два свойства; произвольная
+    // структура исказила бы проверки типа и чтение этих свойств.
+    Err(RtError::DynamicError(
+        "параметр выбора не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_color(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Отдельного значения `Цвет` ещё нет; число или строка исказили бы
+    // проверки типа и последующее чтение цветовых составляющих.
+    Err(RtError::DynamicError(
+        "цвет не поддерживается этим хостом".into(),
+    ))
+}
+
 fn construct_date_qualifiers(
     _context: &mut CallContext<'_>,
     arguments: &[BslValue],
@@ -1698,6 +2370,18 @@ fn construct_qualified_type_description(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
+    if arguments.len() > 5 {
+        // Шесть и семь аргументов задают копирование с добавлением и
+        // вычитанием типов. Узкий конструктор ниже этих действий не делает.
+        return Err(RtError::DynamicError(
+            "копирование ОписаниеТипов не реализовано".into(),
+        ));
+    }
+    if arguments.is_empty() {
+        // Нулевая форма копирующего конструктора даёт пустой набор типов.
+        let empty = BslValue::Str(crate::BslString::from_str(""));
+        return BslValue::new_type_description(&empty, context.runtime_shapes());
+    }
     let Some((names, qualifiers)) = arguments.split_first() else {
         return Err(RtError::InvalidBytecode(
             "квалифицированное ОписаниеТипов вызвано без аргументов",
@@ -1712,10 +2396,387 @@ fn construct_qualified_type_description(
             op: "Новый ОписаниеТипов",
         });
     }
-    BslValue::new_type_description(names, context.runtime_shapes())
+    let description = BslValue::new_type_description(names, context.runtime_shapes())?;
+    crate::type_description::retain_primitive_qualifiers(description, qualifiers)
+}
+
+fn construct_text_writer(
+    context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    match arguments {
+        [] => Ok(BslValue::new_unopened_text_writer()),
+        [path, encoding] => {
+            let encoding = crate::encoding::Encoding::from_bsl_value(
+                encoding,
+                Some(crate::encoding::Encoding::Utf8),
+                "Новый ЗаписьТекста",
+            )?;
+            if encoding != crate::encoding::Encoding::Utf8 {
+                return Err(RtError::DynamicError(
+                    "кодировка конструктора ЗаписьТекста пока не поддерживается".into(),
+                ));
+            }
+            BslValue::new_text_writer_with_files(path, context.files()?)
+        }
+        _ => Err(RtError::DynamicError(
+            "дополнительные параметры конструктора ЗаписьТекста пока не поддерживаются".into(),
+        )),
+    }
+}
+
+fn construct_text_extraction(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Извлечение текста из произвольного формата требует отдельного
+    // сервиса хоста; пустой текст выдавал бы ложный успешный результат.
+    Err(RtError::DynamicError(
+        "ИзвлечениеТекста пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_data_composition_filter(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Пустой объект без элементов и идентификатора настройки не был бы
+    // полноценным отбором компоновки данных.
+    Err(RtError::DynamicError(
+        "ОтборКомпоновкиДанных пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_user_work_favorites(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Избранное — отдельная коллекция с типизированными элементами.
+    // Пустой массив не заменяет её методы и свойства элементов.
+    Err(RtError::DynamicError(
+        "ИзбранноеРаботыПользователя пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_user_work_favorites_item(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Элемент избранного имеет собственные изменяемые свойства; обычная
+    // структура не сохраняет его платформенный тип и поведение.
+    Err(RtError::DynamicError(
+        "ЭлементИзбранногоРаботыПользователя пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_sessions_lock(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Описание блокировки влияет на допуск новых сеансов; пока объект не
+    // реализован, нельзя выдавать фиктивное отключённое состояние.
+    Err(RtError::DynamicError(
+        "БлокировкаСеансов пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_error_message_texts(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Парные тексты — самостоятельный платформенный тип. Обычная структура
+    // скрыла бы отсутствие его свойств и ошибочно позволила бы их менять.
+    Err(RtError::DynamicError(
+        "ТекстыСообщенияОбОшибке пока не поддерживаются этим хостом".into(),
+    ))
+}
+
+fn construct_range(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Диапазон передаётся в настройку блокировки данных; пока это значение
+    // не реализовано, нельзя выдавать обычную структуру вместо его типа.
+    Err(RtError::DynamicError(
+        "Диапазон пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_data_composition_area_template_value_collection(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Макет участвует в построении результата компоновки данных. Пустая
+    // структура скрыла бы отсутствие его типизированных ячеек и коллекций.
+    Err(RtError::DynamicError(
+        "МакетКоллекцииЗначенийОбластиКомпоновкиДанных пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_data_composition_pipeline(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Эти два макета — типизированные части конвейера компоновки. Пока
+    // их нет, ни один не может быть обычной структурой.
+    Err(RtError::DynamicError(
+        "Конвейер компоновки данных пока не поддерживается этим хостом".into(),
+    ))
 }
 
 const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
+    ConstructorDescriptor {
+        code: ConstructorCode::new(60),
+        names: &["МакетКомпоновкиДанных", "DataCompositionTemplate"],
+        arity: Arity::exact(0),
+        call: construct_data_composition_pipeline,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(59),
+        names: &[
+            "МакетЗаголовкаКоллекцииЗначенийОбластиКомпоновкиДанных",
+            "DataCompositionAreaTemplateValueCollectionHeader",
+        ],
+        arity: Arity::exact(0),
+        call: construct_data_composition_pipeline,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(58),
+        names: &[
+            "МакетКоллекцииЗначенийОбластиКомпоновкиДанных",
+            "DataCompositionAreaTemplateValueCollection",
+        ],
+        arity: Arity::exact(0),
+        call: construct_data_composition_area_template_value_collection,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(57),
+        names: &["Диапазон", "Range"],
+        arity: Arity::range(1, 2),
+        call: construct_range,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(56),
+        names: &["ТекстыСообщенияОбОшибке", "ErrorMessageTexts"],
+        arity: Arity::exact(2),
+        call: construct_error_message_texts,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(55),
+        names: &["БлокировкаСеансов", "SessionsLock"],
+        arity: Arity::exact(0),
+        call: construct_sessions_lock,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(54),
+        names: &[
+            "ЭлементИзбранногоРаботыПользователя",
+            "UserWorkFavoritesItem",
+        ],
+        arity: Arity::exact(0),
+        call: construct_user_work_favorites_item,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(53),
+        names: &["ИзбранноеРаботыПользователя", "UserWorkFavorites"],
+        arity: Arity::exact(0),
+        call: construct_user_work_favorites,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(52),
+        names: &["ОтборКомпоновкиДанных", "DataCompositionFilter"],
+        arity: Arity::exact(0),
+        call: construct_data_composition_filter,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(51),
+        names: &["ИзвлечениеТекста", "TextExtraction"],
+        arity: Arity::range(0, 1),
+        call: construct_text_extraction,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(50),
+        names: &[
+            "ФлагиИнтернетПочтовогоСообщения",
+            "InternetMailMessageFlags",
+        ],
+        arity: Arity::exact(0),
+        call: crate::internet_mail_message_flags::construct,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(49),
+        names: &["МоментВремени", "PointInTime"],
+        arity: Arity::range(1, 2),
+        call: crate::point_in_time::construct,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(48),
+        names: &["ОписаниеПередаваемогоФайла", "TransferableFileDescription"],
+        arity: Arity::range(0, 2),
+        call: crate::transferable_file_description::construct,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(47),
+        names: &["COMSafeArray"],
+        arity: Arity::range(1, u8::MAX),
+        call: construct_com_safe_array,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(46),
+        names: &["СвязьПараметраВыбора", "ChoiceParameterLink"],
+        arity: Arity::range(2, 3),
+        call: construct_choice_parameter_link,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(45),
+        names: &["FTPСоединение", "FTPConnection"],
+        arity: Arity::range(1, 9),
+        call: construct_ftp_connection,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(44),
+        names: &["СвязьПоТипу", "TypeLink"],
+        arity: Arity::range(0, 2),
+        call: construct_type_link,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(43),
+        names: &[
+            "ДанныеРасшифровкиКомпоновкиДанных",
+            "DataCompositionDetailsData",
+        ],
+        arity: Arity::exact(0),
+        call: construct_data_composition_details_data,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(42),
+        names: &["ПакетОтображаемыхДокументов", "RepresentableDocumentBatch"],
+        arity: Arity::exact(0),
+        call: construct_representable_document_batch,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(40),
+        names: &["ЧтениеHTML", "HTMLReader"],
+        arity: Arity::exact(0),
+        call: construct_html_reader,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(39),
+        names: &["МенеджерКриптографии", "CryptoManager"],
+        arity: Arity::one_of(&[0, 1, 3, 4]),
+        call: construct_crypto_manager,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(38),
+        names: &["Рамка", "Border"],
+        arity: Arity::range(1, 2),
+        call: construct_border,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(37),
+        names: &["СочетаниеКлавиш", "Shortcut"],
+        arity: Arity::range(1, 4),
+        call: construct_shortcut,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(36),
+        names: &["СертификатКриптографии", "CryptoCertificate"],
+        arity: Arity::range(0, 1),
+        call: construct_crypto_certificate,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(35),
+        names: &["WSПрокси", "WSProxy"],
+        arity: Arity::range(4, 9),
+        call: construct_ws_proxy,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(34),
+        names: &["WSОпределения", "WSDefinitions"],
+        arity: Arity::range(1, 7),
+        call: construct_ws_definitions,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(33),
+        names: &["ДоставляемоеУведомление", "DeliverableNotification"],
+        arity: Arity::exact(0),
+        call: construct_deliverable_notification,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(32),
+        names: &["ФорматированныйДокумент", "FormattedDocument"],
+        arity: Arity::exact(0),
+        call: construct_formatted_document,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(31),
+        names: &["ГенераторСлучайныхЧисел", "RandomNumberGenerator"],
+        arity: Arity::range(0, 1),
+        call: construct_random_number_generator,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(30),
+        names: &["ОбрабатываемаяКартинка", "ProcessingPicture"],
+        arity: Arity::range(0, 3),
+        call: construct_processing_picture,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(29),
+        names: &["Линия", "Line"],
+        arity: Arity::range(1, 3),
+        call: construct_line,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(28),
+        names: &["ПараметрВыбора", "ChoiceParameter"],
+        arity: Arity::exact(2),
+        call: construct_choice_parameter,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(27),
+        names: &["ЗаписьТекста", "TextWriter"],
+        arity: Arity::range(0, 5),
+        call: construct_text_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(26),
+        names: &["Цвет", "Color"],
+        arity: Arity::one_of(&[0, 3]),
+        call: construct_color,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(25),
+        names: &["РеквизитФормы", "FormAttribute"],
+        arity: Arity::range(2, 5),
+        call: construct_form_attribute,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(24),
+        names: &["ИнтернетПочтовыйПрофиль", "InternetMailProfile"],
+        arity: Arity::exact(0),
+        call: construct_internet_mail_profile,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(23),
+        names: &["ИнтернетПочта", "InternetMail"],
+        arity: Arity::exact(0),
+        call: construct_internet_mail,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(22),
+        names: &["ДеревоЗначений", "ValueTree"],
+        arity: Arity::exact(0),
+        call: construct_value_tree,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(21),
+        names: &["Шрифт", "Font"],
+        arity: Arity::range(0, 8),
+        call: construct_font,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(20),
+        names: &["COMОбъект", "COMObject"],
+        arity: Arity::range(1, 2),
+        call: construct_com_object,
+    },
     ConstructorDescriptor {
         code: ConstructorCode::new(10),
         names: &["ОписаниеОповещения", "NotifyDescription"],
@@ -1755,7 +2816,7 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
         code: ConstructorCode::new(5),
         names: &["ОписаниеТипов", "TypeDescription"],
-        arity: Arity::range(2, 5),
+        arity: Arity::range(0, 7),
         call: construct_qualified_type_description,
     },
     // Голое имя `ФоновыеЗадания` разрешается конструктором менеджера —
@@ -1814,9 +2875,36 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::range(0, 3),
         call: construct_number_qualifiers,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(17),
+        names: &["ФорматированнаяСтрока", "FormattedString"],
+        arity: Arity::range(1, u8::MAX),
+        call: crate::formatted_string::construct_formatted_string,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(18),
+        names: &["Картинка", "Picture"],
+        arity: Arity::range(0, 2),
+        call: crate::picture::construct_picture,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(19),
+        names: &["ПараметрКомпоновкиДанных", "DataCompositionParameter"],
+        arity: Arity::exact(1),
+        call: crate::data_composition::construct_parameter,
+    },
 ];
 
 const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
+    (ConstructorCode::new(49), &crate::POINT_IN_TIME_TYPE),
+    (
+        ConstructorCode::new(50),
+        &crate::internet_mail_message_flags::TYPE,
+    ),
+    (
+        ConstructorCode::new(48),
+        &crate::transferable_file_description::TYPE,
+    ),
     (
         ConstructorCode::new(10),
         &crate::notification::NOTIFICATION_TYPE,
@@ -1863,10 +2951,23 @@ const CORE_CONSTRUCTOR_TYPES: &[(ConstructorCode, &crate::TypeDescriptor)] = &[
         ConstructorCode::new(16),
         &crate::type_description::NUMBER_QUALIFIERS_TYPE,
     ),
+    (
+        ConstructorCode::new(17),
+        &crate::formatted_string::FORMATTED_STRING_TYPE,
+    ),
+    (ConstructorCode::new(18), &crate::picture::PICTURE_TYPE),
+    (
+        ConstructorCode::new(19),
+        &crate::data_composition::DATA_COMPOSITION_PARAMETER_TYPE,
+    ),
 ];
 
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
+    &crate::POINT_IN_TIME_TYPE,
+    &crate::internet_mail_message_flags::TYPE,
+    &crate::transferable_file_description::TYPE,
     &crate::BSL_MODULE_TYPE,
+    &crate::COMMON_MODULE_TYPE,
     &crate::notification::NOTIFICATION_TYPE,
     &crate::promise::PROMISE_TYPE,
     &crate::file::FILE_TYPE,
@@ -1885,10 +2986,16 @@ const CORE_TYPES: &[&crate::TypeDescriptor] = &[
     &crate::type_description::STRING_QUALIFIERS_TYPE,
     &crate::type_description::NUMBER_QUALIFIERS_TYPE,
     &crate::data_composition::DATA_COMPOSITION_FIELD_TYPE,
+    &crate::data_composition::DATA_COMPOSITION_PARAMETER_TYPE,
     &crate::data_composition::STANDARD_BEGINNING_DATE_TYPE,
+    &crate::formatted_string::FORMATTED_STRING_TYPE,
+    &crate::picture::PICTURE_TYPE,
 ];
 
 const CORE_OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[
+    crate::point_in_time::API_MEMBERS,
+    crate::internet_mail_message_flags::API_MEMBERS,
+    crate::transferable_file_description::API_MEMBERS,
     crate::notification::API_MEMBERS,
     crate::file::API_MEMBERS,
     crate::fixed_array::API_MEMBERS,
@@ -1907,16 +3014,158 @@ const CORE_OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[
 pub const fn core_library() -> LibraryDescriptor {
     LibraryDescriptor::new(crate::PACKAGE_NAME, crate::PACKAGE_VERSION)
         .with_functions(CORE_FUNCTION_TABLE)
+        .with_globals(CORE_GLOBALS)
         .with_constructors(CORE_CONSTRUCTORS)
         .with_constructor_types(CORE_CONSTRUCTOR_TYPES)
         .with_types(CORE_TYPES)
         .with_object_member_groups(CORE_OBJECT_MEMBER_GROUPS)
 }
 
+fn style_colors(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Значения цветов зависят от стиля конфигурации; без его данных нельзя
+    // отвечать фиктивными цветами или пустым объектом.
+    Err(RtError::DynamicError(
+        "цвета стиля не предоставлены этим хостом".into(),
+    ))
+}
+
+fn style_fonts(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Шрифты стиля требуют данных конфигурации и объектной модели шрифта.
+    Err(RtError::DynamicError(
+        "шрифты стиля не предоставлены этим хостом".into(),
+    ))
+}
+
+fn web_colors(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Все свойства набора имеют тип `Цвет`; до появления этого значения
+    // нельзя подменять их строками или числами RGB.
+    Err(RtError::DynamicError(
+        "web-цвета не предоставлены этим хостом".into(),
+    ))
+}
+
+fn merge_files(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Обе формы должны собирать файл через ФС этого прогона. До их
+    // реализации нельзя молча отвечать успехом, не создав результат.
+    Err(RtError::DynamicError(
+        "ОбъединитьФайлы пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn split_file(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Части файла должны создаваться через файловую систему прогона.
+    // Пока такой операции нет, ошибка сохраняет границу сеанса и не
+    // сообщает ложный список созданных файлов.
+    Err(RtError::DynamicError(
+        "РазделитьФайл пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn move_file(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // Переименование обязано идти через файловую систему сеанса, а у неё
+    // пока нет такой операции. Прямой вызов ФС процесса нарушил бы изоляцию.
+    Err(RtError::DynamicError(
+        "ПереместитьФайл пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn copy_file(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    // У платформы допустимы и файловые, и URI-источники. Пока граница ФС
+    // сеанса не описывает копирование, нельзя делать его через ФС процесса.
+    Err(RtError::DynamicError(
+        "КопироватьФайл пока не поддерживается этим хостом".into(),
+    ))
+}
+
+fn find_and_highlight_by_appearance(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Поиск учитывает границы слов и иерархию, а результат несёт оформление.
+    // Обычная строка потеряла бы сведения о найденных фрагментах.
+    Err(RtError::DynamicError(
+        "СтрНайтиИВыделитьОформлением пока не поддерживается этим хостом".into(),
+    ))
+}
+
+const CORE_GLOBALS: &[GlobalDescriptor] = &[
+    GlobalDescriptor {
+        names: &["ЦветаСтиля", "StyleColors"],
+        function: FunctionCode::new(6),
+    },
+    GlobalDescriptor {
+        names: &["ШрифтыСтиля", "StyleFonts"],
+        function: FunctionCode::new(7),
+    },
+    GlobalDescriptor {
+        names: &["WebЦвета", "WebColors"],
+        function: FunctionCode::new(8),
+    },
+];
+
 /// Глобальные функции ядра, которым нужен контекст прогона: временное
 /// хранилище живёт в сеансе, и путь через компонентную границу даёт ему
 /// `CallContext` — в отличие от таблицы `BuiltinFn`.
 const CORE_FUNCTION_TABLE: &[FunctionDescriptor] = &[
+    FunctionDescriptor {
+        code: FunctionCode::new(14),
+        names: &["РазделитьФайл", "SplitFile"],
+        arity: Arity::range(2, 3),
+        kind: FunctionKind::Function,
+        call: split_file,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(13),
+        names: &[
+            "СтрНайтиИВыделитьОформлением",
+            "StrFindAndHighlightByAppearance",
+        ],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: find_and_highlight_by_appearance,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(11),
+        names: &["КопироватьФайл", "CopyFile"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Procedure,
+        call: copy_file,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(10),
+        names: &["ПереместитьФайл", "MoveFile"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Procedure,
+        call: move_file,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(9),
+        names: &["ОбъединитьФайлы", "MergeFiles"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Procedure,
+        call: merge_files,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(8),
+        names: &["WebЦвета", "WebColors"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: web_colors,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(7),
+        names: &["ШрифтыСтиля", "StyleFonts"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: style_fonts,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(6),
+        names: &["ЦветаСтиля", "StyleColors"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: style_colors,
+    },
     FunctionDescriptor {
         code: FunctionCode::new(1),
         names: &["ПоместитьВоВременноеХранилище", "PutToTempStorage"],
@@ -1945,10 +3194,23 @@ const CORE_FUNCTION_TABLE: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: crate::user_message::get_user_messages,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(5),
+        names: &["ЭтоАдресВременногоХранилища", "IsTempStorageURL"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: crate::temp_storage::is_temp_storage_url,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistryError {
+    /// Описание типа значения содержит пустую идентичность или имя.
+    InvalidValueType(String),
+    /// Имя типа значения конфликтует с уже объявленным типом.
+    DuplicateValueTypeName(String),
+    /// Одна идентичность типа значения объявлена повторно.
+    DuplicateValueTypeIdentity(String),
     /// Имя или псевдоним глобального свойства объявлены повторно.
     DuplicateGlobalName(String),
     /// Глобальное свойство пытается заменить зарезервированное имя.
@@ -2053,6 +3315,14 @@ pub enum RegistryError {
 impl fmt::Display for RegistryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidValueType(name) => write!(f, "неверное описание типа значения «{name}»"),
+            Self::DuplicateValueTypeName(name) => {
+                write!(f, "имя типа значения «{name}» объявлено повторно")
+            }
+            Self::DuplicateValueTypeIdentity(identity) => write!(
+                f,
+                "идентичность типа значения «{identity}» объявлена повторно"
+            ),
             Self::DuplicateGlobalName(name) => {
                 write!(f, "глобальное имя «{name}» объявлено повторно")
             }
@@ -2176,9 +3446,48 @@ impl std::error::Error for RegistryError {}
 #[derive(Debug, Default)]
 pub(crate) struct TypeCatalog {
     by_spelling: HashMap<String, &'static crate::TypeDescriptor>,
+    value_by_spelling: HashMap<String, Arc<crate::ValueTypeDescriptor>>,
 }
 
 impl TypeCatalog {
+    pub(crate) fn resolve_value(&self, name: &str) -> Option<Arc<crate::ValueTypeDescriptor>> {
+        self.value_by_spelling.get(&name.to_uppercase()).cloned()
+    }
+
+    fn add_value_types(
+        &mut self,
+        types: &[Arc<crate::ValueTypeDescriptor>],
+    ) -> Result<(), RegistryError> {
+        let mut identities = HashSet::new();
+        for ty in types {
+            if ty.package().is_empty()
+                || ty.identity().is_empty()
+                || ty.display().is_empty()
+                || ty.names().is_empty()
+                || ty.names().iter().any(String::is_empty)
+            {
+                return Err(RegistryError::InvalidValueType(ty.identity().into()));
+            }
+            if !identities.insert((ty.package(), ty.identity())) {
+                return Err(RegistryError::DuplicateValueTypeIdentity(
+                    ty.identity().into(),
+                ));
+            }
+            for name in ty.names() {
+                if crate::TypeId::lookup(name).is_some() || self.resolve(name).is_some() {
+                    return Err(RegistryError::DuplicateValueTypeName(name.clone()));
+                }
+                if self
+                    .value_by_spelling
+                    .insert(name.to_uppercase(), Arc::clone(ty))
+                    .is_some()
+                {
+                    return Err(RegistryError::DuplicateValueTypeName(name.clone()));
+                }
+            }
+        }
+        Ok(())
+    }
     /// Тип по написанию — регистронезависимо и без учёта пробелов, тем же
     /// судьёй [`crate::types::squash`], что и `TypeDescriptor::answers_to`,
     /// иначе проверка разошлась бы с поиском на «ЧтениеXML» против
@@ -2295,16 +3604,25 @@ fn build_type_catalog(libraries: &[LibraryDescriptor]) -> Result<TypeCatalog, Re
         }
     }
 
-    Ok(TypeCatalog { by_spelling })
+    Ok(TypeCatalog {
+        by_spelling,
+        value_by_spelling: HashMap::new(),
+    })
 }
 
 /// Изменяемая стадия композиции runtime-компонентов.
 #[derive(Default)]
 pub struct RuntimeBuilder {
     libraries: Vec<LibraryDescriptor>,
+    value_types: Vec<Arc<crate::ValueTypeDescriptor>>,
 }
 
 impl RuntimeBuilder {
+    /// Объявляет неизменяемый тип значения до замораживания реестра.
+    pub fn register_value_type(&mut self, ty: Arc<crate::ValueTypeDescriptor>) -> &mut Self {
+        self.value_types.push(ty);
+        self
+    }
     pub fn new() -> Self {
         Self::default()
     }
@@ -2490,7 +3808,9 @@ impl RuntimeBuilder {
         }
 
         let globals = build_globals(&self.libraries)?;
-        let type_catalog = Arc::new(build_type_catalog(&self.libraries)?);
+        let mut type_catalog = build_type_catalog(&self.libraries)?;
+        type_catalog.add_value_types(&self.value_types)?;
+        let type_catalog = Arc::new(type_catalog);
         let mut byte_stream_factories = self
             .libraries
             .iter()
@@ -2502,6 +3822,7 @@ impl RuntimeBuilder {
 
         Ok(RuntimeRegistry {
             libraries: self.libraries,
+            value_types: self.value_types,
             function_names,
             globals,
             constructor_names,
@@ -2514,6 +3835,7 @@ impl RuntimeBuilder {
 /// Неизменяемый каталог собранного `Engine`.
 pub struct RuntimeRegistry {
     libraries: Vec<LibraryDescriptor>,
+    value_types: Vec<Arc<crate::ValueTypeDescriptor>>,
     function_names: HashMap<String, (u8, FunctionCode)>,
     globals: Vec<(&'static str, u8, FunctionCode)>,
     constructor_names: HashMap<String, (u8, ConstructorCode)>,
@@ -2522,6 +3844,10 @@ pub struct RuntimeRegistry {
 }
 
 impl RuntimeRegistry {
+    /// Неизменяемые типы значений, объявленные хостом до сборки реестра.
+    pub fn value_types(&self) -> &[Arc<crate::ValueTypeDescriptor>] {
+        &self.value_types
+    }
     pub fn libraries(&self) -> &[LibraryDescriptor] {
         &self.libraries
     }
@@ -2572,6 +3898,7 @@ impl RuntimeRegistry {
         ty: crate::TypeRef,
     ) -> Option<&'static ConstructorDescriptor> {
         match ty {
+            crate::TypeRef::Value(_) => None,
             crate::TypeRef::Object(ty) => self
                 .libraries
                 .iter()

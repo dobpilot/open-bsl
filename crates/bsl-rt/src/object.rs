@@ -41,6 +41,8 @@ pub enum BslObject {
     /// зарегистрированные типы. Ограничение значений колонки пока не
     /// применяется: объект нужен метаданным колонки и её конструктору.
     TypeDescription(Vec<crate::TypeRef>),
+    /// Описание приобретённых типов с квалификаторами платформы.
+    QualifiedTypeDescription(Vec<crate::table::ColumnType>),
     /// `СравнениеЗначений` — стратегия стандартного сравнения платформы,
     /// передаваемая вторым аргументом в `ТаблицаЗначений.Сортировать`.
     ValueComparison,
@@ -119,6 +121,7 @@ pub enum StructureStorage {
     Shaped {
         shape: Rc<Shape>,
         slots: Vec<BslValue>,
+        spellings: Option<Box<HashMap<NameId, String>>>,
     },
     /// Порядок вставки хранится отдельно от таблицы поиска — ровно как
     /// в `MapData`, и по той же причине: `Для Каждого` обязан быть
@@ -126,12 +129,17 @@ pub enum StructureStorage {
     Dictionary {
         order: Vec<NameId>,
         values: HashMap<NameId, BslValue>,
+        spellings: Option<Box<HashMap<NameId, String>>>,
     },
 }
 
 impl StructureStorage {
     pub fn new(shape: Rc<Shape>, slots: Vec<BslValue>) -> Self {
-        StructureStorage::Shaped { shape, slots }
+        StructureStorage::Shaped {
+            spellings: shape.spellings.clone(),
+            shape,
+            slots,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -147,7 +155,7 @@ impl StructureStorage {
 
     pub fn get(&self, field: NameId) -> Option<BslValue> {
         match self {
-            StructureStorage::Shaped { shape, slots } => {
+            StructureStorage::Shaped { shape, slots, .. } => {
                 shape.index.get(&field).map(|&s| slots[s as usize].clone())
             }
             StructureStorage::Dictionary { values, .. } => values.get(&field).cloned(),
@@ -159,7 +167,7 @@ impl StructureStorage {
     /// ошибка, а не создание поля).
     pub fn set(&mut self, field: NameId, val: BslValue) -> bool {
         match self {
-            StructureStorage::Shaped { shape, slots } => match shape.index.get(&field) {
+            StructureStorage::Shaped { shape, slots, .. } => match shape.index.get(&field) {
                 Some(&s) => {
                     slots[s as usize] = val;
                     true
@@ -181,7 +189,7 @@ impl StructureStorage {
     /// с переключением объекта в словарный режим).
     pub fn insert(&mut self, field: NameId, val: BslValue, shapes: &mut ShapeTable) {
         match self {
-            StructureStorage::Shaped { shape, slots } => {
+            StructureStorage::Shaped { shape, slots, .. } => {
                 if let Some(&slot) = shape.index.get(&field) {
                     slots[slot as usize] = val;
                     return;
@@ -192,7 +200,7 @@ impl StructureStorage {
                     return;
                 }
             }
-            StructureStorage::Dictionary { order, values } => {
+            StructureStorage::Dictionary { order, values, .. } => {
                 if values.insert(field, val).is_none() {
                     order.push(field);
                 }
@@ -212,15 +220,29 @@ impl StructureStorage {
     /// теряет ровно один элемент, как `slots` в шейповом режиме.
     pub fn remove(&mut self, field: NameId, shapes: &mut ShapeTable) {
         match self {
-            StructureStorage::Shaped { shape, slots } => {
+            StructureStorage::Shaped {
+                shape,
+                slots,
+                spellings,
+            } => {
                 if let Some(&slot) = shape.index.get(&field) {
                     slots.remove(slot as usize);
                     *shape = shapes.remove_field(shape, field);
+                    if let Some(spellings) = spellings {
+                        spellings.remove(&field);
+                    }
                 }
             }
-            StructureStorage::Dictionary { order, values } => {
+            StructureStorage::Dictionary {
+                order,
+                values,
+                spellings,
+            } => {
                 if values.remove(&field).is_some() {
                     order.retain(|&n| n != field);
+                    if let Some(spellings) = spellings {
+                        spellings.remove(&field);
+                    }
                 }
             }
         }
@@ -231,13 +253,23 @@ impl StructureStorage {
     /// doc comment на типе), даже когда полей снова ноль.
     pub fn clear(&mut self, shapes: &mut ShapeTable) {
         match self {
-            StructureStorage::Shaped { shape, slots } => {
+            StructureStorage::Shaped {
+                shape,
+                slots,
+                spellings,
+            } => {
                 slots.clear();
                 *shape = shapes.empty();
+                *spellings = None;
             }
-            StructureStorage::Dictionary { order, values } => {
+            StructureStorage::Dictionary {
+                order,
+                values,
+                spellings,
+            } => {
                 order.clear();
                 values.clear();
+                *spellings = None;
             }
         }
     }
@@ -246,29 +278,68 @@ impl StructureStorage {
     /// Каждого`, тот же позиционный обход, что и у `MapData::entry_at`.
     pub fn entry_at(&self, i: usize) -> Option<(NameId, BslValue)> {
         match self {
-            StructureStorage::Shaped { shape, slots } => {
+            StructureStorage::Shaped { shape, slots, .. } => {
                 Some((*shape.names.get(i)?, slots.get(i)?.clone()))
             }
-            StructureStorage::Dictionary { order, values } => {
+            StructureStorage::Dictionary { order, values, .. } => {
                 let n = *order.get(i)?;
                 Some((n, values.get(&n)?.clone()))
             }
         }
     }
 
+    /// Возвращает написание имени, видимое при обходе конкретной структуры.
+    pub fn spelling_at(&self, i: usize, names: &crate::NameInterner) -> Option<String> {
+        let (field, _) = self.entry_at(i)?;
+        let spellings = match self {
+            Self::Shaped { spellings, .. } | Self::Dictionary { spellings, .. } => spellings,
+        };
+        spellings
+            .as_ref()
+            .and_then(|spellings| spellings.get(&field))
+            .cloned()
+            .or_else(|| names.name(field).map(str::to_string))
+    }
+
+    /// Запоминает последнее написание ключа, не меняя общий интернер.
+    pub fn set_spelling(&mut self, field: NameId, spelling: &str, canonical: &str) {
+        let spellings = match self {
+            Self::Shaped { spellings, .. } | Self::Dictionary { spellings, .. } => spellings,
+        };
+        if spelling == canonical {
+            if let Some(spellings) = spellings {
+                spellings.remove(&field);
+            }
+        } else {
+            spellings
+                .get_or_insert_with(|| Box::new(HashMap::new()))
+                .insert(field, spelling.to_string());
+        }
+    }
+
     /// Переключение на словарное хранение с сохранением порядка полей.
     fn degrade(&mut self) {
-        let StructureStorage::Shaped { shape, slots } = std::mem::replace(
+        let StructureStorage::Shaped {
+            shape,
+            slots,
+            spellings,
+        } = std::mem::replace(
             self,
             StructureStorage::Dictionary {
                 order: Vec::new(),
                 values: HashMap::new(),
+                spellings: None,
             },
-        ) else {
+        )
+        else {
             return;
         };
         let order = shape.names.clone();
         let values = order.iter().copied().zip(slots).collect();
-        *self = StructureStorage::Dictionary { order, values };
+        *self = StructureStorage::Dictionary {
+            order,
+            values,
+            spellings,
+        };
     }
 }

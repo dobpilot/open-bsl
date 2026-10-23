@@ -128,6 +128,7 @@ pub(crate) fn node_descriptor(kind: DomKind) -> &'static TypeDescriptor {
         DomKind::Comment => &DOM_COMMENT_TYPE,
         DomKind::ProcessingInstruction => &DOM_PI_TYPE,
         DomKind::EntityReference => &DOM_ENTITY_REF_TYPE,
+        DomKind::DocumentType => &html::DOCUMENT_TYPE_DEFINITION_TYPE,
     }
 }
 
@@ -725,14 +726,34 @@ pub(crate) static NODE_METHODS: &[MethodDescriptor] = &[
 
 impl ObjectProtocol for DomNodeObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
-        node_descriptor(self.node.kind())
+        if self.doc.html_document.get() {
+            html::descriptor(&self.node)
+        } else {
+            node_descriptor(self.node.kind())
+        }
     }
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
+        if self.doc.html_document.get() {
+            match self.node.kind() {
+                DomKind::Document => return html::DOCUMENT_PROPERTIES,
+                DomKind::Element => return html::ELEMENT_PROPERTIES,
+                DomKind::DocumentType => return html::DOCUMENT_TYPE_PROPERTIES,
+                _ => {}
+            }
+        }
         NODE_PROPERTIES
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
+        if self.doc.html_document.get() {
+            match self.node.kind() {
+                DomKind::Document => return html::DOCUMENT_METHODS,
+                DomKind::Element => return html::ELEMENT_METHODS,
+                DomKind::DocumentType => return &[],
+                _ => {}
+            }
+        }
         NODE_METHODS
     }
 

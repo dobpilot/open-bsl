@@ -384,6 +384,14 @@ fn parse_address(text: &str) -> Option<TempAddress> {
     })
 }
 
+fn is_temp_storage_url_text(text: &str) -> bool {
+    let Some(rest) = text.strip_prefix(ADDRESS_PREFIX) else {
+        return false;
+    };
+    let id = rest.split_once('?').map_or(rest, |(id, _)| id);
+    crate::uuid::parse(id).is_ok()
+}
+
 impl TempStorageSession {
     #[must_use]
     pub fn new(token: [u8; 16], random: crate::RandomHandle) -> Self {
@@ -738,6 +746,18 @@ pub(crate) fn delete_from_temp_storage(
         .to_string();
     session.borrow_mut().delete(&address);
     Ok(BslValue::Undefined)
+}
+
+/// `ЭтоАдресВременногоХранилища(Адрес)` проверяет форму адреса, а не его наличие.
+pub(crate) fn is_temp_storage_url(
+    _: &mut crate::CallContext<'_>,
+    args: &[BslValue],
+) -> RtResult<BslValue> {
+    let result = match args.first() {
+        Some(BslValue::Str(value)) => is_temp_storage_url_text(&value.to_string()),
+        _ => false,
+    };
+    Ok(BslValue::Boolean(result))
 }
 
 #[cfg(test)]

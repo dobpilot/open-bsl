@@ -101,6 +101,23 @@ impl ObjectProtocol for FixedMapObject {
     fn method_table(&self) -> &'static [MethodDescriptor] {
         FIXED_MAP_METHODS
     }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self.entries.len())
+    }
+
+    fn collection_item(&self, index: &BslValue) -> RtResult<BslValue> {
+        // Позиция обхода не является публичным ключом соответствия.
+        let index = BslValue::index_as_usize(index)?;
+        let (key, value) = self.entries.get(index).ok_or(RtError::IndexOutOfBounds {
+            index: index as i64,
+            len: self.entries.len(),
+        })?;
+        Ok(BslValue::Object(std::rc::Rc::new(BslObject::KeyValuePair(
+            key.clone(),
+            value.clone(),
+        ))))
+    }
 }
 
 fn fixed_structure(receiver: &dyn ObjectProtocol) -> RtResult<&FixedStructureObject> {
@@ -198,12 +215,9 @@ pub(crate) fn construct_fixed_structure(
         .map_err(|_| RtError::ResourceLimit("не удалось создать фиксированную структуру".into()))?;
     for index in 0..storage.len() {
         let (name, value) = storage.entry_at(index).ok_or(RtError::NotAnObject)?;
-        let name = context
-            .runtime_shapes()
-            .names
-            .name(name)
-            .ok_or(RtError::UnknownField(name))?
-            .to_string();
+        let name = storage
+            .spelling_at(index, &context.runtime_shapes().names)
+            .ok_or(RtError::UnknownField(name))?;
         fields.push((name, value));
     }
     Ok(BslValue::new_object(FixedStructureObject { fields }))
@@ -213,7 +227,16 @@ pub(crate) fn construct_fixed_map(
     _context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let BslValue::Object(object) = &arguments[0] else {
+    fixed_map_from_map(&arguments[0])
+}
+
+/// Создаёт неизменяемый снимок существующего соответствия.
+///
+/// # Errors
+/// Возвращает ошибку типа, если передано не соответствие, или ошибку
+/// ограничения ресурсов, если нельзя выделить память для снимка.
+pub fn fixed_map_from_map(value: &BslValue) -> RtResult<BslValue> {
+    let BslValue::Object(object) = value else {
         return Err(RtError::TypeError {
             expected: "Соответствие",
             op: "ФиксированноеСоответствие",

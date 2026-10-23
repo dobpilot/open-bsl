@@ -23,9 +23,11 @@ mod fill;
 mod fixed_array;
 mod fixed_collections;
 pub mod fold;
+mod formatted_string;
 mod host_error;
 mod http;
 mod interner;
+mod internet_mail_message_flags;
 mod job_dto;
 mod locale;
 mod map;
@@ -36,6 +38,8 @@ mod notification;
 mod object;
 mod object_protocol;
 pub mod open_questions;
+mod picture;
+mod point_in_time;
 mod promise;
 mod runtime_shapes;
 mod shape;
@@ -45,6 +49,7 @@ mod temp_storage;
 #[cfg(target_os = "linux")]
 mod temporary_file_access;
 mod temporary_files;
+mod transferable_file_description;
 mod type_description;
 mod types;
 mod tz;
@@ -53,18 +58,23 @@ pub mod uuid;
 mod value;
 mod value_graph;
 mod value_list;
+mod value_type;
+pub use value_list::value_list_from_values;
 mod value_table_indexes;
 mod vstr;
 pub use background_jobs::{BackgroundJobService, JobWaitOutcome, background_job_type_descriptor};
 pub use error::{ComponentError, RtError, RtResult};
 pub use host_error::{HostError, HostErrorCode};
 pub use job_dto::{JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto, UserMessageDto};
+pub use picture::PICTURE_TYPE;
 pub use temp_storage::{
     GlobalStagingBudget, StagedWrite, StagingBudget, TempMailbox, TempStorageHub,
     TempStorageSession,
 };
+pub use user_message::PendingUserMessages;
 pub use value::BslValue;
 pub use value_graph::{GraphBudget, GraphLimits, SerializedValueGraph};
+pub use vstr::value_from_string_internal;
 
 pub use bsl_number::BslNumber;
 
@@ -83,10 +93,11 @@ pub use builtin::{
     BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, HostEffect, call_builtin_env,
     call_builtin_env_with_args, call_builtin_files, call_builtin_fn, call_builtin_fn_ctx,
     call_builtin_method, call_builtin_method_ctx, call_builtin_method_files,
-    call_builtin_temp_file,
+    call_builtin_temp_file, convert_to_boolean,
 };
 pub use component::{
-    Arity, ByteStreamFactory, CallContext, CallOutcome, Capability, ComponentCall, ConstructorCode,
+    Arity, ByteStreamFactory, CallContext, CallOutcome, Capability, ComponentCall,
+    ConfigurationHandlerEntryMode, ConfigurationInstanceEntryMode, ConstructorCode,
     ConstructorDescriptor, ContextKind, ExecutionParts, FunctionCall, FunctionCode,
     FunctionDescriptor, FunctionKind, GlobalDescriptor, InterpreterServices, LibraryDependency,
     LibraryDescriptor, LibraryKey, LibraryRequirement, MethodCall, MethodDescriptor,
@@ -102,10 +113,10 @@ pub use date::{
 };
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use env::{
-    Clock, DirEntry, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem,
-    FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, OpenedTemporaryFile,
-    RandomHandle, RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
-    TransferableTemporaryFile, UserMessageSink,
+    Clock, ClockHandle, DirEntry, FileCreate, FileHandle, FileMetadata, FileOpenOptions,
+    FileSystem, FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS,
+    OpenedTemporaryFile, RandomHandle, RandomSource, SystemClock, SystemFileSystem, SystemRandom,
+    TimeZone, TransferableTemporaryFile, UserMessageSink,
 };
 pub use error_info::{
     brief_error_description, detailed_error_description, is_error_info, new_error_info,
@@ -124,21 +135,26 @@ pub use file_search::{
     call_builtin_delete_files, call_builtin_delete_files_formatted, call_builtin_find_files,
     find_files, prepare_file_search, search_file_paths,
 };
-pub use fixed_collections::{fixed_map_entries, fixed_structure_entries};
+pub use fixed_array::fixed_array_from_values;
+pub use fixed_collections::{fixed_map_entries, fixed_map_from_map, fixed_structure_entries};
 pub use fold::folded_eq;
 pub use http::{
     ClientIdentity, HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink,
     HttpErrorMapper, HttpResponseMapper, HttpWireRequest, HttpWireResponse, NetworkError,
-    NetworkErrorKind, ProxyConfig, ProxyMode, RequestHandle, SecretBytes, SecretString, TlsConfig,
+    NetworkErrorKind, ProxyConfig, ProxyMode, RequestHandle, SecretBytes, SecretString,
+    ServerTlsCertificateRevocationCheckMode, TlsConfig,
 };
 pub use interner::{NameId, NameInterner, first_folded_duplicate};
 pub use locale::{Locale, NBSP};
 pub use mask::{file_mask_matches, simple_mask_matches};
-pub use module_reference::BSL_MODULE_TYPE;
+pub use module_reference::{BSL_MODULE_TYPE, COMMON_MODULE_TYPE};
 pub use notification::NotificationDescription;
 pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{
     ByteStreamProtocol, ObjectDowncast, ObjectProtocol, ObjectRef, TypeDescriptor, receiver_of,
+};
+pub use point_in_time::{
+    POINT_IN_TIME_TYPE, PointInTimeValue, ReferenceOrderKey, new_point_in_time,
 };
 pub use promise::HostPromiseSpawner as HttpPromiseSpawner;
 pub use promise::{
@@ -148,10 +164,13 @@ pub use promise::{
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::BslString;
-pub use table::ValueTableData;
+pub use table::{ColumnType, ValueTableData, adjust_to_types};
+mod configuration_instance;
+pub use configuration_instance::ConfigurationInstance;
 pub use temporary_files::{TemporaryFileCleanup, TemporaryFileRegistry, TemporaryFileResource};
 pub use types::{TypeId, TypeRef};
 pub use tz::SystemTimeZone;
+pub use value_type::{ValueMaterializer, ValueTypeDescriptor};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
@@ -181,6 +200,8 @@ pub fn reserve_hint<T>(
     vec.try_reserve(hint)?;
     Ok(hint)
 }
+
+pub use vstr::value_from_string_internal_with_resolver;
 
 #[cfg(test)]
 mod tests {

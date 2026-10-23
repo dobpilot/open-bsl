@@ -318,6 +318,7 @@ pub struct EntryObject {
 pub struct WriterObject {
     pub(crate) kind: ArchiveKind,
     pub(crate) state: Rc<RefCell<WriterState>>,
+    pub(crate) os_utf8: std::cell::Cell<bool>,
     pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 

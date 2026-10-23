@@ -107,7 +107,12 @@ impl BslValue {
     ) -> RtResult<Self> {
         let text = self.as_str("СтрНайти")?;
         let needle = needle.as_str("СтрНайти")?;
-        if needle.units().is_empty() || needle.units().len() > text.units().len() {
+        // Пустая подстрока даёт 1 независимо от дополнительных параметров:
+        // это отдельный ранний результат, подтверждённый нативным контролем.
+        if needle.units().is_empty() {
+            return Ok(BslValue::number_from_i64(1));
+        }
+        if needle.units().len() > text.units().len() {
             return Ok(BslValue::number_from_i64(0));
         }
         let from_end = match direction {
@@ -227,7 +232,10 @@ impl BslValue {
     /// Это осознанное расхождение уровня слоёв, а не забытая локализация:
     /// массив строк (обычный случай) оно не затрагивает вовсе.
     pub fn str_join(&self, sep: &Self) -> RtResult<Self> {
-        let sep = sep.as_str("СтрСоединить")?;
+        let sep = match sep {
+            BslValue::Undefined => BslString::from_str(""),
+            _ => sep.as_str("СтрСоединить")?.clone(),
+        };
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(items) => {
@@ -239,7 +247,7 @@ impl BslValue {
                             other => BslString::from_str(&other.to_string()),
                         })
                         .collect();
-                    Ok(BslValue::Str(BslString::join(&parts, sep)))
+                    Ok(BslValue::Str(BslString::join(&parts, &sep)))
                 }
                 _ => Err(RtError::TypeError {
                     expected: "Массив",

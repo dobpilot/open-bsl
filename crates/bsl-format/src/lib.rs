@@ -504,7 +504,8 @@ fn group_digits(digits: &str, sep: char) -> String {
 /// текстовое представление уже верно само по себе (`Display` в `bsl-rt`:
 /// `Массив`, пустая строка для `Неопределено`, ...).
 ///
-/// Ошибка — единственная: незнакомая локаль в `Л`.
+/// Возвращает ошибку для незнакомой локали в `Л` или при отказе
+/// обработчика представления компонентного объекта.
 pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
     match v {
         BslValue::Number(n) => {
@@ -519,6 +520,11 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
                 Some(s) => parse_date_format(s)?,
                 None => DateFormat::default(),
             };
+            // Нативный контроль нового бизнес-процесса и отдельная проба
+            // подтверждают пустой результат даже для буквального шаблона.
+            if d.is_empty() && fmt.pattern.is_some() {
+                return Ok(String::new());
+            }
             Ok(match (&fmt.pattern, &fmt.long) {
                 // `ДФ` конкретнее `ДЛФ`, поэтому при обоих ключах
                 // выигрывает шаблон.
@@ -547,6 +553,27 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
         // отладочное «Null»: он для человека за отладчиком, а не для
         // пользовательского вывода.
         BslValue::Null => Ok(String::new()),
+        BslValue::Object(object) => match object.as_ref() {
+            bsl_rt::BslObject::Extension(component) => component.presentation(),
+            bsl_rt::BslObject::TypeDescription(types) => match types.as_slice() {
+                [
+                    bsl_rt::TypeRef::Native(id @ (bsl_rt::TypeId::String | bsl_rt::TypeId::Number)),
+                ] => Ok(id.to_string()),
+                _ => Ok(v.to_string()),
+            },
+            bsl_rt::BslObject::QualifiedTypeDescription(types) => match types.as_slice() {
+                [column]
+                    if matches!(
+                        column.id.native(),
+                        Some(bsl_rt::TypeId::String | bsl_rt::TypeId::Number)
+                    ) =>
+                {
+                    Ok(column.id.to_string())
+                }
+                _ => Ok(v.to_string()),
+            },
+            _ => Ok(v.to_string()),
+        },
         other => Ok(other.to_string()),
     }
 }

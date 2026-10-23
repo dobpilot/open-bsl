@@ -103,6 +103,19 @@ pub enum TlsConfig {
     Insecure,
 }
 
+/// Запрошенный режим проверки отзыва TLS-сертификата сервера.
+///
+/// Host получает это значение отдельно от источника доверенных корней:
+/// поддержка конкретной политики зависит от TLS-транспорта, а режим нельзя
+/// молча ослаблять до отсутствия проверки.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServerTlsCertificateRevocationCheckMode {
+    Auto,
+    DontCheck,
+    SoftFail,
+    Strict,
+}
+
 impl fmt::Debug for TlsConfig {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -127,6 +140,9 @@ pub struct HttpClientConfig {
     pub proxy: ProxyMode,
     pub timeout: Option<Duration>,
     pub tls: TlsConfig,
+    /// Явно переданный BSL-коду режим проверки отзыва сертификата.
+    /// `None` сохраняет прежнее поведение вызовов без третьего аргумента.
+    pub server_certificate_revocation_check_mode: Option<ServerTlsCertificateRevocationCheckMode>,
     pub client_identity: Option<ClientIdentity>,
     pub use_os_authentication: bool,
 }
@@ -142,6 +158,10 @@ impl fmt::Debug for HttpClientConfig {
             .field("proxy", &self.proxy)
             .field("timeout", &self.timeout)
             .field("tls", &self.tls)
+            .field(
+                "server_certificate_revocation_check_mode",
+                &self.server_certificate_revocation_check_mode,
+            )
             .field("client_identity", &self.client_identity)
             .field("use_os_authentication", &self.use_os_authentication)
             .finish()

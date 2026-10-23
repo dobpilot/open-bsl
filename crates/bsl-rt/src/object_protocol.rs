@@ -164,7 +164,30 @@ pub fn receiver_of<'r, T: ObjectProtocol + 'static>(
 /// поддерживает, оставляют реализацию по умолчанию с типизированной
 /// ошибкой.
 pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
+    /// Ключ ссылки для сравнения моментов времени. Обычные компоненты
+    /// не являются ссылками; неизвестный номер хранения не угадывается.
+    fn reference_order_key(&self) -> Option<crate::ReferenceOrderKey> {
+        None
+    }
+    /// Память модуля конкретного изменяемого объекта конфигурации.
+    /// Исполнитель возвращает сюда переменные при обратном вызове другого
+    /// объекта. У обычного компонента собственного модуля нет.
+    fn configuration_instance(&self) -> Option<&crate::ConfigurationInstance> {
+        None
+    }
     fn type_descriptor(&self) -> &'static TypeDescriptor;
+
+    /// Тип значения для `ТипЗнч`. По умолчанию это статический тип
+    /// компонента; типы конфигурации возвращают объявленное хостом описание.
+    fn value_type(&self) -> crate::TypeRef {
+        crate::TypeRef::Object(self.type_descriptor())
+    }
+
+    /// Неизменяемые байты идентичности для зарегистрированного декодера типа.
+    /// По умолчанию объект не допускает переноса через граф значений.
+    fn immutable_snapshot(&self) -> Option<&[u8]> {
+        None
+    }
 
     /// Вход для доступа к свойству с именем-строкой. По умолчанию
     /// диспетчеризует по [`ObjectProtocol::property_table`]; пустая
@@ -255,6 +278,15 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
     /// переопределение есть в тестах VM.
     fn get_index(&self, _index: &BslValue) -> RtResult<BslValue> {
         Err(RtError::NotIndexable)
+    }
+
+    /// Получает элемент при обходе коллекции независимо от публичного индексирования.
+    /// По умолчанию сохраняет индексный доступ существующих объектов.
+    ///
+    /// # Errors
+    /// Возвращает ошибку объекта, если элемент недоступен.
+    fn collection_item(&self, index: &BslValue) -> RtResult<BslValue> {
+        self.get_index(index)
     }
 
     fn set_index(&self, _index: &BslValue, _value: BslValue) -> RtResult<()> {
@@ -348,6 +380,24 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         None
     }
 
+    /// Пользовательское представление объекта отдельно от диагностического вывода.
+    /// По умолчанию сохраняет прежнее представление компонента.
+    ///
+    /// # Errors
+    /// Возвращает ошибку, если необходимые данные представления недоступны.
+    fn presentation(&self) -> RtResult<String> {
+        Ok(self.display())
+    }
+
+    /// Пользовательское представление в контексте вызывающего сеанса.
+    /// По умолчанию сохраняет поведение существующих компонентов.
+    ///
+    /// # Errors
+    /// Возвращает ошибку представления или недоступных данных контекста.
+    fn presentation_with_context(&self, _context: &CallContext<'_>) -> RtResult<String> {
+        self.presentation()
+    }
+
     fn display(&self) -> String {
         self.type_descriptor().name.to_string()
     }
@@ -404,12 +454,30 @@ impl ObjectRef {
         self.0.method_table()
     }
 
+    /// Тип значения, объявленный конкретным объектом.
+    pub fn value_type(&self) -> crate::TypeRef {
+        self.0.value_type()
+    }
+
+    /// Неизменяемая полезная нагрузка снимка конкретного объекта.
+    pub fn immutable_snapshot(&self) -> Option<&[u8]> {
+        self.0.immutable_snapshot()
+    }
+
     pub fn property_table(&self) -> &'static [crate::PropertyDescriptor] {
         self.0.property_table()
     }
 
     pub fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
         self.0.get_index(index)
+    }
+
+    /// Получает элемент для обхода коллекции.
+    ///
+    /// # Errors
+    /// Возвращает ошибку протокола объекта.
+    pub fn collection_item(&self, index: &BslValue) -> RtResult<BslValue> {
+        self.0.collection_item(index)
     }
 
     pub fn set_index(&self, index: &BslValue, value: BslValue) -> RtResult<()> {
@@ -460,6 +528,22 @@ impl ObjectRef {
 
     pub fn display(&self) -> String {
         self.0.display()
+    }
+
+    /// Пользовательское представление компонентного значения.
+    ///
+    /// # Errors
+    /// Возвращает ошибку обработчика представления объекта.
+    pub fn presentation(&self) -> RtResult<String> {
+        self.0.presentation()
+    }
+
+    /// Представляет значение с данными текущего вызывающего сеанса.
+    ///
+    /// # Errors
+    /// Возвращает ошибку контекстного обработчика представления.
+    pub fn presentation_with_context(&self, context: &CallContext<'_>) -> RtResult<String> {
+        self.0.presentation_with_context(context)
     }
 }
 

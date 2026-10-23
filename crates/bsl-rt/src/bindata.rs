@@ -674,6 +674,70 @@ pub fn concat(v: &BslValue, other: &BslValue) -> RtResult<BslValue> {
     Ok(wrap(BinBufData::new(bytes, d.order)))
 }
 
+/// `СоединитьБуферыДвоичныхДанных(Части[, Разделитель][, ПорядокБайтов])`.
+///
+/// Разделитель добавляется только между соседними частями, а порядок
+/// результата по умолчанию всегда малый, независимо от порядка источников.
+/// Это проверено прямыми пробами 1С 8.3.27.2342.
+///
+/// # Errors
+///
+/// Возвращает ошибку типа, если части — не массив буферов, разделитель —
+/// не буфер либо порядок — не член `ПорядокБайтов`.
+pub fn concat_buffers(args: &[BslValue]) -> RtResult<BslValue> {
+    const OP: &str = "СоединитьБуферыДвоичныхДанных";
+    let parts = match &args[0] {
+        BslValue::Object(object) => match &**object {
+            BslObject::Array(parts) => parts,
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Массив",
+                    op: OP,
+                });
+            }
+        },
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Массив",
+                op: OP,
+            });
+        }
+    };
+    let bad_buffer = || RtError::TypeError {
+        expected: "БуферДвоичныхДанных",
+        op: OP,
+    };
+    let separator = match args.get(1) {
+        None | Some(BslValue::Undefined) => Vec::new(),
+        Some(value) => data(value, OP).map_err(|_| bad_buffer())?.borrow().to_vec(),
+    };
+    let order = match args.get(2) {
+        None | Some(BslValue::Undefined) => ByteOrder::Little,
+        Some(BslValue::Enum(value)) => ByteOrder::from_enum(*value).ok_or(RtError::TypeError {
+            expected: "ПорядокБайтов",
+            op: OP,
+        })?,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "ПорядокБайтов",
+                op: OP,
+            });
+        }
+    };
+    let parts = parts.borrow();
+    let mut bytes = Vec::new();
+    for (index, part) in parts.iter().enumerate() {
+        if index != 0 {
+            bytes.extend_from_slice(&separator);
+        }
+        data(part, OP)
+            .map_err(|_| bad_buffer())?
+            .borrow()
+            .with_bytes(|part_bytes| bytes.extend_from_slice(part_bytes));
+    }
+    Ok(wrap(BinBufData::new(bytes, order)))
+}
+
 // --- ПолучитьСрез / Записать / Скопировать ----------------------------------
 
 /// Количество байтов из аргумента. От [`pos_of`] отличается тем, что

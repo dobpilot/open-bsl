@@ -188,6 +188,64 @@ fn normalized_count(value: Option<&BslValue>) -> RtResult<BslNumber> {
     }
 }
 
+pub(crate) fn qualifier_property(object: &BslObject, name: &str) -> RtResult<BslValue> {
+    let (target, number) = if crate::folded_eq(name, "КвалификаторыСтроки")
+        || crate::folded_eq(name, "StringQualifiers")
+    {
+        (TypeId::String, false)
+    } else if crate::folded_eq(name, "КвалификаторыЧисла")
+        || crate::folded_eq(name, "NumberQualifiers")
+    {
+        (TypeId::Number, true)
+    } else {
+        return Err(RtError::UnknownColumn(name.to_owned()));
+    };
+    let qualifiers = match object {
+        BslObject::QualifiedTypeDescription(types) => types
+            .iter()
+            .find(|value| value.id == TypeRef::Native(target))
+            .map(|value| value.quals.as_slice())
+            .unwrap_or_default(),
+        BslObject::TypeDescription(_) => &[],
+        _ => return Err(RtError::NotAnObject),
+    };
+    let count = |index: usize| -> RtResult<BslNumber> {
+        match qualifiers.get(index) {
+            None => Ok(BslNumber::from_i64(0)),
+            Some(text) => BslNumber::parse_canonical(text.as_str()).map_err(|_| {
+                RtError::DynamicError("неподдерживаемый квалификатор описания типов".into())
+            }),
+        }
+    };
+    // Нативная проба `type-description-qualifiers` подтверждает нулевые
+    // квалификаторы отсутствующего типа и политики «Переменная» / «Любой».
+    let policy_index = if number { 2 } else { 1 };
+    if qualifiers
+        .get(policy_index)
+        .is_some_and(|value| value != "0" && (number || value != "1"))
+    {
+        return Err(RtError::DynamicError(
+            "эта политика квалификатора описания типов пока не поддерживается".into(),
+        ));
+    }
+    if number {
+        Ok(BslValue::new_object(NumberQualifiersObject {
+            digits: count(0)?,
+            fraction_digits: count(1)?,
+            allowed_sign: EnumValue::AllowedSignAny,
+        }))
+    } else {
+        Ok(BslValue::new_object(StringQualifiersObject {
+            length: count(0)?,
+            allowed_length: if qualifiers.get(1).is_some_and(|value| value == "0") {
+                EnumValue::AllowedLengthFixed
+            } else {
+                EnumValue::AllowedLengthVariable
+            },
+        }))
+    }
+}
+
 pub(crate) fn construct_number_qualifiers(arguments: &[BslValue]) -> RtResult<BslValue> {
     let digits = normalized_count(arguments.first())?;
     let fraction_digits = normalized_count(arguments.get(1))?;
@@ -274,6 +332,67 @@ pub(crate) fn is_supported_qualifier(value: &BslValue) -> bool {
             .object_ref()
             .and_then(|object| object.downcast_ref::<StringQualifiersObject>())
             .is_some()
+        || value
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<NumberQualifiersObject>())
+            .is_some()
+}
+
+pub(crate) fn retain_primitive_qualifiers(
+    description: BslValue,
+    qualifiers: &[BslValue],
+) -> RtResult<BslValue> {
+    let BslValue::Object(object) = &description else {
+        return Err(RtError::NotAnObject);
+    };
+    let BslObject::TypeDescription(types) = object.as_ref() else {
+        return Err(RtError::NotAnObject);
+    };
+    let mut columns = types
+        .iter()
+        .cloned()
+        .map(crate::table::ColumnType::plain)
+        .collect::<Vec<_>>();
+    for column in &mut columns {
+        if column.id == TypeRef::Native(TypeId::String) {
+            if let Some(qualifier) = qualifiers
+                .get(1)
+                .and_then(BslValue::object_ref)
+                .and_then(|object| object.downcast_ref::<StringQualifiersObject>())
+            {
+                column.quals = vec![
+                    qualifier.length.to_string(),
+                    if qualifier.allowed_length == EnumValue::AllowedLengthFixed {
+                        "0"
+                    } else {
+                        "1"
+                    }
+                    .into(),
+                ];
+            }
+        } else if column.id == TypeRef::Native(TypeId::Number)
+            && let Some(qualifier) = qualifiers
+                .first()
+                .and_then(BslValue::object_ref)
+                .and_then(|object| object.downcast_ref::<NumberQualifiersObject>())
+        {
+            if qualifier.allowed_sign != EnumValue::AllowedSignAny {
+                return Err(RtError::DynamicError(
+                    "эта политика квалификатора числа пока не поддерживается".into(),
+                ));
+            }
+            column.quals = vec![
+                qualifier.digits.to_string(),
+                qualifier.fraction_digits.to_string(),
+                "0".into(),
+            ];
+        }
+    }
+    if columns.iter().all(|column| column.quals.is_empty()) {
+        Ok(description)
+    } else {
+        Ok(BslValue::new_qualified_type_description(columns))
+    }
 }
 
 /// `ОписаниеТипов.ПривестиЗначение` для двух форм Connector.
@@ -281,12 +400,32 @@ pub(crate) fn is_supported_qualifier(value: &BslValue) -> bool {
 /// Платформа 8.3.27 измерена файлом
 /// `measure-type-description-convert.bsl`: негодная строка даёт
 /// значение по умолчанию (`0` либо пустую дату), а не ошибку.
-pub(crate) fn adjust_value(receiver: &BslValue, value: &BslValue) -> RtResult<BslValue> {
+pub(crate) fn adjust_value(receiver: &BslValue, value: Option<&BslValue>) -> RtResult<BslValue> {
     let BslValue::Object(object) = receiver else {
         return not_applicable(receiver);
     };
+    if let BslObject::QualifiedTypeDescription(types) = object.as_ref() {
+        // Составное описание характеристики и квалификация измерены
+        // независимой пробой `characteristic-value-type-qualifiers`.
+        return Ok(crate::table::adjust_to_types(
+            value.cloned().unwrap_or(BslValue::Undefined),
+            types,
+        ));
+    }
     let BslObject::TypeDescription(types) = &**object else {
         return not_applicable(receiver);
+    };
+    let Some(value) = value else {
+        return match types.as_slice() {
+            [TypeRef::Native(TypeId::Number)] => Ok(BslValue::Number(BslNumber::from_i64(0))),
+            [TypeRef::Native(TypeId::String)] => Ok(BslValue::Str(crate::BslString::from_str(""))),
+            [TypeRef::Native(TypeId::Boolean)] => Ok(BslValue::Boolean(false)),
+            [TypeRef::Native(TypeId::Date)] => Ok(BslValue::Date(BslDate::empty())),
+            [] | [_, _, ..] => Ok(BslValue::Undefined),
+            [_] => Err(RtError::DynamicError(
+                "значение по умолчанию этого типа не реализовано".into(),
+            )),
+        };
     };
     let [TypeRef::Native(target)] = types.as_slice() else {
         return Err(RtError::TypeError {

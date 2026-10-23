@@ -9,7 +9,7 @@ pub mod writer;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDescriptor,
-    RtResult, TypeDescriptor,
+    RtError, RtResult, TypeDescriptor,
 };
 
 pub use document::{
@@ -36,7 +36,40 @@ fn construct_attachments(
     Ok(new_pdf_attachments())
 }
 
-// Оба конструктора БЕЗ аргументов: измерено, что и путь, и
+fn construct_representation_description(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Без свойств отображаемого объекта описание PDF не может участвовать
+    // в построении документа.
+    Err(RtError::DynamicError(
+        "описание отображаемого объекта PDF не поддерживается".into(),
+    ))
+}
+
+fn construct_pdf_writer(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Низкоуровневый писатель не реализует методы и жизненный цикл
+    // платформенного объекта `ЗаписьPDF`.
+    Err(RtError::DynamicError(
+        "объект ЗаписьPDF не поддерживается".into(),
+    ))
+}
+
+fn construct_pdf_reader(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    // Читатель контейнера документа не реализует жизненный цикл `ЧтениеPDF`.
+    // Без этой реализации успешное создание обещало бы недоступное чтение.
+    Err(RtError::DynamicError(
+        "объект ЧтениеPDF не поддерживается".into(),
+    ))
+}
+
+// Конструкторы документа и коллекции без аргументов: измерено, что и путь, и
 // `ДвоичныеДанные` в `Новый ДокументPDF` платформа отвергает, а `Новый
 // ВложениеPDF` не существует вовсе — вложение появляется через `Добавить`.
 const CONSTRUCTORS: &[ConstructorDescriptor] = &[
@@ -51,6 +84,27 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         names: &["КоллекцияВложенийPDF", "PDFAttachmentCollection"],
         arity: Arity::exact(0),
         call: construct_attachments,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(3),
+        names: &[
+            "ОписаниеОтображаемогоОбъектаPDF",
+            "PDFRepresentationObjectDescription",
+        ],
+        arity: Arity::exact(0),
+        call: construct_representation_description,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(4),
+        names: &["ЗаписьPDF", "PDFWriter"],
+        arity: Arity::range(0, 1),
+        call: construct_pdf_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(5),
+        names: &["ЧтениеPDF", "PDFReader"],
+        arity: Arity::range(0, 1),
+        call: construct_pdf_reader,
     },
 ];
 
@@ -96,6 +150,6 @@ mod tests {
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(codes, (1..=2).collect::<Vec<_>>());
+        assert_eq!(codes, (1..=5).collect::<Vec<_>>());
     }
 }

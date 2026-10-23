@@ -137,11 +137,19 @@ impl BslValue {
         Ok(BslValue::Number(BslNumber::from_i64(millis)))
     }
 
-    /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — все
+    /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели`/`ДеньГода` — все
     /// возвращают `Число`, поэтому одна функция с селектором вместо шести
     /// почти одинаковых.
     pub fn date_component(&self, part: DatePart) -> RtResult<Self> {
-        let d = self.as_date(part.op())?;
+        let d = if matches!(part, DatePart::DayOfYear) {
+            match self {
+                BslValue::Str(value) => BslDate::parse_digits(&value.to_string())
+                    .ok_or(RtError::DateOutOfRange { op: part.op() })?,
+                _ => self.as_date(part.op())?,
+            }
+        } else {
+            self.as_date(part.op())?
+        };
         let c = d.to_civil();
         let n = match part {
             DatePart::Year => c.year,
@@ -151,22 +159,44 @@ impl BslValue {
             DatePart::Minute => c.minute as i64,
             DatePart::Second => c.second as i64,
             DatePart::Weekday => d.weekday() as i64,
+            DatePart::DayOfYear => {
+                (d.start_of_day().seconds() - d.start_of_year().seconds()) / 86_400 + 1
+            }
+            DatePart::WeekOfYear => {
+                // Номер недели зависит от границы недели текущей базы.
+                return Err(RtError::DynamicError(
+                    "нумерация недель не определена для текущего сеанса".into(),
+                ));
+            }
         };
         Ok(BslValue::Number(BslNumber::from_i64(n)))
     }
 
     /// `НачалоДня`/`КонецДня`/`НачалоМесяца`/... — тоже один селектор:
-    /// все семь границ отличаются только тем, что округляют.
+    /// границы отличаются только тем, что округляют.
     pub fn date_boundary(&self, which: DateBoundary) -> RtResult<Self> {
         let d = self.as_date(which.op())?;
         Ok(BslValue::Date(match which {
+            DateBoundary::StartOfMinute => d.start_of_minute(),
+            DateBoundary::EndOfMinute => d.end_of_minute(),
+            DateBoundary::StartOfHour => d.start_of_hour(),
+            DateBoundary::EndOfHour => d.end_of_hour(),
             DateBoundary::StartOfDay => d.start_of_day(),
             DateBoundary::EndOfDay => d.end_of_day(),
             DateBoundary::StartOfMonth => d.start_of_month(),
             DateBoundary::EndOfMonth => d.end_of_month(),
+            DateBoundary::StartOfQuarter => d.start_of_quarter(),
+            DateBoundary::EndOfQuarter => d.end_of_quarter(),
             DateBoundary::StartOfYear => d.start_of_year(),
             DateBoundary::EndOfYear => d.end_of_year(),
             DateBoundary::StartOfWeek => d.start_of_week(),
+            DateBoundary::EndOfWeek => {
+                // Два реальных оракула расходятся по началу недели;
+                // без настройки сеанса нельзя выбрать календарь.
+                return Err(RtError::DynamicError(
+                    "граница недели не определена для текущего сеанса".into(),
+                ));
+            }
         }))
     }
 

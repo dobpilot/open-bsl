@@ -141,6 +141,9 @@ impl DomSerializer<'_> {
             // ИЗМЕРЕНО: атрибут не пишется вовсе — результат пустой, и это
             // не ошибка.
             DomKind::Attribute => Ok(()),
+            DomKind::DocumentType => {
+                Err(bad("запись определения HTML через XML пока не реализована"))
+            }
         }
     }
 }
@@ -184,6 +187,16 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         });
     }
     let node = need_node(args.first(), op)?;
+    if node.html_document.get()
+        || node
+            .owner
+            .borrow()
+            .upgrade()
+            .is_some_and(|document| document.html_document.get())
+    {
+        html::write_to_string(&args[1], &node)?;
+        return Ok(BslValue::Undefined);
+    }
     let target = &args[1];
     crate::xml::with_writer(crate::xml::arg_object(target)?, |w| {
         let mut ser = DomSerializer {
@@ -196,4 +209,54 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         ser.write_node(&node)
     })?;
     Ok(BslValue::Undefined)
+}
+
+/// Измеренный HTML-режим над тем же деревом, без XML-объявления и отступов.
+pub(crate) fn html_string(node: &Rc<DomNode>) -> RtResult<String> {
+    fn visit(node: &DomNode, output: &mut String) -> RtResult<()> {
+        match node.kind {
+            DomKind::Document => {
+                for child in node.children.borrow().iter() {
+                    visit(child, output)?;
+                }
+            }
+            DomKind::Element => {
+                if !node.attrs.borrow().is_empty()
+                    || !matches!(
+                        node.name.as_str(),
+                        "html" | "head" | "title" | "body" | "br" | "div"
+                    )
+                {
+                    return Err(bad("запись этого вида элемента HTML пока не реализована"));
+                }
+                output.push('<');
+                output.push_str(&node.name);
+                output.push('>');
+                let children = node.children.borrow();
+                if node.name == "br" {
+                    if !children.is_empty() {
+                        return Err(bad("запись br с дочерними узлами пока не реализована"));
+                    }
+                } else {
+                    for child in children.iter() {
+                        visit(child, output)?;
+                    }
+                    output.push_str("</");
+                    output.push_str(&node.name);
+                    output.push('>');
+                }
+            }
+            DomKind::Text => {
+                crate::core::escape_text(output, node.value.borrow().as_deref().unwrap_or(""))
+            }
+            DomKind::DocumentType => {
+                output.push_str("<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
+            }
+            _ => return Err(bad("запись этого вида узла HTML пока не реализована")),
+        }
+        Ok(())
+    }
+    let mut output = String::new();
+    visit(node, &mut output)?;
+    Ok(output)
 }

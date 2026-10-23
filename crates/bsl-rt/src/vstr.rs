@@ -336,8 +336,8 @@ fn object_to_writer(
             let entries: Vec<(String, BslValue)> = {
                 let s = s.borrow();
                 (0..s.len())
-                    .filter_map(|i| s.entry_at(i))
-                    .filter_map(|(id, v)| rt.names.name(id).map(|n| (n.to_string(), v)))
+                    .filter_map(|i| s.entry_at(i).zip(s.spelling_at(i, &rt.names)))
+                    .map(|((_, value), name)| (name, value))
                     .collect()
             };
             w.open();
@@ -388,6 +388,16 @@ fn object_to_writer(
         BslObject::ValueTable(data) => table_to_writer(data, rt, path, w)?,
         // `ОписаниеТипов` — тот же `{"Pattern",…}`, что у колонок таблицы,
         // под своим видом объекта (измерено, пробы `CMP.VALUE*`).
+        BslObject::QualifiedTypeDescription(types) => {
+            w.open();
+            w.quoted("#");
+            w.bare(TYPE_DESCRIPTION_ID);
+            w.open();
+            w.quoted("Pattern");
+            write_qualified_pattern_types(types, w)?;
+            w.close();
+            w.close();
+        }
         BslObject::TypeDescription(type_ids) => {
             w.open();
             w.quoted("#");
@@ -538,24 +548,7 @@ fn table_to_writer(
             w.open();
             w.quoted("Pattern");
             if let Some(Some(column_types)) = types.get(idx) {
-                let ids: Vec<TypeRef> = column_types.iter().map(|t| t.id).collect();
-                for letter in canonical_letters(&ids).map_err(|_| {
-                    err(format!(
-                        "тип колонки «{name}» не представим во внутреннем формате"
-                    ))
-                })? {
-                    let quals = column_types
-                        .iter()
-                        .find(|t| t.id.native().and_then(letter_of) == Some(letter))
-                        .map(|t| t.quals.as_slice())
-                        .unwrap_or(&[]);
-                    w.open();
-                    w.quoted(letter);
-                    for q in quals {
-                        w.bare(q);
-                    }
-                    w.close();
-                }
+                write_qualified_pattern_types(column_types, w)?;
             }
             w.close();
         }
@@ -734,7 +727,34 @@ pub fn value_from_string_internal(text: &str, rt: &mut RuntimeShapes) -> RtResul
     parse_and_convert(text.as_bytes(), false, rt)
 }
 
+/// Разбирает внутреннее значение с резолвером скалярных объектов хоста.
+/// Резолвер получает UUID вида и уже разобранную скалярную нагрузку.
+/// `None` сохраняет прежний непрозрачный транзит неизвестного вида.
+/// Повторяющиеся представления используют общий кэш одного разбора:
+/// резолвер должен возвращать одинаковое значение для одинакового входа.
+///
+/// # Errors
+/// Возвращает ошибки формата и переданного резолвера.
+pub fn value_from_string_internal_with_resolver<'r>(
+    text: &str,
+    rt: &'r mut RuntimeShapes,
+    resolver: &'r mut (dyn FnMut(&str, &str) -> RtResult<Option<BslValue>> + 'r),
+) -> RtResult<BslValue> {
+    parse_and_convert_with_resolver(text.as_bytes(), false, rt, Some(resolver))
+}
+
+type ScalarResolver<'a> = dyn FnMut(&str, &str) -> RtResult<Option<BslValue>> + 'a;
+
 fn parse_and_convert(text: &[u8], crlf_to_lf: bool, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+    parse_and_convert_with_resolver(text, crlf_to_lf, rt, None)
+}
+
+fn parse_and_convert_with_resolver<'r>(
+    text: &[u8],
+    crlf_to_lf: bool,
+    rt: &'r mut RuntimeShapes,
+    resolver: Option<&'r mut ScalarResolver<'r>>,
+) -> RtResult<BslValue> {
     let mut r = Reader {
         p: Parser {
             text,
@@ -742,6 +762,7 @@ fn parse_and_convert(text: &[u8], crlf_to_lf: bool, rt: &mut RuntimeShapes) -> R
             crlf_to_lf,
         },
         rt,
+        resolver,
         strings: ValueCache::new(),
         numbers: ValueCache::new(),
         dates: ValueCache::new(),
@@ -1070,6 +1091,7 @@ fn one_arg_err(tag: &str) -> RtError {
 struct Reader<'a, 'r> {
     p: Parser<'a>,
     rt: &'r mut RuntimeShapes,
+    resolver: Option<&'r mut ScalarResolver<'r>>,
     strings: ValueCache<'a>,
     numbers: ValueCache<'a>,
     dates: ValueCache<'a>,
@@ -1198,14 +1220,14 @@ impl<'a> Reader<'a, '_> {
             self.p.pos = start;
             let node = self.p.parse_node(depth)?;
             debug_assert_eq!(self.p.pos, end, "скан скобок разошёлся с разбором");
-            let v = convert(&node, self.rt, depth)?;
+            let v = convert(&node, self.rt, depth, &mut self.resolver)?;
             self.opaques.insert(raw, v.clone());
             return Ok(v);
         }
         // Оборванный текст: настоящий разбор даст точную ошибку.
         self.p.pos = start;
         let node = self.p.parse_node(depth)?;
-        convert(&node, self.rt, depth)
+        convert(&node, self.rt, depth, &mut self.resolver)
     }
 
     /// Хвост списка после `{"U"`/`{"L"`: платформенные формы пусты, но
@@ -1389,7 +1411,13 @@ impl<'a> Reader<'a, '_> {
             let id = self.rt.names.intern(&name);
             let value = self.read_value(depth + 1)?;
             self.expect_close(pair_err)?;
-            object.structure_insert(id, value, &mut self.rt.shapes)?;
+            object.structure_insert_spelled(
+                id,
+                &name,
+                value,
+                &mut self.rt.shapes,
+                &self.rt.names,
+            )?;
             got += 1;
         }
         Self::check_count(declared, got)?;
@@ -1679,7 +1707,12 @@ impl<'a> Reader<'a, '_> {
     }
 }
 
-fn convert(node: &Node, rt: &mut RuntimeShapes, depth: usize) -> RtResult<BslValue> {
+fn convert(
+    node: &Node,
+    rt: &mut RuntimeShapes,
+    depth: usize,
+    resolver: &mut Option<&mut ScalarResolver<'_>>,
+) -> RtResult<BslValue> {
     if depth > MAX_VSTR_DEPTH {
         return Err(RtError::StackOverflow {
             what: "слишком глубокая вложенность в ЗначениеИзСтрокиВнутр",
@@ -1729,7 +1762,7 @@ fn convert(node: &Node, rt: &mut RuntimeShapes, depth: usize) -> RtResult<BslVal
                 None => Ok(opaque(node)),
             }
         }
-        "#" => convert_object(node, items, rt, depth),
+        "#" => convert_object(node, items, rt, depth, resolver),
         other => Err(err(format!(
             "вид значения «{other}» во внутреннем формате не поддержан"
         ))),
@@ -1804,6 +1837,7 @@ fn convert_object(
     items: &[Node],
     rt: &mut RuntimeShapes,
     depth: usize,
+    resolver: &mut Option<&mut ScalarResolver<'_>>,
 ) -> RtResult<BslValue> {
     let Some(Node::Bare(kind)) = items.get(1) else {
         return Err(err(
@@ -1823,6 +1857,11 @@ fn convert_object(
         ARRAY_ID | FIXED_ARRAY_ID | STRUCTURE_ID | MAP_ID | VALUE_TABLE_ID | TYPE_DESCRIPTION_ID
     );
     if !known_kind {
+        if let ([_, _, Node::Bare(payload)], Some(resolve)) = (items, resolver.as_deref_mut())
+            && let Some(value) = resolve(kind, payload)?
+        {
+            return Ok(value);
+        }
         return Ok(opaque(node));
     }
     let [_, _, payload] = items else {
@@ -1841,7 +1880,7 @@ fn convert_object(
             let elems = counted_elements(payload)?;
             let items = BslValue::new_array(Vec::new());
             for node in elems {
-                items.push_element(convert(node, rt, depth + 1)?)?;
+                items.push_element(convert(node, rt, depth + 1, resolver)?)?;
             }
             Ok(items)
         }
@@ -1858,13 +1897,13 @@ fn convert_object(
                 let [name, value] = pair.as_slice() else {
                     return Err(err("элемент структуры — пара «имя, значение»"));
                 };
-                let name = match convert(name, rt, depth + 1)? {
+                let name = match convert(name, rt, depth + 1, resolver)? {
                     BslValue::Str(s) => s.to_string(),
                     _ => return Err(err("имя поля структуры — строка")),
                 };
                 let id = rt.names.intern(&name);
-                let value = convert(value, rt, depth + 1)?;
-                object.structure_insert(id, value, &mut rt.shapes)?;
+                let value = convert(value, rt, depth + 1, resolver)?;
+                object.structure_insert_spelled(id, &name, value, &mut rt.shapes, &rt.names)?;
             }
             Ok(object)
         }
@@ -1878,18 +1917,18 @@ fn convert_object(
                 let [key, value] = pair.as_slice() else {
                     return Err(err("элемент соответствия — пара «ключ, значение»"));
                 };
-                let key = convert(key, rt, depth + 1)?;
-                let value = convert(value, rt, depth + 1)?;
+                let key = convert(key, rt, depth + 1, resolver)?;
+                let value = convert(value, rt, depth + 1, resolver)?;
                 map.map_insert(key, value)?;
             }
             Ok(map)
         }
-        VALUE_TABLE_ID => table_from_payload(payload, rt, depth),
+        VALUE_TABLE_ID => table_from_payload(payload, rt, depth, resolver),
         TYPE_DESCRIPTION_ID => {
             // Полезная нагрузка — сам `{"Pattern",…}`. Материализуется
-            // только чисто-буквенное описание; квалификаторы и ссылочные
-            // типы внутри уходят в непрозрачное значение — терять их при
-            // транзите нельзя, а модель `ОписаниеТипов` их не хранит.
+            // как список типов, а при наличии квалификаторов — как
+            // приобретённое описание. Незнакомые ссылочные формы остаются
+            // непрозрачными, чтобы не терять их при транзите.
             let [Node::Str(tag), type_nodes @ ..] = payload.as_slice() else {
                 return Ok(opaque(node));
             };
@@ -1897,6 +1936,12 @@ fn convert_object(
                 return Err(err(format!(
                     "описание типов начинается с «Pattern», не «{tag}»"
                 )));
+            }
+            let (qualified, _) = column_pattern(payload)?;
+            if let Some(types) = qualified
+                && types.iter().any(|ty| !ty.quals.is_empty())
+            {
+                return Ok(BslValue::new_qualified_type_description(types));
             }
             let mut ids = Vec::with_capacity(type_nodes.len());
             for type_node in type_nodes {
@@ -1923,6 +1968,29 @@ fn convert_object(
     }
 }
 
+// Описание приобретённых типов и колонка используют один формат
+// квалификаторов; самостоятельный писатель расходился бы с колонками.
+fn write_qualified_pattern_types(
+    types: &[crate::table::ColumnType],
+    w: &mut Writer,
+) -> RtResult<()> {
+    let ids: Vec<TypeRef> = types.iter().map(|ty| ty.id.clone()).collect();
+    for letter in canonical_letters(&ids)? {
+        let quals = types
+            .iter()
+            .find(|ty| ty.id.native().and_then(letter_of) == Some(letter))
+            .map(|ty| ty.quals.as_slice())
+            .unwrap_or(&[]);
+        w.open();
+        w.quoted(letter);
+        for qualifier in quals {
+            w.bare(qualifier);
+        }
+        w.close();
+    }
+    Ok(())
+}
+
 /// Разбор `ТаблицыЗначений` из дерева — разметка описана над
 /// [`table_to_writer`]; потоковый двойник — [`Reader::read_table`].
 /// Служебные индексы (номер колонки, номер строки, пары в блоке строк)
@@ -1933,6 +2001,7 @@ fn table_from_payload(
     payload: &[Node],
     rt: &mut RuntimeShapes,
     depth: usize,
+    resolver: &mut Option<&mut ScalarResolver<'_>>,
 ) -> RtResult<BslValue> {
     let [
         Node::Bare(version),
@@ -2044,7 +2113,7 @@ fn table_from_payload(
             t.add_row()?;
             let pos = t.row_ids.len() - 1;
             for (k, node) in values.iter().enumerate() {
-                t.columns[k][pos] = convert(node, rt, depth + 1)?;
+                t.columns[k][pos] = convert(node, rt, depth + 1, resolver)?;
             }
             // Хвост до `ncols` остаётся `Неопределено` — так платформа
             // кодирует пропуски (измерено: хвостовые не пишутся).

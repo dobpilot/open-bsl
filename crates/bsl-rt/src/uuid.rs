@@ -25,15 +25,6 @@ pub fn v4_from_bytes(mut bytes: [u8; 16]) -> [u8; 16] {
     bytes
 }
 
-fn hex_digit(c: u8) -> Option<u8> {
-    match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'a'..=b'f' => Some(c - b'a' + 10),
-        b'A'..=b'F' => Some(c - b'A' + 10),
-        _ => None,
-    }
-}
-
 fn bad_lexical() -> RtError {
     RtError::TypeError {
         expected: "строка вида xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
@@ -61,7 +52,7 @@ pub fn parse(text: &str) -> RtResult<[u8; 16]> {
             }
             continue;
         }
-        let d = hex_digit(c).ok_or_else(bad_lexical)?;
+        let d = crate::encoding::hex_digit(c).ok_or_else(bad_lexical)?;
         out[nibbles / 2] |= if nibbles.is_multiple_of(2) { d << 4 } else { d };
         nibbles += 1;
     }
@@ -80,6 +71,29 @@ pub fn format(bytes: &[u8; 16]) -> String {
         out.push(HEX[usize::from(b & 0x0f)] as char);
     }
     out
+}
+
+/// Переставляет канонические поля UUID в физический порядок ссылок 1С.
+/// Порядок подтверждён замерами расширений и отсутствующих значений перечисления.
+#[must_use]
+pub fn to_1c_bytes(canonical: [u8; 16]) -> [u8; 16] {
+    let mut physical = [0; 16];
+    physical[..8].copy_from_slice(&canonical[8..]);
+    physical[8..10].copy_from_slice(&canonical[6..8]);
+    physical[10..12].copy_from_slice(&canonical[4..6]);
+    physical[12..].copy_from_slice(&canonical[..4]);
+    physical
+}
+
+/// Восстанавливает канонические поля UUID из физического порядка ссылок 1С.
+#[must_use]
+pub fn from_1c_bytes(physical: [u8; 16]) -> [u8; 16] {
+    let mut canonical = [0; 16];
+    canonical[..4].copy_from_slice(&physical[12..16]);
+    canonical[4..6].copy_from_slice(&physical[10..12]);
+    canonical[6..8].copy_from_slice(&physical[8..10]);
+    canonical[8..].copy_from_slice(&physical[..8]);
+    canonical
 }
 
 #[cfg(test)]

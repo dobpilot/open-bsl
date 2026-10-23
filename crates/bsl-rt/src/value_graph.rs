@@ -20,6 +20,20 @@ use crate::{
     BslDate, BslNumber, BslObject, BslString, BslValue, EnumValue, RtError, RtResult, RuntimeShapes,
 };
 
+// У конфигурационного типа отображаемое имя не является именем поиска.
+// Один и тот же кодек нужен значениям Тип и ограничениям колонок таблицы.
+fn graph_type_name(ty: &crate::TypeRef) -> RtResult<std::borrow::Cow<'_, str>> {
+    if let crate::TypeRef::Value(description) = ty {
+        description
+            .names()
+            .first()
+            .map(|name| std::borrow::Cow::Borrowed(name.as_str()))
+            .ok_or_else(|| RtError::UnknownType(description.display().into()))
+    } else {
+        Ok(std::borrow::Cow::Owned(ty.to_string()))
+    }
+}
+
 /// Пределы снимка. Жёсткая платформенная граница — 1 ГиБ на графе
 /// параметров; admission фонового задания задаёт и меньшие бюджеты.
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +73,8 @@ enum GraphNode {
     /// Тип-значение переносится ИМЕНЕМ и разрешается заново в каталоге
     /// принимающего сеанса: `TypeRef` указывает в каталог отправителя.
     Type(String),
+    Uuid([u8; 16]),
+    ImmutableValue(Box<ImmutableValueSnapshot>),
     Array(Vec<NodeId>),
     Structure(Vec<(String, NodeId)>),
     Map(Vec<(NodeId, NodeId)>),
@@ -71,6 +87,15 @@ enum GraphNode {
         columns: Vec<GraphColumn>,
         rows: Vec<Vec<NodeId>>,
     },
+}
+
+// Отдельный заголовок не увеличивает размер всех прежних узлов и их бюджет.
+#[derive(Debug, Clone, PartialEq)]
+struct ImmutableValueSnapshot {
+    name: String,
+    package: String,
+    identity: String,
+    bytes: Vec<u8>,
 }
 
 /// Колонка таблицы в графе: имя и ограничение типов, если оно есть.
@@ -210,7 +235,7 @@ impl SerializedValueGraph {
         // Корни классифицируются до всякого списания: непереносимое
         // значение обязано назвать свой тип, а не упереться в бюджет.
         for value in values {
-            check_portable(value)?;
+            check_portable(value, rt)?;
         }
         // Вектор корней — такая же память снимка, как и его узлы: он
         // оплачивается ДО того, как под него запрошено место.
@@ -258,7 +283,7 @@ impl SerializedValueGraph {
     ) -> RtResult<usize> {
         let mut capture = Capture::new(rt, budget, true, true);
         for value in values {
-            check_portable(value)?;
+            check_portable(value, rt)?;
         }
         capture.charge(collection_cost::<NodeId>(values.len())?)?;
         for value in values {
@@ -311,6 +336,24 @@ impl SerializedValueGraph {
                         ))
                     })?;
                     BslValue::Type(resolved)
+                }
+                GraphNode::Uuid(bytes) => BslValue::Object(Rc::new(BslObject::Uuid(*bytes))),
+                GraphNode::ImmutableValue(snapshot) => {
+                    let ImmutableValueSnapshot {
+                        name,
+                        package,
+                        identity,
+                        bytes,
+                    } = snapshot.as_ref();
+                    let Some(crate::TypeRef::Value(ty)) = rt.resolve_type(name) else {
+                        return Err(RtError::UnknownType(name.clone()));
+                    };
+                    if ty.package() != package || ty.identity() != identity {
+                        return Err(RtError::DynamicError(
+                            "идентичность переносимого типа не совпала".into(),
+                        ));
+                    }
+                    ty.materialize(bytes)?
                 }
                 GraphNode::Array(_) => BslValue::new_array(Vec::new()),
                 GraphNode::Structure(_) => BslValue::new_structure(rt.shapes.empty(), Vec::new()),
@@ -448,7 +491,7 @@ fn unsupported(value: &BslValue) -> RtError {
 
 /// Проверяет ВЕРХНИЙ уровень значения, не обходя его: поддержан ли сам
 /// вариант. Дёшево и без аллокаций, поэтому вызывается перед списанием.
-fn check_portable(value: &BslValue) -> RtResult<()> {
+fn check_portable(value: &BslValue, rt: &RuntimeShapes) -> RtResult<()> {
     let supported = match value {
         BslValue::Undefined
         | BslValue::Null
@@ -458,9 +501,16 @@ fn check_portable(value: &BslValue) -> RtResult<()> {
         | BslValue::Date(_)
         | BslValue::Enum(_)
         | BslValue::Type(_) => true,
+        BslValue::Object(object) if matches!(object.as_ref(), BslObject::Extension(_)) => {
+            let BslObject::Extension(object) = object.as_ref() else {
+                unreachable!()
+            };
+            immutable_type(object, rt).is_ok()
+        }
         BslValue::Object(object) => matches!(
             object.as_ref(),
-            BslObject::Array(_)
+            BslObject::Uuid(_)
+                | BslObject::Array(_)
                 | BslObject::Structure(_)
                 | BslObject::Map(_)
                 | BslObject::ValueTable(_)
@@ -472,6 +522,32 @@ fn check_portable(value: &BslValue) -> RtResult<()> {
     } else {
         Err(unsupported(value))
     }
+}
+
+fn immutable_type(
+    object: &crate::ObjectRef,
+    rt: &RuntimeShapes,
+) -> RtResult<std::sync::Arc<crate::ValueTypeDescriptor>> {
+    let crate::TypeRef::Value(description) = object.value_type() else {
+        return Err(RtError::DynamicError(
+            "объект не объявил неизменяемый тип значения".into(),
+        ));
+    };
+    let registered = description
+        .names()
+        .first()
+        .and_then(|name| rt.resolve_type(name));
+    if let Some(crate::TypeRef::Value(registered)) = registered
+        && registered.package() == description.package()
+        && registered.identity() == description.identity()
+        && registered.has_materializer()
+        && object.immutable_snapshot().is_some()
+    {
+        return Ok(registered);
+    }
+    Err(RtError::DynamicError(
+        "декодер неизменяемого значения не зарегистрирован".into(),
+    ))
 }
 
 /// Память коллекции из `len` элементов: сам вектор плюс его содержимое.
@@ -582,7 +658,7 @@ impl<'a> Capture<'a> {
         const NODE_COST: usize = std::mem::size_of::<GraphNode>();
         // Сначала «едет ли это вообще», потом «есть ли место»: иначе
         // мелкий бюджет подменял бы причину отказа.
-        check_portable(value)?;
+        check_portable(value, self.rt)?;
         match value {
             BslValue::Undefined => {
                 self.charge(NODE_COST)?;
@@ -662,7 +738,7 @@ impl<'a> Capture<'a> {
                 // Имя типа — короткий идентификатор из таблицы, а не
                 // пользовательские данные: его материализация бюджету не
                 // угрожает.
-                let name = v.to_string();
+                let name = graph_type_name(v)?.into_owned();
                 self.charge(NODE_COST + name.len())?;
                 if self.dry {
                     return Ok(self.push(GraphNode::Undefined));
@@ -685,7 +761,7 @@ impl<'a> Capture<'a> {
         if let Some(existing) = self.seen.get(&key) {
             return Ok(*existing);
         }
-        check_portable(&BslValue::Object(Rc::clone(object)))?;
+        check_portable(&BslValue::Object(Rc::clone(object)), self.rt)?;
         // Карта увиденных объектов живёт весь обход и растёт вместе с
         // графом: её запись оплачивается наравне с узлом, иначе на
         // больших графах она была бы памятью вне бюджета. Двойной размер
@@ -693,6 +769,42 @@ impl<'a> Capture<'a> {
         self.charge(2 * std::mem::size_of::<(usize, NodeId)>())?;
         const NODE_COST: usize = std::mem::size_of::<GraphNode>();
         match object.as_ref() {
+            BslObject::Uuid(bytes) => {
+                self.charge(NODE_COST)?;
+                let id = self.push(GraphNode::Uuid(*bytes));
+                self.seen.insert(key, id);
+                Ok(self.finish_object(key, id, GraphNode::Uuid(*bytes)))
+            }
+            BslObject::Extension(value) => {
+                let ty = immutable_type(value, self.rt)?;
+                let name = ty.names().first().expect("имя проверено регистрацией");
+                let bytes = value.immutable_snapshot().expect("снимок проверен выше");
+                let cost = [
+                    NODE_COST,
+                    std::mem::size_of::<ImmutableValueSnapshot>(),
+                    name.len(),
+                    ty.package().len(),
+                    ty.identity().len(),
+                    bytes.len(),
+                ]
+                .into_iter()
+                .try_fold(0usize, |sum, cost| sum.checked_add(cost))
+                .ok_or_else(|| RtError::ResourceLimit(BUDGET_EXCEEDED.into()))?;
+                self.charge(cost)?;
+                let node = if self.dry {
+                    GraphNode::Undefined
+                } else {
+                    GraphNode::ImmutableValue(Box::new(ImmutableValueSnapshot {
+                        name: name.clone(),
+                        package: ty.package().into(),
+                        identity: ty.identity().into(),
+                        bytes: bytes.to_vec(),
+                    }))
+                };
+                let id = self.push(GraphNode::Undefined);
+                self.seen.insert(key, id);
+                Ok(self.finish_object(key, id, node))
+            }
             BslObject::Array(items) => {
                 self.charge(NODE_COST)?;
                 // Узел-заглушка встаёт ДО обхода детей: самоссылка найдёт
@@ -732,19 +844,15 @@ impl<'a> Capture<'a> {
                 };
                 for index in 0..len {
                     let entry = storage.borrow().entry_at(index);
-                    let Some((field, item)) = entry else {
+                    let Some((_, item)) = entry else {
                         continue;
                     };
-                    let Some(name) = self.rt.names.name(field) else {
+                    let Some(name) = storage.borrow().spelling_at(index, &self.rt.names) else {
                         continue;
                     };
                     // Имя поля оплачивается до собственной копии.
                     self.charge(name.len())?;
-                    let name = if self.dry {
-                        String::new()
-                    } else {
-                        name.to_string()
-                    };
+                    let name = if self.dry { String::new() } else { name };
                     let node = self.node(&item)?;
                     if !self.dry {
                         children.push((name, node));
@@ -819,10 +927,12 @@ impl<'a> Capture<'a> {
                         let types_cost: usize = data.column_types[index]
                             .iter()
                             .flatten()
-                            .map(|t| {
-                                t.id.display_len() + t.quals.iter().map(String::len).sum::<usize>()
-                            })
-                            .sum();
+                            .try_fold(0, |cost, t| {
+                                graph_type_name(&t.id).map(|name| {
+                                    cost + name.len()
+                                        + t.quals.iter().map(String::len).sum::<usize>()
+                                })
+                            })?;
                         name_len + types_cost
                     };
                     self.charge(cost)?;
@@ -833,12 +943,20 @@ impl<'a> Capture<'a> {
                         let data = data.borrow();
                         (
                             data.column_names[index].clone(),
-                            data.column_types[index].as_ref().map(|types| {
-                                types
-                                    .iter()
-                                    .map(|t| (t.id.to_string(), t.quals.clone()))
-                                    .collect::<Vec<(String, Vec<String>)>>()
-                            }),
+                            data.column_types[index]
+                                .as_ref()
+                                .map(|types| {
+                                    types
+                                        .iter()
+                                        .map(|t| {
+                                            Ok((
+                                                graph_type_name(&t.id)?.into_owned(),
+                                                t.quals.clone(),
+                                            ))
+                                        })
+                                        .collect::<RtResult<Vec<(String, Vec<String>)>>>()
+                                })
+                                .transpose()?,
                         )
                     };
                     columns.push(GraphColumn { name, types });
@@ -1733,3 +1851,7 @@ mod tests {
         assert_eq!(restored_value, BslValue::Number(BslNumber::from_i64(7)));
     }
 }
+
+#[cfg(test)]
+#[path = "value_graph_codec_tests.rs"]
+mod codec_tests;

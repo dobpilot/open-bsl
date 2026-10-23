@@ -129,6 +129,9 @@ pub(crate) fn named_parts(
 /// [`RtError::TypeError`] при негодном имени или неверной арности.
 pub fn create_element(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     let doc = as_document(obj, "СоздатьЭлемент")?;
+    if doc.html_document.get() {
+        html::validate_element(args)?;
+    }
     let (name, local, prefix, uri) = named_parts(DomKind::Element, args, "СоздатьЭлемент")?;
     let el = DomNode::raw(
         DomKind::Element,

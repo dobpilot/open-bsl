@@ -43,7 +43,10 @@ fn construct_request(
     _context: &mut bsl_rt::CallContext<'_>,
     arguments: &[bsl_rt::BslValue],
 ) -> bsl_rt::RtResult<bsl_rt::BslValue> {
-    new_http_request(arguments.first().unwrap_or(&bsl_rt::BslValue::Undefined))
+    objects::new_http_request_with_headers(
+        arguments.first().unwrap_or(&bsl_rt::BslValue::Undefined),
+        arguments.get(1),
+    )
 }
 
 fn construct_connection(
@@ -67,6 +70,24 @@ fn construct_system_roots(
     Ok(new_system_roots())
 }
 
+fn construct_windows_certificate(
+    _context: &mut bsl_rt::CallContext<'_>,
+    _arguments: &[bsl_rt::BslValue],
+) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+    // Имена нужны для компиляции платформенных веток конфигурации; получение
+    // сертификатов и закрытого ключа требует адаптера хранилища Windows.
+    Err(bsl_rt::RtError::DynamicError(
+        "хранилище сертификатов Windows не поддерживается хостом".into(),
+    ))
+}
+
+fn construct_linux_roots(
+    _context: &mut bsl_rt::CallContext<'_>,
+    _arguments: &[bsl_rt::BslValue],
+) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+    objects::new_linux_roots()
+}
+
 fn construct_secure_connection(
     _context: &mut bsl_rt::CallContext<'_>,
     arguments: &[bsl_rt::BslValue],
@@ -88,11 +109,31 @@ fn construct_file_client_certificate(
     new_file_client_certificate(arguments, context)
 }
 
+fn construct_service_response(
+    _context: &mut bsl_rt::CallContext<'_>,
+    _arguments: &[bsl_rt::BslValue],
+) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+    // Ответ HTTP-сервиса — выход серверного обработчика. Клиентский
+    // `HTTPОтвет` не имеет того же контракта записи тела и заголовков.
+    Err(bsl_rt::RtError::DynamicError(
+        "ответ HTTP-сервиса пока не поддерживается этим хостом".into(),
+    ))
+}
+
 const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
+    bsl_rt::ConstructorDescriptor {
+        code: bsl_rt::ConstructorCode::new(11),
+        names: &[
+            "СертификатыУдостоверяющихЦентровLinux",
+            "LinuxCertificationAuthorityCertificates",
+        ],
+        arity: bsl_rt::Arity::exact(0),
+        call: construct_linux_roots,
+    },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(1),
         names: &["HTTPЗапрос", "HTTPRequest"],
-        arity: bsl_rt::Arity::range(0, 1),
+        arity: bsl_rt::Arity::range(0, 2),
         call: construct_request,
     },
     bsl_rt::ConstructorDescriptor {
@@ -119,7 +160,7 @@ const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(5),
         names: &["ЗащищенноеСоединениеOpenSSL", "OpenSSLSecureConnection"],
-        arity: bsl_rt::Arity::range(0, 2),
+        arity: bsl_rt::Arity::range(0, 3),
         call: construct_secure_connection,
     },
     bsl_rt::ConstructorDescriptor {
@@ -137,9 +178,31 @@ const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
         arity: bsl_rt::Arity::range(1, 2),
         call: construct_file_client_certificate,
     },
+    bsl_rt::ConstructorDescriptor {
+        code: bsl_rt::ConstructorCode::new(8),
+        names: &["HTTPСервисОтвет", "HTTPServiceResponse"],
+        arity: bsl_rt::Arity::range(1, 3),
+        call: construct_service_response,
+    },
+    bsl_rt::ConstructorDescriptor {
+        code: bsl_rt::ConstructorCode::new(9),
+        names: &["СертификатКлиентаWindows", "WindowsClientCertificate"],
+        arity: bsl_rt::Arity::range(0, 1),
+        call: construct_windows_certificate,
+    },
+    bsl_rt::ConstructorDescriptor {
+        code: bsl_rt::ConstructorCode::new(10),
+        names: &[
+            "СертификатыУдостоверяющихЦентровWindows",
+            "WindowsCertificationAuthorityCertificates",
+        ],
+        arity: bsl_rt::Arity::exact(0),
+        call: construct_windows_certificate,
+    },
 ];
 
 const TYPES: &[&bsl_rt::TypeDescriptor] = &[
+    &objects::LINUX_ROOTS_TYPE,
     &objects::HTTP_REQUEST_TYPE,
     &objects::HTTP_RESPONSE_TYPE,
     &objects::HTTP_CONNECTION_TYPE,
@@ -149,8 +212,10 @@ const TYPES: &[&bsl_rt::TypeDescriptor] = &[
     &objects::FILE_ROOTS_TYPE,
     &objects::FILE_CLIENT_CERTIFICATE_TYPE,
     &objects::WINDOWS_CLIENT_CERTIFICATE_TYPE,
+    &objects::WINDOWS_ROOTS_TYPE,
 ];
 const CONSTRUCTOR_TYPES: &[(bsl_rt::ConstructorCode, &bsl_rt::TypeDescriptor)] = &[
+    (bsl_rt::ConstructorCode::new(11), &objects::LINUX_ROOTS_TYPE),
     (bsl_rt::ConstructorCode::new(1), &objects::HTTP_REQUEST_TYPE),
     (
         bsl_rt::ConstructorCode::new(2),
@@ -169,5 +234,13 @@ const CONSTRUCTOR_TYPES: &[(bsl_rt::ConstructorCode, &bsl_rt::TypeDescriptor)] =
     (
         bsl_rt::ConstructorCode::new(7),
         &objects::FILE_CLIENT_CERTIFICATE_TYPE,
+    ),
+    (
+        bsl_rt::ConstructorCode::new(9),
+        &objects::WINDOWS_CLIENT_CERTIFICATE_TYPE,
+    ),
+    (
+        bsl_rt::ConstructorCode::new(10),
+        &objects::WINDOWS_ROOTS_TYPE,
     ),
 ];

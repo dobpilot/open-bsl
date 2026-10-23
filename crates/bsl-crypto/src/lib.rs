@@ -22,11 +22,21 @@ pub static DATA_HASHING_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["DataHashing"],
 };
 
+/// Тип токена доступа, объявленный для компиляции исходного кода конфигурации.
+/// Создание токена остаётся явно неподдерживаемой операцией.
+pub static ACCESS_TOKEN_TYPE: TypeDescriptor = TypeDescriptor {
+    package: PACKAGE_NAME,
+    name: "ТокенДоступа",
+    type_display: "AccessToken",
+    type_names: &["AccessToken"],
+};
+
 #[derive(Clone)]
 enum Hasher {
     Md5(md5::Md5),
     Sha1(sha1::Sha1),
     Sha256(sha2::Sha256),
+    Sha512(sha2::Sha512),
 }
 
 impl fmt::Debug for Hasher {
@@ -35,6 +45,7 @@ impl fmt::Debug for Hasher {
             Self::Md5(_) => "MD5",
             Self::Sha1(_) => "SHA-1",
             Self::Sha256(_) => "SHA-256",
+            Self::Sha512(_) => "SHA-512",
         })
     }
 }
@@ -45,6 +56,7 @@ impl Hasher {
             EnumValue::HashMd5 => Ok(Self::Md5(md5::Md5::new())),
             EnumValue::HashSha1 => Ok(Self::Sha1(sha1::Sha1::new())),
             EnumValue::HashSha256 => Ok(Self::Sha256(sha2::Sha256::new())),
+            EnumValue::HashSha512 => Ok(Self::Sha512(sha2::Sha512::new())),
             _ => Err(RtError::TypeError {
                 expected: "ХешФункция",
                 op: "Новый ХешированиеДанных",
@@ -57,6 +69,7 @@ impl Hasher {
             Self::Md5(hasher) => hasher.update(bytes),
             Self::Sha1(hasher) => hasher.update(bytes),
             Self::Sha256(hasher) => hasher.update(bytes),
+            Self::Sha512(hasher) => hasher.update(bytes),
         }
     }
 
@@ -65,6 +78,7 @@ impl Hasher {
             Self::Md5(hasher) => hasher.clone().finalize().to_vec(),
             Self::Sha1(hasher) => hasher.clone().finalize().to_vec(),
             Self::Sha256(hasher) => hasher.clone().finalize().to_vec(),
+            Self::Sha512(hasher) => hasher.clone().finalize().to_vec(),
         }
     }
 }
@@ -99,6 +113,14 @@ fn add(
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
+    // Нативный контроль подтверждает UTF-8 без BOM для строкового входа.
+    if let BslValue::Str(text) = &arguments[0] {
+        data_hashing(receiver)?
+            .hasher
+            .borrow_mut()
+            .update(text.shared_utf8().as_bytes());
+        return Ok(BslValue::Undefined);
+    }
     let bytes = arguments[0].binary_data_bytes().ok_or(RtError::TypeError {
         expected: "ДвоичныеДанные",
         op: "ХешированиеДанных.Добавить",
@@ -146,16 +168,34 @@ fn construct_data_hashing(
     }))
 }
 
-const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
-    code: ConstructorCode::new(1),
-    names: &["ХешированиеДанных", "DataHashing"],
-    arity: Arity::exact(1),
-    call: construct_data_hashing,
-}];
+// Нативная платформа допускает только ноль или два аргумента. Объявление
+// сохраняет холодный вызов; фиктивный JWT вместо настоящего токена не создаём.
+fn construct_access_token(_: &mut CallContext<'_>, _: &[BslValue]) -> RtResult<BslValue> {
+    Err(RtError::DynamicError(
+        "ТокенДоступа: создание токена не поддерживается".into(),
+    ))
+}
 
-const TYPES: &[&TypeDescriptor] = &[&DATA_HASHING_TYPE];
-const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] =
-    &[(ConstructorCode::new(1), &DATA_HASHING_TYPE)];
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[
+    ConstructorDescriptor {
+        code: ConstructorCode::new(1),
+        names: &["ХешированиеДанных", "DataHashing"],
+        arity: Arity::exact(1),
+        call: construct_data_hashing,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(2),
+        names: &["ТокенДоступа", "AccessToken"],
+        arity: Arity::one_of(&[0, 2]),
+        call: construct_access_token,
+    },
+];
+
+const TYPES: &[&TypeDescriptor] = &[&DATA_HASHING_TYPE, &ACCESS_TOKEN_TYPE];
+const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
+    (ConstructorCode::new(1), &DATA_HASHING_TYPE),
+    (ConstructorCode::new(2), &ACCESS_TOKEN_TYPE),
+];
 
 /// Дескриптор компонента криптографии.
 #[must_use]
@@ -207,3 +247,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "sha512_tests.rs"]
+mod sha512_tests;

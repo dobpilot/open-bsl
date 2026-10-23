@@ -81,17 +81,68 @@ const MISSING_POSITION: usize = usize::MAX;
 /// ([`ValueTableData::adjust_to_column_type`]); написание — транзитом.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnType {
+    /// Идентичность допустимого типа.
     pub id: crate::TypeRef,
+    /// Квалификаторы во внутреннем формате платформы.
     pub quals: Vec<String>,
 }
 
 impl ColumnType {
+    /// Создаёт ограничение одним типом без квалификаторов.
     pub fn plain(id: crate::TypeRef) -> Self {
         ColumnType {
             id,
             quals: Vec::new(),
         }
     }
+}
+
+/// Приводит значение к списку типов и квалификаторов по правилам таблицы значений.
+/// Компоненты используют тот же механизм, не создавая временную таблицу.
+/// Пустой список оставляет значение неизменным; неудачное приведение к
+/// единственному примитивному типу возвращает его значение по умолчанию.
+#[must_use]
+pub fn adjust_to_types(value: BslValue, types: &[ColumnType]) -> BslValue {
+    if types.is_empty() {
+        return value;
+    }
+    let value_type = match value.type_of() {
+        Ok(BslValue::Type(reference)) => reference,
+        _ => return value,
+    };
+    if let Some(t) = types.iter().find(|t| t.id == value_type) {
+        return apply_qualifiers(value, t);
+    }
+    // `Неопределено` допустимо в любой колонке С СОСТАВНЫМ списком
+    // (измерено `ADJ.BL.UNDEF`); в колонке с единственным типом оно
+    // приводится к значению по умолчанию (`ADJ.B.UNDEF`, `ADJ.N.UNDEF`).
+    if matches!(value, BslValue::Undefined) && types.len() > 1 {
+        return BslValue::Undefined;
+    }
+    // Порядок проб конверсии — Строка, Число, Булево: `5` в
+    // `Булево,Строка` даёт `"5"`, а `1` в `Булево,Null` — `Истина`
+    // (измерено `ADJ.BS.NUM` и `ADJ.BL.NUM`).
+    for probe in [
+        crate::TypeId::String,
+        crate::TypeId::Number,
+        crate::TypeId::Boolean,
+    ] {
+        let Some(t) = types.iter().find(|t| t.id == TypeRef::Native(probe)) else {
+            continue;
+        };
+        if let Some(converted) = convert_to(&value, probe) {
+            return apply_qualifiers(converted, t);
+        }
+    }
+    // Колонка с единственным типом приводит значение к умолчанию
+    // этого типа; у типа компонента умолчания нет — там `Неопределено`.
+    if types.len() == 1 {
+        let Some(id) = types[0].id.native() else {
+            return BslValue::Undefined;
+        };
+        return apply_qualifiers(default_of(id), &types[0]);
+    }
+    BslValue::Undefined
 }
 
 /// Транзитные атрибуты колонки для внутреннего формата
@@ -309,7 +360,15 @@ fn apply_qualifiers(value: BslValue, t: &ColumnType) -> BslValue {
                 return value;
             }
             let units = s.units();
-            if units.len() <= len {
+            // Нативная сериализация строки: `0` — фиксированная длина,
+            // `1` — переменная; проверено пробой `measure-encoding.bsl`.
+            if units.len() < len && t.quals.get(1).is_some_and(|value| value == "0") {
+                // Нативная проба `type-description-qualifiers/measure-fixed`
+                // подтверждает дополнение фиксированной строки пробелами.
+                let mut padded = units.to_vec();
+                padded.resize(len, u16::from(b' '));
+                BslValue::Str(BslString::from_units(padded))
+            } else if units.len() <= len {
                 value
             } else {
                 BslValue::Str(BslString::from_units(units[..len].to_vec()))
@@ -436,6 +495,22 @@ impl ValueTableData {
 
     pub fn row_count(&self) -> usize {
         self.row_ids.len()
+    }
+
+    pub(crate) fn from_typed_columns(columns: Vec<(String, Vec<ColumnType>)>) -> Rc<RefCell<Self>> {
+        let result = Self::new();
+        {
+            let mut data = result.borrow_mut();
+            // Схема задаётся до первого поиска имён. Кэши и строки ещё
+            // пусты; повторные имена сохраняют нативную схему результата.
+            for (name, types) in columns {
+                data.column_names.push(name);
+                data.column_types.push(Some(types));
+                data.column_vstr.push(ColumnVstr::default());
+                data.columns.push(Vec::new());
+            }
+        }
+        result
     }
 
     pub fn column_index(&self, name: &str) -> Option<usize> {
@@ -654,49 +729,10 @@ impl ValueTableData {
     // `Добавить()` в типизированной колонке. Выбраны консервативные
     // варианты — см. ветки ниже.
     pub fn adjust_to_column_type(&self, col: usize, value: BslValue) -> BslValue {
-        let Some(Some(types)) = self.column_types.get(col) else {
-            return value;
-        };
-        if types.is_empty() {
-            return value;
+        match self.column_types.get(col).and_then(Option::as_deref) {
+            Some(types) => adjust_to_types(value, types),
+            None => value,
         }
-        let value_type = match value.type_of() {
-            Ok(BslValue::Type(reference)) => reference,
-            _ => return value,
-        };
-        if let Some(t) = types.iter().find(|t| t.id == value_type) {
-            return apply_qualifiers(value, t);
-        }
-        // `Неопределено` допустимо в любой колонке С СОСТАВНЫМ списком
-        // (измерено `ADJ.BL.UNDEF`); в колонке с единственным типом оно
-        // приводится к значению по умолчанию (`ADJ.B.UNDEF`, `ADJ.N.UNDEF`).
-        if matches!(value, BslValue::Undefined) && types.len() > 1 {
-            return BslValue::Undefined;
-        }
-        // Порядок проб конверсии — Строка, Число, Булево: `5` в
-        // `Булево,Строка` даёт `"5"`, а `1` в `Булево,Null` — `Истина`
-        // (измерено `ADJ.BS.NUM` и `ADJ.BL.NUM`).
-        for probe in [
-            crate::TypeId::String,
-            crate::TypeId::Number,
-            crate::TypeId::Boolean,
-        ] {
-            let Some(t) = types.iter().find(|t| t.id == TypeRef::Native(probe)) else {
-                continue;
-            };
-            if let Some(converted) = convert_to(&value, probe) {
-                return apply_qualifiers(converted, t);
-            }
-        }
-        // Колонка с единственным типом приводит значение к умолчанию
-        // этого типа; у типа компонента умолчания нет — там `Неопределено`.
-        if types.len() == 1 {
-            let Some(id) = types[0].id.native() else {
-                return BslValue::Undefined;
-            };
-            return apply_qualifiers(default_of(id), &types[0]);
-        }
-        BslValue::Undefined
     }
 
     /// `ЗаполнитьЗначения(Значение, Колонки)` — записывает одно значение

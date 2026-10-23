@@ -114,6 +114,31 @@ pub fn encode_hex(bytes: &[u8]) -> String {
     out
 }
 
+pub(crate) fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Декодирует ASCII Hex-цифры, пропуская остальные символы.
+/// Нечётное число оставшихся цифр означает ошибку.
+#[must_use]
+pub(crate) fn decode_hex(text: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() / 2);
+    let mut high = None;
+    for digit in text.bytes().filter_map(hex_digit) {
+        if let Some(first) = high.take() {
+            out.push(first << 4 | digit);
+        } else {
+            high = Some(digit);
+        }
+    }
+    high.is_none().then_some(out)
+}
+
 /// Область, которую оставляет незакодированной `КодироватьСтроку`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UrlEncodingMode {
@@ -160,23 +185,14 @@ pub fn encode_url(text: &str, mode: UrlEncodingMode) -> String {
 /// а негодный UTF-8 заменяется U+FFFD, как на платформе 8.3.27.
 #[must_use]
 pub fn decode_url(text: &str) -> String {
-    fn hex(byte: u8) -> Option<u8> {
-        match byte {
-            b'0'..=b'9' => Some(byte - b'0'),
-            b'a'..=b'f' => Some(byte - b'a' + 10),
-            b'A'..=b'F' => Some(byte - b'A' + 10),
-            _ => None,
-        }
-    }
-
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'%'
             && let (Some(high), Some(low)) = (
-                bytes.get(index + 1).copied().and_then(hex),
-                bytes.get(index + 2).copied().and_then(hex),
+                bytes.get(index + 1).copied().and_then(hex_digit),
+                bytes.get(index + 2).copied().and_then(hex_digit),
             )
         {
             decoded.push((high << 4) | low);

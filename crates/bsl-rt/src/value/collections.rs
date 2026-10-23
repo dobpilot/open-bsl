@@ -1,12 +1,12 @@
 //! Полиморфная индексация, свойства и операции коллекций значения BSL.
 
 use super::BslValue;
+use crate::bindata;
 use crate::map::MapData;
 use crate::{
     BslObject, BslString, NameId, NameInterner, RtError, RtResult, Shape, ShapeTable,
     StructureStorage, folded_eq,
 };
-use crate::{TypeRef, bindata};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -108,7 +108,45 @@ impl BslValue {
             }
         }
         BslValue::Object(Rc::new(BslObject::Structure(std::cell::RefCell::new(
-            StructureStorage::Dictionary { order, values },
+            StructureStorage::Dictionary {
+                order,
+                values,
+                spellings: None,
+            },
+        ))))
+    }
+
+    /// Создаёт словарную структуру, сохраняя последнее написание каждого поля.
+    #[must_use]
+    pub fn new_dictionary_structure_spelled(
+        entries: Vec<(NameId, String, BslValue)>,
+        names: &NameInterner,
+    ) -> Self {
+        let mut order = Vec::with_capacity(entries.len());
+        let mut values = HashMap::with_capacity(entries.len());
+        let mut spellings: Option<Box<HashMap<NameId, String>>> = None;
+        for (field, spelling, value) in entries {
+            if values.insert(field, value).is_none() {
+                order.push(field);
+            }
+            if let Some(canonical) = names.name(field) {
+                if spelling == canonical {
+                    if let Some(overrides) = &mut spellings {
+                        overrides.remove(&field);
+                    }
+                } else {
+                    spellings
+                        .get_or_insert_with(|| Box::new(HashMap::new()))
+                        .insert(field, spelling);
+                }
+            }
+        }
+        BslValue::Object(Rc::new(BslObject::Structure(std::cell::RefCell::new(
+            StructureStorage::Dictionary {
+                order,
+                values,
+                spellings,
+            },
         ))))
     }
 
@@ -116,6 +154,33 @@ impl BslValue {
         BslValue::Object(Rc::new(BslObject::Map(std::cell::RefCell::new(
             MapData::new(),
         ))))
+    }
+
+    /// Получает элемент обхода, сохраняя отдельный протокол коллекций хоста.
+    /// Соответствие отдаёт пары по позиции, остальные значения используют индексный доступ.
+    ///
+    /// # Errors
+    /// Возвращает ошибку чтения элемента или недопустимого индекса.
+    pub fn collection_item(&self, idx: &BslValue, names: &NameInterner) -> RtResult<BslValue> {
+        if let BslValue::Object(object) = self {
+            match &**object {
+                BslObject::Extension(extension) => return extension.collection_item(idx),
+                BslObject::Map(data) => {
+                    // Обход читает пары по позиции; обычные скобки — по ключу.
+                    let index = Self::index_as_usize(idx)?;
+                    let data = data.borrow();
+                    let (key, value) = data.entry_at(index).ok_or(RtError::IndexOutOfBounds {
+                        index: index as i64,
+                        len: data.len(),
+                    })?;
+                    return Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(
+                        key, value,
+                    ))));
+                }
+                _ => {}
+            }
+        }
+        self.get_index(idx, names)
     }
 
     /// `names` нужен единственной ветке — `Структура`: её поля хранятся
@@ -193,30 +258,7 @@ impl BslValue {
                         self.get_field_by_name(&name)
                     }
                 },
-                // Строковый индекс — ключ, как в BSL. Числовой пока остаётся
-                // ПОЗИЦИОННЫМ: `Для Каждого` компилируется в
-                // общий для всех коллекций протокол `CollectionLen` + рост
-                // числового индекса `0..len` через эту же функцию (см.
-                // `bsl-bytecode::compiler::RStmtKind::ForEach`) — компилятор не
-                // знает на этапе компиляции, что `idx` в рантайме окажется
-                // `Соответствие`, и не может эмитить для него другой путь.
-                // Доступ ПО КЛЮЧУ у `Соответствие` поэтому сознательно НЕ
-                // здесь, а в `.Получить(Ключ)` (`map_get`) — если бы `[]`
-                // тоже читал по ключу, `м[0]` было бы неразрешимо
-                // неоднозначно между "0-я по счёту пара" и "значение по
-                // ключу 0" для карты с целочисленными ключами.
-                BslObject::Map(data) if matches!(idx, BslValue::Str(_)) => {
-                    Ok(data.borrow().get(idx).unwrap_or(BslValue::Undefined))
-                }
-                BslObject::Map(data) => {
-                    let i = Self::index_as_usize(idx)?;
-                    let data = data.borrow();
-                    let (k, v) = data.entry_at(i).ok_or(RtError::IndexOutOfBounds {
-                        index: i as i64,
-                        len: data.len(),
-                    })?;
-                    Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(k, v))))
-                }
+                BslObject::Map(data) => Ok(data.borrow().get(idx).unwrap_or(BslValue::Undefined)),
                 // `Для Каждого КиЗ Из Структура` — тот же протокол, что и у
                 // `Соответствие` (`CollectionLen` + позиционный обход), и та
                 // же пара `Ключ`/`Значение` на выходе. Порядок — вставки, в
@@ -240,9 +282,9 @@ impl BslValue {
                         index: i as i64,
                         len: s.len(),
                     })?;
-                    let key = names.name(n).ok_or(RtError::UnknownField(n))?;
+                    let key = s.spelling_at(i, names).ok_or(RtError::UnknownField(n))?;
                     Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(
-                        BslValue::Str(BslString::from_str(key)),
+                        BslValue::Str(BslString::from_str(&key)),
                         v,
                     ))))
                 }
@@ -254,6 +296,34 @@ impl BslValue {
             },
             _ => Err(RtError::NotIndexable),
         }
+    }
+
+    /// Записывает элемент по индексу, используя имена для полей структуры.
+    ///
+    /// # Errors
+    /// Возвращает ошибку неизвестного поля, недопустимого индекса или записи
+    /// в неизменяемый объект. Для остальных объектов действуют ошибки `set_index`.
+    pub fn set_index_with_names(
+        &self,
+        idx: &BslValue,
+        val: BslValue,
+        names: &NameInterner,
+    ) -> RtResult<()> {
+        if let BslValue::Object(object) = self
+            && let BslObject::Structure(_) = object.as_ref()
+        {
+            let BslValue::Str(name) = idx else {
+                return Err(RtError::BadIndex);
+            };
+            let text = name.to_string();
+            let field = names
+                .lookup(&text)
+                .ok_or_else(|| RtError::UnknownColumn(text))?;
+            // Запись меняет существующий слот; как и присваивание через точку,
+            // она не вставляет новое поле и не меняет порядок обхода.
+            return self.set_field(field, val);
+        }
+        self.set_index(idx, val)
     }
 
     pub fn set_index(&self, idx: &BslValue, val: BslValue) -> RtResult<()> {
@@ -296,6 +366,7 @@ impl BslValue {
                 BslObject::TableColumns(data) => Ok(data.borrow().column_names.len()),
                 BslObject::TableColumn(..)
                 | BslObject::TypeDescription(_)
+                | BslObject::QualifiedTypeDescription(_)
                 | BslObject::ValueComparison => Err(RtError::NotIndexable),
                 BslObject::TableRow(..) => Err(RtError::NotIndexable),
                 BslObject::Map(data) => Ok(data.borrow().len()),
@@ -370,6 +441,34 @@ impl BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
                     s.borrow_mut().insert(field, val, shapes);
+                    Ok(())
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// Вставляет поле, сохраняя написание переданного BSL-ключа в этой структуре.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка, если получатель не структура или имя отсутствует в интернере.
+    pub fn structure_insert_spelled(
+        &self,
+        field: NameId,
+        spelling: &str,
+        val: BslValue,
+        shapes: &mut ShapeTable,
+        names: &NameInterner,
+    ) -> RtResult<()> {
+        let canonical = names.name(field).ok_or(RtError::UnknownField(field))?;
+        match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::Structure(storage) => {
+                    let mut storage = storage.borrow_mut();
+                    storage.insert(field, val, shapes);
+                    storage.set_spelling(field, spelling, canonical);
                     Ok(())
                 }
                 _ => Err(RtError::NotAnObject),
@@ -504,7 +603,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => match &*s.borrow() {
-                    StructureStorage::Shaped { shape, slots } => {
+                    StructureStorage::Shaped { shape, slots, .. } => {
                         if let Some((cached_shape, slot)) = cache.borrow().as_ref()
                             && Rc::ptr_eq(cached_shape, shape)
                         {
@@ -539,7 +638,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => match &mut *s.borrow_mut() {
-                    StructureStorage::Shaped { shape, slots } => {
+                    StructureStorage::Shaped { shape, slots, .. } => {
                         if let Some((cached_shape, slot)) = cache.borrow().as_ref()
                             && Rc::ptr_eq(cached_shape, shape)
                         {
@@ -613,20 +712,29 @@ impl BslValue {
                         Ok(BslValue::Str(BslString::from_str(column_name)))
                     } else if folded_eq(name, "ТипЗначения") || folded_eq(name, "ValueType")
                     {
-                        let types: Vec<TypeRef> = data
+                        let types = data
                             .borrow()
                             .column_types
                             .get(column)
                             .cloned()
                             .flatten()
-                            .unwrap_or_default()
-                            .into_iter()
-                            .map(|t| t.id)
-                            .collect();
-                        Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(types))))
+                            .unwrap_or_default();
+                        if types.iter().all(|ty| ty.quals.is_empty()) {
+                            // Без квалификаторов сохраняем прежнее представление
+                            // публичного Rust API; приобретённые ограничения
+                            // требуют отдельного варианта, чтобы не потерять их.
+                            Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(
+                                types.into_iter().map(|ty| ty.id).collect(),
+                            ))))
+                        } else {
+                            Ok(BslValue::new_qualified_type_description(types))
+                        }
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
+                }
+                BslObject::TypeDescription(_) | BslObject::QualifiedTypeDescription(_) => {
+                    crate::type_description::qualifier_property(o, name)
                 }
                 // У буфера `Размер` и `ПорядокБайтов` — именно СВОЙСТВА:
                 // `Б.Размер()` со скобками платформа отвергает (измерено),

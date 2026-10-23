@@ -6,6 +6,14 @@ use std::io::Write;
 use std::rc::Rc;
 
 impl BslValue {
+    /// Создаёт `ЗаписьТекста` без открытого файла.
+    #[must_use]
+    pub fn new_unopened_text_writer() -> Self {
+        BslValue::Object(Rc::new(BslObject::TextWriter(std::cell::RefCell::new(
+            None,
+        ))))
+    }
+
     /// Возвращает байтовую потоковую возможность внешнего объекта.
     pub fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
         self.object_ref()?.byte_stream()

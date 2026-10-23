@@ -156,8 +156,14 @@ pub fn is_spread_document(v: &BslValue) -> bool {
 }
 
 pub fn new_document(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
+    from_document_data(SpreadDocData::new(), files)
+}
+
+/// Создаёт отдельный изменяемый документ из уже разобранного макета.
+/// Файловые операции последующего документа используют файловую систему сеанса.
+pub fn from_document_data(data: SpreadDocData, files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     BslValue::new_object(SpreadDocumentObject {
-        data: Rc::new(RefCell::new(SpreadDocData::new())),
+        data: Rc::new(RefCell::new(data)),
         files,
     })
 }

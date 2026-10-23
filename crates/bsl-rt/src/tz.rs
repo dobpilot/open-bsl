@@ -130,6 +130,28 @@ impl Default for SystemTimeZone {
     }
 }
 
+struct NamedZone<'a>(&'a TzTable);
+
+impl crate::TimeZone for NamedZone<'_> {
+    fn offset_seconds(&self, unix_seconds: i64) -> i32 {
+        self.0.offset_for(unix_seconds)
+    }
+}
+
+fn named_zone_table(name: &str) -> Option<TzTable> {
+    let path = std::path::Path::new(name);
+    if path.as_os_str().is_empty()
+        || path
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return None;
+    }
+    std::fs::read(std::path::Path::new("/usr/share/zoneinfo").join(path))
+        .ok()
+        .and_then(|bytes| parse_tzif(&bytes))
+}
+
 impl crate::TimeZone for SystemTimeZone {
     fn offset_seconds(&self, unix_seconds: i64) -> i32 {
         self.table
@@ -147,18 +169,22 @@ impl crate::TimeZone for SystemTimeZone {
         if let Some(offset) = crate::env::parse_gmt_offset(name) {
             return Some(offset);
         }
-        let path = std::path::Path::new(name);
-        if path.as_os_str().is_empty()
-            || path
-                .components()
-                .any(|part| !matches!(part, std::path::Component::Normal(_)))
-        {
-            return None;
+        named_zone_table(name).map(|table| table.standard_offset_for(unix_seconds))
+    }
+
+    fn named_offset_seconds(&self, name: &str, unix_seconds: i64) -> Option<i32> {
+        if let Some(offset) = crate::env::parse_gmt_offset(name) {
+            return Some(offset);
         }
-        std::fs::read(std::path::Path::new("/usr/share/zoneinfo").join(path))
-            .ok()
-            .and_then(|bytes| parse_tzif(&bytes))
-            .map(|table| table.standard_offset_for(unix_seconds))
+        named_zone_table(name).map(|table| table.offset_for(unix_seconds))
+    }
+
+    fn named_offset_for_local(&self, name: &str, wall_seconds: i64) -> Option<i32> {
+        if let Some(offset) = crate::env::parse_gmt_offset(name) {
+            return Some(offset);
+        }
+        named_zone_table(name)
+            .map(|table| crate::TimeZone::offset_for_local(&NamedZone(&table), wall_seconds))
     }
 
     fn identifier(&self) -> Option<String> {

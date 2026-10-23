@@ -174,6 +174,12 @@ impl NameInterner {
     pub fn into_names(self) -> Vec<String> {
         self.names
     }
+
+    /// Заимствует текущую таблицу имён для компиляции вложенного фрагмента.
+    /// Идентификаторы сохраняются вместе с добавленными во время исполнения.
+    pub fn as_names(&self) -> &[String] {
+        &self.names
+    }
 }
 
 /// Есть ли в списке два имени, равных ПО СВЁРТКЕ, — и какое из них второе.
@@ -198,3 +204,7 @@ pub fn first_folded_duplicate(names: &[String]) -> Option<usize> {
     }
     None
 }
+
+#[cfg(test)]
+#[path = "interner_unicode_key_tests.rs"]
+mod unicode_key_tests;

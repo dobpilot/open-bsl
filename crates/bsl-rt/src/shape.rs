@@ -34,6 +34,11 @@ pub struct Shape {
     pub depth: u32,
     transitions: RefCell<HashMap<NameId, Rc<Shape>>>,
     remove_transitions: RefCell<HashMap<NameId, Rc<Shape>>>,
+    /// Написания литерала при связывании с другим пространством имён.
+    /// Редкая таблица вынесена за указатель, чтобы не увеличивать каждую
+    /// форму на размер `HashMap`, когда переопределений нет.
+    #[allow(clippy::box_collection)]
+    pub(crate) spellings: Option<Box<HashMap<NameId, String>>>,
 }
 
 /// После стольких `Вставить` подряд структура переходит на словарное
@@ -104,6 +109,29 @@ impl ShapeTable {
         self.intern_with_depth(names, 0)
     }
 
+    /// Возвращает форму литерала, сохраняя его написания при связывании.
+    /// Идентификаторы уже принадлежат принимающему контексту; написания
+    /// копируются в создаваемую структуру, а не меняют общую форму.
+    pub fn intern_spelled(
+        &mut self,
+        names: &[NameId],
+        spellings: Vec<(NameId, String)>,
+    ) -> Rc<Shape> {
+        let id = self.intern(names);
+        let shape = &self.shapes[id as usize];
+        if spellings.is_empty() {
+            return Rc::clone(shape);
+        }
+        Rc::new(Shape {
+            names: shape.names.clone(),
+            index: shape.index.clone(),
+            depth: shape.depth,
+            transitions: RefCell::new(HashMap::new()),
+            remove_transitions: RefCell::new(HashMap::new()),
+            spellings: Some(Box::new(spellings.into_iter().collect())),
+        })
+    }
+
     /// ВНИМАНИЕ ПРО `depth` НА УЖЕ СУЩЕСТВУЮЩЕЙ ФОРМЕ: возвращаемая ниже
     /// по раннему выходу форма сохраняет СВОЮ исходную глубину, а
     /// запрошенный `depth` игнорируется — глубина фиксируется в момент
@@ -142,6 +170,7 @@ impl ShapeTable {
             depth,
             transitions: RefCell::new(HashMap::new()),
             remove_transitions: RefCell::new(HashMap::new()),
+            spellings: None,
         });
         self.shapes.push(shape);
         self.by_keys.insert(names.to_vec(), id);

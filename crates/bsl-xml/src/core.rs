@@ -1434,6 +1434,9 @@ struct OpenTag {
 pub struct XmlWriter {
     out: String,
     settings: XmlWriterSettings,
+    indent_attributes: bool,
+    indent_chars: String,
+    attribute_count: usize,
     stack: Vec<OpenTag>,
     /// Начальный тег написан, но не закрыт `>`: можно ещё дописать атрибут
     /// или схлопнуть элемент в `<а/>`.
@@ -1448,6 +1451,9 @@ impl XmlWriter {
         XmlWriter {
             out: String::new(),
             settings,
+            indent_attributes: false,
+            indent_chars: "\t".to_string(),
+            attribute_count: 0,
             stack: Vec::new(),
             pending_start: false,
             root_done: false,
@@ -1459,6 +1465,13 @@ impl XmlWriter {
         let mut w = Self::to_string_target(settings);
         w.path = Some(path);
         w
+    }
+
+    /// Дополняет прежние настройки измеренными параметрами форматирования.
+    pub(crate) fn with_layout(mut self, indent_attributes: bool, indent_chars: String) -> Self {
+        self.indent_attributes = indent_attributes;
+        self.indent_chars = indent_chars;
+        self
     }
 
     pub fn is_file_target(&self) -> bool {
@@ -1481,7 +1494,7 @@ impl XmlWriter {
         self.stack.len()
     }
 
-    /// Перевод строки и отступ по глубине. Один таб на уровень — измерено.
+    /// Перевод строки и отступ по глубине. По умолчанию один таб на уровень.
     ///
     /// Файловый приёмник платформы разделяет строки CRLF, строковый — LF;
     /// оба измерены: строковый — построчными фикстурами `xdto-xml-io`,
@@ -1500,7 +1513,7 @@ impl XmlWriter {
         }
         self.out.push('\n');
         for _ in 0..depth {
-            self.out.push('\t');
+            self.out.push_str(&self.indent_chars);
         }
     }
 
@@ -1568,6 +1581,7 @@ impl XmlWriter {
         self.out.push('<');
         self.out.push_str(name);
         self.pending_start = true;
+        self.attribute_count = 0;
         self.stack.push(OpenTag {
             name: name.to_string(),
             last_was_text: false,
@@ -1583,11 +1597,16 @@ impl XmlWriter {
         if !self.pending_start {
             return Err(bad("атрибут вне начального тега"));
         }
-        self.out.push(' ');
+        if self.settings.indent && self.indent_attributes && self.attribute_count > 0 {
+            self.newline(self.stack.len() + 1);
+        } else {
+            self.out.push(' ');
+        }
         self.out.push_str(name);
         self.out.push_str("=\"");
         escape_attr(&mut self.out, value);
         self.out.push('"');
+        self.attribute_count += 1;
         Ok(())
     }
 
@@ -1757,7 +1776,7 @@ impl XmlWriter {
 
 /// Экранирование текста узла: апостроф и кавычка остаются как есть
 /// (измерено).
-fn escape_text(out: &mut String, s: &str) {
+pub(crate) fn escape_text(out: &mut String, s: &str) {
     for c in s.chars() {
         match c {
             '&' => out.push_str("&amp;"),

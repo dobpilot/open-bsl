@@ -83,6 +83,8 @@ const DAYS_9999_12_31: i64 = 3_652_058;
 pub const MAX_SECONDS: i64 = DAYS_9999_12_31 * SECONDS_PER_DAY + SECONDS_PER_DAY - 1;
 
 const TICKS_PER_SECOND: u64 = 10_000;
+const TICKS_PER_MINUTE: u64 = 60 * TICKS_PER_SECOND;
+const TICKS_PER_HOUR: u64 = 3_600 * TICKS_PER_SECOND;
 const TICKS_PER_DAY: u64 = SECONDS_PER_DAY as u64 * TICKS_PER_SECOND;
 const MAX_TICKS: u64 = (MAX_SECONDS as u64 + 1) * TICKS_PER_SECOND - 1;
 
@@ -104,6 +106,8 @@ pub enum DatePart {
     Minute,
     Second,
     Weekday,
+    DayOfYear,
+    WeekOfYear,
 }
 
 impl DatePart {
@@ -118,6 +122,8 @@ impl DatePart {
             DatePart::Minute => "Минута",
             DatePart::Second => "Секунда",
             DatePart::Weekday => "ДеньНедели",
+            DatePart::DayOfYear => "ДеньГода",
+            DatePart::WeekOfYear => "НеделяГода",
         }
     }
 }
@@ -125,25 +131,39 @@ impl DatePart {
 /// Граница периода — тот же приём, что и `DatePart`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DateBoundary {
+    StartOfMinute,
+    EndOfMinute,
+    StartOfHour,
+    EndOfHour,
     StartOfDay,
     EndOfDay,
     StartOfMonth,
     EndOfMonth,
+    StartOfQuarter,
+    EndOfQuarter,
     StartOfYear,
     EndOfYear,
     StartOfWeek,
+    EndOfWeek,
 }
 
 impl DateBoundary {
     pub fn op(self) -> &'static str {
         match self {
+            DateBoundary::StartOfMinute => "НачалоМинуты",
+            DateBoundary::EndOfMinute => "КонецМинуты",
+            DateBoundary::StartOfHour => "НачалоЧаса",
+            DateBoundary::EndOfHour => "КонецЧаса",
             DateBoundary::StartOfDay => "НачалоДня",
             DateBoundary::EndOfDay => "КонецДня",
             DateBoundary::StartOfMonth => "НачалоМесяца",
             DateBoundary::EndOfMonth => "КонецМесяца",
+            DateBoundary::StartOfQuarter => "НачалоКвартала",
+            DateBoundary::EndOfQuarter => "КонецКвартала",
             DateBoundary::StartOfYear => "НачалоГода",
             DateBoundary::EndOfYear => "КонецГода",
             DateBoundary::StartOfWeek => "НачалоНедели",
+            DateBoundary::EndOfWeek => "КонецНедели",
         }
     }
 }
@@ -273,11 +293,8 @@ impl BslDate {
 
     /// `ДеньНедели(Дата)`.
     ///
-    /// `НЕ ИЗМЕРЕНО(DATE.WEEKDAY_NUMBERING)`: нумерация. Взято
-    /// `понедельник = 1 .. воскресенье = 7` — так это описано в документации
-    /// 1С и так же считает `НачалоНедели` ниже; альтернатива
-    /// (`воскресенье = 1`, как в некоторых СУБД) сдвинула бы обе функции
-    /// разом.
+    /// Платформа нумерует понедельник как 1, воскресенье как 7. Настройка
+    /// границ недели — отдельный вопрос и не меняет эту нумерацию.
     pub fn weekday(self) -> u32 {
         let days = (self.0 / TICKS_PER_DAY) as i64;
         // `0001-01-01` — понедельник по пролептическому григорианскому
@@ -290,6 +307,22 @@ impl BslDate {
             return Self::empty();
         }
         BslDate(self.0 - self.0 % TICKS_PER_DAY)
+    }
+
+    pub fn start_of_hour(self) -> Self {
+        BslDate(self.0 - self.0 % TICKS_PER_HOUR)
+    }
+
+    pub fn start_of_minute(self) -> Self {
+        BslDate(self.0 - self.0 % TICKS_PER_MINUTE)
+    }
+
+    pub fn end_of_minute(self) -> Self {
+        BslDate(self.start_of_minute().0 + TICKS_PER_MINUTE - TICKS_PER_SECOND)
+    }
+
+    pub fn end_of_hour(self) -> Self {
+        BslDate(self.start_of_hour().0 + TICKS_PER_HOUR - TICKS_PER_SECOND)
     }
 
     pub fn end_of_day(self) -> Self {
@@ -317,6 +350,31 @@ impl BslDate {
         BslDate::from_civil(c.year, c.month, last, 23, 59, 59).unwrap_or(BslDate::empty())
     }
 
+    /// Начало квартала — первое число его первого месяца в полночь.
+    pub fn start_of_quarter(self) -> Self {
+        let c = if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        }
+        .to_civil();
+        let month = (c.month - 1) / 3 * 3 + 1;
+        BslDate::from_civil(c.year, month, 1, 0, 0, 0).unwrap_or(BslDate::empty())
+    }
+
+    /// Конец квартала — последняя целая секунда его последнего месяца.
+    pub fn end_of_quarter(self) -> Self {
+        let c = if self.is_calendar_value() {
+            self
+        } else {
+            Self::empty()
+        }
+        .to_civil();
+        let month = (c.month - 1) / 3 * 3 + 3;
+        BslDate::from_civil(c.year, month, days_in_month(c.year, month), 23, 59, 59)
+            .unwrap_or(BslDate::empty())
+    }
+
     pub fn start_of_year(self) -> Self {
         let c = if self.is_calendar_value() {
             self
@@ -337,8 +395,8 @@ impl BslDate {
         BslDate::from_civil(c.year, 12, 31, 23, 59, 59).unwrap_or(BslDate::empty())
     }
 
-    /// `НачалоНедели` — понедельник этой недели, 00:00:00 (см. `weekday`
-    /// про то, что первым днём считается понедельник).
+    /// `НачалоНедели` — понедельник этой недели, 00:00:00. Серверный оракул
+    /// `file-date-components` подтверждает этот выбор для своей базы.
     pub fn start_of_week(self) -> Self {
         let back = u64::from(self.weekday() - 1);
         BslDate(self.0 - self.0 % TICKS_PER_DAY - back * TICKS_PER_DAY)
@@ -417,10 +475,10 @@ impl BslDate {
         if !digits.bytes().all(|b| b.is_ascii_digit()) {
             return None;
         }
-        // Измерено на серверной 1С: четырнадцать нулей в строковой форме
-        // `Дата` и в литерале означают обычную пустую дату. Числовая форма
+        // Измерено на серверной 1С: восемь и четырнадцать нулей в строковой
+        // форме `Дата` и в литерале означают обычную пустую дату. Числовая форма
         // `Дата(0, 0, 0)` проходит другим путём и остаётся ошибкой.
-        if digits == "00000000000000" {
+        if digits == "00000000" || digits == "00000000000000" {
             return Some(Self::empty());
         }
         let part = |from: usize, len: usize| digits[from..from + len].parse::<u32>().ok();

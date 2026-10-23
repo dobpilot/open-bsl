@@ -140,8 +140,13 @@ pub fn new_archive_writer(
         ArchiveKind::Archive
     };
     let state = Rc::new(RefCell::new(WriterState::default()));
-    configure(kind, &state, args, "ЗаписьZipФайла")?;
-    Ok(BslValue::new_object(WriterObject { kind, state, files }))
+    let os_utf8 = configure(kind, &state, args, "ЗаписьZipФайла")?;
+    Ok(BslValue::new_object(WriterObject {
+        kind,
+        state,
+        files,
+        os_utf8: std::cell::Cell::new(os_utf8),
+    }))
 }
 
 /// `Открыть(Файл[, ...])` у писателя — те же аргументы, что у его
@@ -164,7 +169,9 @@ pub fn writer_open(writer: &WriterObject, args: &[BslValue]) -> RtResult<()> {
     if state.borrow().target.is_some() {
         return Err(zip_err("архив уже открыт"));
     }
-    configure(kind, &state, args, "Открыть")
+    let os_utf8 = configure(kind, &state, args, "Открыть")?;
+    writer.os_utf8.set(os_utf8);
+    Ok(())
 }
 
 /// Разобрать общий для конструктора и `Открыть` список аргументов.
@@ -173,8 +180,17 @@ pub(crate) fn configure(
     state: &Rc<RefCell<WriterState>>,
     args: &[BslValue],
     op: &'static str,
-) -> RtResult<()> {
+) -> RtResult<bool> {
     let arg = |i: usize| args.get(i).unwrap_or(&BslValue::Undefined);
+    let os_utf8 =
+        kind == ArchiveKind::Zip && matches!(arg(6), BslValue::Enum(EnumValue::ZipNamesOsWithUtf8));
+    // Байты кодировки ОС измерены на Linux с UTF-8. На других ОС
+    // подмена неизвестной кодовой страницы кодировкой UTF-8 недопустима.
+    if os_utf8 && !cfg!(target_os = "linux") {
+        return Err(zip_err(
+            "кодировка ОС дополнительно UTF8 поддерживается только на Linux",
+        ));
+    }
     let target = write_target(arg(0), op)?;
     check_password(arg(1))?;
 
@@ -225,7 +241,7 @@ pub(crate) fn configure(
     state.target = target;
     state.method = method;
     state.comment = comment;
-    Ok(())
+    Ok(os_utf8)
 }
 
 /// Первый аргумент: имя файла, поток либо ничего.
@@ -758,7 +774,7 @@ pub fn writer_write(writer: &WriterObject, files: &dyn FileSystem) -> RtResult<(
     let Some(target) = state.target.take() else {
         return Err(zip_err("архив не открыт"));
     };
-    let bytes = build_archive(&state.entries, &state.comment)?;
+    let bytes = build_archive_with_encoding(&state.entries, &state.comment, writer.os_utf8.get())?;
     // Цель снята со состояния ДО записи, поэтому неудачная запись тоже
     // оставляет архив закрытым. Что делает в этом случае платформа, НЕ
     // измерено (снят только сам отказ на несуществующем каталоге, без
@@ -801,12 +817,16 @@ pub fn writer_binary_data(writer: &WriterObject) -> RtResult<BslValue> {
     if state.target.is_some() {
         return Err(zip_err("архив уже открыт"));
     }
-    let bytes = build_archive(&state.entries, &state.comment)?;
+    let bytes = build_archive_with_encoding(&state.entries, &state.comment, writer.os_utf8.get())?;
     Ok(BslValue::binary_data_of(bytes))
 }
 
 /// Собрать архив из накопленных записей через крейт `zip`.
-pub(crate) fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult<Vec<u8>> {
+fn build_archive_with_encoding(
+    entries: &[PendingEntry],
+    comment: &str,
+    os_utf8: bool,
+) -> RtResult<Vec<u8>> {
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     if !comment.is_empty() {
         zip.set_comment(comment);
@@ -819,11 +839,21 @@ pub(crate) fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult
         };
         // Уровень 1 (самый быстрый поиск совпадений) — только для deflate;
         // для Stored крейт `zip` отвергает任何 уровень.
-        let mut options = zip::write::SimpleFileOptions::default()
+        let mut options = zip::write::FullFileOptions::default()
             .compression_method(method)
             .last_modified_time(dt);
         if method == zip::CompressionMethod::Deflated {
             options = options.compression_level(Some(1));
+        }
+        if os_utf8 {
+            let mut crc = flate2::Crc::new();
+            crc.update(e.name.as_bytes());
+            let mut extra = vec![1];
+            extra.extend_from_slice(&crc.sum().to_le_bytes());
+            extra.extend_from_slice(e.name.as_bytes());
+            options
+                .add_extra_data(0x7076, extra.into_boxed_slice(), false)
+                .map_err(zip_error_to_rt)?;
         }
         if e.directory {
             zip.add_directory(&e.name, options)
@@ -835,7 +865,59 @@ pub(crate) fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult
         }
     }
     let cursor = zip.finish().map_err(zip_error_to_rt)?;
-    Ok(cursor.into_inner())
+    let mut bytes = cursor.into_inner();
+    if os_utf8 {
+        // Крейт zip выставляет UTF8 по строке имени. Нативный режим
+        // OS+UTF8 хранит Unicode Path, но снимает этот бит в обоих
+        // заголовках. Смещения берём у читателя zip, не разбирая формат вновь.
+        let offsets = {
+            let mut archive =
+                zip::ZipArchive::new(std::io::Cursor::new(&bytes)).map_err(zip_error_to_rt)?;
+            let mut offsets = Vec::new();
+            for index in 0..archive.len() {
+                let file = archive.by_index(index).map_err(zip_error_to_rt)?;
+                offsets.push((file.header_start(), file.central_header_start()));
+            }
+            offsets
+        };
+        for (local, central) in offsets {
+            // zip 2.4.2 проверяет Unicode Path до получения имени и
+            // сравнивает CRC с пустой строкой. В промежуточном архиве
+            // поле имеет временный ID; после сборки меняем только ID.
+            for (header, name_offset, size) in [(local, 26, 30), (central, 28, 46)] {
+                let header = usize::try_from(header)
+                    .map_err(|_| zip_err("смещение заголовка не помещается в памяти"))?;
+                let name_len = usize::from(u16::from_le_bytes([
+                    bytes[header + name_offset],
+                    bytes[header + name_offset + 1],
+                ]));
+                let extra_len = usize::from(u16::from_le_bytes([
+                    bytes[header + name_offset + 2],
+                    bytes[header + name_offset + 3],
+                ]));
+                let mut at = header + size + name_len;
+                let end = at + extra_len;
+                while at + 4 <= end {
+                    let id = u16::from_le_bytes([bytes[at], bytes[at + 1]]);
+                    let len = usize::from(u16::from_le_bytes([bytes[at + 2], bytes[at + 3]]));
+                    if id == 0x7076 {
+                        bytes[at..at + 2].copy_from_slice(&0x7075u16.to_le_bytes());
+                    }
+                    at += 4 + len;
+                }
+            }
+            for offset in [local + 6, central + 8] {
+                let at = usize::try_from(offset)
+                    .map_err(|_| zip_err("смещение заголовка не помещается в памяти"))?;
+                let flags = bytes
+                    .get_mut(at..at + 2)
+                    .ok_or_else(|| zip_err("заголовок вне собранного архива"))?;
+                let value = u16::from_le_bytes([flags[0], flags[1]]) & !0x0800;
+                flags.copy_from_slice(&value.to_le_bytes());
+            }
+        }
+    }
+    Ok(bytes)
 }
 
 #[cfg(test)]
@@ -878,3 +960,7 @@ mod tests {
         assert_eq!(state.entries.len(), 1);
     }
 }
+
+#[cfg(test)]
+#[path = "os_utf8_tests.rs"]
+mod os_utf8_tests;

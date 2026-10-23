@@ -564,13 +564,13 @@ pub(crate) fn builtin_index_for(model: &Rc<XdtoModel>, value: &BslValue) -> Opti
 }
 
 pub(crate) fn builtin_name_for_value(value: &BslValue) -> Option<&'static str> {
-    Some(match value {
-        BslValue::Str(_) => "string",
-        BslValue::Number(_) => "decimal",
-        BslValue::Boolean(_) => "boolean",
-        BslValue::Date(_) => "dateTime",
+    canonical_xml_name(match value {
+        BslValue::Str(_) => TypeId::String,
+        BslValue::Number(_) => TypeId::Number,
+        BslValue::Boolean(_) => TypeId::Boolean,
+        BslValue::Date(_) => TypeId::Date,
         BslValue::Object(o) => match &**o {
-            BslObject::BinaryData(_) => "base64Binary",
+            BslObject::BinaryData(_) => TypeId::BinaryData,
             _ => return None,
         },
         _ => return None,

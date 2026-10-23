@@ -176,6 +176,9 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             | DomKind::Element
             | DomKind::ProcessingInstruction
             | DomKind::EntityReference => BslValue::Undefined,
+            DomKind::DocumentType => {
+                return Err(bad("значение определения HTML пока не реализовано"));
+            }
         });
     }
     if is("ТекстовоеСодержимое", "TextContent") {
@@ -194,6 +197,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             // (проверено на объявленной, НЕрекурсивной сущности). Здесь
             // отдаётся пустая строка: воспроизводить зависание незачем.
             | DomKind::EntityReference => str_value(&node.text_content()),
+            DomKind::DocumentType => return Err(bad("текст определения HTML пока не реализован")),
         });
     }
     if is("ЛокальноеИмя", "LocalName") {

@@ -41,6 +41,24 @@ pub trait Clock {
     fn unix_millis(&mut self) -> i64;
 }
 
+/// Разделяемые часы одного прогона.
+///
+/// Компоненты и встроенные функции используют один внедрённый источник;
+/// изменяемое заимствование ограничено чтением текущего времени.
+#[derive(Clone)]
+pub struct ClockHandle(Rc<RefCell<Box<dyn Clock>>>);
+
+impl ClockHandle {
+    fn new(clock: impl Clock + 'static) -> Self {
+        Self(Rc::new(RefCell::new(Box::new(clock))))
+    }
+
+    /// Возвращает время внедрённых часов в миллисекундах от эпохи Unix.
+    pub fn unix_millis(&self) -> i64 {
+        self.0.borrow_mut().unix_millis()
+    }
+}
+
 /// Источник случайных байтов для `Новый УникальныйИдентификатор()`.
 ///
 /// Ровно шестнадцать байтов — столько в идентификаторе, и другого
@@ -130,6 +148,20 @@ pub trait TimeZone {
         parse_gmt_offset(name)
     }
 
+    /// Фактическое смещение именованной зоны на заданный момент UTC.
+    /// Базовая реализация понимает фиксированные зоны `GMT±…`.
+    fn named_offset_seconds(&self, name: &str, _unix_seconds: i64) -> Option<i32> {
+        parse_gmt_offset(name)
+    }
+
+    /// Фактическое смещение именованной зоны для показаний местных часов.
+    ///
+    /// Реализация по умолчанию знает фиксированные зоны `GMT±…`.
+    /// Системная зона дополнительно читает именованные зоны из `tzdata`.
+    fn named_offset_for_local(&self, name: &str, _wall_seconds: i64) -> Option<i32> {
+        parse_gmt_offset(name)
+    }
+
     /// Идентификатор текущей зоны сеанса, если host способен его назвать.
     /// Значение возвращается во владение вызывающего, чтобы фиксированная
     /// зона могла сформировать документированное имя `GMT±…`.
@@ -211,7 +243,12 @@ pub(crate) fn parse_gmt_offset(name: &str) -> Option<i32> {
     if hours > 23 || minutes > 59 {
         return None;
     }
-    Some(sign * (hours * 3600 + minutes * 60))
+    // Некорректное имя зоны должно остаться ловимой ошибкой вызывающего,
+    // даже если разобранное число не помещается в секунды смещения.
+    hours
+        .checked_mul(3600)?
+        .checked_add(minutes.checked_mul(60)?)?
+        .checked_mul(sign)
 }
 
 /// Наибольшее смещение от UTC, которое [`TimeZone`] вправе вернуть (см.
@@ -1298,6 +1335,29 @@ pub trait UserMessageSink {
     /// либо `ResourceLimit` (бюджет истории сообщений исчерпан).
     fn enqueue(&self, message: &crate::UserMessageDto) -> Result<(), crate::HostError>;
 
+    /// Разрешает дополнительно писать текст сообщения в stdout как
+    /// диагностику хоста. Это не подтверждает получение сообщения
+    /// пользователем и не удаляет его из ожидающей очереди.
+    fn also_write_to_stdout(&self) -> bool {
+        false
+    }
+
+    /// Возвращает ожидающие сообщения текущего сеанса.
+    /// При `remove` возвращённые записи удаляются из очереди. Повторные
+    /// чтения без удаления сохраняют идентичность объектов сообщений.
+    /// Прежние приёмники по умолчанию не имеют ожидающих сообщений.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку материализации сообщения или отказ хоста.
+    fn pending_messages(
+        &self,
+        _remove: bool,
+        _context: &mut crate::CallContext<'_>,
+    ) -> crate::RtResult<Vec<crate::BslValue>> {
+        Ok(Vec::new())
+    }
+
     /// Остаток бюджета сообщений этого sink в байтах; `None` — явного
     /// предела нет. Отправитель ограничивает этим остатком сериализацию
     /// `КлючДанных` и `ИдентификаторНазначения` ДО крупной аллокации —
@@ -1314,10 +1374,12 @@ pub trait UserMessageSink {
 /// разную последовательность случайных байтов, в каком угодно порядке
 /// запусков.
 pub struct HostEnv {
+    module_instance_owner: std::rc::Rc<()>,
     arguments: Vec<String>,
-    clock: Box<dyn Clock>,
+    clock: ClockHandle,
     random: RandomHandle,
     zone: std::rc::Rc<dyn TimeZone>,
+    computer_zone: Option<String>,
     files: std::rc::Rc<dyn FileSystem>,
     network: Option<std::rc::Rc<dyn crate::HttpClientFactory>>,
     host_data: Option<std::rc::Rc<dyn std::any::Any>>,
@@ -1333,11 +1395,15 @@ impl HostEnv {
     /// системный источник случайности.
     #[must_use]
     pub fn process() -> Self {
+        let system_zone = crate::tz::SystemTimeZone::new();
+        let computer_zone = system_zone.identifier();
         HostEnv {
+            module_instance_owner: std::rc::Rc::new(()),
             arguments: Vec::new(),
-            clock: Box::new(SystemClock),
+            clock: ClockHandle::new(SystemClock),
             random: RandomHandle::new(SystemRandom::default()),
-            zone: std::rc::Rc::new(crate::tz::SystemTimeZone::new()),
+            zone: std::rc::Rc::new(system_zone),
+            computer_zone,
             files: std::rc::Rc::new(SystemFileSystem),
             // Базовый runtime не знает системного HTTP-адаптера: его
             // устанавливает верхний слой, подключивший `bsl-http`.
@@ -1349,6 +1415,14 @@ impl HostEnv {
             message_sink: None,
             temporary_files: crate::TemporaryFileRegistry::default(),
         }
+    }
+
+    /// Непрозрачная идентичность владельца изменяемой памяти модулей.
+    /// Новый `HostEnv` получает отдельный маркер; слабая ссылка на него
+    /// позволяет исполнителю проверять сеанс, не удерживая его сервисы.
+    #[must_use]
+    pub fn module_instance_owner(&self) -> std::rc::Rc<()> {
+        self.module_instance_owner.clone()
     }
 
     /// Данные хоста этого сеанса. Новое окружение их не наследует.
@@ -1390,7 +1464,7 @@ impl HostEnv {
 
     #[must_use]
     pub fn with_clock(mut self, clock: impl Clock + 'static) -> Self {
-        self.clock = Box::new(clock);
+        self.clock = ClockHandle::new(clock);
         self
     }
 
@@ -1411,6 +1485,11 @@ impl HostEnv {
     #[must_use]
     pub fn zone(&self) -> std::rc::Rc<dyn TimeZone> {
         std::rc::Rc::clone(&self.zone)
+    }
+
+    /// Зона компьютера, зафиксированная при создании окружения.
+    pub(crate) fn computer_zone(&self) -> Option<&str> {
+        self.computer_zone.as_deref()
     }
 
     #[must_use]
@@ -1493,6 +1572,12 @@ impl HostEnv {
     #[must_use]
     pub fn arguments(&self) -> &[String] {
         &self.arguments
+    }
+
+    /// Возвращает разделяемые часы этого прогона для runtime-компонентов.
+    #[must_use]
+    pub fn clock(&self) -> ClockHandle {
+        self.clock.clone()
     }
 
     pub fn unix_millis(&mut self) -> i64 {

@@ -8,3 +8,11 @@ pub static BSL_MODULE_TYPE: crate::TypeDescriptor = crate::TypeDescriptor {
     type_display: "Модуль BSL",
     type_names: &["BSLModule"],
 };
+
+/// Тип ссылки на общий модуль конфигурации текущего сеанса.
+pub static COMMON_MODULE_TYPE: crate::TypeDescriptor = crate::TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ОбщийМодуль",
+    type_display: "Common module",
+    type_names: &["CommonModule"],
+};

@@ -124,10 +124,10 @@ fn new_item(arguments: &[BslValue]) -> BslValue {
     BslValue::new_object(ValueListItemObject {
         value: arguments.first().cloned().unwrap_or(BslValue::Undefined),
         presentation: arguments.get(1).cloned().unwrap_or(BslValue::Undefined),
-        check: arguments
-            .get(2)
-            .cloned()
-            .unwrap_or(BslValue::Boolean(false)),
+        check: match arguments.get(2) {
+            Some(BslValue::Undefined) | None => BslValue::Boolean(false),
+            Some(value) => value.clone(),
+        },
         picture: arguments.get(3).cloned().unwrap_or(BslValue::Undefined),
     })
 }
@@ -319,6 +319,113 @@ fn sort_by_value(
     Ok(BslValue::Undefined)
 }
 
+fn presentation_key(text: &str) -> (Vec<char>, Vec<(bool, bool)>) {
+    // Сравнение таблицы сворачивает регистр латиницы и не различает е/ё
+    // вторичным ключом так, как измеренный метод списка. Поэтому её
+    // `collate` здесь неприменим; контроль содержит смешанные строки.
+    // НЕ ИЗМЕРЕНО(VLIST.PRESENTATION.UNICODE): прочие алфавиты пока
+    // сравниваются по кодам символов, без полной таблицы колляции Unicode.
+    let mut primary = Vec::new();
+    let mut secondary = Vec::new();
+    for character in text.chars() {
+        let folded = match character {
+            'А'..='Я' => char::from_u32(character as u32 + 32).unwrap_or(character),
+            'Ё' | 'ё' => 'е',
+            _ => character,
+        };
+        primary.push(folded);
+        secondary.push((
+            matches!(character, 'Ё' | 'ё'),
+            matches!(character, 'А'..='Я' | 'Ё'),
+        ));
+    }
+    (primary, secondary)
+}
+
+fn sort_by_presentation(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let descending = match arguments.first() {
+        None | Some(BslValue::Undefined | BslValue::Enum(EnumValue::SortDirectionAscending)) => {
+            false
+        }
+        Some(BslValue::Enum(EnumValue::SortDirectionDescending)) => true,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "НаправлениеСортировки",
+                op: "СписокЗначений.СортироватьПоПредставлению",
+            });
+        }
+    };
+    let list = value_list(receiver)?;
+    let items = list.items.borrow();
+    let mut keyed = Vec::with_capacity(items.len());
+    for item in items.iter().cloned() {
+        let object = item
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<ValueListItemObject>())
+            .ok_or(RtError::NotAnObject)?;
+        let text = match &object.presentation {
+            BslValue::Undefined => String::new(),
+            BslValue::Str(text) => text.to_string(),
+            // Числовое представление допустимо на платформе. Преобразуется
+            // только ключ, само свойство существующего элемента не меняется.
+            // НЕ ИЗМЕРЕНО(VLIST.PRESENTATION.OTHER_TYPES): прочие типы
+            // используют общий форматтер до отдельного нативного контроля.
+            value => context.format_value(value, None)?,
+        };
+        keyed.push((presentation_key(&text), item));
+    }
+    drop(items);
+    // Стабильность равных ключей измерена для обоих направлений;
+    // переворачивается сравнение, а не готовый список.
+    keyed.sort_by(|left, right| {
+        if descending {
+            right.0.cmp(&left.0)
+        } else {
+            left.0.cmp(&right.0)
+        }
+    });
+    *list.items.borrow_mut() = keyed.into_iter().map(|(_, item)| item).collect();
+    Ok(BslValue::Undefined)
+}
+
+fn unload_values(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = value_list(receiver)?.items.borrow();
+    let mut values = Vec::with_capacity(items.len());
+    for item in items.iter() {
+        let object = item
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<ValueListItemObject>())
+            .ok_or(RtError::NotAnObject)?;
+        // Массив имеет собственные ячейки, но изменяемые значения сохраняют
+        // идентичность: изменение вложенной структуры измерено на 1С.
+        values.push(object.value.clone());
+    }
+    Ok(BslValue::new_array(values))
+}
+
+fn find_by_value(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    // Нативный поиск возвращает первый существующий элемент, сохраняя его тождество.
+    for item in value_list(receiver)?.items.borrow().iter() {
+        let object = item.object_ref().ok_or(RtError::NotAnObject)?;
+        if value_list_item(object.as_dyn())?.value == arguments[0] {
+            return Ok(item.clone());
+        }
+    }
+    Ok(BslValue::Undefined)
+}
+
 fn item_value(receiver: &dyn ObjectProtocol, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
     Ok(value_list_item(receiver)?.value.clone())
 }
@@ -342,6 +449,17 @@ fn item_picture(
 }
 
 static VALUE_LIST_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["ВыгрузитьЗначения", "UnloadValues"],
+        Arity::exact(0),
+        unload_values,
+    ),
+    MethodDescriptor::new(
+        &["СортироватьПоПредставлению", "SortByPresentation"],
+        Arity::range(0, 1),
+        sort_by_presentation,
+    )
+    .as_procedure(),
     MethodDescriptor::new(&["Количество", "Count"], Arity::exact(0), count),
     MethodDescriptor::new(&["Добавить", "Add"], Arity::range(0, 4), add),
     MethodDescriptor::new(&["Удалить", "Delete"], Arity::exact(1), delete).as_procedure(),
@@ -351,6 +469,11 @@ static VALUE_LIST_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["Скопировать", "Copy"], Arity::exact(0), copy),
     MethodDescriptor::new(&["Сдвинуть", "Move"], Arity::exact(2), move_item).as_procedure(),
     MethodDescriptor::new(&["Индекс", "IndexOf"], Arity::exact(1), index_of),
+    MethodDescriptor::new(
+        &["НайтиПоЗначению", "FindByValue"],
+        Arity::exact(1),
+        find_by_value,
+    ),
     MethodDescriptor::new(
         &["СортироватьПоЗначению", "SortByValue"],
         Arity::exact(1),
@@ -393,10 +516,69 @@ pub(crate) fn new_value_list() -> BslValue {
     })
 }
 
+/// Создаёт список значений из готовых значений элементов.
+///
+/// Представление и картинка каждого элемента остаются
+/// `Неопределено`, а пометка — `Ложь`, как при вызове BSL-метода
+/// `Добавить` только с первым аргументом.
+#[must_use]
+pub fn value_list_from_values(values: impl IntoIterator<Item = BslValue>) -> BslValue {
+    BslValue::new_object(ValueListObject {
+        items: RefCell::new(values.into_iter().map(|value| new_item(&[value])).collect()),
+    })
+}
+
+#[cfg(test)]
+#[path = "value_list_presentation_tests.rs"]
+mod presentation_tests;
+
+#[cfg(test)]
+#[path = "value_list_unload_tests.rs"]
+mod unload_tests;
+
+#[cfg(test)]
+#[path = "value_list_find_tests.rs"]
+mod find_tests;
+
 #[cfg(test)]
 mod tests {
+    use crate::BslValue;
+
     #[test]
     fn an_empty_value_list_has_the_measured_empty_string_representation() {
         assert_eq!(super::new_value_list().to_string(), "");
+    }
+
+    #[test]
+    fn rust_factory_uses_the_same_default_item_shape_as_add() {
+        let list = super::value_list_from_values([BslValue::Str("ключ".into())]);
+        assert_eq!(list.collection_len().unwrap(), 1);
+        let item = list
+            .get_index(&BslValue::number_from_i64(0), &crate::NameInterner::new())
+            .unwrap();
+        let object = item
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<super::ValueListItemObject>())
+            .unwrap();
+        assert_eq!(object.value, BslValue::Str("ключ".into()));
+        assert_eq!(object.presentation, BslValue::Undefined);
+        assert_eq!(object.check, BslValue::Boolean(false));
+        assert_eq!(object.picture, BslValue::Undefined);
+    }
+
+    #[test]
+    fn an_undefined_check_position_uses_the_measured_default() {
+        let item = super::new_item(&[
+            BslValue::Undefined,
+            BslValue::Undefined,
+            BslValue::Undefined,
+            BslValue::Undefined,
+        ]);
+
+        let item = item
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<super::ValueListItemObject>())
+            .expect("new_item возвращает элемент списка значений");
+        assert_eq!(item.check, BslValue::Boolean(false));
     }
 }

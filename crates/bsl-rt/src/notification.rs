@@ -370,6 +370,7 @@ mod tests {
                 BslObject::Structure(RefCell::new(crate::StructureStorage::Dictionary {
                     order: vec![],
                     values: HashMap::new(),
+                    spellings: None,
                 })),
             ),
             (

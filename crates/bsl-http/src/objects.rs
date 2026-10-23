@@ -1,5 +1,9 @@
 //! Объекты `HTTPЗапрос`, `HTTPОтвет` и `HTTPСоединение`.
 
+#[cfg(test)]
+#[path = "linux_roots_tests.rs"]
+mod linux_roots_tests;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -10,8 +14,8 @@ use bsl_rt::{
     Arity, BslObject, BslString, BslValue, CallContext, CallOutcome, ClientIdentity,
     ComponentError, EnumValue, HttpClient, HttpClientConfig, HttpWireRequest, HttpWireResponse,
     MethodDescriptor, NetworkError, ObjectProtocol, PendingHostCall, PropertyDescriptor,
-    ProxyConfig, ProxyMode, RtError, RtResult, SecretBytes, SecretString, TlsConfig,
-    TypeDescriptor, folded_eq,
+    ProxyConfig, ProxyMode, RtError, RtResult, SecretBytes, SecretString,
+    ServerTlsCertificateRevocationCheckMode, TlsConfig, TypeDescriptor, folded_eq,
 };
 
 pub static HTTP_REQUEST_TYPE: TypeDescriptor = TypeDescriptor {
@@ -72,14 +76,25 @@ pub static FILE_CLIENT_CERTIFICATE_TYPE: TypeDescriptor = TypeDescriptor {
 
 /// Дескриптор платформенного Windows-сертификата.
 ///
-/// Конструктор намеренно не регистрируется: host пока не умеет извлекать
-/// закрытый ключ из хранилища Windows. Сам тип нужен Connector для
-/// безопасной проверки `ТипЗнч` даже при пустом клиентском сертификате.
+/// Конструктор разрешается для компиляции платформенных веток, но отказывает
+/// при исполнении: хост пока не умеет извлекать закрытый ключ из хранилища
+/// Windows. Тип также нужен для проверки `ТипЗнч` клиентского сертификата.
 pub static WINDOWS_CLIENT_CERTIFICATE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СертификатКлиентаWindows",
     type_display: "WindowsClientCertificate",
     type_names: &["WindowsClientCertificate"],
+};
+
+/// Дескриптор сертификатов удостоверяющих центров из хранилища Windows.
+///
+/// Конструктор разрешается при компиляции, но исполнение требует адаптера
+/// хранилища Windows, которого текущий хост не предоставляет.
+pub static WINDOWS_ROOTS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СертификатыУдостоверяющихЦентровWindows",
+    type_display: "WindowsCertificationAuthorityCertificates",
+    type_names: &["WindowsCertificationAuthorityCertificates"],
 };
 
 #[derive(Debug, Clone)]
@@ -314,6 +329,34 @@ fn proxy_mode(value: Option<&BslValue>, secure: bool) -> RtResult<ProxyMode> {
 #[derive(Debug)]
 pub struct SystemRootsObject;
 
+pub static LINUX_ROOTS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СертификатыУдостоверяющихЦентровLinux",
+    type_display: "LinuxCertificationAuthorityCertificates",
+    type_names: &["LinuxCertificationAuthorityCertificates"],
+};
+
+#[derive(Debug)]
+struct LinuxRootsObject;
+
+impl ObjectProtocol for LinuxRootsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &LINUX_ROOTS_TYPE
+    }
+}
+
+pub(crate) fn new_linux_roots() -> RtResult<BslValue> {
+    // Отдельный платформенный тип сохраняет идентичность, даже когда адаптер
+    // использует тот же проверяемый системный источник, что и объект ОС.
+    if cfg!(target_os = "linux") {
+        Ok(BslValue::new_object(LinuxRootsObject))
+    } else {
+        Err(RtError::DynamicError(
+            "хранилище сертификатов Linux не поддерживается хостом".into(),
+        ))
+    }
+}
+
 impl ObjectProtocol for SystemRootsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &SYSTEM_ROOTS_TYPE
@@ -398,6 +441,8 @@ pub fn new_file_client_certificate(
 pub struct SecureConnectionObject {
     client_certificate: BslValue,
     roots: BslValue,
+    revocation_property: EnumValue,
+    revocation_mode: Option<ServerTlsCertificateRevocationCheckMode>,
     tls: TlsConfig,
     client_identity: Option<ClientIdentity>,
 }
@@ -430,9 +475,10 @@ pub fn new_secure_connection(arguments: &[BslValue]) -> RtResult<BslValue> {
     let tls = match &roots {
         BslValue::Undefined => TlsConfig::Insecure,
         value
-            if value
-                .object_ref()
-                .is_some_and(|object| object.downcast_ref::<SystemRootsObject>().is_some()) =>
+            if value.object_ref().is_some_and(|object| {
+                object.downcast_ref::<SystemRootsObject>().is_some()
+                    || object.downcast_ref::<LinuxRootsObject>().is_some()
+            }) =>
         {
             TlsConfig::SystemRoots
         }
@@ -450,9 +496,39 @@ pub fn new_secure_connection(arguments: &[BslValue]) -> RtResult<BslValue> {
             }
         }
     };
+    let (revocation_property, revocation_mode) = match arguments.get(2) {
+        None | Some(BslValue::Undefined) => (
+            EnumValue::ServerTlsCertificateRevocationCheckModeSoftFail,
+            None,
+        ),
+        Some(BslValue::Enum(EnumValue::ServerTlsCertificateRevocationCheckModeAuto)) => (
+            EnumValue::ServerTlsCertificateRevocationCheckModeSoftFail,
+            Some(ServerTlsCertificateRevocationCheckMode::Auto),
+        ),
+        Some(BslValue::Enum(EnumValue::ServerTlsCertificateRevocationCheckModeDontCheck)) => (
+            EnumValue::ServerTlsCertificateRevocationCheckModeDontCheck,
+            Some(ServerTlsCertificateRevocationCheckMode::DontCheck),
+        ),
+        Some(BslValue::Enum(EnumValue::ServerTlsCertificateRevocationCheckModeSoftFail)) => (
+            EnumValue::ServerTlsCertificateRevocationCheckModeSoftFail,
+            Some(ServerTlsCertificateRevocationCheckMode::SoftFail),
+        ),
+        Some(BslValue::Enum(EnumValue::ServerTlsCertificateRevocationCheckModeStrict)) => (
+            EnumValue::ServerTlsCertificateRevocationCheckModeStrict,
+            Some(ServerTlsCertificateRevocationCheckMode::Strict),
+        ),
+        Some(_) => {
+            return Err(type_error(
+                "РежимПроверкиОтзываTLSСертификатаСервера",
+                "Новый ЗащищенноеСоединениеOpenSSL",
+            ));
+        }
+    };
     Ok(BslValue::new_object(SecureConnectionObject {
         client_certificate,
         roots,
+        revocation_property,
+        revocation_mode,
         tls,
         client_identity,
     }))
@@ -478,10 +554,25 @@ fn secure_roots(
     Ok(secure(receiver)?.roots.clone())
 }
 
+fn secure_revocation_mode(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(BslValue::Enum(secure(receiver)?.revocation_property))
+}
+
 static SECURE_CONNECTION_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
         names: &["СертификатКлиента", "ClientCertificate"],
         get: secure_client_certificate,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &[
+            "РежимПроверкиОтзываTLSСертификатаСервера",
+            "ServerTLSCertificateRevocationCheckMode",
+        ],
+        get: secure_revocation_mode,
         set: None,
     },
     PropertyDescriptor {
@@ -521,15 +612,31 @@ impl ObjectProtocol for HttpRequestObject {
 }
 
 pub fn new_http_request(resource: &BslValue) -> RtResult<BslValue> {
+    new_http_request_with_headers(resource, None)
+}
+
+pub(crate) fn new_http_request_with_headers(
+    resource: &BslValue,
+    headers: Option<&BslValue>,
+) -> RtResult<BslValue> {
     let resource = match resource {
         BslValue::Undefined => BslString::from_str(""),
         BslValue::Str(value) => value.clone(),
         _ => return Err(type_error("Строка", "Новый HTTPЗапрос")),
     };
+    let headers = match headers {
+        Some(value) => {
+            value.map_entries()?;
+            // Платформа сохраняет то же соответствие, что и присваивание
+            // свойства `Заголовки`: изменения видны через обе ссылки.
+            value.clone()
+        }
+        None => BslValue::new_map(),
+    };
     Ok(BslValue::new_object(HttpRequestObject {
         data: Rc::new(RefCell::new(RequestData {
             resource,
-            headers: BslValue::new_map(),
+            headers,
             body: memory_stream(&[])?,
         })),
     }))
@@ -909,6 +1016,11 @@ pub fn new_http_connection(
         proxy,
         timeout,
         tls,
+        server_certificate_revocation_check_mode: arguments
+            .get(6)
+            .and_then(BslValue::object_ref)
+            .and_then(|object| object.downcast_ref::<SecureConnectionObject>())
+            .and_then(|secure| secure.revocation_mode),
         client_identity: arguments
             .get(6)
             .and_then(BslValue::object_ref)

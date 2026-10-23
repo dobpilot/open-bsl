@@ -65,7 +65,10 @@ pub fn call_builtin_env_with_args(
                 .map(|a| BslValue::Str(BslString::from_str(a)))
                 .collect(),
         )),
-        BuiltinFn::StandardTimeOffset => standard_time_offset(args, env),
+        BuiltinFn::StandardTimeOffset => time_offset(args, env, false),
+        BuiltinFn::DaylightTimeOffset => time_offset(args, env, true),
+        BuiltinFn::ToUniversalTime => to_universal_time(args, env),
+        BuiltinFn::ToLocalTime => to_local_time(args, env),
         BuiltinFn::SessionTimeZone => env
             .zone()
             .identifier()
@@ -73,30 +76,44 @@ pub fn call_builtin_env_with_args(
             .ok_or_else(|| {
                 RtError::DynamicError("часовой пояс сеанса не имеет идентификатора".into())
             }),
+        BuiltinFn::ComputerTimeZone => env
+            .computer_zone()
+            .map(|name| BslValue::Str(BslString::from_str(name)))
+            .ok_or_else(|| {
+                RtError::DynamicError("часовой пояс компьютера не имеет идентификатора".into())
+            }),
+        BuiltinFn::GetAvailableTimeZones => Err(RtError::DynamicError(
+            "список допустимых часовых поясов пока не предоставлен этим хостом".into(),
+        )),
         _ => Err(RtError::InvalidBytecode(
             "эта встроенная функция не относится к окружению прогона",
         )),
     }
 }
 
-fn standard_time_offset(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslValue> {
+fn time_offset(args: &[BslValue], env: &mut HostEnv, daylight: bool) -> RtResult<BslValue> {
+    let op = if daylight {
+        "СмещениеЛетнегоВремени"
+    } else {
+        "СмещениеСтандартногоВремени"
+    };
     let [zone_name, utc_time] = args else {
-        return Err(RtError::InvalidBytecode(
-            "СмещениеСтандартногоВремени получила неверное число аргументов",
-        ));
+        return Err(RtError::InvalidBytecode(if daylight {
+            "СмещениеЛетнегоВремени получила неверное число аргументов"
+        } else {
+            "СмещениеСтандартногоВремени получила неверное число аргументов"
+        }));
     };
     let unix_seconds = match utc_time {
         BslValue::Undefined => env.unix_millis().div_euclid(1000),
         BslValue::Date(date) => crate::pseudo_unix_seconds(*date),
         BslValue::Str(text) => crate::BslDate::parse_digits(&text.to_string())
             .map(crate::pseudo_unix_seconds)
-            .ok_or(RtError::DateOutOfRange {
-                op: "СмещениеСтандартногоВремени",
-            })?,
+            .ok_or(RtError::DateOutOfRange { op })?,
         _ => {
             return Err(RtError::TypeError {
                 expected: "Дата, Строка даты или Неопределено",
-                op: "СмещениеСтандартногоВремени",
+                op,
             });
         }
     };
@@ -109,11 +126,115 @@ fn standard_time_offset(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslVal
         _ => {
             return Err(RtError::TypeError {
                 expected: "Строка или Неопределено",
-                op: "СмещениеСтандартногоВремени",
+                op,
             });
         }
     };
-    Ok(BslValue::number_from_i64(i64::from(offset)))
+    let offset = if daylight {
+        // Фактическое и стандартное смещения относятся к одному моменту UTC.
+        let actual = match zone_name {
+            BslValue::Undefined => zone.offset_seconds(unix_seconds),
+            BslValue::Str(name) => zone
+                .named_offset_seconds(&name.to_string(), unix_seconds)
+                .ok_or_else(|| RtError::DynamicError(format!("часовой пояс «{name}» не найден")))?,
+            _ => unreachable!("тип зоны проверен выше"),
+        };
+        i64::from(actual) - i64::from(offset)
+    } else {
+        i64::from(offset)
+    };
+    Ok(BslValue::number_from_i64(offset))
+}
+
+fn to_universal_time(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslValue> {
+    let (local, zone_name) = match args {
+        [local] => (local, &BslValue::Undefined),
+        [local, zone_name] => (local, zone_name),
+        _ => {
+            return Err(RtError::InvalidBytecode(
+                "УниверсальноеВремя получила неверное число аргументов",
+            ));
+        }
+    };
+    let local = match local {
+        BslValue::Date(date) => *date,
+        BslValue::Str(text) => {
+            crate::BslDate::parse_digits(&text.to_string()).ok_or(RtError::DateOutOfRange {
+                op: "УниверсальноеВремя",
+            })?
+        }
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Дата или Строка даты",
+                op: "УниверсальноеВремя",
+            });
+        }
+    };
+    let wall_seconds = crate::pseudo_unix_seconds(local);
+    let zone = env.zone();
+    let offset = match zone_name {
+        BslValue::Undefined => zone.offset_for_local(wall_seconds),
+        BslValue::Str(name) => zone
+            .named_offset_for_local(&name.to_string(), wall_seconds)
+            .ok_or_else(|| RtError::DynamicError(format!("часовой пояс «{name}» не найден")))?,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка или Неопределено",
+                op: "УниверсальноеВремя",
+            });
+        }
+    };
+    local
+        .shift_seconds(-i64::from(offset))
+        .map(BslValue::Date)
+        .ok_or(RtError::DateOutOfRange {
+            op: "УниверсальноеВремя",
+        })
+}
+
+fn to_local_time(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslValue> {
+    let (utc, zone_name) = match args {
+        [utc] => (utc, &BslValue::Undefined),
+        [utc, zone_name] => (utc, zone_name),
+        _ => {
+            return Err(RtError::InvalidBytecode(
+                "МестноеВремя получило неверное число аргументов",
+            ));
+        }
+    };
+    let utc = match utc {
+        BslValue::Date(date) => *date,
+        BslValue::Str(text) => {
+            crate::BslDate::parse_digits(&text.to_string()).ok_or(RtError::DateOutOfRange {
+                op: "МестноеВремя",
+            })?
+        }
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Дата или Строка даты",
+                op: "МестноеВремя",
+            });
+        }
+    };
+    let unix_seconds = crate::pseudo_unix_seconds(utc);
+    let zone = env.zone();
+    let offset = match zone_name {
+        BslValue::Undefined => zone.offset_seconds(unix_seconds),
+        BslValue::Str(name) => zone
+            .named_offset_seconds(&name.to_string(), unix_seconds)
+            .ok_or_else(|| RtError::DynamicError(format!("часовой пояс «{name}» не найден")))?,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка или Неопределено",
+                op: "МестноеВремя",
+            });
+        }
+    };
+    utc.shift_seconds(i64::from(offset))
+        .map(BslValue::Date)
+        .ok_or(RtError::DateOutOfRange {
+            op: "МестноеВремя"
+        })
 }
 
 /// Встроенные функции, вызываемые по голому имени (`Sqrt(x)`, `Pow(x,y)`,
@@ -159,8 +280,29 @@ pub enum BuiltinFn {
     ToString,
     /// `Формат(x, spec)` — с явной форматной строкой.
     Format,
+    /// Локализованное склонение числа; пока без таблицы категорий языков.
+    StringWithNumber,
+    /// Склонение строки; пока без морфологического движка.
+    GetStringDeclensions,
+    /// Склонение строки по числу; пока без русской морфологии.
+    GetStringDeclensionsByNumber,
+    /// Преобразование данных управляемой формы; модель данных формы пока отсутствует.
+    FormDataToValue,
+    /// Обратное преобразование в данные формы; модель данных формы пока отсутствует.
+    ValueToFormData,
+    /// Копирование данных формы; модель данных формы пока отсутствует.
+    CopyFormData,
+    /// Представление события журнала; пока без локализованного каталога.
+    EventLogEventPresentation,
+    /// Внешнее представление периода; пока без локализованного форматирования.
+    PeriodPresentation,
+    /// Пропись числа; пока без форм слов для разных локализаций.
+    NumberInWords,
     /// `Число(строка)` — обратный разбор форматированной строки в число.
     ToNumber,
+    /// `Булево(Значение)` / `Boolean(Value)` — измеренное преобразование
+    /// числа, булева и строк `Истина`/`True`/`Yes`, `Ложь`/`False`/`No`.
+    ToBoolean,
 
     /// `СтрДлина`/`StrLen` — длина в код-юнитах UTF-16, не в символах.
     StrLen,
@@ -174,6 +316,7 @@ pub enum BuiltinFn {
     Mid,
     Upper,
     Lower,
+    Title,
     /// `СокрЛП`/`TrimAll` — обрезка пробелов с обеих сторон.
     TrimAll,
     /// `СокрЛ`/`TrimL` — только слева.
@@ -183,6 +326,9 @@ pub enum BuiltinFn {
     /// `СтрНайти`/`StrFind(строка, подстрока)` -> позиция 1-based в
     /// код-юнитах UTF-16, `0` если не найдено.
     StrFind,
+    /// `Найти`/`Find` — старый двухаргументный поиск с позицией `1`
+    /// для пустой подстроки.
+    LegacyFind,
     /// `СтрСравнить`/`StrCompare(левое, правое)` — регистронезависимое
     /// сравнение строковых представлений со знаком `-1`, `0` или `1`.
     StrCompare,
@@ -197,7 +343,7 @@ pub enum BuiltinFn {
     StrReplace,
     /// `СтрРазделить`/`StrSplit(строка, разделитель)` -> `Массив`.
     StrSplit,
-    /// `СтрСоединить`/`StrConcat(массив, разделитель)` -> `Строка`.
+    /// `СтрСоединить`/`StrConcat(массив[, разделитель])` -> `Строка`.
     StrConcat,
     /// `СтрЧислоСтрок`/`StrLineCount`.
     StrLineCount,
@@ -226,6 +372,10 @@ pub enum BuiltinFn {
     /// Снимок текущего исключения BSL-задачи. Значение строит VM, потому
     /// что базовый runtime не владеет стеком исполнения.
     ErrorInfo,
+    /// Безопасное описание ошибки активного обработчика текущего вызова.
+    ErrorDescription,
+    /// Краткое описание из неизменяемого снимка `ИнформацияОбОшибке`.
+    BriefErrorDescription,
     /// Безопасный текст из неизменяемого снимка `ИнформацияОбОшибке`.
     DetailedErrorDescription,
 
@@ -242,21 +392,31 @@ pub enum BuiltinFn {
     /// `СмещениеСтандартногоВремени`/`StandardTimeOffset` — стандартное
     /// смещение текущей или именованной зоны в секундах.
     StandardTimeOffset,
+    /// `СмещениеЛетнегоВремени`/`DaylightTimeOffset` — летнее смещение в секундах.
+    DaylightTimeOffset,
+    /// `УниверсальноеВремя`/`ToUniversalTime` — перевод местной даты
+    /// текущей или явно заданной зоны в UTC.
+    ToUniversalTime,
+    /// `МестноеВремя`/`ToLocalTime` — перевод UTC в текущую или явно
+    /// заданную зону.
+    ToLocalTime,
     /// `ЧасовойПоясСеанса`/`SessionTimeZone` — идентификатор зоны
     /// текущего прогона.
     SessionTimeZone,
+    /// `ЧасовойПояс`/`TimeZone` — идентификатор зоны компьютера.
+    ComputerTimeZone,
+    /// `ПолучитьДопустимыеЧасовыеПояса` — список зон платформы текущего хоста.
+    GetAvailableTimeZones,
     /// `ТекущаяУниверсальнаяДата`/`CurrentUniversalDate` — текущий момент
     /// UTC как значение `Дата`.
     CurrentUniversalDate,
     /// Число миллисекунд с начала Unix-эпохи в UTC. Используется в BSL для
     /// измерения длительности выполнения коротких участков кода.
     CurrentUniversalDateInMilliseconds,
-    /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — семь
-    /// имён на один вариант с селектором: тела у них отличаются одним
-    /// полем разложения.
+    /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели`/`ДеньГода` —
+    /// один вариант с селектором: тела отличаются полем разложения.
     DatePartOf(DatePart),
-    /// `НачалоДня`/`КонецДня`/`НачалоМесяца`/`КонецМесяца`/`НачалоГода`/
-    /// `КонецГода`/`НачалоНедели` — так же одним вариантом с селектором.
+    /// Границы часа, дня, недели, месяца и года — один вариант с селектором.
     DateBoundaryOf(DateBoundary),
     /// `ДобавитьМесяц(Дата, Количество)`.
     AddMonth,
@@ -292,16 +452,28 @@ pub enum BuiltinFn {
     /// `MergeBinaryData` и `JoinBinaryData` платформа не знает), а не
     /// угадано по русскому имени.
     ConcatBinaryData,
+    /// Соединяет массив буферов с необязательными разделителем и порядком байтов.
+    ConcatBinaryDataBuffers,
     /// `Base64Значение(Строка)` — двоичные данные из Base64.
     Base64Value,
     /// `Base64Строка(ДвоичныеДанные)` — исходная функция платформы.
     Base64String,
     /// Стандартный Base64 без переносов строк.
     GetBase64StringFromBinaryData,
+    /// Кодирует байты буфера в Base64 с переносами по 64 символа.
+    GetBase64StringFromBinaryDataBuffer,
     /// Обратное преобразование Base64 в `ДвоичныеДанные`.
     GetBinaryDataFromBase64String,
+    /// Декодирует Base64 из байтов `ДвоичныеДанные`.
+    GetBinaryDataFromBase64BinaryData,
     /// Заглавное шестнадцатеричное представление байтов.
     GetHexStringFromBinaryData,
+    /// Двоичные данные из Hex-цифр строки с пропуском остальных символов.
+    GetBinaryDataFromHexString,
+    /// Из тех же Hex-цифр создаёт изменяемый буфер.
+    GetBinaryDataBufferFromHexString,
+    /// Заглавное шестнадцатеричное представление байтов буфера.
+    GetHexStringFromBinaryDataBuffer,
     /// Percent-кодирование UTF-8 строки в одном из двух режимов платформы.
     EncodeString,
     /// Обратное percent-декодирование; `+` не считается пробелом.
@@ -341,8 +513,12 @@ pub enum BuiltinFn {
     GetTempFileName,
     /// Временный каталог host с завершающим разделителем.
     TempFilesDir,
+    /// Каталог исполняемых файлов платформы 1С; host пока не задаёт его.
+    BinDir,
     /// Разделитель пути host-файловой системы.
     GetPathSeparator,
+    /// Маска выбора всех файлов в host-файловой системе.
+    GetAllFilesMask,
     /// `УдалитьФайлы(Путь)` — файл либо дерево; отсутствующий путь не ошибка.
     DeleteFiles,
     /// `СоздатьКаталог(Путь)` — создание каталога с родителями через host.
@@ -394,8 +570,40 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("String", BuiltinFn::ToString),
     ("Формат", BuiltinFn::Format),
     ("Format", BuiltinFn::Format),
+    ("СтрокаСЧислом", BuiltinFn::StringWithNumber),
+    ("StringWithNumber", BuiltinFn::StringWithNumber),
+    ("ПолучитьСклоненияСтроки", BuiltinFn::GetStringDeclensions),
+    ("GetStringDeclensions", BuiltinFn::GetStringDeclensions),
+    (
+        "ПолучитьСклоненияСтрокиПоЧислу",
+        BuiltinFn::GetStringDeclensionsByNumber,
+    ),
+    (
+        "GetStringDeclensionsByNumber",
+        BuiltinFn::GetStringDeclensionsByNumber,
+    ),
+    ("ДанныеФормыВЗначение", BuiltinFn::FormDataToValue),
+    ("FormDataToValue", BuiltinFn::FormDataToValue),
+    ("ЗначениеВДанныеФормы", BuiltinFn::ValueToFormData),
+    ("ValueToFormData", BuiltinFn::ValueToFormData),
+    ("КопироватьДанныеФормы", BuiltinFn::CopyFormData),
+    ("CopyFormData", BuiltinFn::CopyFormData),
+    (
+        "ПредставлениеСобытияЖурналаРегистрации",
+        BuiltinFn::EventLogEventPresentation,
+    ),
+    (
+        "EventLogEventPresentation",
+        BuiltinFn::EventLogEventPresentation,
+    ),
+    ("ПредставлениеПериода", BuiltinFn::PeriodPresentation),
+    ("PeriodPresentation", BuiltinFn::PeriodPresentation),
+    ("ЧислоПрописью", BuiltinFn::NumberInWords),
+    ("NumberInWords", BuiltinFn::NumberInWords),
     ("Число", BuiltinFn::ToNumber),
     ("Number", BuiltinFn::ToNumber),
+    ("Булево", BuiltinFn::ToBoolean),
+    ("Boolean", BuiltinFn::ToBoolean),
     ("СтрДлина", BuiltinFn::StrLen),
     ("StrLen", BuiltinFn::StrLen),
     ("Лев", BuiltinFn::Left),
@@ -408,6 +616,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("Upper", BuiltinFn::Upper),
     ("НРег", BuiltinFn::Lower),
     ("Lower", BuiltinFn::Lower),
+    ("ТРег", BuiltinFn::Title),
+    ("Title", BuiltinFn::Title),
     ("СокрЛП", BuiltinFn::TrimAll),
     ("TrimAll", BuiltinFn::TrimAll),
     ("СокрЛ", BuiltinFn::TrimLeft),
@@ -416,6 +626,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("TrimR", BuiltinFn::TrimRight),
     ("СтрНайти", BuiltinFn::StrFind),
     ("StrFind", BuiltinFn::StrFind),
+    ("Найти", BuiltinFn::LegacyFind),
+    ("Find", BuiltinFn::LegacyFind),
     ("СтрСравнить", BuiltinFn::StrCompare),
     ("StrCompare", BuiltinFn::StrCompare),
     ("СтрЧислоВхождений", BuiltinFn::StrOccurrenceCount),
@@ -452,6 +664,13 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("Type", BuiltinFn::TypeByName),
     ("ИнформацияОбОшибке", BuiltinFn::ErrorInfo),
     ("ErrorInfo", BuiltinFn::ErrorInfo),
+    ("ОписаниеОшибки", BuiltinFn::ErrorDescription),
+    ("ErrorDescription", BuiltinFn::ErrorDescription),
+    (
+        "КраткоеПредставлениеОшибки",
+        BuiltinFn::BriefErrorDescription,
+    ),
+    ("BriefErrorDescription", BuiltinFn::BriefErrorDescription),
     (
         "ПодробноеПредставлениеОшибки",
         BuiltinFn::DetailedErrorDescription,
@@ -468,8 +687,21 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("CurrentSessionDate", BuiltinFn::CurrentSessionDate),
     ("СмещениеСтандартногоВремени", BuiltinFn::StandardTimeOffset),
     ("StandardTimeOffset", BuiltinFn::StandardTimeOffset),
+    ("СмещениеЛетнегоВремени", BuiltinFn::DaylightTimeOffset),
+    ("DaylightTimeOffset", BuiltinFn::DaylightTimeOffset),
+    ("УниверсальноеВремя", BuiltinFn::ToUniversalTime),
+    ("ToUniversalTime", BuiltinFn::ToUniversalTime),
+    ("МестноеВремя", BuiltinFn::ToLocalTime),
+    ("ToLocalTime", BuiltinFn::ToLocalTime),
     ("ЧасовойПоясСеанса", BuiltinFn::SessionTimeZone),
     ("SessionTimeZone", BuiltinFn::SessionTimeZone),
+    ("ЧасовойПояс", BuiltinFn::ComputerTimeZone),
+    ("TimeZone", BuiltinFn::ComputerTimeZone),
+    (
+        "ПолучитьДопустимыеЧасовыеПояса",
+        BuiltinFn::GetAvailableTimeZones,
+    ),
+    ("GetAvailableTimeZones", BuiltinFn::GetAvailableTimeZones),
     ("ТекущаяУниверсальнаяДата", BuiltinFn::CurrentUniversalDate),
     ("CurrentUniversalDate", BuiltinFn::CurrentUniversalDate),
     (
@@ -494,6 +726,42 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("Second", BuiltinFn::DatePartOf(DatePart::Second)),
     ("ДеньНедели", BuiltinFn::DatePartOf(DatePart::Weekday)),
     ("WeekDay", BuiltinFn::DatePartOf(DatePart::Weekday)),
+    ("ДеньГода", BuiltinFn::DatePartOf(DatePart::DayOfYear)),
+    ("DayOfYear", BuiltinFn::DatePartOf(DatePart::DayOfYear)),
+    ("НеделяГода", BuiltinFn::DatePartOf(DatePart::WeekOfYear)),
+    ("WeekOfYear", BuiltinFn::DatePartOf(DatePart::WeekOfYear)),
+    (
+        "НачалоМинуты",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfMinute),
+    ),
+    (
+        "BegOfMinute",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfMinute),
+    ),
+    (
+        "КонецМинуты",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfMinute),
+    ),
+    (
+        "EndOfMinute",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfMinute),
+    ),
+    (
+        "НачалоЧаса",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfHour),
+    ),
+    (
+        "BegOfHour",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfHour),
+    ),
+    (
+        "КонецЧаса",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfHour),
+    ),
+    (
+        "EndOfHour",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfHour),
+    ),
     (
         "НачалоДня",
         BuiltinFn::DateBoundaryOf(DateBoundary::StartOfDay),
@@ -527,6 +795,22 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
         BuiltinFn::DateBoundaryOf(DateBoundary::EndOfMonth),
     ),
     (
+        "НачалоКвартала",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfQuarter),
+    ),
+    (
+        "BegOfQuarter",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfQuarter),
+    ),
+    (
+        "КонецКвартала",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfQuarter),
+    ),
+    (
+        "EndOfQuarter",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfQuarter),
+    ),
+    (
         "НачалоГода",
         BuiltinFn::DateBoundaryOf(DateBoundary::StartOfYear),
     ),
@@ -549,6 +833,14 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     (
         "BegOfWeek",
         BuiltinFn::DateBoundaryOf(DateBoundary::StartOfWeek),
+    ),
+    (
+        "КонецНедели",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfWeek),
+    ),
+    (
+        "EndOfWeek",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfWeek),
     ),
     ("ДобавитьМесяц", BuiltinFn::AddMonth),
     ("AddMonth", BuiltinFn::AddMonth),
@@ -575,8 +867,12 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("GetTempFileName", BuiltinFn::GetTempFileName),
     ("КаталогВременныхФайлов", BuiltinFn::TempFilesDir),
     ("TempFilesDir", BuiltinFn::TempFilesDir),
+    ("КаталогПрограммы", BuiltinFn::BinDir),
+    ("BinDir", BuiltinFn::BinDir),
     ("ПолучитьРазделительПути", BuiltinFn::GetPathSeparator),
     ("GetPathSeparator", BuiltinFn::GetPathSeparator),
+    ("ПолучитьМаскуВсеФайлы", BuiltinFn::GetAllFilesMask),
+    ("GetAllFilesMask", BuiltinFn::GetAllFilesMask),
     ("УдалитьФайлы", BuiltinFn::DeleteFiles),
     ("DeleteFiles", BuiltinFn::DeleteFiles),
     ("СоздатьКаталог", BuiltinFn::CreateDirectory),
@@ -606,6 +902,14 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("SplitBinaryData", BuiltinFn::SplitBinaryData),
     ("СоединитьДвоичныеДанные", BuiltinFn::ConcatBinaryData),
     ("ConcatBinaryData", BuiltinFn::ConcatBinaryData),
+    (
+        "СоединитьБуферыДвоичныхДанных",
+        BuiltinFn::ConcatBinaryDataBuffers,
+    ),
+    (
+        "ConcatBinaryDataBuffers",
+        BuiltinFn::ConcatBinaryDataBuffers,
+    ),
     ("Base64Значение", BuiltinFn::Base64Value),
     ("Base64Value", BuiltinFn::Base64Value),
     ("Base64Строка", BuiltinFn::Base64String),
@@ -619,6 +923,14 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
         BuiltinFn::GetBase64StringFromBinaryData,
     ),
     (
+        "ПолучитьBase64СтрокуИзБуфераДвоичныхДанных",
+        BuiltinFn::GetBase64StringFromBinaryDataBuffer,
+    ),
+    (
+        "GetBase64StringFromBinaryDataBuffer",
+        BuiltinFn::GetBase64StringFromBinaryDataBuffer,
+    ),
+    (
         "ПолучитьДвоичныеДанныеИзBase64Строки",
         BuiltinFn::GetBinaryDataFromBase64String,
     ),
@@ -627,12 +939,44 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
         BuiltinFn::GetBinaryDataFromBase64String,
     ),
     (
+        "ПолучитьДвоичныеДанныеИзBase64ДвоичныхДанных",
+        BuiltinFn::GetBinaryDataFromBase64BinaryData,
+    ),
+    (
+        "GetBinaryDataFromBase64BinaryData",
+        BuiltinFn::GetBinaryDataFromBase64BinaryData,
+    ),
+    (
         "ПолучитьHexСтрокуИзДвоичныхДанных",
         BuiltinFn::GetHexStringFromBinaryData,
     ),
     (
         "GetHexStringFromBinaryData",
         BuiltinFn::GetHexStringFromBinaryData,
+    ),
+    (
+        "ПолучитьДвоичныеДанныеИзHexСтроки",
+        BuiltinFn::GetBinaryDataFromHexString,
+    ),
+    (
+        "GetBinaryDataFromHexString",
+        BuiltinFn::GetBinaryDataFromHexString,
+    ),
+    (
+        "ПолучитьБуферДвоичныхДанныхИзHexСтроки",
+        BuiltinFn::GetBinaryDataBufferFromHexString,
+    ),
+    (
+        "GetBinaryDataBufferFromHexString",
+        BuiltinFn::GetBinaryDataBufferFromHexString,
+    ),
+    (
+        "ПолучитьHexСтрокуИзБуфераДвоичныхДанных",
+        BuiltinFn::GetHexStringFromBinaryDataBuffer,
+    ),
+    (
+        "GetHexStringFromBinaryDataBuffer",
+        BuiltinFn::GetHexStringFromBinaryDataBuffer,
     ),
     ("КодироватьСтроку", BuiltinFn::EncodeString),
     ("EncodeString", BuiltinFn::EncodeString),
@@ -691,11 +1035,20 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
 impl BuiltinFn {
     /// Регистронезависимый поиск по [`BUILTIN_FN_NAMES`].
     pub fn lookup(name: &str) -> Option<Self> {
-        let upper = name.to_uppercase();
-        BUILTIN_FN_NAMES
-            .iter()
-            .find(|(n, _)| n.to_uppercase() == upper)
-            .map(|(_, f)| *f)
+        // Тот же индекс, что у `BuiltinMethod::lookup`: первое написание
+        // в исходной таблице побеждает, свёртка таблицы выполняется один раз.
+        static INDEX: std::sync::OnceLock<std::collections::HashMap<String, BuiltinFn>> =
+            std::sync::OnceLock::new();
+        INDEX
+            .get_or_init(|| {
+                let mut index = std::collections::HashMap::with_capacity(BUILTIN_FN_NAMES.len());
+                for (name, function) in BUILTIN_FN_NAMES {
+                    index.entry(name.to_uppercase()).or_insert(*function);
+                }
+                index
+            })
+            .get(&name.to_uppercase())
+            .copied()
     }
 
     /// Функция ВСТРОЕННОГО ЯЗЫКА — в отличие от функции глобального
@@ -753,6 +1106,7 @@ impl BuiltinFn {
                 | BuiltinFn::StrReplace
                 | BuiltinFn::Tan
                 | BuiltinFn::ToNumber
+                | BuiltinFn::ToBoolean
                 | BuiltinFn::ToString
                 | BuiltinFn::TrimAll
                 | BuiltinFn::TrimLeft
@@ -782,9 +1136,16 @@ impl BuiltinFn {
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments
             | BuiltinFn::StandardTimeOffset
-            | BuiltinFn::SessionTimeZone => Some(HostEffect::Env),
+            | BuiltinFn::DaylightTimeOffset
+            | BuiltinFn::ToUniversalTime
+            | BuiltinFn::ToLocalTime
+            | BuiltinFn::SessionTimeZone
+            | BuiltinFn::ComputerTimeZone
+            | BuiltinFn::GetAvailableTimeZones => Some(HostEffect::Env),
             BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Some(HostEffect::Files),
-            BuiltinFn::GetPathSeparator | BuiltinFn::TempFilesDir => Some(HostEffect::Files),
+            BuiltinFn::GetPathSeparator | BuiltinFn::GetAllFilesMask | BuiltinFn::TempFilesDir => {
+                Some(HostEffect::Files)
+            }
             BuiltinFn::CreateDirectory => Some(HostEffect::FileCreate),
             BuiltinFn::DeleteFiles => Some(HostEffect::FileDelete),
             BuiltinFn::GetTempFileName => Some(HostEffect::TempFiles),
@@ -806,6 +1167,7 @@ impl BuiltinFn {
             BuiltinFn::Message
                 | BuiltinFn::RunApp
                 | BuiltinFn::FillPropertyValues
+                | BuiltinFn::ValueToFormData
                 | BuiltinFn::DeleteFiles
                 | BuiltinFn::CreateDirectory
         )
@@ -836,13 +1198,23 @@ impl BuiltinFn {
             | BuiltinFn::Right
             | BuiltinFn::StrStartsWith
             | BuiltinFn::StrEndsWith
-            | BuiltinFn::StrConcat
             | BuiltinFn::StrCompare
             | BuiltinFn::StrOccurrenceCount
             | BuiltinFn::StrGetLine
             | BuiltinFn::EncodeString
             | BuiltinFn::DecodeString => (2, 2),
+            BuiltinFn::StrConcat => (1, 2),
             BuiltinFn::StrReplace => (3, 3),
+            BuiltinFn::StringWithNumber => (3, 4),
+            BuiltinFn::GetStringDeclensions => (1, 3),
+            BuiltinFn::GetStringDeclensionsByNumber => (2, 6),
+            BuiltinFn::FormDataToValue => (2, 2),
+            BuiltinFn::ValueToFormData => (2, 2),
+            BuiltinFn::CopyFormData => (2, 2),
+            BuiltinFn::EventLogEventPresentation => (1, 1),
+            BuiltinFn::PeriodPresentation => (2, 3),
+            BuiltinFn::NumberInWords => (1, 3),
+            BuiltinFn::Title => (1, 1),
             // Платформа принимает как один аргумент, так и 256
             // (`measure-min-max.bsl`). Наш формат хранит `count` в `u8`,
             // поэтому 255 — измеренное техническое ограничение open-bsl.
@@ -855,6 +1227,7 @@ impl BuiltinFn {
             // Длину можно не указывать — до конца строки.
             BuiltinFn::Mid => (2, 3),
             BuiltinFn::StrFind => (2, 5),
+            BuiltinFn::LegacyFind => (2, 2),
             // Третий аргумент включает пустые части и по умолчанию равен
             // `Истина` (oracle `measure-string-split.bsl`).
             BuiltinFn::StrSplit => (2, 3),
@@ -876,14 +1249,20 @@ impl BuiltinFn {
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments
             | BuiltinFn::SessionTimeZone
+            | BuiltinFn::ComputerTimeZone
+            | BuiltinFn::GetAvailableTimeZones
             | BuiltinFn::Metadata
             | BuiltinFn::ThisObject
             | BuiltinFn::ErrorInfo
+            | BuiltinFn::ErrorDescription
             | BuiltinFn::GetPathSeparator
+            | BuiltinFn::GetAllFilesMask
             | BuiltinFn::TempFilesDir
             | BuiltinFn::TempFilesDirAsync => (0, 0),
+            BuiltinFn::BinDir => (0, 0),
             BuiltinFn::GetTempFileName => (0, 1),
-            BuiltinFn::StandardTimeOffset => (0, 2),
+            BuiltinFn::StandardTimeOffset | BuiltinFn::DaylightTimeOffset => (0, 2),
+            BuiltinFn::ToUniversalTime | BuiltinFn::ToLocalTime => (1, 2),
             BuiltinFn::RunApp => (1, 4),
             BuiltinFn::RunAppAsync => (1, 3),
             BuiltinFn::FindFiles | BuiltinFn::FindFilesAsync => (1, 3),
@@ -901,8 +1280,11 @@ impl BuiltinFn {
             // `BIN.SPLIT.ONEARG`, `BIN.COMBINE.NOARG`).
             BuiltinFn::SplitBinaryData => (2, 2),
             BuiltinFn::ConcatBinaryData => (1, 1),
+            BuiltinFn::ConcatBinaryDataBuffers => (1, 3),
             BuiltinFn::GetBinaryDataFromString | BuiltinFn::GetBinaryDataBufferFromString => (1, 3),
             BuiltinFn::GetStringFromBinaryData | BuiltinFn::GetStringFromBinaryDataBuffer => (1, 2),
+            BuiltinFn::GetBinaryDataFromBase64BinaryData => (1, 1),
+            BuiltinFn::GetHexStringFromBinaryDataBuffer => (1, 1),
             // Сообщить(<ТекстСообщения>, <Статус>) — по синтакс-помощнику
             // 8.3.27 второй параметр (СтатусСообщения) необязателен и «в
             // режиме управляемого приложения игнорируется»; open-bsl
@@ -955,6 +1337,10 @@ pub enum BuiltinMethod {
     OpenStreamForRead,
     /// `ОписаниеТипов.ПривестиЗначение(Значение)`.
     AdjustValue,
+    /// `ОписаниеТипов.Типы()` возвращает независимый массив типов.
+    Types,
+    /// `ОписаниеТипов.СодержитТип(Тип)` проверяет состав описания.
+    ContainsType,
     BufSet,
     ReadInt16,
     ReadInt32,
@@ -1024,6 +1410,10 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("ОткрытьПотокДляЧтения", BuiltinMethod::OpenStreamForRead),
     ("OpenStreamForRead", BuiltinMethod::OpenStreamForRead),
     ("ПривестиЗначение", BuiltinMethod::AdjustValue),
+    ("Типы", BuiltinMethod::Types),
+    ("Types", BuiltinMethod::Types),
+    ("СодержитТип", BuiltinMethod::ContainsType),
+    ("ContainsType", BuiltinMethod::ContainsType),
     ("Установить", BuiltinMethod::BufSet),
     ("Set", BuiltinMethod::BufSet),
     ("ПрочитатьЦелое16", BuiltinMethod::ReadInt16),
@@ -1100,7 +1490,9 @@ impl BuiltinMethod {
                 Count | Add | Delete | Clear | Insert | Get | Find | Move | IndexOf
             ),
             BslObject::TableRow(..) => matches!(self, Get | BufSet),
-            BslObject::TypeDescription(_) => self == AdjustValue,
+            BslObject::TypeDescription(_) | BslObject::QualifiedTypeDescription(_) => {
+                matches!(self, AdjustValue | Types | ContainsType)
+            }
             BslObject::TextWriter(_) => matches!(self, Write | Close),
             BslObject::BinaryData(_) => matches!(self, Write | Size | OpenStreamForRead),
             BslObject::BinaryBuffer(_) => matches!(
@@ -1183,15 +1575,16 @@ impl BuiltinMethod {
             | BuiltinMethod::Clear
             | BuiltinMethod::Close
             | BuiltinMethod::Size
-            | BuiltinMethod::OpenStreamForRead => Some(0),
+            | BuiltinMethod::OpenStreamForRead
+            | BuiltinMethod::Types => Some(0),
             BuiltinMethod::Delete
             | BuiltinMethod::FindRows
             | BuiltinMethod::Total
             | BuiltinMethod::UnloadColumn
             | BuiltinMethod::IndexOf
-            | BuiltinMethod::AdjustValue
             | BuiltinMethod::BufSplit
-            | BuiltinMethod::BufConcat => Some(1),
+            | BuiltinMethod::BufConcat
+            | BuiltinMethod::ContainsType => Some(1),
             BuiltinMethod::LoadColumn
             | BuiltinMethod::Move
             | BuiltinMethod::WriteBitwiseAnd
@@ -1217,7 +1610,8 @@ impl BuiltinMethod {
             | BuiltinMethod::WriteInt64
             | BuiltinMethod::BufSlice
             | BuiltinMethod::BufSet
-            | BuiltinMethod::Invert => None,
+            | BuiltinMethod::Invert
+            | BuiltinMethod::AdjustValue => None,
         }
     }
 
@@ -1309,6 +1703,45 @@ fn localized_string(args: &[BslValue]) -> RtResult<BslValue> {
     }
 }
 
+/// Преобразует значение по правилам встроенной функции `Булево`.
+///
+/// # Errors
+/// Возвращает ошибку типа для неподдерживаемого значения или строки,
+/// не являющейся представлением булева значения.
+pub fn convert_to_boolean(value: &BslValue) -> RtResult<bool> {
+    let converted = match value {
+        BslValue::Boolean(value) => *value,
+        BslValue::Number(value) => !value.is_zero(),
+        BslValue::Str(value) => {
+            let text = value.to_string();
+            let text = text.trim();
+            if ["Истина", "True", "Yes"]
+                .iter()
+                .any(|candidate| crate::folded_eq(text, candidate))
+            {
+                true
+            } else if ["Ложь", "False", "No"]
+                .iter()
+                .any(|candidate| crate::folded_eq(text, candidate))
+            {
+                false
+            } else {
+                return Err(RtError::TypeError {
+                    expected: "Строка с представлением булева значения",
+                    op: "Булево",
+                });
+            }
+        }
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Число, Булево или Строка",
+                op: "Булево",
+            });
+        }
+    };
+    Ok(converted)
+}
+
 pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
     // Сторож входа публичной функции: без него недостающий аргумент падает
     // на `args[0]`. Путь VM защищён периметром образа (`check_call_geometry`),
@@ -1348,6 +1781,37 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
                  у которого есть доступ к bsl-format — сюда попадать не должны"
             )
         }
+        BuiltinFn::ToBoolean => convert_to_boolean(&args[0]).map(BslValue::Boolean),
+        BuiltinFn::StringWithNumber => Err(RtError::DynamicError(
+            "локализованное склонение числа пока не поддерживается".into(),
+        )),
+        BuiltinFn::GetStringDeclensions => Err(RtError::DynamicError(
+            "склонение строки пока не поддерживается".into(),
+        )),
+        BuiltinFn::GetStringDeclensionsByNumber => Err(RtError::DynamicError(
+            "склонение строки по числу пока не поддерживается".into(),
+        )),
+        BuiltinFn::FormDataToValue => Err(RtError::DynamicError(
+            "преобразование данных формы пока не поддерживается этим хостом".into(),
+        )),
+        BuiltinFn::ValueToFormData => Err(RtError::DynamicError(
+            "преобразование значения в данные формы пока не поддерживается этим хостом".into(),
+        )),
+        BuiltinFn::CopyFormData => Err(RtError::DynamicError(
+            "копирование данных формы пока не поддерживается этим хостом".into(),
+        )),
+        BuiltinFn::EventLogEventPresentation => Err(RtError::DynamicError(
+            "представление события журнала регистрации пока не поддерживается".into(),
+        )),
+        BuiltinFn::BinDir => Err(RtError::DynamicError(
+            "каталог программы 1С не задан хостом".into(),
+        )),
+        BuiltinFn::PeriodPresentation => Err(RtError::DynamicError(
+            "локализованное представление периода пока не поддерживается".into(),
+        )),
+        BuiltinFn::NumberInWords => Err(RtError::DynamicError(
+            "локализованная пропись числа пока не поддерживается".into(),
+        )),
         BuiltinFn::StrLen => Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
             args[0].str_len()? as i64,
         ))),
@@ -1356,10 +1820,26 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::Mid => args[0].str_mid(&args[1], &args[2]),
         BuiltinFn::Upper => args[0].str_upper(),
         BuiltinFn::Lower => args[0].str_lower(),
+        BuiltinFn::Title => Err(RtError::DynamicError(
+            "преобразование строки в титульный регистр пока не поддерживается".into(),
+        )),
         BuiltinFn::TrimAll => args[0].str_trim_all(),
         BuiltinFn::TrimLeft => args[0].str_trim_left(),
         BuiltinFn::TrimRight => args[0].str_trim_right(),
         BuiltinFn::StrFind => args[0].str_find(&args[1], &args[2], &args[3], &args[4]),
+        BuiltinFn::LegacyFind => {
+            if matches!((&args[0], &args[1]), (BslValue::Str(_), BslValue::Str(needle)) if needle.units().is_empty())
+            {
+                Ok(BslValue::number_from_i64(1))
+            } else {
+                args[0].str_find(
+                    &args[1],
+                    &BslValue::Undefined,
+                    &BslValue::Undefined,
+                    &BslValue::Undefined,
+                )
+            }
+        }
         BuiltinFn::StrStartsWith => args[0].str_starts_with(&args[1]),
         BuiltinFn::StrEndsWith => args[0].str_ends_with(&args[1]),
         BuiltinFn::StrReplace => args[0].str_replace(&args[1], &args[2]),
@@ -1384,6 +1864,10 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::ErrorInfo => Err(RtError::InvalidBytecode(
             "ИнформацияОбОшибке требует контекста текущей BSL-задачи",
         )),
+        BuiltinFn::ErrorDescription => Err(RtError::InvalidBytecode(
+            "ОписаниеОшибки требует контекста обработчика текущего вызова",
+        )),
+        BuiltinFn::BriefErrorDescription => crate::brief_error_description(&args[0]),
         BuiltinFn::DetailedErrorDescription => crate::detailed_error_description(&args[0]),
         BuiltinFn::MakeDate => BslValue::make_date(args),
         // Три функции окружения перехвачены в `call_builtin_fn_ctx`: часы,
@@ -1394,7 +1878,12 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::CurrentDate
         | BuiltinFn::CurrentSessionDate
         | BuiltinFn::StandardTimeOffset
+        | BuiltinFn::DaylightTimeOffset
+        | BuiltinFn::ToUniversalTime
+        | BuiltinFn::ToLocalTime
         | BuiltinFn::SessionTimeZone
+        | BuiltinFn::ComputerTimeZone
+        | BuiltinFn::GetAvailableTimeZones
         | BuiltinFn::CurrentUniversalDate
         | BuiltinFn::CurrentUniversalDateInMilliseconds
         | BuiltinFn::CommandLineArguments => Err(RtError::InvalidBytecode(
@@ -1414,6 +1903,7 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // `RtError::InvalidBytecode`).
         BuiltinFn::SplitBinaryData => args[0].binary_data_split(&args[1]),
         BuiltinFn::ConcatBinaryData => args[0].binary_data_combine(),
+        BuiltinFn::ConcatBinaryDataBuffers => crate::bindata::concat_buffers(args),
         BuiltinFn::Base64Value => {
             let text = args[0].as_str("Base64")?.to_string();
             Ok(crate::encoding::decode_base64(&text)
@@ -1427,7 +1917,36 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
             let bytes = crate::encoding::decode_base64(&text).unwrap_or_default();
             Ok(BslValue::binary_data_of(bytes))
         }
+        BuiltinFn::GetBinaryDataFromBase64BinaryData => {
+            let input = args[0].binary_data_bytes().ok_or(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op: "ПолучитьДвоичныеДанныеИзBase64ДвоичныхДанных",
+            })?;
+            // Платформа пропускает CR/LF, но завершает чтение на прочем
+            // неалфавитном байте после полного квартета. До его конца
+            // такой байт делает вход некорректным.
+            let mut text = String::with_capacity(input.len());
+            for &byte in input {
+                match byte {
+                    b'\r' | b'\n' => {}
+                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' => {
+                        text.push(char::from(byte));
+                    }
+                    b'=' if !text.len().is_multiple_of(4) => text.push('='),
+                    _ if text.len().is_multiple_of(4) => break,
+                    _ => return Ok(BslValue::binary_data_of(Vec::new())),
+                }
+            }
+            let bytes = crate::encoding::decode_base64(&text).unwrap_or_default();
+            Ok(BslValue::binary_data_of(bytes))
+        }
         BuiltinFn::Base64String | BuiltinFn::GetBase64StringFromBinaryData => {
+            // Исходная функция платформы принимает строку и возвращает пустую
+            // строку: нативный контроль `characteristic-manager-reference`.
+            // Современный метод преобразования сохраняет проверку типа.
+            if f == BuiltinFn::Base64String && matches!(args[0], BslValue::Str(_)) {
+                return Ok(BslValue::Str(BslString::from_str("")));
+            }
             let bytes = args[0].binary_data_bytes().ok_or(RtError::TypeError {
                 expected: "ДвоичныеДанные",
                 op: if f == BuiltinFn::Base64String {
@@ -1440,6 +1959,24 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
                 crate::encoding::encode_base64(bytes),
             )))
         }
+        BuiltinFn::GetBase64StringFromBinaryDataBuffer => {
+            let bytes = args[0].binary_buffer_bytes().ok_or(RtError::TypeError {
+                expected: "БуферДвоичныхДанных",
+                op: "ПолучитьBase64СтрокуИзБуфераДвоичныхДанных",
+            })?;
+            let encoded = crate::encoding::encode_base64(&bytes);
+            let mut wrapped = String::with_capacity(encoded.len() + encoded.len() / 64 * 2);
+            for start in (0..encoded.len()).step_by(64) {
+                if start > 0 {
+                    wrapped.push_str("\r\n");
+                }
+                wrapped.push_str(&encoded[start..encoded.len().min(start + 64)]);
+            }
+            if encoded.len() > 64 && encoded.len().is_multiple_of(64) {
+                wrapped.push_str("\r\n");
+            }
+            Ok(BslValue::Str(BslString::from_utf8_string(wrapped)))
+        }
         BuiltinFn::GetHexStringFromBinaryData => {
             let bytes = args[0].binary_data_bytes().ok_or(RtError::TypeError {
                 expected: "ДвоичныеДанные",
@@ -1447,6 +1984,31 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
             })?;
             Ok(BslValue::Str(BslString::from_utf8_string(
                 crate::encoding::encode_hex(bytes),
+            )))
+        }
+        BuiltinFn::GetBinaryDataFromHexString | BuiltinFn::GetBinaryDataBufferFromHexString => {
+            let op = if f == BuiltinFn::GetBinaryDataFromHexString {
+                "ПолучитьДвоичныеДанныеИзHexСтроки"
+            } else {
+                "ПолучитьБуферДвоичныхДанныхИзHexСтроки"
+            };
+            let text = args[0].as_str(op)?;
+            let utf8 = text.shared_utf8();
+            let bytes = crate::encoding::decode_hex(&utf8)
+                .ok_or_else(|| RtError::DynamicError("нечётное число цифр в Hex-строке".into()))?;
+            Ok(if f == BuiltinFn::GetBinaryDataFromHexString {
+                BslValue::binary_data_of(bytes)
+            } else {
+                BslValue::binary_buffer_of(bytes)
+            })
+        }
+        BuiltinFn::GetHexStringFromBinaryDataBuffer => {
+            let bytes = args[0].binary_buffer_bytes().ok_or(RtError::TypeError {
+                expected: "БуферДвоичныхДанных",
+                op: "ПолучитьHexСтрокуИзБуфераДвоичныхДанных",
+            })?;
+            Ok(BslValue::Str(BslString::from_utf8_string(
+                crate::encoding::encode_hex(&bytes),
             )))
         }
         BuiltinFn::EncodeString => {
@@ -1510,6 +2072,7 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
             "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         )),
         BuiltinFn::GetPathSeparator
+        | BuiltinFn::GetAllFilesMask
         | BuiltinFn::TempFilesDir
         | BuiltinFn::DeleteFiles
         | BuiltinFn::CreateDirectory => Err(RtError::InvalidBytecode(
@@ -1707,6 +2270,18 @@ pub fn call_builtin_files(
                 .path_separator()
                 .map_err(|error| RtError::IoError(error.to_string()))?;
             Ok(BslValue::Str(BslString::from_utf8_string(separator)))
+        }
+        BuiltinFn::GetAllFilesMask => {
+            let [] = args else {
+                return Err(bad_arity());
+            };
+            let separator = files
+                .path_separator()
+                .map_err(|error| RtError::IoError(error.to_string()))?;
+            // НЕ ИЗМЕРЕНО(FILE.ALL_FILES_MASK.WINDOWS): разделитель хоста
+            // выбирает маску из примера синтакс-помощника для Windows.
+            let mask = if separator == "\\" { "*.*" } else { "*" };
+            Ok(BslValue::Str(BslString::from_str(mask)))
         }
         BuiltinFn::TempFilesDir => {
             let [] = args else {
@@ -2110,7 +2685,53 @@ pub fn call_builtin_method(
             method: "ОткрытьПотокДляЧтения",
             receiver: obj.type_name(),
         }),
-        BuiltinMethod::AdjustValue => crate::type_description::adjust_value(obj, &args[0]),
+        BuiltinMethod::ContainsType => match (obj, args) {
+            (BslValue::Object(object), [BslValue::Type(ty)]) => match object.as_ref() {
+                BslObject::TypeDescription(types) => Ok(BslValue::Boolean(types.contains(ty))),
+                BslObject::QualifiedTypeDescription(types) => Ok(BslValue::Boolean(
+                    types.iter().any(|candidate| candidate.id == *ty),
+                )),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "СодержитТип",
+                    receiver: obj.type_name(),
+                }),
+            },
+            _ => Err(RtError::TypeError {
+                expected: "ОписаниеТипов и Тип",
+                op: "СодержитТип",
+            }),
+        },
+        BuiltinMethod::Types => match obj {
+            BslValue::Object(object) => match object.as_ref() {
+                // Нативная проба подтверждает, что изменение массива не меняет
+                // состав исходного описания типов.
+                BslObject::TypeDescription(types) => Ok(BslValue::new_array(
+                    types.iter().cloned().map(BslValue::Type).collect(),
+                )),
+                BslObject::QualifiedTypeDescription(types) => Ok(BslValue::new_array(
+                    types
+                        .iter()
+                        .map(|ty| BslValue::Type(ty.id.clone()))
+                        .collect(),
+                )),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Типы",
+                    receiver: obj.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Типы",
+                receiver: obj.type_name(),
+            }),
+        },
+        BuiltinMethod::AdjustValue => {
+            if args.len() > 1 {
+                return Err(RtError::InvalidBytecode(
+                    "ПривестиЗначение принимает не больше одного аргумента",
+                ));
+            }
+            crate::type_description::adjust_value(obj, args.first())
+        }
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
@@ -2233,8 +2854,17 @@ pub fn call_builtin_method_ctx(
                     ));
                 }
                 let field = key_name(&args[0], rt)?;
+                let BslValue::Str(spelling) = &args[0] else {
+                    unreachable!("тип ключа проверен в key_name")
+                };
                 let value = args.get(1).cloned().unwrap_or(BslValue::Undefined);
-                obj.structure_insert(field, value, &mut rt.shapes)?;
+                obj.structure_insert_spelled(
+                    field,
+                    &spelling.to_string(),
+                    value,
+                    &mut rt.shapes,
+                    &rt.names,
+                )?;
                 return Ok(BslValue::Undefined);
             }
             BuiltinMethod::Delete => {
@@ -2677,3 +3307,11 @@ mod name_table_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "builtin_lookup_tests.rs"]
+mod lookup_tests;
+
+#[cfg(test)]
+#[path = "type_description_types_tests.rs"]
+mod type_description_types_tests;

@@ -35,6 +35,15 @@ impl HttpClientFactory for SystemHttpClientFactory {
                 "аутентификация операционной системы пока не поддерживается",
             ));
         }
+        if config
+            .server_certificate_revocation_check_mode
+            .is_some_and(|mode| mode != bsl_rt::ServerTlsCertificateRevocationCheckMode::DontCheck)
+        {
+            return Err(NetworkError::new(
+                NetworkErrorKind::Unsupported,
+                "системный HTTP-адаптер не поддерживает выбранный режим проверки отзыва TLS-сертификата сервера",
+            ));
+        }
 
         let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -268,9 +277,19 @@ mod tests {
             proxy: ProxyMode::Direct,
             timeout: Some(Duration::from_secs(5)),
             tls,
+            server_certificate_revocation_check_mode: None,
             client_identity: None,
             use_os_authentication: false,
         }
+    }
+
+    #[test]
+    fn unsupported_revocation_mode_is_not_silently_weakened() {
+        let mut config = test_config(TlsConfig::SystemRoots);
+        config.server_certificate_revocation_check_mode =
+            Some(bsl_rt::ServerTlsCertificateRevocationCheckMode::Strict);
+        let error = SystemHttpClientFactory.create(config).unwrap_err();
+        assert_eq!(error.kind, NetworkErrorKind::Unsupported);
     }
 
     /// BSL-конструкторы только снимают байты файла. `reqwest` принимает

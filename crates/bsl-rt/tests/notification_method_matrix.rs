@@ -69,5 +69,7 @@ fn native_matrix_preserves_receiver_errors_separately_from_missing_methods() {
         }
     }
     assert_eq!(rows.len(), 18);
-    assert_eq!(counts, [181, 1083, 158]);
+    // Повторный нативный замер включает `Типы`/`Types` и `СодержитТип`/`ContainsType`.
+    // Прежние столбцы сохранились; новые дают 4 объявления, 60 отказов и 8 ошибок получателя.
+    assert_eq!(counts, [185, 1143, 166]);
 }

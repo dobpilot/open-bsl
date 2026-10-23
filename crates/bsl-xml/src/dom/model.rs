@@ -9,8 +9,9 @@ pub(crate) const XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
 
 /// Вид узла. Ровно те виды, которые умеют появиться в дереве: РАЗБОР секции
 /// CDATA не создаёт (она вливается в текст — измерено), но
-/// `СоздатьСекциюCDATA` создаёт, поэтому вид у неё свой. Определения типа
-/// документа и фрагмента здесь нет по причинам из заголовка модуля.
+/// `СоздатьСекциюCDATA` создаёт, поэтому вид у неё свой. Определение типа
+/// документа появляется только у HTML по отдельному нативному контролю;
+/// XML-разбор по-прежнему его не создаёт. Фрагмент документа не реализован.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DomKind {
     Document,
@@ -23,6 +24,8 @@ pub enum DomKind {
     /// Ссылка на объявленную сущность: `<к>раз&е;два</к>` при объявленной
     /// `е` даёт троих детей, средний из которых — этот узел (измерено).
     EntityReference,
+    /// Встроенное определение HTML 4.0 Transitional у документа HTML.
+    DocumentType,
 }
 
 impl DomKind {
@@ -37,6 +40,7 @@ impl DomKind {
             DomKind::Comment => EnumValue::DomComment,
             DomKind::ProcessingInstruction => EnumValue::DomProcessingInstruction,
             DomKind::EntityReference => EnumValue::DomEntityReference,
+            DomKind::DocumentType => EnumValue::DomDocumentType,
         }
     }
 
@@ -57,6 +61,8 @@ impl DomKind {
 /// цикл `Rc` и не освобождался бы никогда.
 #[derive(Debug)]
 pub struct DomNode {
+    /// Режим документа-владельца; у обычного DOM всегда выключен.
+    pub(crate) html_document: std::cell::Cell<bool>,
     pub(crate) kind: DomKind,
     /// `ИмяУзла`: полное имя элемента или атрибута, `#document`, `#text`,
     /// `#cdata-section`, `#comment` либо цель инструкции обработки. Имя
@@ -111,6 +117,7 @@ impl DomNode {
         value: Option<String>,
     ) -> Rc<DomNode> {
         Rc::new(DomNode {
+            html_document: std::cell::Cell::new(false),
             kind,
             name,
             local,
@@ -216,7 +223,7 @@ impl DomNode {
             // У ссылки на сущность собственного текста нет: в
             // `ТекстовоеСодержимое` родителя она не даёт ничего (измерено —
             // `<к>раз&е;два</к>` отдаёт «раздва»).
-            DomKind::EntityReference => String::new(),
+            DomKind::EntityReference | DomKind::DocumentType => String::new(),
         }
     }
 

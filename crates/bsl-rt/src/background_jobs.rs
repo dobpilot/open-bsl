@@ -25,6 +25,13 @@ use crate::{
 /// runtime — `RuntimeClosed`/`RuntimeBroken`; свойства уже
 /// материализованного снимка при этом остаются читаемыми.
 pub trait BackgroundJobService {
+    /// Подготавливает отложенный сервис при первом доступе к возможности.
+    /// Обычный внедрённый сервис готов без дополнительной подготовки.
+    /// `false` означает недоступность сервиса для этого вызова.
+    fn is_ready(&self) -> bool {
+        true
+    }
+
     /// Запуск цели `Модуль.Метод`; снимок `Queued` при успехе.
     ///
     /// # Errors
@@ -375,13 +382,12 @@ fn manager_get_jobs(
             let entries: Vec<(String, BslValue)> = {
                 let storage = storage.borrow();
                 (0..storage.len())
-                    .filter_map(|i| storage.entry_at(i))
-                    .filter_map(|(field, item)| {
-                        ctx.runtime_shapes()
-                            .names
-                            .name(field)
-                            .map(|name| (name.to_string(), item))
+                    .filter_map(|i| {
+                        storage
+                            .entry_at(i)
+                            .zip(storage.spelling_at(i, &ctx.runtime_shapes().names))
                     })
+                    .map(|((_, item), name)| (name, item))
                     .collect()
             };
             for (name, value) in entries {
