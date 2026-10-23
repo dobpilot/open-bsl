@@ -25,7 +25,7 @@
 - [ ] 3.8 Remove the per-lexer keyword map layered over the global one, unless an A/B shows it pays; delete `crates/bsl-compiler/examples/name_table_storage.rs`.
 
 ## 4. Runtime
-- [ ] 4.1 Generate every per-enumeration table in `enums.rs`/`types.rs`/`value/mod.rs` from one declaration; replace the linear lookups by indexed ones; make `kind()` non-panicking.
+- [x] 4.1 Generate every per-enumeration table in `enums.rs`/`types.rs`/`value/mod.rs` from one declaration; replace the linear lookups by indexed ones; make `kind()` non-panicking.
 - [x] 4.2 Merge `call_configuration_instance_handler{,_without_safe_mode,_with_safe_mode}` into one call taking the entry mode; share date/zone parsing between `to_universal_time` and `to_local_time`.
 
 ## 5. Configuration and session

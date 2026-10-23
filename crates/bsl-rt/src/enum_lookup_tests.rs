@@ -4,10 +4,9 @@ use super::*;
 
 fn linear_enum(name: &str) -> Option<EnumKind> {
     let upper = name.to_uppercase();
-    ENUM_NAMES
-        .iter()
+    enum_names()
         .find(|(name, _)| name.to_uppercase() == upper)
-        .map(|(_, kind)| *kind)
+        .map(|(_, kind)| kind)
 }
 
 fn linear_member(kind: EnumKind, member: &str) -> Option<EnumValue> {
@@ -22,7 +21,7 @@ fn linear_member(kind: EnumKind, member: &str) -> Option<EnumValue> {
 
 #[test]
 fn enum_lookup_matches_every_original_name_and_case_variant() {
-    for (name, _) in ENUM_NAMES {
+    for (name, _) in enum_names() {
         for spelling in [name.to_string(), name.to_lowercase(), name.to_uppercase()] {
             assert_eq!(lookup_enum(&spelling), linear_enum(&spelling), "{spelling}");
         }
