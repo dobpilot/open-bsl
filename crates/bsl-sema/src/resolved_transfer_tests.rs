@@ -18,7 +18,8 @@ fn owned_transfer_preserves_large_numbers_defaults_and_control_flow() {
     let syntax = bsl_syntax::parse(source).unwrap();
     let resolved = crate::resolve_program(&syntax.items).unwrap();
     let expected = resolved.clone();
-    let portable = resolved.into_sendable();
-    let portable = std::thread::spawn(move || portable).join().unwrap();
-    assert_eq!(portable.into_resolved(), expected);
+    // Дерево передаётся между потоками подготовки как есть: одно
+    // определение без переносимой копии.
+    let moved = std::thread::spawn(move || resolved).join().unwrap();
+    assert_eq!(moved, expected);
 }

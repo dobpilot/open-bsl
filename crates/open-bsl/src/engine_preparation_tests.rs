@@ -186,12 +186,8 @@ fn semantic_transfer_preserves_resolvable_conformance_sources() {
             continue;
         };
         let expected = resolved.clone();
-        assert_eq!(
-            resolved.into_sendable().into_resolved(),
-            expected,
-            "{}",
-            path.display()
-        );
+        let moved = std::thread::spawn(move || resolved).join().unwrap();
+        assert_eq!(moved, expected, "{}", path.display());
         checked += 1;
     }
     assert!(checked > 50, "проверено только {checked} программ");

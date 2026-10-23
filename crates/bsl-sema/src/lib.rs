@@ -7,9 +7,6 @@
 mod core_receivers;
 mod resolved;
 mod resolver;
-mod sendable;
-
-pub use sendable::SendableResolvedProgram;
 
 pub use resolved::{
     LabelId, RExpr, RStmt, RStmtKind, Resolved, ResolvedArg, ResolvedFunction, ResolvedLink,

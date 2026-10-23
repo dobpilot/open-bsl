@@ -20,7 +20,7 @@
 - [x] 3.3 Run `benchmarks/hot-code-diff.sh` and an alternating A/B for the `Frame`/`step` changes; move the handled-error stack out of `Frame` if the difference is measurable.
 - [x] 3.4 Resolve `GetImportedModule` targets through an index fixed at verification.
 - [x] 3.5 Move `bind_program_shapes` from `bsl-bytecode` to `bsl-vm`.
-- [ ] 3.6 Replace the `include!` copy in `bsl-sema/src/sendable.rs` with a single resolved-tree definition that can cross threads.
+- [x] 3.6 Replace the `include!` copy in `bsl-sema/src/sendable.rs` with a single resolved-tree definition that can cross threads.
 - [ ] 3.7 Collapse the `resolve_*_with_*`, `compile_dynamic_snippet_with_*` and `call_configuration_handler_with_*` families into options-struct entry points.
 - [ ] 3.8 Remove the per-lexer keyword map layered over the global one, unless an A/B shows it pays; delete `crates/bsl-compiler/examples/name_table_storage.rs`.
 

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use num_bigint::BigInt;
 use num_traits::{One, Signed, ToPrimitive, Zero};
@@ -143,7 +143,10 @@ pub struct BslNumber(pub(crate) Repr);
 #[derive(Clone)]
 pub(crate) enum Repr {
     Small { m: M128, scale: i32 },
-    Big(Rc<BigDec>),
+    // `Arc`, а не `Rc`: разрешённое дерево с числовыми литералами
+    // передаётся между потоками подготовки (`bsl-sema`), а копирование
+    // большого числа встречается редко.
+    Big(Arc<BigDec>),
 }
 
 impl BslNumber {
@@ -852,7 +855,7 @@ fn demote(b: BigDec) -> BslNumber {
             m: M128::new(v),
             scale: b.scale,
         }),
-        None => BslNumber(Repr::Big(Rc::new(b))),
+        None => BslNumber(Repr::Big(Arc::new(b))),
     }
 }
 

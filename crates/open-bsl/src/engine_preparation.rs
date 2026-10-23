@@ -126,11 +126,7 @@ impl Analyzer<'_> {
         }
         ordered_map(indices, workers, |_, &current| {
             self.resolve(current, selected)
-                .map(bsl_sema::ResolvedProgram::into_sendable)
         })
-        .into_iter()
-        .map(|result| result.map(bsl_sema::SendableResolvedProgram::into_resolved))
-        .collect()
     }
 
     pub(super) fn resolve(
