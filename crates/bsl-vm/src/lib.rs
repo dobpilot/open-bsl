@@ -5423,6 +5423,10 @@ fn err_to_value(err: &RtError) -> BslValue {
 }
 
 fn current_handler_description(frame: &Frame) -> Result<BslValue, RtError> {
+    // Ошибку видит только кадр обработчика: в функции, вызванной из
+    // `Исключение`, и после `КонецПопытки` результат пуст, а внутренний
+    // обработчик не заслоняет внешний после выхода из него —
+    // `measure-error-description-scope.platform.txt`.
     let Some((_, value)) = frame
         .handled_errors
         .iter()
@@ -5690,6 +5694,17 @@ fn call_builtin_with_format(
                 std::cmp::Ordering::Greater => 1,
             };
             Ok(BslValue::number_from_i64(result))
+        }
+        // Измерено (`measure-legacy-find-coercion.bsl`): устаревшая `Найти` приводит
+        // оба аргумента обычной `Строка` — `Найти(1000, Символ(160))` равно 2.
+        BuiltinFn::LegacyFind => {
+            let mut text = Vec::with_capacity(2);
+            for value in &args[..2] {
+                text.push(BslValue::Str(bsl_rt::BslString::from_str(
+                    &format_value_in_context(value, None, runtime_shapes, host)?,
+                )));
+            }
+            bsl_rt::call_builtin_fn(BuiltinFn::LegacyFind, &text)
         }
         // Измерено (`measure-title-case.bsl`): `ТРег` приводит любой
         // аргумент обычной `Строка` — `ТРег(1000)` даёт `1 000`.

@@ -1,6 +1,6 @@
 //! `ТРег`: титульный регистр по границам слов Unicode.
 //!
-//! Измерено пробой `tests/conformance/measure/measure-title-case.bsl`
+//! Измерено пробой `tests/conformance/measure/1c/measure-title-case.bsl`
 //! (`measure-title-case.platform.txt`): платформа делит строку на слова по
 //! правилам UAX #29 и в каждом слове переводит первую букву, имеющую регистр,
 //! в титульный регистр Unicode, а остальные буквы — в строчные. Поэтому

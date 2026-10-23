@@ -1,0 +1,4 @@
+document.copy.table.count	1
+document.copy.table.value	7
+document.copy.table.source	7
+document.copy.table.source.count	1

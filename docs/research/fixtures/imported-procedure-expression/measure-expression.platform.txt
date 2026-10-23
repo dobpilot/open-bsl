@@ -1,0 +1,2 @@
+imported.procedure.expression.error	{DataProcessor.Замеры.Form.Форма.Form(33)}: Object procedure called as function (ИзменитьТекст)
+imported.procedure.expression.parameter	initial

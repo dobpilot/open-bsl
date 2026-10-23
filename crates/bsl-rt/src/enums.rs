@@ -12686,11 +12686,8 @@ pub fn lookup_enum(name: &str) -> Option<EnumKind> {
 
 /// Член перечисления по имени справа от точки.
 pub fn lookup_member(kind: EnumKind, member: &str) -> Option<EnumValue> {
-    // Прежде принималось `Ascending`; официальный `Asc` не должен ломать
-    // уже исполнявшийся код при дополнении перечисления.
-    if kind == EnumKind::SortDirection && member.eq_ignore_ascii_case("Ascending") {
-        return Some(EnumValue::SortDirectionAscending);
-    }
+    // Членов `Ascending`/`Descending` у `НаправлениеСортировки` нет:
+    // `measure-sort-direction-alias.platform.txt`.
     static INDEX: std::sync::OnceLock<std::collections::HashMap<(EnumKind, String), EnumValue>> =
         std::sync::OnceLock::new();
     INDEX

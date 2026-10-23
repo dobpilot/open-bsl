@@ -1,0 +1,3 @@
+imported.procedure.arguments.error	{DataProcessor.Замеры.Form.Форма.Form(33)}: Object procedure called as function (ИзменитьТекст)
+imported.procedure.arguments.trace	argument
+imported.procedure.arguments.skipped	reached

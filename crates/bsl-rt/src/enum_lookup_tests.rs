@@ -1,4 +1,4 @@
-//! Индексы сохраняют порядок написаний и отдельную совместимость Ascending.
+//! Индексы сохраняют порядок написаний.
 
 use super::*;
 
@@ -11,9 +11,6 @@ fn linear_enum(name: &str) -> Option<EnumKind> {
 }
 
 fn linear_member(kind: EnumKind, member: &str) -> Option<EnumValue> {
-    if kind == EnumKind::SortDirection && member.eq_ignore_ascii_case("Ascending") {
-        return Some(EnumValue::SortDirectionAscending);
-    }
     let upper = member.to_uppercase();
     MEMBERS
         .iter()
@@ -49,12 +46,13 @@ fn member_lookup_matches_every_original_kind_and_spelling() {
 }
 
 #[test]
-fn legacy_ascending_keeps_its_ascii_only_compatibility_rule() {
-    assert_eq!(
-        lookup_member(EnumKind::SortDirection, "aScEnDiNg"),
-        Some(EnumValue::SortDirectionAscending),
-    );
-    for name in ["Aſcending", " Ascending", "Ascending ", ""] {
+fn sort_direction_has_no_ascending_alias() {
+    // Измерено: `measure-sort-direction-alias.platform.txt`.
+    for name in ["Ascending", "aScEnDiNg", "Descending"] {
         assert_eq!(lookup_member(EnumKind::SortDirection, name), None, "{name}");
     }
+    assert_eq!(
+        lookup_member(EnumKind::SortDirection, "Asc"),
+        Some(EnumValue::SortDirectionAscending),
+    );
 }

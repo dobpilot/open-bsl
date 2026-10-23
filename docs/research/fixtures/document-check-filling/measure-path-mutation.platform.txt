@@ -1,0 +1,2 @@
+document.check.clear	1
+document.check.replace	0

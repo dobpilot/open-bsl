@@ -1,24 +1,14 @@
 use open_bsl::{Engine, Value};
 
 #[test]
-fn title_function_resolves_but_does_not_guess_word_boundaries() {
+fn title_function_checks_arity_and_follows_measured_word_boundaries() {
     let engine = Engine::builder().build().unwrap();
     assert!(engine.compile("ТРег();").is_err());
     assert!(engine.compile("Title(\"a\", \"b\");").is_err());
-    engine.compile("Результат = Title(\"a\");").unwrap();
-
+    // Измерено: `tests/conformance/measure/1c/measure-title-case.platform.txt`.
     let result = engine
         .new_state()
-        .exec(
-            r#"
-Попытка
-    Результат = ТРег("два слова");
-Исключение
-    Возврат Истина;
-КонецПопытки;
-Возврат Ложь;
-"#,
-        )
+        .exec(r#"Возврат ТРег("два слова") + "|" + Title("o'neil-smith");"#)
         .unwrap();
-    assert_eq!(result, Value::Boolean(true));
+    assert_eq!(result, Value::Str("Два Слова|O'neil-Smith".into()));
 }

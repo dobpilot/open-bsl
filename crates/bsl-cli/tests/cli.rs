@@ -625,10 +625,19 @@ fn declared_only_function_and_constructor_compile_and_raise_the_uniform_error() 
 }
 
 #[test]
-fn title_case_matches_the_platform_oracle() {
-    let out = stdout_of(&run(&[measure("measure-title-case.bsl").to_str().unwrap()]));
-    assert_eq!(
-        out,
-        include_str!("../../../tests/conformance/measure/measure-title-case.platform.txt")
-    );
+fn review_probes_match_their_platform_oracles() {
+    for probe in [
+        "measure-title-case",
+        "measure-error-description-scope",
+        "measure-legacy-find-coercion",
+        "measure-sort-direction-alias",
+        "measure-base64-lenient",
+        "measure-empty-date-format",
+    ] {
+        let out = stdout_of(&run(&[measure(&format!("1c/{probe}.bsl"))
+            .to_str()
+            .unwrap()]));
+        let oracle = std::fs::read_to_string(measure(&format!("1c/{probe}.platform.txt"))).unwrap();
+        assert_eq!(out, oracle, "{probe}");
+    }
 }

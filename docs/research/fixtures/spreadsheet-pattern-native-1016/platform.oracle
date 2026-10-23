@@ -1,0 +1,11 @@
+﻿alias=YES
+mixed=YES
+presentation=No pattern
+value.type=SpreadsheetDocumentPatternType
+lookup.ru=SpreadsheetDocumentPatternType
+lookup.en=SpreadsheetDocumentPatternType
+enum.type=EnumSpreadsheetDocumentPatternType
+enum.presentation=EnumSpreadsheetDocumentPatternType
+self.equal=YES
+
+completed=YES

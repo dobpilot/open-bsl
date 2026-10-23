@@ -163,6 +163,8 @@ pub struct DateFormat {
     pub pattern: Option<String>,
     /// `ДЛФ=Д`.
     pub long: Option<String>,
+    /// `ДП='пусто'` — текст пустой даты.
+    pub empty: Option<String>,
     /// `Л` — от неё зависят имена месяцев и дней недели.
     pub locale: Locale,
 }
@@ -263,6 +265,7 @@ pub fn parse_date_format(spec: &str) -> RtResult<DateFormat> {
         match key.as_str() {
             "ДФ" | "DF" => fmt.pattern = Some(val.clone()),
             "ДЛФ" | "DLF" => fmt.long = Some(val.clone()),
+            "ДП" | "DE" => fmt.empty = Some(val.clone()),
             _ => {}
         }
     }
@@ -499,7 +502,7 @@ fn group_digits(digits: &str, sep: char) -> String {
 /// `Строка(значение)` / `Формат(значение, spec)`. `spec = None` — правила
 /// по умолчанию (`Строка()` — это `Формат()` без явной форматной строки).
 /// Форматная строка имеет эффект на `Число` (`ЧГ`/`ЧРД`/`ЧРГ`/`ЧДЦ`/`ЧЦ`/
-/// `ЧН`/`ЧВН`/`ЧС`), на `Дата` (`ДФ`/`ДЛФ`) и на `Булево` (`БИ`/`БЛ`); `Л`
+/// `ЧН`/`ЧВН`/`ЧС`), на `Дата` (`ДФ`/`ДЛФ`/`ДП`) и на `Булево` (`БИ`/`БЛ`); `Л`
 /// действует на все три. У остальных типов применимых ключей нет, их
 /// текстовое представление уже верно само по себе (`Display` в `bsl-rt`:
 /// `Массив`, пустая строка для `Неопределено`, ...).
@@ -520,10 +523,11 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
                 Some(s) => parse_date_format(s)?,
                 None => DateFormat::default(),
             };
-            // Нативный контроль нового бизнес-процесса и отдельная проба
-            // подтверждают пустой результат даже для буквального шаблона.
-            if d.is_empty() && fmt.pattern.is_some() {
-                return Ok(String::new());
+            // `Формат` пустой даты при любой форматной строке, в том числе
+            // пустой, даёт текст `ДП` или пустую строку; `Строка()` (без
+            // форматной строки) печатает дату: `measure-empty-date-format`.
+            if d.is_empty() && spec.is_some() {
+                return Ok(fmt.empty.unwrap_or_default());
             }
             Ok(match (&fmt.pattern, &fmt.long) {
                 // `ДФ` конкретнее `ДЛФ`, поэтому при обоих ключах

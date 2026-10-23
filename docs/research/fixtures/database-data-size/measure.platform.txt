@@ -1,0 +1,11 @@
+database.size.default	Yes|Yes
+database.size.alias	Yes|Yes
+database.size.undefined	Yes|Yes
+database.size.empty	0
+database.size.empty.include	0
+database.size.metadata.include	Yes|Yes
+database.size.include.exclude	0
+database.size.bad.area	ERROR
+database.size.bad.include	ERROR
+database.size.bad.exclude	ERROR
+database.size.arity.extra	ERROR

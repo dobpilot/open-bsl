@@ -89,6 +89,27 @@ pub fn call_builtin_env_with_args(
     }
 }
 
+/// Разбор Base64 функций `ПолучитьДвоичныеДанныеИзBase64*`. Платформа
+/// пропускает CR/LF, но завершает чтение на прочем неалфавитном символе
+/// после полного квартета. До его конца такой символ, в том числе пробел,
+/// делает вход некорректным, и результат пуст. Лишние `=` после дополнения
+/// игнорируются: `QQ===` даёт `41`.
+fn decode_lenient_base64(input: impl Iterator<Item = u8>) -> Vec<u8> {
+    let mut text = String::new();
+    for byte in input {
+        match byte {
+            b'\r' | b'\n' => {}
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' => {
+                text.push(char::from(byte));
+            }
+            b'=' if !text.len().is_multiple_of(4) => text.push('='),
+            _ if text.len().is_multiple_of(4) => break,
+            _ => return Vec::new(),
+        }
+    }
+    crate::encoding::decode_base64(&text).unwrap_or_default()
+}
+
 fn time_offset(args: &[BslValue], env: &mut HostEnv, daylight: bool) -> RtResult<BslValue> {
     let op = if daylight {
         "СмещениеЛетнегоВремени"
@@ -1833,6 +1854,8 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::TrimLeft => args[0].str_trim_left(),
         BuiltinFn::TrimRight => args[0].str_trim_right(),
         BuiltinFn::StrFind => args[0].str_find(&args[1], &args[2], &args[3], &args[4]),
+        // Пустая подстрока даёт 1 даже в пустой строке:
+        // `measure-legacy-find.platform.txt`.
         BuiltinFn::LegacyFind => {
             if matches!((&args[0], &args[1]), (BslValue::Str(_), BslValue::Str(needle)) if needle.units().is_empty())
             {
@@ -1916,35 +1939,24 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
                 .map(BslValue::binary_data_of)
                 .unwrap_or(BslValue::Undefined))
         }
+        // Строка и двоичные данные разбираются одинаково:
+        // `measure-base64-lenient.platform.txt`.
         BuiltinFn::GetBinaryDataFromBase64String => {
             let text = args[0]
                 .as_str("ПолучитьДвоичныеДанныеИзBase64Строки")?
                 .to_string();
-            let bytes = crate::encoding::decode_base64(&text).unwrap_or_default();
-            Ok(BslValue::binary_data_of(bytes))
+            Ok(BslValue::binary_data_of(decode_lenient_base64(
+                text.chars().map(|c| u8::try_from(c).unwrap_or(0)),
+            )))
         }
         BuiltinFn::GetBinaryDataFromBase64BinaryData => {
             let input = args[0].binary_data_bytes().ok_or(RtError::TypeError {
                 expected: "ДвоичныеДанные",
                 op: "ПолучитьДвоичныеДанныеИзBase64ДвоичныхДанных",
             })?;
-            // Платформа пропускает CR/LF, но завершает чтение на прочем
-            // неалфавитном байте после полного квартета. До его конца
-            // такой байт делает вход некорректным.
-            let mut text = String::with_capacity(input.len());
-            for &byte in input {
-                match byte {
-                    b'\r' | b'\n' => {}
-                    b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' => {
-                        text.push(char::from(byte));
-                    }
-                    b'=' if !text.len().is_multiple_of(4) => text.push('='),
-                    _ if text.len().is_multiple_of(4) => break,
-                    _ => return Ok(BslValue::binary_data_of(Vec::new())),
-                }
-            }
-            let bytes = crate::encoding::decode_base64(&text).unwrap_or_default();
-            Ok(BslValue::binary_data_of(bytes))
+            Ok(BslValue::binary_data_of(decode_lenient_base64(
+                input.iter().copied(),
+            )))
         }
         BuiltinFn::Base64String | BuiltinFn::GetBase64StringFromBinaryData => {
             // Исходная функция платформы принимает строку и возвращает пустую

@@ -103,7 +103,6 @@
 М("TITLE.EMPTY", Т(""));
 М("TITLE.NUMBER", Т(12));
 М("TITLE.UNDEFINED", Т(Неопределено));
-М("TITLE.BOOLEAN", Т(Истина));
 Результат = "error";
 Попытка
 	Результат = "[" + Title("abc def") + "]";

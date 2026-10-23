@@ -1,0 +1,9 @@
+characteristic.additional.initial.count=0
+characteristic.additional.type=Structure
+characteristic.additional.body.value=1
+characteristic.additional.same=2
+characteristic.additional.other.count=1
+characteristic.additional.assignment.error=1
+characteristic.additional.after.assignment=2
+characteristic.additional.cleared=0
+characteristic.additional.other.after.clear=1

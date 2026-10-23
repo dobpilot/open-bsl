@@ -1,0 +1,6 @@
+ENUM.MEMBER=[Enum.ЗамерПеречисления.Обычная]
+ENUM.EMPTY=[Enum.ЗамерПеречисления.EmptyRef]
+UNDEFINED=ERROR
+NUMBER=ERROR
+SYSTEM=[SortDirection.Asc]
+SYSTEM.DATA_SEND=[DataItemSend.Auto]

@@ -1,0 +1,2 @@
+catalog.level.flat	0
+catalog.level.flat.body	ERROR
