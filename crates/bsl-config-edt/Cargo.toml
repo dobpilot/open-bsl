@@ -5,3 +5,5 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+bsl-config = { path = "../bsl-config" }
+bsl-config-xml = { path = "../bsl-config-xml" }

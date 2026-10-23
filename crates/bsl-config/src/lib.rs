@@ -10,6 +10,18 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
+mod artifacts;
+pub use artifacts::{
+    BoundConfigurationSource, ConfigurationArtifact, ConfigurationArtifactKind,
+    ConfigurationArtifacts, ConfigurationDescription, ConfigurationProperty,
+};
+
+mod index;
+pub use index::{
+    ConfigurationIndex, ConfigurationModuleDeclaration, ConfigurationSource,
+    ModuleDeclarationSource, SnapshotSource,
+};
+
 /// Неизменяемый снимок всего исходного кода одной конфигурации.
 #[derive(Debug, Clone)]
 pub struct ConfigurationCodeSnapshot {
@@ -102,6 +114,8 @@ impl ConfigurationCodeSnapshot {
 /// Один окончательный исходный модуль конфигурации.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigurationModule {
+    source_is_extension: bool,
+    own_extension_safe_mode: Option<bool>,
     id: Arc<str>,
     name: Arc<str>,
     source: Arc<str>,
@@ -123,6 +137,8 @@ impl ConfigurationModule {
         execution: ModuleExecution,
     ) -> Self {
         Self {
+            source_is_extension: false,
+            own_extension_safe_mode: None,
             id: Arc::from(id.into()),
             name: Arc::from(name.into()),
             source: Arc::from(source.into()),
@@ -131,6 +147,39 @@ impl ConfigurationModule {
             imports: Arc::from([]),
             owner: None,
         }
+    }
+
+    /// Сохраняет происхождение окончательного текста модуля. Загрузчик
+    /// отмечает расширение только при фактической замене исходного текста.
+    /// Отдельная политика собственного события при этом снимается.
+    #[must_use]
+    pub const fn with_extension_source(mut self, extension: bool) -> Self {
+        self.source_is_extension = extension;
+        self.own_extension_safe_mode = None;
+        self
+    }
+
+    /// Сохраняет настройку безопасности источника собственного объекта расширения.
+    /// Настройка относится к окончательному тексту, а не к имени или владельцу.
+    #[must_use]
+    pub const fn with_own_extension_source(mut self, safe_mode: bool) -> Self {
+        self.source_is_extension = true;
+        self.own_extension_safe_mode = Some(safe_mode);
+        self
+    }
+
+    /// Возвращает известную настройку собственного источника расширения.
+    /// `None` не означает выключенный режим: собственная политика не задана.
+    #[must_use]
+    pub const fn own_extension_safe_mode(&self) -> Option<bool> {
+        self.own_extension_safe_mode
+    }
+
+    /// Возвращает признак текста из расширения. Новый модуль по умолчанию
+    /// принадлежит основной конфигурации; имя и владелец признак не определяют.
+    #[must_use]
+    pub const fn source_is_extension(&self) -> bool {
+        self.source_is_extension
     }
 
     /// Задаёт импорты модуля целиком.
@@ -196,6 +245,8 @@ impl ConfigurationModule {
 pub enum ModuleKind {
     /// Модуль сеанса.
     Session,
+    /// Модуль управляемой формы; не входит в серверный граф запуска сеанса.
+    Form,
     /// Общий модуль.
     Common,
     /// Модуль менеджера объекта метаданных.
@@ -391,3 +442,5 @@ impl Error for SnapshotError {}
 #[cfg(test)]
 #[path = "snapshot_tests.rs"]
 mod tests;
+
+pub use artifacts::decode_configuration_text;
