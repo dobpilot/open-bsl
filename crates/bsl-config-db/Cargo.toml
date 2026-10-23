@@ -12,3 +12,4 @@ bsl-syntax = { path = "../bsl-syntax" }
 open-bsl = { path = "../open-bsl" }
 open-sdbl = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.9.44" }
 open-sdbl-db = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.9.44" }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }

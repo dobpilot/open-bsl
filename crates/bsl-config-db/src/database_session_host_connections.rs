@@ -1,4 +1,4 @@
-//! Авторизация полного снимка реальных сеансов текущего CLI-хоста.
+//! Авторизация полного снимка реальных сеансов текущего хоста.
 
 use bsl_session::InfoBaseConnection;
 use open_sdbl::metadata::{Guid, Right};
@@ -42,5 +42,5 @@ pub(super) fn computer_name() -> Result<String, String> {
 }
 
 #[cfg(test)]
-#[path = "config_db_host_connections_tests.rs"]
+#[path = "database_session_host_connections_tests.rs"]
 mod tests;

@@ -222,7 +222,6 @@ dependencies = [
  "open-bsl",
  "open-sdbl",
  "open-sdbl-db",
- "rustls",
  "rustyline",
  "serde_json",
 ]
@@ -253,6 +252,7 @@ dependencies = [
  "open-bsl",
  "open-sdbl",
  "open-sdbl-db",
+ "rustls",
 ]
 
 [[package]]

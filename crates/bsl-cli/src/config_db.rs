@@ -3,12 +3,6 @@
 #[path = "config_db_files.rs"]
 mod files;
 
-#[path = "config_db_language.rs"]
-mod language;
-
-#[path = "config_db_host_connections.rs"]
-mod host_connections;
-
 #[cfg(test)]
 #[path = "config_db_session_kind_tests.rs"]
 mod session_kind_tests;
@@ -306,23 +300,8 @@ fn startup_timing(stage: &str, start: std::time::Instant) {
 }
 
 fn run_in_session(path: &str, arguments: Vec<String>, options: &Options) -> Result<(), String> {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-    use std::sync::Arc;
-
-    use bsl_config_db::{
-        DatabaseConfigurationSource, DatabaseDataAccess, LoadOptions, principal_candidates,
-    };
-    use bsl_session::{SessionFactory, SessionResources, select_principal};
-    use open_bsl::ConfigurationSource;
-    use open_sdbl::metadata::Guid;
-    use open_sdbl_db::{AccessStore, BlockingDatabaseSession, Limits};
-
     let source = std::fs::read_to_string(path)
         .map_err(|error| format!("не удалось прочитать «{path}»: {error}"))?;
-    // В CLI вместе с `open-sdbl-db` связан HTTP-компонент. Их признаки
-    // Rustls включают два провайдера, поэтому выбор для процесса явный.
-    let _ = rustls::crypto::ring::default_provider().install_default();
     let file_source = options
         .file_source
         .as_ref()
@@ -342,174 +321,30 @@ fn run_in_session(path: &str, arguments: Vec<String>, options: &Options) -> Resu
         .unwrap_or_default();
     let connection = database_connection(options);
     let credentials = database_credentials(options.provider)?;
-    let phase = std::time::Instant::now();
-    let acquire = if file_source.is_some() {
-        DatabaseConfigurationSource::acquire_orm
-    } else {
-        DatabaseConfigurationSource::acquire
-    };
-    let configuration_source = Arc::new(acquire(
-        BlockingDatabaseSession::connect(&connection, &credentials, Limits::default())
-            .map_err(|error| error.to_string())?,
-        LoadOptions {
-            decompile_protected_modules: options.decompile_protected_modules,
+    let mut session = bsl_config_db::open_database_session(
+        &connection,
+        &credentials,
+        &source,
+        bsl_config_db::DatabaseSessionOptions {
+            load: bsl_config_db::LoadOptions {
+                decompile_protected_modules: options.decompile_protected_modules,
+            },
+            file_source,
+            extension_sources,
+            principal: options.principal.clone(),
+            session_kind: options.session_kind,
+            platform_version: options.platform_version.clone(),
+            infobase_connection_string: options.infobase_connection_string.clone(),
+            locale_code: options.locale_code.clone(),
+            infobase_locale_code: options.infobase_locale_code.clone(),
+            system_language: options.system_language.clone(),
+            application_name: "bsl-cli".into(),
+            arguments,
+            event_log_writer: Some(std::rc::Rc::new(
+                crate::config_db_event_log::CliEventLogWriter,
+            )),
         },
-    )?);
-    startup_timing("cli.acquire", phase);
-    let phase = std::time::Instant::now();
-    let mut catalog = configuration_source.metadata_catalog()?;
-    let executable_source: Arc<dyn open_bsl::ConfigurationSource> =
-        if let Some(file_source) = file_source {
-            let bound: Arc<dyn open_bsl::ConfigurationSource> =
-                Arc::new(open_bsl::BoundConfigurationSource::new(
-                    file_source,
-                    catalog
-                        .configuration_object_id()
-                        .ok_or("нет UUID корневого объекта БД")?,
-                    configuration_source.index().identity(),
-                )?);
-            let selected = configuration_source.bind_file_sources(bound, extension_sources)?;
-            catalog = catalog.with_file_source(selected.clone())?;
-            selected
-        } else {
-            configuration_source.clone()
-        };
-    let metadata = configuration_source.metadata_snapshot(&[])?;
-    let mut access = AccessStore::new(&metadata);
-    configuration_source.ensure_users(&mut access)?;
-    let users = access
-        .users()
-        .ok_or_else(|| "список пользователей базы не загружен".to_string())?;
-    let candidates = principal_candidates(users);
-    let selected = (!candidates.is_empty())
-        .then(|| {
-            select_principal(
-                &candidates,
-                options.principal.as_deref(),
-                std::iter::empty(),
-            )
-        })
-        .transpose()
-        .map_err(|error| error.to_string())?;
-    startup_timing("cli.decode", phase);
-    let phase = std::time::Instant::now();
-    let principal = match selected {
-        Some(principal) => principal,
-        None => select_principal(
-            &candidates,
-            options.principal.as_deref(),
-            catalog.main_role_ids().map(str::to_string),
-        )
-        .map_err(|error| error.to_string())?,
-    };
-    // Неизвестный формат записи отличается от известного отсутствия выбора.
-    // Язык фиксируем до запуска исходного модуля и открытия нового сеанса.
-    let selected_language = access
-        .users()
-        .and_then(|users| {
-            users
-                .iter()
-                .find(|user| user.data.id.as_str() == principal.id())
-        })
-        .and_then(|user| user.data.interface_language.as_ref());
-    let principal = language::resolve(principal, selected_language, &catalog)?;
-    let role_ids = principal
-        .role_ids()
-        .map(str::parse::<Guid>)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())?;
-    let missing = configuration_source.ensure_rights(&mut access, &role_ids)?;
-    if !missing.is_empty() {
-        return Err(format!(
-            "права ролей отсутствуют: {}",
-            missing
-                .iter()
-                .map(|role| access.role_name(role))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    }
-
-    // Источник конфигурации держит отдельное соединение для поздних чтений.
-    // В снимок прикладных сеансов входит только открываемый ниже Session.
-    let computer_name = host_connections::computer_name()?;
-    let connections = host_connections::authorized_snapshot(
-        &access,
-        &role_ids,
-        catalog.configuration_object_id(),
-        [bsl_session::InfoBaseConnection::new(
-            1,
-            "bsl-cli",
-            &computer_name,
-        )],
     )?;
-
-    startup_timing("cli.access", phase);
-    let phase = std::time::Instant::now();
-    let factory = SessionFactory::new_with_source(
-        executable_source,
-        Arc::new(catalog),
-        "МодульСеанса",
-        options.session_kind,
-        options.platform_version.clone(),
-        [source.clone()],
-    )
-    .map_err(|error| error.to_string())?;
-    startup_timing("cli.factory", phase);
-    let phase = std::time::Instant::now();
-    let factory = if let Some(value) = &options.infobase_connection_string {
-        factory
-            .with_connection_string(value.clone())
-            .map_err(|error| error.to_string())?
-    } else {
-        factory
-    };
-    let connection = Rc::new(RefCell::new(
-        BlockingDatabaseSession::connect(&connection, &credentials, Limits::default())
-            .map_err(|error| error.to_string())?,
-    ));
-    let data_access = Rc::new(
-        DatabaseDataAccess::new(Rc::clone(&connection), metadata, access, &principal)
-            .with_configuration_source(configuration_source),
-    );
-    // CLI присваивает начало своему сеансу непосредственно перед открытием.
-    // Преобразование совпадает с локальной датой стандартного host-окружения.
-    let session_started = open_bsl::local_date_from_utc_seconds(
-        open_bsl::Clock::unix_millis(&mut open_bsl::SystemClock).div_euclid(1000),
-        "НачалоСеанса",
-        &open_bsl::SystemTimeZone::new(),
-    )
-    .map_err(|error| error.to_string())?;
-    let mut resources = SessionResources::new(Box::new(connection), 1)
-        .with_session_started(session_started)
-        .with_computer_name(computer_name)
-        // Это начальное состояние нового сеанса CLI, а не свойство снимка базы.
-        .with_database_configuration_changed_dynamically(false)
-        .with_arguments(arguments)
-        .with_data_access(data_access.clone())
-        .with_client_settings_adapter(data_access)
-        .with_event_log_writer(Rc::new(crate::config_db_event_log::CliEventLogWriter))
-        .with_current_client_interface_variant(
-            open_bsl::EnumValue::ClientApplicationInterfaceVariantTaxi,
-        );
-    if let Some(connections) = connections {
-        resources = resources.with_connections(connections);
-    }
-    if let Some(code) = &options.locale_code {
-        resources = resources.with_locale_code(code.as_str());
-    }
-    if let Some(code) = &options.infobase_locale_code {
-        resources = resources.with_infobase_locale_code(code.as_str());
-    }
-    if let Some(language) = &options.system_language {
-        resources = resources.with_system_language(language.as_str());
-    }
-    startup_timing("cli.resources", phase);
-    let phase = std::time::Instant::now();
-    let mut session = factory
-        .open(principal, resources)
-        .map_err(|error| error.to_string())?;
-    startup_timing("cli.session_open", phase);
     let phase = std::time::Instant::now();
     let result = session.execute(&source).map_err(|error| error.to_string());
     startup_timing("cli.execute", phase);

@@ -18,7 +18,6 @@ bsl-session = { path = "../bsl-session" }
 bsl-config-db = { path = "../bsl-config-db" }
 open-sdbl = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.9.44" }
 open-sdbl-db = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.9.44" }
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # Единственная внешняя зависимость всего рабочего пространства сверх
 # num-bigint: сырой режим терминала, редактирование строки и история для
 # REPL. Подсветку и дополнение реализуем сами через её трейты Highlighter и

@@ -25,6 +25,8 @@ mod scsu;
 mod user_separation;
 
 pub use data_access::DatabaseDataAccess;
+mod database_session;
+pub use database_session::{DatabaseSessionOptions, open_database_session};
 
 use std::{collections::HashMap, error::Error, fmt};
 

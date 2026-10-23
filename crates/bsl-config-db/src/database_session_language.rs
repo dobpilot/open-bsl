@@ -1,4 +1,4 @@
-//! Фиксация приобретённого языка пользователя перед запуском сеанса CLI.
+//! Фиксация приобретённого языка пользователя перед открытием сеанса.
 
 use bsl_orm::{MetadataCatalog, MetadataKind, Principal};
 use open_sdbl::metadata::Guid;
@@ -27,5 +27,5 @@ pub(super) fn resolve(
 }
 
 #[cfg(test)]
-#[path = "config_db_language_tests.rs"]
+#[path = "database_session_language_tests.rs"]
 mod tests;
