@@ -1180,7 +1180,6 @@ impl BuiltinFn {
                 | BuiltinFn::BinDir
                 | BuiltinFn::PeriodPresentation
                 | BuiltinFn::NumberInWords
-                | BuiltinFn::Title
                 | BuiltinFn::GetAvailableTimeZones
         )
     }
@@ -1820,8 +1819,7 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         | BuiltinFn::EventLogEventPresentation
         | BuiltinFn::BinDir
         | BuiltinFn::PeriodPresentation
-        | BuiltinFn::NumberInWords
-        | BuiltinFn::Title) => Err(crate::declared_only_error(f.name())),
+        | BuiltinFn::NumberInWords) => Err(crate::declared_only_error(f.name())),
         BuiltinFn::StrLen => Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
             args[0].str_len()? as i64,
         ))),
@@ -1830,6 +1828,7 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::Mid => args[0].str_mid(&args[1], &args[2]),
         BuiltinFn::Upper => args[0].str_upper(),
         BuiltinFn::Lower => args[0].str_lower(),
+        BuiltinFn::Title => args[0].str_title(),
         BuiltinFn::TrimAll => args[0].str_trim_all(),
         BuiltinFn::TrimLeft => args[0].str_trim_left(),
         BuiltinFn::TrimRight => args[0].str_trim_right(),

@@ -5691,6 +5691,14 @@ fn call_builtin_with_format(
             };
             Ok(BslValue::number_from_i64(result))
         }
+        // Измерено (`measure-title-case.bsl`): `ТРег` приводит любой
+        // аргумент обычной `Строка` — `ТРег(1000)` даёт `1 000`.
+        BuiltinFn::Title => {
+            let text = format_value_in_context(&args[0], None, runtime_shapes, host)?;
+            Ok(BslValue::Str(bsl_rt::BslString::from_str(
+                &bsl_rt::title_case(&text),
+            )))
+        }
         BuiltinFn::StrOccurrenceCount => {
             let text = bsl_rt::BslString::from_str(&format_value_in_context(
                 &args[0],

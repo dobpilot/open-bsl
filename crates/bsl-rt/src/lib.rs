@@ -49,6 +49,7 @@ mod temp_storage;
 #[cfg(target_os = "linux")]
 mod temporary_file_access;
 mod temporary_files;
+mod title_case;
 mod transferable_file_description;
 mod type_description;
 mod types;
@@ -165,6 +166,7 @@ pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::BslString;
 pub use table::{ColumnType, ValueTableData, adjust_to_types};
+pub use title_case::title_case;
 mod configuration_instance;
 pub use configuration_instance::ConfigurationInstance;
 pub use temporary_files::{TemporaryFileCleanup, TemporaryFileRegistry, TemporaryFileResource};

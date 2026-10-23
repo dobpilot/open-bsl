@@ -83,6 +83,14 @@ impl BslValue {
         Ok(BslValue::Str(self.string_for_case("НРег")?.to_lowercase()))
     }
 
+    /// `ТРег` над строкой. Приведение других значений через `Строка` делает
+    /// вызывающий, у которого есть форматтер (см. путь VM).
+    pub fn str_title(&self) -> RtResult<Self> {
+        Ok(BslValue::Str(BslString::from_str(&crate::title_case(
+            &self.as_str("ТРег")?.to_string(),
+        ))))
+    }
+
     pub fn str_trim_all(&self) -> RtResult<Self> {
         Ok(BslValue::Str(self.as_str("СокрЛП")?.trim()))
     }

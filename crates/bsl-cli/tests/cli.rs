@@ -623,3 +623,12 @@ fn declared_only_function_and_constructor_compile_and_raise_the_uniform_error() 
         "{out}"
     );
 }
+
+#[test]
+fn title_case_matches_the_platform_oracle() {
+    let out = stdout_of(&run(&[measure("measure-title-case.bsl").to_str().unwrap()]));
+    assert_eq!(
+        out,
+        include_str!("../../../tests/conformance/measure/measure-title-case.platform.txt")
+    );
+}
