@@ -102,6 +102,12 @@ identical, `step_cold` 0xa0 bytes smaller.
 - Integration tests that are one file per probe are merged into table-driven
   targets per crate: today ~475 test binaries need more than 55 GB of
   `target/` for one debug test run.
+- The per-lexer keyword cache stays: lexing every committed `.bsl` file five
+  times costs 2.86·10⁹ `instructions:u` with it and 4.23·10⁹ without it
+  (+48 %, five alternating pairs, spread under 0.1 %, 2026-10-23). The
+  example `crates/bsl-compiler/examples/name_table_storage.rs` stays too:
+  `docs/research/unf-compilation-oom-1012.md` cites it as the reproducible
+  measurement behind the shared name table.
 - `run-on-1c.sh` gets one generic setup mechanism (a manifest beside each
   probe naming input XML and `ChildObjects` additions); the per-probe
   branches and fixed `/tmp` information bases go away.
