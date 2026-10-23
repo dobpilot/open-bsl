@@ -6,6 +6,9 @@
 
 #![warn(missing_docs)]
 
+mod messages;
+mod planner_item;
+
 use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::fmt;
@@ -20,7 +23,7 @@ use open_bsl::{
     GlobalDescriptor, LibraryDescriptor, MethodDescriptor, ModuleGraphRecipe, ModuleInstance,
     ModuleRecipe, ObjectMembersDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
     State, TypeDescriptor, Value, background_job_type_descriptor, brief_error_description,
-    detailed_error_description, folded_eq,
+    detailed_error_description, fixed_array_from_values, folded_eq, value_list_from_values,
 };
 
 #[derive(Debug, Clone)]
@@ -41,6 +44,7 @@ struct ParameterSlot {
 pub struct SessionParameters {
     handler_module: String,
     slots: RefCell<Vec<ParameterSlot>>,
+    positions: Arc<std::collections::HashMap<String, usize>>,
 }
 
 impl SessionParameters {
@@ -59,11 +63,12 @@ impl SessionParameters {
             return Err(ParameterError::EmptyHandlerModule);
         }
         let mut slots = Vec::<ParameterSlot>::new();
+        let mut positions = std::collections::HashMap::new();
         for name in names {
             if name.is_empty() {
                 return Err(ParameterError::EmptyParameterName);
             }
-            if slots.iter().any(|slot| folded_eq(&slot.name, &name)) {
+            if positions.insert(name.to_uppercase(), slots.len()).is_some() {
                 return Err(ParameterError::DuplicateParameterName(name));
             }
             slots.push(ParameterSlot {
@@ -74,6 +79,7 @@ impl SessionParameters {
         Ok(Self {
             handler_module,
             slots: RefCell::new(slots),
+            positions: Arc::new(positions),
         })
     }
 
@@ -90,7 +96,8 @@ impl SessionParameters {
     /// Возвращает ошибку для имени, которого нет в конфигурации.
     pub fn set(&self, name: &str, value: Value) -> Result<(), ParameterError> {
         let mut slots = self.slots.borrow_mut();
-        let slot = find_slot_mut(&mut slots, name)
+        let slot = self
+            .find_slot_mut(&mut slots, name)
             .ok_or_else(|| ParameterError::UnknownParameter(name.into()))?;
         slot.state = ParameterState::Set(value);
         Ok(())
@@ -104,8 +111,9 @@ impl SessionParameters {
     /// Возвращает ошибку для имени, которого нет в конфигурации.
     pub fn peek(&self, name: &str) -> Result<Option<Value>, ParameterError> {
         let slots = self.slots.borrow();
-        let slot =
-            find_slot(&slots, name).ok_or_else(|| ParameterError::UnknownParameter(name.into()))?;
+        let slot = self
+            .find_slot(&slots, name)
+            .ok_or_else(|| ParameterError::UnknownParameter(name.into()))?;
         Ok(match &slot.state {
             ParameterState::Set(value) => Some(value.clone()),
             ParameterState::Unset | ParameterState::Initializing => None,
@@ -139,6 +147,7 @@ impl SessionParameters {
         Self {
             handler_module: self.handler_module.clone(),
             slots: RefCell::new(slots),
+            positions: Arc::clone(&self.positions),
         }
     }
 
@@ -159,7 +168,8 @@ impl SessionParameters {
             {
                 let mut slots = self.slots.borrow_mut();
                 for name in required {
-                    let slot = find_slot_mut(&mut slots, name)
+                    let slot = self
+                        .find_slot_mut(&mut slots, name)
                         .ok_or_else(|| parameter_access_error(name))?;
                     match slot.state {
                         ParameterState::Unset => slot.state = ParameterState::Initializing,
@@ -178,18 +188,18 @@ impl SessionParameters {
                     .collect(),
             )
         });
-        let result = context.call_configuration_module(
+        let result = context.call_configuration_handler_with_mode(
             &self.handler_module,
             "УстановкаПараметровСеанса",
             vec![argument],
-            None,
+            open_bsl::ConfigurationHandlerEntryMode::Privileged,
         );
 
         if let Some(required) = required {
             let mut slots = self.slots.borrow_mut();
             if result.is_err() {
                 for name in required {
-                    if let Some(slot) = find_slot_mut(&mut slots, name)
+                    if let Some(slot) = self.find_slot_mut(&mut slots, name)
                         && matches!(slot.state, ParameterState::Initializing)
                     {
                         slot.state = ParameterState::Unset;
@@ -197,7 +207,8 @@ impl SessionParameters {
                 }
             } else {
                 for name in required {
-                    let slot = find_slot_mut(&mut slots, name)
+                    let slot = self
+                        .find_slot_mut(&mut slots, name)
                         .ok_or_else(|| parameter_access_error(name))?;
                     if matches!(slot.state, ParameterState::Initializing) {
                         slot.state = ParameterState::Unset;
@@ -209,10 +220,21 @@ impl SessionParameters {
         result.map(|_| ())
     }
 
-    fn get(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<Value> {
+    /// Читает параметр, при необходимости вызывая его выборочную инициализацию.
+    ///
+    /// Адаптер данных использует тот же путь, что и обращение из BSL: цикл,
+    /// неизвестное имя и возврат обработчика без значения остаются ошибками.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку для неизвестного имени, повторного чтения во время
+    /// инициализации или ошибки обработчика модуля сеанса.
+    pub fn get(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<Value> {
         {
             let slots = self.slots.borrow();
-            let slot = find_slot(&slots, name).ok_or_else(|| parameter_access_error(name))?;
+            let slot = self
+                .find_slot(&slots, name)
+                .ok_or_else(|| parameter_access_error(name))?;
             match &slot.state {
                 ParameterState::Set(value) => return Ok(value.clone()),
                 ParameterState::Initializing => return Err(parameter_access_error(name)),
@@ -224,14 +246,24 @@ impl SessionParameters {
             .map_err(|_| parameter_access_error(name))?
             .ok_or_else(|| parameter_access_error(name))
     }
-}
 
-fn find_slot<'a>(slots: &'a [ParameterSlot], name: &str) -> Option<&'a ParameterSlot> {
-    slots.iter().find(|slot| folded_eq(&slot.name, name))
-}
+    // Индекс неизменяем: копия фонового сеанса разделяет только имена и
+    // позиции, а значения и состояния инициализации остаются независимыми.
+    fn find_slot<'a>(&self, slots: &'a [ParameterSlot], name: &str) -> Option<&'a ParameterSlot> {
+        self.positions
+            .get(&name.to_uppercase())
+            .and_then(|&index| slots.get(index))
+    }
 
-fn find_slot_mut<'a>(slots: &'a mut [ParameterSlot], name: &str) -> Option<&'a mut ParameterSlot> {
-    slots.iter_mut().find(|slot| folded_eq(&slot.name, name))
+    fn find_slot_mut<'a>(
+        &self,
+        slots: &'a mut [ParameterSlot],
+        name: &str,
+    ) -> Option<&'a mut ParameterSlot> {
+        self.positions
+            .get(&name.to_uppercase())
+            .and_then(|&index| slots.get_mut(index))
+    }
 }
 
 fn parameter_access_error(name: &str) -> RtError {
@@ -293,6 +325,17 @@ pub enum EventLogLevel {
     Error,
 }
 
+impl EventLogLevel {
+    fn value(self) -> Value {
+        Value::Enum(match self {
+            Self::Note => EnumValue::EventLogLevelNote,
+            Self::Information => EnumValue::EventLogLevelInformation,
+            Self::Warning => EnumValue::EventLogLevelWarning,
+            Self::Error => EnumValue::EventLogLevelError,
+        })
+    }
+}
+
 /// Связь записи журнала регистрации с транзакцией.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventLogTransactionMode {
@@ -314,6 +357,30 @@ pub struct EventLogEntry {
 }
 
 impl EventLogEntry {
+    /// Создаёт запись из подготовленных хостом значений.
+    ///
+    /// Конструктор сохраняет значения без преобразований и не обращается
+    /// к журналу. Для доставки адаптер передаёт запись в `EventLogWriter`
+    /// текущего сеанса.
+    #[must_use]
+    pub fn new(
+        event_name: impl Into<Arc<str>>,
+        level: EventLogLevel,
+        metadata: Value,
+        data: Value,
+        comment: impl Into<Arc<str>>,
+        transaction_mode: EventLogTransactionMode,
+    ) -> Self {
+        Self {
+            event_name: event_name.into(),
+            level,
+            metadata,
+            data,
+            comment: comment.into(),
+            transaction_mode,
+        }
+    }
+
     /// Возвращает имя события.
     #[must_use]
     pub fn event_name(&self) -> &str {
@@ -351,6 +418,36 @@ impl EventLogEntry {
     }
 }
 
+/// Снимок настройки использования одного события журнала регистрации.
+#[derive(Debug, Clone)]
+pub struct EventLogEventUseData {
+    use_event: bool,
+    description: Value,
+}
+
+impl EventLogEventUseData {
+    /// Создаёт снимок настройки события.
+    #[must_use]
+    pub const fn new(use_event: bool, description: Value) -> Self {
+        Self {
+            use_event,
+            description,
+        }
+    }
+
+    /// Возвращает признак регистрации события.
+    #[must_use]
+    pub const fn use_event(&self) -> bool {
+        self.use_event
+    }
+
+    /// Возвращает произвольное описание использования события.
+    #[must_use]
+    pub const fn description(&self) -> &Value {
+        &self.description
+    }
+}
+
 /// Приёмник событий журнала регистрации одного сеанса.
 pub trait EventLogWriter: fmt::Debug {
     /// Записывает одно событие.
@@ -359,6 +456,42 @@ pub trait EventLogWriter: fmt::Debug {
     ///
     /// Возвращает ошибку хоста, проверки прав или хранения журнала.
     fn write(&self, entry: EventLogEntry) -> RtResult<()>;
+
+    /// Читает настройку использования именованного события.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку неизвестного события, проверки прав, хранилища или
+    /// неподдерживаемой операции.
+    fn event_use(&self, _event_name: &str) -> RtResult<EventLogEventUseData> {
+        Err(RtError::DynamicError(
+            "чтение настроек событий журнала регистрации не поддерживается адаптером".into(),
+        ))
+    }
+
+    /// Записывает настройку использования именованного события.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку неизвестного события, проверки прав, хранилища или
+    /// неподдерживаемой операции.
+    fn set_event_use(&self, _event_name: &str, _use: &EventLogEventUseData) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "изменение настроек событий журнала регистрации не поддерживается адаптером".into(),
+        ))
+    }
+
+    /// Возвращает включённые уровни журнала регистрации текущей базы.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав, хранилища или неподдерживаемой
+    /// операции.
+    fn enabled_levels(&self) -> RtResult<Vec<EventLogLevel>> {
+        Err(RtError::DynamicError(
+            "чтение включённых уровней журнала регистрации не поддерживается адаптером".into(),
+        ))
+    }
 }
 
 /// Вид стандартного хранилища настроек.
@@ -370,6 +503,10 @@ pub enum ClientSettingsStorage {
     System,
     /// Стандартное хранилище настроек данных форм.
     FormData,
+    /// Стандартное хранилище пользовательских настроек отчётов.
+    ReportsUser,
+    /// Стандартное хранилище пользовательских настроек динамических списков.
+    DynamicListsUser,
 }
 
 /// Запрос чтения значения из стандартного хранилища настроек.
@@ -484,6 +621,134 @@ impl ClientSettingsSelectRequest {
     }
 }
 
+/// Запрос списка ключей стандартного хранилища настроек.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsListRequest {
+    storage: ClientSettingsStorage,
+    object_key: Arc<str>,
+    user_name: Option<Arc<str>>,
+}
+
+impl ClientSettingsListRequest {
+    /// Возвращает выбранное хранилище.
+    #[must_use]
+    pub const fn storage(&self) -> ClientSettingsStorage {
+        self.storage
+    }
+
+    /// Возвращает ключ объекта.
+    #[must_use]
+    pub fn object_key(&self) -> &str {
+        &self.object_key
+    }
+
+    /// Возвращает явно указанное имя пользователя.
+    #[must_use]
+    pub fn user_name(&self) -> Option<&str> {
+        self.user_name.as_deref()
+    }
+}
+
+/// Запрос описания одной настройки.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsDescriptionRequest {
+    storage: ClientSettingsStorage,
+    object_key: Arc<str>,
+    settings_key: Arc<str>,
+    user_name: Option<Arc<str>>,
+}
+
+impl ClientSettingsDescriptionRequest {
+    /// Возвращает выбранное хранилище.
+    #[must_use]
+    pub const fn storage(&self) -> ClientSettingsStorage {
+        self.storage
+    }
+
+    /// Возвращает ключ объекта.
+    #[must_use]
+    pub fn object_key(&self) -> &str {
+        &self.object_key
+    }
+
+    /// Возвращает ключ настройки.
+    #[must_use]
+    pub fn settings_key(&self) -> &str {
+        &self.settings_key
+    }
+
+    /// Возвращает явно указанное имя пользователя.
+    #[must_use]
+    pub fn user_name(&self) -> Option<&str> {
+        self.user_name.as_deref()
+    }
+}
+
+/// Запрос удаления настроек.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsDeleteRequest {
+    storage: ClientSettingsStorage,
+    object_key: Option<Arc<str>>,
+    settings_key: Option<Arc<str>>,
+    user_name: Option<Arc<str>>,
+}
+
+impl ClientSettingsDeleteRequest {
+    /// Возвращает выбранное хранилище.
+    #[must_use]
+    pub const fn storage(&self) -> ClientSettingsStorage {
+        self.storage
+    }
+
+    /// Возвращает ключ объекта либо `None` для всех объектов.
+    #[must_use]
+    pub fn object_key(&self) -> Option<&str> {
+        self.object_key.as_deref()
+    }
+
+    /// Возвращает ключ настройки либо `None` для всех ключей.
+    #[must_use]
+    pub fn settings_key(&self) -> Option<&str> {
+        self.settings_key.as_deref()
+    }
+
+    /// Возвращает имя пользователя либо `None` для всех пользователей.
+    #[must_use]
+    pub fn user_name(&self) -> Option<&str> {
+        self.user_name.as_deref()
+    }
+}
+
+/// Данные объекта `ОписаниеНастроек`, прочитанные провайдером.
+#[derive(Debug, Clone)]
+pub struct ClientSettingsDescription {
+    object_key: Value,
+    settings_key: Value,
+    user: Value,
+    presentation: Value,
+    additional_properties: Value,
+}
+
+impl ClientSettingsDescription {
+    /// Создаёт описание из значений провайдера.
+    #[must_use]
+    pub const fn new(
+        object_key: Value,
+        settings_key: Value,
+        user: Value,
+        presentation: Value,
+        additional_properties: Value,
+    ) -> Self {
+        Self {
+            object_key,
+            settings_key,
+            user,
+            presentation,
+            additional_properties,
+        }
+    }
+}
+
 /// Одна строка выборки стандартного хранилища настроек.
 #[derive(Debug, Clone)]
 pub struct ClientSettingsEntry {
@@ -581,6 +846,23 @@ pub trait ClientSettingsAdapter: fmt::Debug {
         request: &ClientSettingsLoadRequest,
     ) -> RtResult<Option<Value>>;
 
+    /// Загружает настройку в контексте текущего вызова сеанса.
+    ///
+    /// Контекст позволяет адаптеру читать параметры разделения и создавать
+    /// значения в текущих таблицах имён. По умолчанию вызывает [`Self::load`].
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав, доступа или декодирования значения.
+    fn load_with_context(
+        &self,
+        principal: &Principal,
+        request: &ClientSettingsLoadRequest,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<Option<Value>> {
+        self.load(principal, request)
+    }
+
     /// Сохраняет настройку.
     ///
     /// # Errors
@@ -598,6 +880,54 @@ pub trait ClientSettingsAdapter: fmt::Debug {
         principal: &Principal,
         request: &ClientSettingsSelectRequest,
     ) -> RtResult<Vec<ClientSettingsEntry>>;
+
+    /// Возвращает ключи настроек одного объекта.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав, доступа или неподдерживаемой
+    /// операции.
+    fn list(
+        &self,
+        _principal: &Principal,
+        _request: &ClientSettingsListRequest,
+    ) -> RtResult<Vec<String>> {
+        Err(RtError::DynamicError(
+            "чтение списка стандартного хранилища настроек не поддерживается адаптером".into(),
+        ))
+    }
+
+    /// Возвращает описание одной настройки.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку отсутствия настройки, проверки прав, доступа или
+    /// неподдерживаемой операции.
+    fn description(
+        &self,
+        _principal: &Principal,
+        _request: &ClientSettingsDescriptionRequest,
+    ) -> RtResult<ClientSettingsDescription> {
+        Err(RtError::DynamicError(
+            "чтение описания стандартного хранилища настроек не поддерживается адаптером".into(),
+        ))
+    }
+
+    /// Удаляет настройки, подходящие под три селектора запроса.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку проверки прав, доступа или неподдерживаемой
+    /// операции.
+    fn delete(
+        &self,
+        _principal: &Principal,
+        _request: &ClientSettingsDeleteRequest,
+    ) -> RtResult<()> {
+        Err(RtError::DynamicError(
+            "удаление из стандартного хранилища настроек не поддерживается адаптером".into(),
+        ))
+    }
 
     /// Читает состав форм начальной страницы текущего пользователя.
     ///
@@ -672,10 +1002,65 @@ impl ErrorProcessingSettingsData {
     }
 }
 
+/// Описание одного экрана, переданное хостом при открытии сеанса клиента.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientDisplayInformation {
+    width: u32,
+    height: u32,
+    dpi: u32,
+}
+
+/// Скорость соединения, которую хост назначил одному клиентскому сеансу.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientConnectionSpeed {
+    /// Низкая скорость соединения.
+    Low,
+    /// Обычная скорость соединения.
+    Normal,
+}
+
+impl ClientConnectionSpeed {
+    const fn value(self) -> EnumValue {
+        match self {
+            Self::Low => EnumValue::ClientConnectionSpeedLow,
+            Self::Normal => EnumValue::ClientConnectionSpeedNormal,
+        }
+    }
+}
+
+impl ClientDisplayInformation {
+    /// Создаёт снимок размеров экрана и плотности пикселей.
+    #[must_use]
+    pub const fn new(width: u32, height: u32, dpi: u32) -> Self {
+        Self { width, height, dpi }
+    }
+
+    /// Возвращает ширину экрана.
+    #[must_use]
+    pub const fn width(self) -> u32 {
+        self.width
+    }
+
+    /// Возвращает высоту экрана.
+    #[must_use]
+    pub const fn height(self) -> u32 {
+        self.height
+    }
+
+    /// Возвращает плотность экрана в точках на дюйм.
+    #[must_use]
+    pub const fn dpi(self) -> u32 {
+        self.dpi
+    }
+}
+
 /// Ресурсы одного открываемого сеанса.
 pub struct SessionResources {
     connection: Box<dyn std::any::Any>,
     connection_number: u64,
+    arguments: Vec<String>,
+    session_number: Option<u64>,
+    session_started: Option<BslDate>,
     data_access: Option<Rc<dyn DataAccess>>,
     connections: Option<Arc<[InfoBaseConnection]>>,
     event_log_writer: Option<Rc<dyn EventLogWriter>>,
@@ -683,6 +1068,14 @@ pub struct SessionResources {
     error_processing_settings: Option<ErrorProcessingSettingsData>,
     database_configuration_changed_dynamically: Option<bool>,
     data_separation_common_attributes: Option<Arc<[Arc<str>]>>,
+    client_displays: Option<Arc<[ClientDisplayInformation]>>,
+    client_connection_speed: Option<ClientConnectionSpeed>,
+    current_client_interface_variant: Option<EnumValue>,
+    computer_name: Option<Arc<str>>,
+    locale_code: Option<Arc<str>>,
+    infobase_locale_code: Option<Arc<str>>,
+    system_language: Option<Arc<str>>,
+    external_resources_mode: Option<ExternalResourcesMode>,
 }
 
 impl SessionResources {
@@ -692,6 +1085,9 @@ impl SessionResources {
         Self {
             connection,
             connection_number,
+            arguments: Vec::new(),
+            session_number: None,
+            session_started: None,
             data_access: None,
             connections: None,
             event_log_writer: None,
@@ -699,13 +1095,48 @@ impl SessionResources {
             error_processing_settings: None,
             database_configuration_changed_dynamically: None,
             data_separation_common_attributes: None,
+            client_displays: None,
+            client_connection_speed: None,
+            current_client_interface_variant: None,
+            computer_name: None,
+            locale_code: None,
+            infobase_locale_code: None,
+            system_language: None,
+            external_resources_mode: None,
         }
+    }
+
+    /// Задаёт аргументы запуска тестового скрипта этого сеанса.
+    #[must_use]
+    pub fn with_arguments(mut self, arguments: Vec<String>) -> Self {
+        self.arguments = arguments;
+        self
     }
 
     /// Подключает адаптер данных этого сеанса.
     #[must_use]
     pub fn with_data_access(mut self, data_access: Rc<dyn DataAccess>) -> Self {
         self.data_access = Some(data_access);
+        self
+    }
+
+    /// Подключает отдельный номер сеанса, назначенный хостом.
+    ///
+    /// Значение проверяется при открытии сеанса и не выводится из номера
+    /// соединения с информационной базой.
+    #[must_use]
+    pub const fn with_session_number(mut self, number: u64) -> Self {
+        self.session_number = Some(number);
+        self
+    }
+
+    /// Задаёт неизменное время начала этого сеанса до его инициализации.
+    ///
+    /// Хост передаёт локальную дату своего сеанса. Значение не выводится
+    /// из времени соединения с БД и не наследуется фоновым сеансом.
+    #[must_use]
+    pub const fn with_session_started(mut self, date: BslDate) -> Self {
+        self.session_started = Some(date);
         self
     }
 
@@ -760,6 +1191,87 @@ impl SessionResources {
             Some(names.into_iter().map(Arc::<str>::from).collect());
         self
     }
+
+    /// Подключает снимок экранов клиента в исходном порядке хоста.
+    #[must_use]
+    pub fn with_client_displays(
+        mut self,
+        displays: impl IntoIterator<Item = ClientDisplayInformation>,
+    ) -> Self {
+        self.client_displays = Some(displays.into_iter().collect());
+        self
+    }
+
+    /// Подключает скорость соединения именно открываемого сеанса.
+    #[must_use]
+    pub const fn with_client_connection_speed(mut self, speed: ClientConnectionSpeed) -> Self {
+        self.client_connection_speed = Some(speed);
+        self
+    }
+
+    /// Передаёт вариант интерфейса именно открываемого сеанса.
+    ///
+    /// Значение должно быть членом `ВариантИнтерфейсаКлиентскогоПриложения`;
+    /// фабрика проверит это до запуска кода конфигурации.
+    #[must_use]
+    pub const fn with_current_client_interface_variant(mut self, variant: EnumValue) -> Self {
+        self.current_client_interface_variant = Some(variant);
+        self
+    }
+
+    /// Подключает сетевое имя машины, исполняющей этот сеанс.
+    #[must_use]
+    pub fn with_computer_name(mut self, name: impl Into<Arc<str>>) -> Self {
+        self.computer_name = Some(name.into());
+        self
+    }
+
+    /// Задаёт код локализации только для открываемого сеанса.
+    #[must_use]
+    pub fn with_locale_code(mut self, code: impl Into<Arc<str>>) -> Self {
+        self.locale_code = Some(code.into());
+        self
+    }
+
+    /// Задаёт код локализации информационной базы для открываемого сеанса.
+    #[must_use]
+    pub fn with_infobase_locale_code(mut self, code: impl Into<Arc<str>>) -> Self {
+        self.infobase_locale_code = Some(code.into());
+        self
+    }
+
+    /// Задаёт язык системы только для открываемого сеанса.
+    #[must_use]
+    pub fn with_system_language(mut self, language: impl Into<Arc<str>>) -> Self {
+        self.system_language = Some(language.into());
+        self
+    }
+
+    /// Задаёт режим внешних ресурсов этого сеанса вместо стандартного `D`.
+    #[must_use]
+    pub fn with_external_resources_mode(mut self, mode: ExternalResourcesMode) -> Self {
+        self.external_resources_mode = Some(mode);
+        self
+    }
+}
+
+/// Режим работы с внешними ресурсами текущего сеанса.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExternalResourcesMode {
+    /// Стандартный режим `D`.
+    Default,
+    /// Альтернативный режим `A`.
+    Alternative,
+}
+
+impl ExternalResourcesMode {
+    const fn code(self) -> &'static str {
+        match self {
+            Self::Default => "D",
+            // НЕ ИЗМЕРЕНО(SESSION.EXTERNAL_RESOURCES_ALTERNATIVE_MODE)
+            Self::Alternative => "A",
+        }
+    }
 }
 
 /// Дополнение [`bsl_orm::SessionData`] для runtime сеанса.
@@ -770,12 +1282,22 @@ pub struct SessionRuntime {
     platform_version: Arc<str>,
     connection_string: Option<Arc<str>>,
     connection_number: u64,
+    session_number: Option<u64>,
+    session_started: Option<BslDate>,
     connections: Option<Arc<[InfoBaseConnection]>>,
     event_log_writer: Option<Rc<dyn EventLogWriter>>,
     client_settings: Option<Rc<dyn ClientSettingsAdapter>>,
     error_processing_settings: Option<ErrorProcessingSettingsData>,
     database_configuration_changed_dynamically: Option<bool>,
     data_separation_common_attributes: Option<Arc<[Arc<str>]>>,
+    client_displays: Option<Arc<[ClientDisplayInformation]>>,
+    client_connection_speed: Option<ClientConnectionSpeed>,
+    current_client_interface_variant: Option<EnumValue>,
+    computer_name: Option<Arc<str>>,
+    locale_code: Option<Arc<str>>,
+    infobase_locale_code: Option<Arc<str>>,
+    system_language: Option<Arc<str>>,
+    external_resources_mode: Option<ExternalResourcesMode>,
     background_method: Option<Arc<str>>,
 }
 
@@ -802,6 +1324,12 @@ impl SessionRuntime {
     #[must_use]
     pub const fn connection_number(&self) -> u64 {
         self.connection_number
+    }
+
+    /// Возвращает номер текущего сеанса, если хост его передал.
+    #[must_use]
+    pub const fn session_number(&self) -> Option<u64> {
+        self.session_number
     }
 
     /// Возвращает разрешённый текущему пользователю снимок соединений.
@@ -848,6 +1376,50 @@ impl SessionRuntime {
     #[must_use]
     pub fn background_method(&self) -> Option<&str> {
         self.background_method.as_deref()
+    }
+
+    /// Возвращает снимок экранов, если хост передал его сеансу клиента.
+    #[must_use]
+    pub fn client_displays(&self) -> Option<&[ClientDisplayInformation]> {
+        self.client_displays.as_deref()
+    }
+
+    /// Возвращает скорость соединения, назначенную этому сеансу хостом.
+    #[must_use]
+    pub const fn client_connection_speed(&self) -> Option<ClientConnectionSpeed> {
+        self.client_connection_speed
+    }
+
+    /// Возвращает сетевое имя машины текущего сеанса.
+    #[must_use]
+    pub fn computer_name(&self) -> Option<&str> {
+        self.computer_name.as_deref()
+    }
+
+    /// Возвращает код локализации, заданный для этого сеанса.
+    #[must_use]
+    pub fn locale_code(&self) -> Option<&str> {
+        self.locale_code.as_deref()
+    }
+
+    /// Возвращает код локализации информационной базы, переданный хостом.
+    #[must_use]
+    pub fn infobase_locale_code(&self) -> Option<&str> {
+        self.infobase_locale_code.as_deref()
+    }
+
+    /// Возвращает язык системы, заданный для этого сеанса.
+    #[must_use]
+    pub fn system_language(&self) -> Option<&str> {
+        self.system_language.as_deref()
+    }
+
+    /// Возвращает режим внешних ресурсов текущего сеанса.
+    #[must_use]
+    pub fn external_resources_mode(&self) -> &str {
+        self.external_resources_mode
+            .unwrap_or(ExternalResourcesMode::Default)
+            .code()
     }
 }
 
@@ -982,12 +1554,13 @@ impl fmt::Display for PrincipalSelectionError {
 impl Error for PrincipalSelectionError {}
 
 /// Скомпилированная конфигурация, из которой открываются изолированные сеансы.
+#[derive(Clone)]
 pub struct SessionFactory {
     engine: Engine,
     catalog: Arc<MetadataCatalog>,
     session_module: String,
     parameter_names: Arc<[String]>,
-    startup: open_bsl::Module,
+    separation_objects: Arc<[usize]>,
     kind: SessionKind,
     platform_version: Arc<str>,
     connection_string: Option<Arc<str>>,
@@ -1009,6 +1582,78 @@ impl SessionFactory {
         kind: SessionKind,
         platform_version: impl Into<String>,
     ) -> Result<Self, SessionError> {
+        Self::new_with_entry_sources(
+            code,
+            catalog,
+            session_module,
+            kind,
+            platform_version,
+            std::iter::empty::<String>(),
+        )
+    }
+
+    /// Компилирует фабрику с зависимостями известных входных BSL-текстов.
+    /// Тексты участвуют только в выборе модулей и не исполняются при создании
+    /// фабрики. Входы не добавляются в исходник модуля сеанса.
+    ///
+    /// # Errors
+    /// Возвращает ошибки [`Self::new`], а также синтаксические и семантические
+    /// ошибки объявленных входных текстов при выборе замыкания.
+    pub fn new_with_entry_sources(
+        code: ConfigurationCodeSnapshot,
+        catalog: Arc<MetadataCatalog>,
+        session_module: &str,
+        kind: SessionKind,
+        platform_version: impl Into<String>,
+        entry_sources: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Result<Self, SessionError> {
+        Self::build_source(
+            Arc::new(open_bsl::SnapshotSource::new(code)),
+            catalog,
+            session_module,
+            kind,
+            platform_version,
+            entry_sources,
+            false,
+        )
+    }
+
+    /// Создаёт фабрику из индекса с подготовкой исходников по обращению.
+    /// В начале подготавливаются модуль сеанса, входные тексты и их зависимости.
+    ///
+    /// # Errors
+    /// Возвращает ошибки идентичности, объявлений, загрузки и подготовки
+    /// достигнутых модулей либо необходимых метаданных.
+    pub fn new_with_source(
+        source: Arc<dyn open_bsl::ConfigurationSource>,
+        catalog: Arc<MetadataCatalog>,
+        session_module: &str,
+        kind: SessionKind,
+        platform_version: impl Into<String>,
+        entry_sources: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Result<Self, SessionError> {
+        Self::build_source(
+            source,
+            catalog,
+            session_module,
+            kind,
+            platform_version,
+            entry_sources,
+            true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_source(
+        source: Arc<dyn open_bsl::ConfigurationSource>,
+        catalog: Arc<MetadataCatalog>,
+        session_module: &str,
+        kind: SessionKind,
+        platform_version: impl Into<String>,
+        entry_sources: impl IntoIterator<Item = impl Into<String>>,
+        on_demand: bool,
+    ) -> Result<Self, SessionError> {
+        let code = source.index();
         let platform_version = platform_version.into();
         if platform_version.is_empty() {
             return Err(SessionError::EmptyPlatformVersion);
@@ -1048,7 +1693,10 @@ impl SessionFactory {
         let modules = code
             .modules()
             .iter()
-            .filter(|module| module.kind() != ModuleKind::Common || module.execution().server())
+            .filter(|module| {
+                module.kind() != ModuleKind::Form
+                    && (module.kind() != ModuleKind::Common || module.execution().server())
+            })
             .map(|module| {
                 let mut imports = Vec::new();
                 for import in module.imports() {
@@ -1068,34 +1716,312 @@ impl SessionFactory {
                             open_bsl::ModuleVisibility::Global
                         }
                         ModuleKind::Common => open_bsl::ModuleVisibility::Named,
-                        // Модуль сеанса видит только синтетический host-entry,
-                        // который запускает обработчик начала сеанса.
+                        // Модуль сеанса закрыт для BSL-импортов; хост
+                        // вызывает обработчик в каталожном экземпляре `State`.
                         ModuleKind::Session => open_bsl::ModuleVisibility::Explicit,
                         _ => open_bsl::ModuleVisibility::Private,
                     },
                     name: module.name().into(),
-                    source: module.source().into(),
+                    source: if on_demand {
+                        String::new()
+                    } else {
+                        source
+                            .module_source(module.id())
+                            .map_err(open_bsl::Error::Configuration)?
+                            .to_string()
+                    },
                     imports,
                 })
             })
             .collect::<Result<Vec<_>, SessionError>>()?;
-        let engine = Engine::builder()
+        // В индексном режиме динамические имена не становятся корнями:
+        // их реальная цель подготавливается при первом обращении.
+        let mut roots = vec![session_module.clone()];
+        if !on_demand {
+            roots.extend(
+                modules
+                    .iter()
+                    .filter(|module| {
+                        matches!(
+                            module.visibility,
+                            open_bsl::ModuleVisibility::Named | open_bsl::ModuleVisibility::Global
+                        )
+                    })
+                    .map(|module| module.name.clone()),
+            );
+        }
+        let mut builder = Engine::builder()
+            .defer_common_module_name_errors(true)
             .register_library(bsl_orm::library())
             .register_library(library())
             // Фабрика исполняет модуль сеанса на сервере. Дефолтный
             // standalone-контекст фасада дополнительно включает внешнее
             // соединение, поэтому его ветви здесь нужно явно выключить.
             .preproc_symbol("ВнешнееСоединение", false)
-            .configuration(ModuleGraphRecipe {
+            .configuration_roots(roots)
+            .configuration_entry_sources(entry_sources);
+        if !on_demand {
+            builder = builder.configuration(ModuleGraphRecipe {
                 modules,
                 eager_init: false,
-            })
-            .configuration_roots([session_module.clone()])
-            .build()?;
-        let startup_source = format!(
-            "Процедура ЗапуститьСеанс() Экспорт\n{session_module}.УстановкаПараметровСеанса(Неопределено);\nКонецПроцедуры"
-        );
-        let startup = engine.compile_entry(&startup_source)?;
+            });
+        }
+        if on_demand {
+            builder = builder
+                .configuration_source(source.clone())
+                .configuration_context_source(Arc::new(source_context::SessionModuleContext::new(
+                    source.index().clone(),
+                    catalog.clone(),
+                )));
+        }
+        for ty in catalog.transferable_value_types() {
+            builder = builder.register_value_type(ty);
+        }
+        for ty in catalog.route_point_reference_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.catalog_selection_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.catalog_object_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.document_object_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog
+            .data_processor_object_types()
+            .chain(catalog.data_processor_tabular_section_types())
+            .chain(catalog.report_object_types())
+            .chain(catalog.report_tabular_section_types())
+        {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.business_process_object_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.characteristic_object_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.information_record_set_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.document_tabular_section_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for ty in catalog.business_process_tabular_section_types() {
+            builder = builder.register_value_type(Arc::clone(ty));
+        }
+        for object in catalog.objects() {
+            if object.kind() == MetadataKind::Catalog
+                && let Some(module) = object.object_module()
+            {
+                builder = builder
+                    .configuration_component_module("Справочники", object.name(), module)
+                    .configuration_property_names(
+                        module,
+                        bsl_orm::catalog_object_receiver_properties()
+                            .iter()
+                            .flat_map(|property| property.names.iter().copied())
+                            .map(str::to_owned)
+                            .chain(
+                                object
+                                    .catalog_attribute_names()
+                                    .into_iter()
+                                    .flatten()
+                                    .cloned(),
+                            )
+                            .chain(
+                                object
+                                    .catalog_common_attributes()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|attribute| attribute.name().to_owned()),
+                            )
+                            .chain(
+                                object
+                                    .catalog_tabular_section_names()
+                                    .into_iter()
+                                    .flatten()
+                                    .cloned(),
+                            ),
+                    )
+                    .configuration_method_context(
+                        module,
+                        bsl_orm::catalog_object_receiver_methods(),
+                    );
+            }
+            if object.kind() == MetadataKind::Document
+                && let Some(module) = object.object_module()
+            {
+                builder = builder
+                    .configuration_component_module("Документы", object.name(), module)
+                    .configuration_property_names(
+                        module,
+                        bsl_orm::document_object_receiver_properties()
+                            .iter()
+                            .flat_map(|property| property.names.iter().copied())
+                            .map(str::to_owned)
+                            .chain(
+                                object
+                                    .document_attributes()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|attribute| attribute.name().to_owned()),
+                            )
+                            .chain(
+                                object
+                                    .document_tabular_sections()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|section| section.name().to_owned()),
+                            ),
+                    )
+                    .configuration_method_context(
+                        module,
+                        bsl_orm::document_object_receiver_methods(),
+                    );
+            }
+            if object.kind() == MetadataKind::BusinessProcess
+                && let Some(module) = object.object_module()
+            {
+                builder = builder
+                    .configuration_component_module("БизнесПроцессы", object.name(), module)
+                    .configuration_property_names(
+                        module,
+                        bsl_orm::business_process_object_receiver_properties()
+                            .iter()
+                            .flat_map(|property| property.names.iter().copied())
+                            .map(str::to_owned)
+                            .chain(
+                                object
+                                    .business_process_attributes()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|attribute| attribute.name().to_owned())
+                                    .chain(
+                                        object
+                                            .business_process_tabular_sections()
+                                            .into_iter()
+                                            .flatten()
+                                            .map(|section| section.name().to_owned()),
+                                    ),
+                            ),
+                    )
+                    .configuration_method_context(
+                        module,
+                        bsl_orm::business_process_object_receiver_methods(),
+                    );
+            }
+            if matches!(
+                object.kind(),
+                MetadataKind::DataProcessor | MetadataKind::Report
+            ) && let Some(module) = object.object_module()
+            {
+                let (global, attributes, sections) = if object.kind() == MetadataKind::Report {
+                    (
+                        "Отчеты",
+                        object.report_attributes(),
+                        object.report_tabular_sections(),
+                    )
+                } else {
+                    (
+                        "Обработки",
+                        object.data_processor_attributes(),
+                        object.data_processor_tabular_sections(),
+                    )
+                };
+                let properties = if object.kind() == MetadataKind::Report {
+                    bsl_orm::report_object_receiver_properties()
+                } else {
+                    &[]
+                };
+                builder = builder
+                    .configuration_component_module(global, object.name(), module)
+                    .configuration_property_names(
+                        module,
+                        properties
+                            .iter()
+                            .flat_map(|property| property.names.iter().copied())
+                            .map(str::to_owned)
+                            .chain(
+                                attributes
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|attribute| attribute.name().to_owned()),
+                            )
+                            .chain(
+                                sections
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|section| section.name().to_owned()),
+                            ),
+                    )
+                    .configuration_method_context(
+                        module,
+                        bsl_orm::data_processor_object_receiver_methods(),
+                    );
+            }
+            if object.kind() == MetadataKind::ChartOfCharacteristicTypes
+                && let Some(module) = object.object_module()
+            {
+                builder = builder
+                    .configuration_component_module(
+                        "ПланыВидовХарактеристик",
+                        object.name(),
+                        module,
+                    )
+                    .configuration_property_names(
+                        module,
+                        bsl_orm::characteristic_object_receiver_properties()
+                            .iter()
+                            .flat_map(|property| property.names.iter().copied())
+                            .map(str::to_owned)
+                            .chain(
+                                object
+                                    .characteristic_attributes()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|attribute| attribute.name().to_owned()),
+                            ),
+                    )
+                    .configuration_method_context(
+                        module,
+                        bsl_orm::characteristic_object_receiver_methods(),
+                    );
+            }
+            if let Some(module) = object.manager_module() {
+                let global = object.kind().collection_name().ok_or_else(|| {
+                    open_bsl::Error::Configuration(format!(
+                        "объект «{}» не имеет коллекции менеджеров",
+                        object.name()
+                    ))
+                })?;
+                builder = builder.configuration_component_module(global, object.name(), module);
+                if matches!(
+                    object.kind(),
+                    MetadataKind::Catalog
+                        | MetadataKind::ChartOfCharacteristicTypes
+                        | MetadataKind::ChartOfAccounts
+                ) {
+                    // Предопределённые имена являются свойствами собственного
+                    // менеджера. Переменные сохраняют обычный приоритет ядра.
+                    builder = builder.configuration_property_names(
+                        module,
+                        object.catalog_predefined_names().iter().cloned(),
+                    );
+                }
+                if object.kind() == MetadataKind::BusinessProcess {
+                    builder = builder
+                        .configuration_property_names(module, ["ТочкиМаршрута", "RoutePoints"]);
+                }
+                let methods = object.kind().receiver_methods();
+                if !methods.is_empty() {
+                    builder = builder.configuration_method_context(module, methods);
+                }
+            }
+        }
+        let engine = builder.build()?;
         let parameter_names = catalog
             .objects()
             .iter()
@@ -1103,16 +2029,38 @@ impl SessionFactory {
             .map(|object| object.name().to_string())
             .collect::<Vec<_>>()
             .into();
+        // Состав каталога неизменяем. Обход всех объектов оплачивает фабрика,
+        // а каждый новый сеанс посещает только связанные разделители.
+        let separation_objects = catalog
+            .objects()
+            .iter()
+            .enumerate()
+            .filter_map(|(index, object)| {
+                object
+                    .common_attribute_separation_parameters()
+                    .map(|_| index)
+            })
+            .collect::<Vec<_>>()
+            .into();
         Ok(Self {
             engine,
             catalog,
             session_module,
             parameter_names,
-            startup,
+            separation_objects,
             kind,
             platform_version: platform_version.into(),
             connection_string: None,
         })
+    }
+
+    /// Выбирает вид создаваемых сеансов с повторным использованием
+    /// скомпилированного серверного контекста.
+    /// Уже открытые сеансы сохраняют свой вид и состояние.
+    #[must_use]
+    pub fn with_kind(mut self, kind: SessionKind) -> Self {
+        self.kind = kind;
+        self
     }
 
     /// Задаёт строку регистрации информационной базы для создаваемых сеансов.
@@ -1189,6 +2137,9 @@ impl SessionFactory {
         let SessionResources {
             connection,
             connection_number,
+            arguments,
+            session_number,
+            session_started,
             data_access,
             connections,
             event_log_writer,
@@ -1196,9 +2147,31 @@ impl SessionFactory {
             error_processing_settings,
             database_configuration_changed_dynamically,
             data_separation_common_attributes,
+            client_displays,
+            client_connection_speed,
+            current_client_interface_variant,
+            computer_name,
+            locale_code,
+            infobase_locale_code,
+            system_language,
+            external_resources_mode,
         } = resources;
         if connection_number == 0 || connection_number > i64::MAX as u64 {
             return Err(SessionError::InvalidConnectionNumber(connection_number));
+        }
+        if let Some(variant) = current_client_interface_variant
+            && !matches!(
+                variant,
+                EnumValue::ClientApplicationInterfaceVariantTaxi
+                    | EnumValue::ClientApplicationInterfaceVariantVersion8_2
+            )
+        {
+            return Err(SessionError::InvalidClientInterfaceVariant);
+        }
+        if let Some(number) = session_number
+            && (number == 0 || number > i64::MAX as u64)
+        {
+            return Err(SessionError::InvalidSessionNumber(number));
         }
         if let Some(connections) = connections.as_deref() {
             for connection in connections {
@@ -1217,10 +2190,20 @@ impl SessionFactory {
         }
         let parameters = match parameters {
             Some(parameters) => parameters,
-            None => Rc::new(SessionParameters::new(
-                self.session_module.clone(),
-                self.parameter_names.iter().cloned(),
-            )?),
+            None => {
+                let parameters = SessionParameters::new(
+                    self.session_module.clone(),
+                    self.parameter_names.iter().cloned(),
+                )?;
+                // Платформа заполняет связанные параметры разделителя до обработчика.
+                // Обычные параметры остаются незаполненными; унаследованные сюда не попадают.
+                initialize_separation_parameters(
+                    &self.catalog,
+                    &self.separation_objects,
+                    &parameters,
+                )?;
+                Rc::new(parameters)
+            }
         };
         let runtime = SessionRuntime {
             parameters: Rc::clone(&parameters),
@@ -1228,26 +2211,56 @@ impl SessionFactory {
             platform_version: Arc::clone(&self.platform_version),
             connection_string: self.connection_string.clone(),
             connection_number,
+            session_number,
+            session_started,
             connections,
             event_log_writer,
             client_settings,
             error_processing_settings,
             database_configuration_changed_dynamically,
             data_separation_common_attributes,
+            client_displays: if self.kind == SessionKind::BackgroundJob {
+                None
+            } else {
+                client_displays
+            },
+            client_connection_speed,
+            current_client_interface_variant,
+            computer_name,
+            locale_code,
+            infobase_locale_code,
+            system_language,
+            external_resources_mode,
             background_method,
         };
+        let system_language = runtime.system_language.clone();
         let mut data = SessionData::new(Arc::clone(&self.catalog), principal.clone())
             .with_extension(Rc::new(runtime));
+        if let Some(language) = system_language {
+            data = data.with_system_language(language);
+        }
         if let Some(data_access) = data_access {
             data = data.with_data_access(data_access);
         }
-        let mut state = self.engine.state_builder().host_data(Rc::new(data)).build();
-        let startup = state.instantiate(&self.startup)?;
-        startup.call(&mut state, "ЗапуститьСеанс", Vec::new())?;
+        let mut state = self
+            .engine
+            .state_builder()
+            .arguments(arguments)
+            .message_sink(Rc::new(messages::SessionMessages::default()))
+            .host_data(Rc::new(data))
+            .build();
+        // НЕ ИЗМЕРЕНО(SESSION.INIT.WEB_PRIVILEGE): автоматический режим
+        // измерен для тонкого клиента и фонового задания; веб-вход требует
+        // отдельного нативного контроля в опубликованной базе.
+        state.call_configuration_handler_with_mode(
+            &self.session_module,
+            "УстановкаПараметровСеанса",
+            vec![Value::Undefined],
+            open_bsl::ConfigurationHandlerEntryMode::Privileged,
+        )?;
         Ok(Session {
             engine: self.engine.clone(),
             state,
-            startup,
             parameters,
             principal,
             connection,
@@ -1256,11 +2269,47 @@ impl SessionFactory {
     }
 }
 
+fn initialize_separation_parameters(
+    catalog: &MetadataCatalog,
+    objects: &[usize],
+    parameters: &SessionParameters,
+) -> Result<(), SessionError> {
+    for &index in objects {
+        let object = &catalog.objects()[index];
+        let Some(settings) = object.common_attribute_separation_parameters() else {
+            continue;
+        };
+        let invalid = || {
+            SessionError::OpenBsl(OpenBslError::Runtime(RtError::DynamicError(format!(
+                "начальное значение параметра разделителя `{}` неизвестно",
+                object.name()
+            ))))
+        };
+        if let Some(id) = &settings.use_parameter {
+            let parameter = catalog.object_by_id(id).ok_or_else(invalid)?;
+            parameters.set(parameter.name(), Value::Boolean(false))?;
+        }
+        if let Some(id) = &settings.value_parameter {
+            let parameter = catalog.object_by_id(id).ok_or_else(invalid)?;
+            let value = match settings.value_types.as_deref() {
+                Some([kind]) if kind.id == open_bsl::TypeRef::Native(open_bsl::TypeId::String) => {
+                    Value::Str("".into())
+                }
+                Some([kind]) if kind.id == open_bsl::TypeRef::Native(open_bsl::TypeId::Number) => {
+                    Value::number_from_i64(0)
+                }
+                _ => return Err(invalid()),
+            };
+            parameters.set(parameter.name(), value)?;
+        }
+    }
+    Ok(())
+}
+
 /// Один запущенный и изолированный сеанс конфигурации.
 pub struct Session {
     engine: Engine,
     state: State,
-    startup: ModuleInstance,
     parameters: Rc<SessionParameters>,
     principal: Principal,
     connection: Box<dyn std::any::Any>,
@@ -1328,13 +2377,6 @@ impl Session {
     pub fn connection<T: std::any::Any>(&self) -> Option<&T> {
         self.connection.downcast_ref()
     }
-
-    /// Подтверждает, что стартовый экземпляр остаётся владельцем общего
-    /// состояния модулей до конца сеанса.
-    #[must_use]
-    pub fn startup_instance(&self) -> &ModuleInstance {
-        &self.startup
-    }
 }
 
 /// Ошибка построения или запуска конфигурационного сеанса.
@@ -1346,6 +2388,10 @@ pub enum SessionError {
     EmptyConnectionString,
     /// Номер соединения не является положительным числом, представимым в BSL.
     InvalidConnectionNumber(u64),
+    /// Номер сеанса не является положительным числом, представимым в BSL.
+    InvalidSessionNumber(u64),
+    /// Вариант интерфейса не принадлежит соответствующему перечислению.
+    InvalidClientInterfaceVariant,
     /// Номер соединения из снимка не представим в BSL.
     InvalidListedConnectionNumber(u64),
     /// В снимке отсутствует соединение создаваемого сеанса.
@@ -1399,6 +2445,15 @@ impl fmt::Display for SessionError {
                 formatter,
                 "номер соединения с информационной базой недопустим: {number}"
             ),
+            Self::InvalidSessionNumber(number) => {
+                write!(
+                    formatter,
+                    "номер сеанса информационной базы недопустим: {number}"
+                )
+            }
+            Self::InvalidClientInterfaceVariant => {
+                formatter.write_str("недопустимый вариант интерфейса клиентского приложения")
+            }
             Self::InvalidListedConnectionNumber(number) => write!(
                 formatter,
                 "снимок содержит недопустимый номер соединения: {number}"
@@ -1495,6 +2550,8 @@ struct SystemInformationObject {
 #[derive(Debug)]
 struct InfoBaseSessionObject {
     background_method: Option<Arc<str>>,
+    session_number: Option<u64>,
+    session_started: Option<BslDate>,
 }
 
 #[derive(Debug)]
@@ -1568,6 +2625,65 @@ struct UnsafeOperationProtectionDescriptionObject {
     warnings: Cell<bool>,
 }
 
+#[derive(Debug)]
+struct EventLogEventUseObject {
+    use_event: Cell<bool>,
+    description: RefCell<Value>,
+}
+
+#[derive(Debug)]
+struct EventLogAccessEventUseDescriptionObject {
+    object: RefCell<Arc<str>>,
+    access_fields: RefCell<Value>,
+    logged_fields: RefCell<Value>,
+}
+
+#[derive(Debug)]
+struct ClientSettingsObject {
+    show_navigation_and_actions_panels: Cell<bool>,
+    show_sections_panel: Cell<bool>,
+    forms_openning_mode: Cell<EnumValue>,
+    interface_variant: Cell<EnumValue>,
+}
+
+#[derive(Debug)]
+struct ClientApplicationObject {
+    kind: SessionKind,
+}
+
+#[derive(Debug)]
+struct CommandInterfaceSettingsObject {
+    sections_panel_representation: Cell<EnumValue>,
+}
+
+#[derive(Debug)]
+struct ClientApplicationInterfaceSettingsObject {
+    content: RefCell<Option<Value>>,
+}
+
+#[derive(Debug)]
+struct ClientApplicationInterfaceContentSettingsObject {
+    top: Value,
+    left: Value,
+    bottom: Value,
+    right: Value,
+}
+
+#[derive(Debug)]
+struct ClientApplicationInterfaceContentSettingsGroupObject {
+    items: RefCell<Vec<Value>>,
+}
+
+#[derive(Debug)]
+struct ClientApplicationInterfaceContentSettingsItemObject {
+    name: Arc<str>,
+}
+
+#[derive(Debug)]
+struct ClientDisplayInformationObject {
+    display: ClientDisplayInformation,
+}
+
 static PARAMETERS_TYPE: TypeDescriptor = TypeDescriptor::new("bsl-session", "ПараметрыСеанса");
 static SYSTEM_INFORMATION_TYPE: TypeDescriptor =
     TypeDescriptor::new("bsl-session", "СистемнаяИнформация");
@@ -1594,6 +2710,12 @@ static STANDARD_SETTINGS_SELECTION_TYPE: TypeDescriptor = TypeDescriptor {
     name: "СтандартноеХранилищеНастроекВыборка",
     type_display: "Standard settings storage Selected data",
     type_names: &["StandardSettingsStorageSelection"],
+};
+static COLLABORATION_CONVERSATION_ID_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ИдентификаторОбсужденияСистемыВзаимодействия",
+    type_display: "CollaborationSystemConversationID",
+    type_names: &["CollaborationSystemConversationID"],
 };
 static HOME_PAGE_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
@@ -1637,6 +2759,123 @@ static UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE: TypeDescriptor = TypeDescri
     type_display: "Unsafe operation protection description",
     type_names: &["UnsafeOperationProtectionDescription"],
 };
+static EVENT_LOG_EVENT_USE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ИспользованиеСобытияЖурналаРегистрации",
+    type_display: "Event log event use",
+    type_names: &["EventLogEventUse"],
+};
+static EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ОписаниеИспользованияСобытияДоступЖурналаРегистрации",
+    type_display: "Description of event log access event use",
+    type_names: &["EventLogAccessEventUseDescription"],
+};
+static CLIENT_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "НастройкиКлиентскогоПриложения",
+    type_display: "Client application settings",
+    type_names: &["ClientSettings"],
+};
+static CLIENT_APPLICATION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "КлиентскоеПриложение",
+    type_display: "Client application",
+    type_names: &["ClientApplication"],
+};
+static COMMAND_INTERFACE_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "НастройкиКомандногоИнтерфейса",
+    type_display: "Command interface settings",
+    type_names: &["CommandInterfaceSettings"],
+};
+static CLIENT_APPLICATION_INTERFACE_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "НастройкиИнтерфейсаКлиентскогоПриложения",
+    type_display: "Panel settings",
+    type_names: &["ClientApplicationInterfaceSettings"],
+};
+static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "НастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+    type_display: "Client application interface composition settings",
+    type_names: &["ClientApplicationInterfaceContentSettings"],
+};
+static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+    type_display: "Client application interface composition settings group",
+    type_names: &["ClientApplicationInterfaceContentSettingsGroup"],
+};
+static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+    type_display: "Client application interface composition settings item",
+    type_names: &["ClientApplicationInterfaceContentSettingsItem"],
+};
+static CLIENT_DISPLAY_INFORMATION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "bsl-session",
+    name: "ИнформацияЭкранаКлиента",
+    type_display: "ClientDisplayInformation",
+    type_names: &["ClientDisplayInformation"],
+};
+
+impl ObjectProtocol for ClientDisplayInformationObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &CLIENT_DISPLAY_INFORMATION_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        CLIENT_DISPLAY_INFORMATION_PROPERTIES
+    }
+}
+
+fn client_display_information(
+    receiver: &dyn ObjectProtocol,
+) -> RtResult<&ClientDisplayInformationObject> {
+    receiver
+        .downcast_ref::<ClientDisplayInformationObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn client_display_width(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(Value::number_from_i64(
+        client_display_information(receiver)?.display.width() as i64,
+    ))
+}
+
+fn client_display_height(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::number_from_i64(
+        client_display_information(receiver)?.display.height() as i64,
+    ))
+}
+
+fn client_display_dpi(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(Value::number_from_i64(
+        client_display_information(receiver)?.display.dpi() as i64,
+    ))
+}
+
+static CLIENT_DISPLAY_INFORMATION_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Ширина", "Width"],
+        get: client_display_width,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Высота", "Height"],
+        get: client_display_height,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["DPI"],
+        get: client_display_dpi,
+        set: None,
+    },
+];
 
 impl ObjectProtocol for ParametersObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -1675,6 +2914,10 @@ impl ObjectProtocol for InfoBaseSessionObject {
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
         INFOBASE_SESSION_METHODS
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        INFOBASE_SESSION_PROPERTIES
     }
 }
 
@@ -1735,6 +2978,96 @@ impl ObjectProtocol for UnsafeOperationProtectionDescriptionObject {
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         UNSAFE_OPERATION_PROTECTION_DESCRIPTION_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for EventLogEventUseObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &EVENT_LOG_EVENT_USE_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        EVENT_LOG_EVENT_USE_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for EventLogAccessEventUseDescriptionObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for ClientSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &CLIENT_SETTINGS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        CLIENT_SETTINGS_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for ClientApplicationObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &CLIENT_APPLICATION_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        CLIENT_APPLICATION_METHODS
+    }
+}
+
+impl ObjectProtocol for CommandInterfaceSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &COMMAND_INTERFACE_SETTINGS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        COMMAND_INTERFACE_SETTINGS_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for ClientApplicationInterfaceSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &CLIENT_APPLICATION_INTERFACE_SETTINGS_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        CLIENT_APPLICATION_INTERFACE_SETTINGS_METHODS
+    }
+}
+
+impl ObjectProtocol for ClientApplicationInterfaceContentSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_PROPERTIES
+    }
+}
+
+impl ObjectProtocol for ClientApplicationInterfaceContentSettingsGroupObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_METHODS
+    }
+}
+
+impl ObjectProtocol for ClientApplicationInterfaceContentSettingsItemObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_PROPERTIES
     }
 }
 
@@ -1839,6 +3172,162 @@ fn current_run_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     }
 }
 
+fn client_application(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(ClientApplicationObject {
+        kind: runtime(ctx)?.kind(),
+    }))
+}
+
+fn client_application_type(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let application = receiver
+        .downcast_ref::<ClientApplicationObject>()
+        .ok_or(RtError::NotAnObject)?;
+    match application.kind {
+        // НЕ ИЗМЕРЕНО(SESSION.CLIENT_APPLICATION.WEB_TYPE) — для веб-клиента
+        // пока нет прямого платформенного прогона.
+        SessionKind::WebClient => Ok(Value::Enum(EnumValue::ClientApplicationTypeWebClient)),
+        SessionKind::ThinClient => Ok(Value::Enum(EnumValue::ClientApplicationTypeThinClient)),
+        SessionKind::BackgroundJob => Ok(Value::Undefined),
+    }
+}
+
+fn client_displays_information(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let runtime = runtime(ctx)?;
+    if runtime.kind() == SessionKind::BackgroundJob {
+        return Ok(Value::Undefined);
+    }
+    let displays = runtime
+        .client_displays()
+        .ok_or_else(|| RtError::DynamicError("снимок экранов клиента не передан хостом".into()))?;
+    Ok(fixed_array_from_values(
+        displays
+            .iter()
+            .map(|display| Value::new_object(ClientDisplayInformationObject { display: *display }))
+            .collect(),
+    ))
+}
+
+fn computer_name(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let name = runtime(ctx)?
+        .computer_name()
+        .ok_or_else(|| RtError::DynamicError("сетевое имя компьютера не передано хостом".into()))?;
+    Ok(Value::Str(name.into()))
+}
+
+fn current_locale_code(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let code = runtime(ctx)?
+        .locale_code()
+        .ok_or_else(|| RtError::DynamicError("код локализации не передан хостом".into()))?;
+    Ok(Value::Str(code.into()))
+}
+
+fn infobase_locale_code(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let code = runtime(ctx)?.infobase_locale_code().ok_or_else(|| {
+        RtError::DynamicError("код локализации информационной базы не передан хостом".into())
+    })?;
+    Ok(Value::Str(code.into()))
+}
+
+fn current_system_language(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let language = runtime(ctx)?
+        .system_language()
+        .ok_or_else(|| RtError::DynamicError("язык системы не передан хостом".into()))?;
+    Ok(Value::Str(language.into()))
+}
+
+fn get_external_resources_mode(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::Str(runtime(ctx)?.external_resources_mode().into()))
+}
+
+fn client_connection_speed(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let speed = runtime(ctx)?.client_connection_speed().ok_or_else(|| {
+        RtError::DynamicError("скорость клиентского соединения не передана хостом".into())
+    })?;
+    Ok(Value::Enum(speed.value()))
+}
+
+fn current_client_interface_variant(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let variant = runtime(ctx)?
+        .current_client_interface_variant
+        .ok_or_else(|| {
+            RtError::DynamicError("вариант интерфейса клиента не передан хостом".into())
+        })?;
+    Ok(Value::Enum(variant))
+}
+
+fn infobase_sessions(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Список сеансов требует права `АктивныеПользователи` и живого снимка
+    // сервера; текущий сеанс не заменяет такой список.
+    Err(RtError::DynamicError(
+        "список сеансов информационной базы не предоставлен хостом".into(),
+    ))
+}
+
+fn scheduled_jobs(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Регламентные задания требуют отдельного планировщика; фоновые
+    // задания не являются его заменой.
+    Err(RtError::DynamicError(
+        "регламентные задания не поддерживаются этим хостом".into(),
+    ))
+}
+
+fn collaboration_system(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Err(RtError::DynamicError(
+        "система взаимодействия не предоставлена хостом".into(),
+    ))
+}
+
+fn construct_collaboration_filter(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Err(RtError::DynamicError(
+        "отбор системы взаимодействия не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_collaboration_conversation_id(
+    _: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    // Идентификатор нельзя подменять строкой: это отдельный тип платформы.
+    Err(RtError::DynamicError(
+        "идентификатор обсуждения системы взаимодействия не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_collaboration_conversation_context(
+    _: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    Err(RtError::DynamicError(
+        "контекст обсуждения системы взаимодействия не поддерживается этим хостом".into(),
+    ))
+}
+
+fn construct_collaboration_application(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Идентификаторы и коллекции приложений — типизированные значения
+    // системы взаимодействия; без её сервиса их нельзя заменять строкой.
+    Err(RtError::DynamicError(
+        "объекты приложений системы взаимодействия не поддерживаются этим хостом".into(),
+    ))
+}
+
+fn construct_server_administration(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // На платформе конструктор сразу подключается к ras. Декларация
+    // позволяет связать исходный модуль, но не подменяет сетевое соединение.
+    Err(RtError::DynamicError(
+        "транспорт администрирования сервера ras не подключён".into(),
+    ))
+}
+
+fn construct_internet_mail_message(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Err(RtError::DynamicError(
+        "интернет-почтовое сообщение не поддерживается этим хостом".into(),
+    ))
+}
+
 fn infobase_connection_string(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     let value = runtime(ctx)?.connection_string().ok_or_else(|| {
         RtError::DynamicError("строка соединения с информационной базой не передана хостом".into())
@@ -1846,10 +3335,25 @@ fn infobase_connection_string(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResul
     Ok(Value::Str(value.into()))
 }
 
+fn infobase_url(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Строка SQL-соединения не содержит клиентский адрес запуска базы.
+    // Подмена её навигационной ссылкой дала бы вызывающему ложный URL.
+    Err(RtError::DynamicError(
+        "навигационная ссылка информационной базы не предоставлена хостом".into(),
+    ))
+}
+
 fn infobase_connection_number(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::number_from_i64(
         runtime(ctx)?.connection_number() as i64
     ))
+}
+
+fn infobase_session_number(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let number = runtime(ctx)?.session_number().ok_or_else(|| {
+        RtError::DynamicError("номер сеанса информационной базы не передан хостом".into())
+    })?;
+    Ok(Value::number_from_i64(number as i64))
 }
 
 fn infobase_connections(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -1917,19 +3421,85 @@ fn write_log_event(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<V
             });
         }
     };
-    let entry = EventLogEntry {
+    let entry = EventLogEntry::new(
         event_name,
-        level: event_log_level(arguments.get(1))?,
-        metadata: arguments.get(2).cloned().unwrap_or(Value::Undefined),
-        data: arguments.get(3).cloned().unwrap_or(Value::Undefined),
+        event_log_level(arguments.get(1))?,
+        arguments.get(2).cloned().unwrap_or(Value::Undefined),
+        arguments.get(3).cloned().unwrap_or(Value::Undefined),
         comment,
-        transaction_mode: event_log_transaction_mode(arguments.get(5))?,
-    };
+        event_log_transaction_mode(arguments.get(5))?,
+    );
     let writer = Rc::clone(runtime(ctx)?.event_log_writer().ok_or_else(|| {
         RtError::DynamicError("журнал регистрации не подключён для текущего сеанса".into())
     })?);
     writer.write(entry)?;
     Ok(Value::Undefined)
+}
+
+fn event_log_event_name(value: &Value, operation: &'static str) -> RtResult<String> {
+    let Value::Str(name) = value else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: operation,
+        });
+    };
+    Ok(name.to_string())
+}
+
+fn get_event_log_event_use(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let name = event_log_event_name(
+        &arguments[0],
+        "ПолучитьИспользованиеСобытияЖурналаРегистрации",
+    )?;
+    let writer = Rc::clone(runtime(ctx)?.event_log_writer().ok_or_else(|| {
+        RtError::DynamicError("журнал регистрации не подключён для текущего сеанса".into())
+    })?);
+    let setting = writer.event_use(&name)?;
+    Ok(Value::new_object(EventLogEventUseObject {
+        use_event: Cell::new(setting.use_event()),
+        description: RefCell::new(setting.description().clone()),
+    }))
+}
+
+fn set_event_log_event_use(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let name = event_log_event_name(
+        &arguments[0],
+        "УстановитьИспользованиеСобытияЖурналаРегистрации",
+    )?;
+    let object = arguments[1]
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<EventLogEventUseObject>())
+        .ok_or(RtError::TypeError {
+            expected: "ИспользованиеСобытияЖурналаРегистрации",
+            op: "УстановитьИспользованиеСобытияЖурналаРегистрации",
+        })?;
+    let setting =
+        EventLogEventUseData::new(object.use_event.get(), object.description.borrow().clone());
+    let writer = Rc::clone(runtime(ctx)?.event_log_writer().ok_or_else(|| {
+        RtError::DynamicError("журнал регистрации не подключён для текущего сеанса".into())
+    })?);
+    writer.set_event_use(&name, &setting)?;
+    Ok(Value::Undefined)
+}
+
+fn get_event_log_using(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let writer = Rc::clone(runtime(ctx)?.event_log_writer().ok_or_else(|| {
+        RtError::DynamicError("журнал регистрации не подключён для текущего сеанса".into())
+    })?);
+    Ok(Value::new_array(
+        writer
+            .enabled_levels()?
+            .into_iter()
+            .map(EventLogLevel::value)
+            .collect(),
+    ))
+}
+
+fn unload_event_log(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Запись отдельных событий не даёт доступа к чтению и выгрузке журнала.
+    Err(RtError::DynamicError(
+        "выгрузка журнала регистрации не поддерживается этим хостом".into(),
+    ))
 }
 
 fn client_settings_context<'a>(
@@ -1996,8 +3566,9 @@ fn load_client_setting(
         user_name: optional_user_name(arguments, 3, OPERATION)?,
     };
     let (principal, adapter) = client_settings_context(ctx)?;
+    let principal = principal.clone();
     Ok(adapter
-        .load(principal, &request)?
+        .load_with_context(&principal, &request, ctx)?
         .unwrap_or(Value::Undefined))
 }
 
@@ -2043,6 +3614,71 @@ fn select_client_settings(
         rows: adapter.select(principal, &request)?.into(),
         position: Cell::new(usize::MAX),
     }))
+}
+
+fn list_client_settings(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    const OPERATION: &str = "ПолучитьСписок";
+    let request = ClientSettingsListRequest {
+        storage: settings_storage(receiver)?.storage,
+        object_key: settings_text(&arguments[0], OPERATION)?,
+        user_name: optional_user_name(arguments, 1, OPERATION)?,
+    };
+    let (principal, adapter) = client_settings_context(ctx)?;
+    let keys = adapter.list(principal, &request)?;
+    Ok(value_list_from_values(
+        keys.into_iter().map(|key| Value::Str(key.as_str().into())),
+    ))
+}
+
+fn describe_client_setting(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    const OPERATION: &str = "ПолучитьОписание";
+    let request = ClientSettingsDescriptionRequest {
+        storage: settings_storage(receiver)?.storage,
+        object_key: settings_text(&arguments[0], OPERATION)?,
+        settings_key: optional_settings_key(arguments, OPERATION)?,
+        user_name: optional_user_name(arguments, 2, OPERATION)?,
+    };
+    let (principal, adapter) = client_settings_context(ctx)?;
+    let description = adapter.description(principal, &request)?;
+    Ok(Value::new_object(SettingsDescriptionObject {
+        object_key: RefCell::new(description.object_key),
+        settings_key: RefCell::new(description.settings_key),
+        user: RefCell::new(description.user),
+        presentation: RefCell::new(description.presentation),
+        additional_properties: description.additional_properties,
+    }))
+}
+
+fn delete_selector(value: &Value, operation: &'static str) -> RtResult<Option<Arc<str>>> {
+    match value {
+        Value::Undefined => Ok(None),
+        value => settings_text(value, operation).map(Some),
+    }
+}
+
+fn delete_client_settings(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    ctx: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    const OPERATION: &str = "Удалить";
+    let request = ClientSettingsDeleteRequest {
+        storage: settings_storage(receiver)?.storage,
+        object_key: delete_selector(&arguments[0], OPERATION)?,
+        settings_key: delete_selector(&arguments[1], OPERATION)?,
+        user_name: delete_selector(&arguments[2], OPERATION)?,
+    };
+    let (principal, adapter) = client_settings_context(ctx)?;
+    adapter.delete(principal, &request)?;
+    Ok(Value::Undefined)
 }
 
 fn next_client_setting(
@@ -2231,6 +3867,145 @@ fn form_data_settings_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<
     }))
 }
 
+fn reports_user_settings_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(StandardSettingsStorageObject {
+        storage: ClientSettingsStorage::ReportsUser,
+    }))
+}
+
+fn reports_variants_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // В конфигурации может быть выбрано собственное хранилище вариантов.
+    // Пока снимок не сообщает этот выбор, стандартное было бы догадкой.
+    Err(RtError::DynamicError(
+        "хранилище вариантов отчетов не определено в снимке конфигурации".into(),
+    ))
+}
+
+fn user_work_history(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // История работы связана с текущим пользователем и его правом сохранения
+    // данных; отсутствие сервиса нельзя подменять пустым менеджером.
+    Err(RtError::DynamicError(
+        "история работы пользователя не предоставлена текущему сеансу".into(),
+    ))
+}
+
+fn deliverable_notification_send(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Отправка уведомлений требует отдельного транспорта; пустой менеджер
+    // скрыл бы отсутствие сервиса текущего сеанса.
+    Err(RtError::DynamicError(
+        "отправка доставляемых уведомлений не предоставлена текущему сеансу".into(),
+    ))
+}
+
+fn crypto_tools(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Без поставщика криптографии нельзя подменять сведения о его модуле
+    // пустым менеджером или данными другого сеанса.
+    Err(RtError::DynamicError(
+        "средства криптографии не предоставлены текущему сеансу".into(),
+    ))
+}
+
+fn get_infobase_time_zone(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Пояс информационной базы — отдельная настройка, которую нельзя
+    // заменять часовым поясом компьютера или текущего сеанса.
+    Err(RtError::DynamicError(
+        "часовой пояс информационной базы не предоставлен текущему сеансу".into(),
+    ))
+}
+
+fn find_marked_for_deletion(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Поиск обязан учитывать права чтения, RLS и разделение данных текущего
+    // сеанса; пустой массив выдал бы отсутствие доступа за отсутствие данных.
+    Err(RtError::DynamicError(
+        "поиск помеченных на удаление объектов не поддерживается текущим сеансом".into(),
+    ))
+}
+
+fn access_parameters(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Результат зависит от полей объекта, прав пользователя или роли и RLS.
+    // Пустая структура ошибочно означала бы отсутствие ограничений.
+    Err(RtError::DynamicError(
+        "параметры доступа для текущего сеанса пока не поддерживаются".into(),
+    ))
+}
+
+fn available_locale_codes(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Список локалей платформы не выводится из локали текущего сеанса.
+    Err(RtError::DynamicError(
+        "доступные коды локализации не предоставлены текущему сеансу".into(),
+    ))
+}
+
+fn full_text_search(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Индекс, права и разделение данных принадлежат текущему сеансу.
+    // Пустой менеджер сообщил бы, что разрешённый поиск ничего не нашёл.
+    Err(RtError::DynamicError(
+        "полнотекстовый поиск не предоставлен текущему сеансу".into(),
+    ))
+}
+
+fn additional_authentication_settings(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Настройки аутентификации принадлежат информационной базе и доступны
+    // только с её разрешениями. Пустой менеджер скрыл бы отсутствие данных.
+    Err(RtError::DynamicError(
+        "дополнительные настройки аутентификации не предоставлены текущему сеансу".into(),
+    ))
+}
+
+fn get_server_path_separator(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    let separator = ctx
+        .files()?
+        .path_separator()
+        .map_err(|error| RtError::IoError(error.to_string()))?;
+    Ok(Value::Str(separator.as_str().into()))
+}
+
+fn get_licensing_client_name(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Имя хранится в информационной базе и доступно только администратору;
+    // значение процесса или пустая строка подменили бы проверку прав.
+    Err(RtError::DynamicError(
+        "имя клиента лицензирования не предоставлено текущему сеансу".into(),
+    ))
+}
+
+fn get_configuration_id(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Платформенный идентификатор зашифрован; GUID метаданных и отпечаток
+    // ресурсов не могут заменить его для проверки лицензии.
+    Err(RtError::DynamicError(
+        "идентификатор конфигурации не предоставлен текущему сеансу".into(),
+    ))
+}
+
+fn get_licensing_client_additional_parameter(
+    _: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    // Дополнительный параметр хранится в базе и доступен администратору.
+    Err(RtError::DynamicError(
+        "дополнительный параметр клиента лицензирования не предоставлен текущему сеансу".into(),
+    ))
+}
+
+fn set_licensing_client_parameters(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Успех без записи в базу ложно подтвердил бы смену учётных данных.
+    Err(RtError::DynamicError(
+        "запись настроек клиента лицензирования не предоставлена текущему сеансу".into(),
+    ))
+}
+
+fn locale_code_presentation(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Представление зависит от платформенного каталога локалей.
+    Err(RtError::DynamicError(
+        "представление кода локализации не предоставлено текущему сеансу".into(),
+    ))
+}
+
+fn dynamic_lists_user_settings_storage(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(StandardSettingsStorageObject {
+        storage: ClientSettingsStorage::DynamicListsUser,
+    }))
+}
+
 fn infobase_connection_number_property(
     receiver: &dyn ObjectProtocol,
     _: &mut CallContext<'_>,
@@ -2315,20 +4090,32 @@ fn set_data_separation_safe_mode(
     ctx: &mut CallContext<'_>,
     arguments: &[Value],
 ) -> RtResult<Value> {
-    const OPERATION: &str = "УстановитьБезопасныйРежимРазделенияДанных";
     let Value::Str(common_attribute) = &arguments[0] else {
         return Err(RtError::TypeError {
             expected: "Строка",
-            op: OPERATION,
+            op: "УстановитьБезопасныйРежимРазделенияДанных",
         });
     };
-    let Value::Boolean(enabled) = arguments[1] else {
-        return Err(RtError::TypeError {
+    // Флаг использует измеренное обычное преобразование в Булево;
+    // ошибка преобразования предшествует поиску имени и изменению счётчика.
+    let enabled = arguments[1]
+        .as_condition()
+        .map_err(|_| RtError::TypeError {
             expected: "Булево",
-            op: OPERATION,
-        });
-    };
-    let common_attribute = common_attribute.shared_utf8();
+            op: "УстановитьБезопасныйРежимРазделенияДанных",
+        })?;
+    let common_attribute =
+        checked_data_separation_common_attribute(ctx, common_attribute.shared_utf8())?;
+    // Счётчики кадров, вложенная видимость и очистка измерены на конфигурации
+    // с разделяющим общим реквизитом; наблюдение хоста не подменяет геттер зоны.
+    ctx.set_data_separation_safe_mode(&common_attribute, enabled)?;
+    Ok(Value::Undefined)
+}
+
+fn checked_data_separation_common_attribute(
+    ctx: &CallContext<'_>,
+    common_attribute: Rc<str>,
+) -> RtResult<Rc<str>> {
     let runtime = session_data(ctx)?
         .extension::<SessionRuntime>()
         .ok_or_else(|| RtError::DynamicError("runtime сеанса не подключён".into()))?;
@@ -2345,11 +4132,22 @@ fn set_data_separation_safe_mode(
             ));
         }
     }
-    // НЕ ИЗМЕРЕНО(SECURITY.DATA_SEPARATION_MODE) — счётчик следует
-    // документированным правилам платформы до замера на конфигурации с
-    // общим реквизитом, включённым как разделитель данных.
-    ctx.set_data_separation_safe_mode(&common_attribute, enabled)?;
-    Ok(Value::Undefined)
+    Ok(common_attribute)
+}
+
+fn data_separation_safe_mode(ctx: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let Value::Str(common_attribute) = &arguments[0] else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "БезопасныйРежимРазделенияДанных",
+        });
+    };
+    checked_data_separation_common_attribute(ctx, common_attribute.shared_utf8())?;
+    // Счётчик VM не включает исходный безопасный режим из `default.vrd`.
+    // Без сведений от хоста нельзя выдавать его за ответ платформы.
+    Err(RtError::DynamicError(
+        "безопасный режим разделения данных зоны не передан хостом".into(),
+    ))
 }
 
 fn refresh_reusable_values(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
@@ -2448,7 +4246,35 @@ fn error_settings_service_address(
 fn current_infobase_session(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
     Ok(Value::new_object(InfoBaseSessionObject {
         background_method: runtime(ctx)?.background_method.clone(),
+        session_number: runtime(ctx)?.session_number(),
+        session_started: runtime(ctx)?.session_started,
     }))
+}
+
+fn current_infobase_session_number(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let session = receiver
+        .downcast_ref::<InfoBaseSessionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    let number = session.session_number.ok_or_else(|| {
+        RtError::DynamicError("номер сеанса информационной базы не передан хостом".into())
+    })?;
+    Ok(Value::number_from_i64(number as i64))
+}
+
+fn current_infobase_session_started(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let session = receiver
+        .downcast_ref::<InfoBaseSessionObject>()
+        .ok_or(RtError::NotAnObject)?;
+    let date = session.session_started.ok_or_else(|| {
+        RtError::DynamicError("начало сеанса информационной базы не передано хостом".into())
+    })?;
+    Ok(Value::Date(date))
 }
 
 fn current_background_job(
@@ -2629,6 +4455,567 @@ fn construct_unsafe_operation_protection_description(
             warnings: Cell::new(true),
         },
     ))
+}
+
+fn construct_event_log_event_use(_: &mut CallContext<'_>, arguments: &[Value]) -> RtResult<Value> {
+    let use_event = match arguments.first() {
+        None => true,
+        Some(Value::Boolean(value)) => *value,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: "Новый ИспользованиеСобытияЖурналаРегистрации",
+            });
+        }
+    };
+    let description = arguments.get(1).cloned().unwrap_or(Value::Undefined);
+    Ok(Value::new_object(EventLogEventUseObject {
+        use_event: Cell::new(use_event),
+        description: RefCell::new(description),
+    }))
+}
+
+fn event_log_event_use(receiver: &dyn ObjectProtocol) -> RtResult<&EventLogEventUseObject> {
+    receiver
+        .downcast_ref::<EventLogEventUseObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn event_log_use(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(Value::Boolean(
+        event_log_event_use(receiver)?.use_event.get(),
+    ))
+}
+
+fn set_event_log_use(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    event_log_event_use(receiver)?
+        .use_event
+        .set(value.as_condition()?);
+    Ok(())
+}
+
+fn event_log_use_description(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(event_log_event_use(receiver)?.description.borrow().clone())
+}
+
+fn set_event_log_use_description(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    *event_log_event_use(receiver)?.description.borrow_mut() = value;
+    Ok(())
+}
+
+fn construct_event_log_access_event_use_description(
+    _: &mut CallContext<'_>,
+    arguments: &[Value],
+) -> RtResult<Value> {
+    let object = match arguments.first() {
+        None | Some(Value::Undefined) => Arc::from(""),
+        Some(Value::Str(value)) => Arc::from(value.to_string()),
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый ОписаниеИспользованияСобытияДоступЖурналаРегистрации",
+            });
+        }
+    };
+    Ok(Value::new_object(EventLogAccessEventUseDescriptionObject {
+        object: RefCell::new(object),
+        access_fields: RefCell::new(Value::new_array(Vec::new())),
+        logged_fields: RefCell::new(Value::new_array(Vec::new())),
+    }))
+}
+
+fn event_log_access_event_use_description(
+    receiver: &dyn ObjectProtocol,
+) -> RtResult<&EventLogAccessEventUseDescriptionObject> {
+    receiver
+        .downcast_ref::<EventLogAccessEventUseDescriptionObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn event_log_access_object(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Str(
+        event_log_access_event_use_description(receiver)?
+            .object
+            .borrow()
+            .as_ref()
+            .into(),
+    ))
+}
+
+fn set_event_log_access_object(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let Value::Str(value) = value else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ОписаниеИспользованияСобытияДоступЖурналаРегистрации.Объект",
+        });
+    };
+    *event_log_access_event_use_description(receiver)?
+        .object
+        .borrow_mut() = Arc::from(value.to_string());
+    Ok(())
+}
+
+fn event_log_access_fields(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(event_log_access_event_use_description(receiver)?
+        .access_fields
+        .borrow()
+        .clone())
+}
+
+fn event_log_logged_fields(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(event_log_access_event_use_description(receiver)?
+        .logged_fields
+        .borrow()
+        .clone())
+}
+
+fn event_log_field_array(value: Value, op: &'static str) -> RtResult<Value> {
+    if matches!(&value, Value::Object(object) if matches!(&**object, BslObject::Array(_))) {
+        Ok(value)
+    } else {
+        Err(RtError::TypeError {
+            expected: "Массив",
+            op,
+        })
+    }
+}
+
+fn set_event_log_access_fields(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    *event_log_access_event_use_description(receiver)?
+        .access_fields
+        .borrow_mut() = event_log_field_array(
+        value,
+        "ОписаниеИспользованияСобытияДоступЖурналаРегистрации.ПоляДоступа",
+    )?;
+    Ok(())
+}
+
+fn set_event_log_logged_fields(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    *event_log_access_event_use_description(receiver)?
+        .logged_fields
+        .borrow_mut() = event_log_field_array(
+        value,
+        "ОписаниеИспользованияСобытияДоступЖурналаРегистрации.ПоляРегистрации",
+    )?;
+    Ok(())
+}
+
+fn construct_client_settings(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(ClientSettingsObject {
+        show_navigation_and_actions_panels: Cell::new(true),
+        show_sections_panel: Cell::new(true),
+        forms_openning_mode: Cell::new(EnumValue::ApplicationFormsOpenningModeTabs),
+        interface_variant: Cell::new(EnumValue::ClientApplicationInterfaceVariantVersion8_2),
+    }))
+}
+
+fn client_settings(receiver: &dyn ObjectProtocol) -> RtResult<&ClientSettingsObject> {
+    receiver
+        .downcast_ref::<ClientSettingsObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn show_navigation_and_actions_panels(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Boolean(
+        client_settings(receiver)?
+            .show_navigation_and_actions_panels
+            .get(),
+    ))
+}
+
+fn set_show_navigation_and_actions_panels(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let Value::Boolean(value) = value else {
+        return Err(RtError::TypeError {
+            expected: "Булево",
+            op: "НастройкиКлиентскогоПриложения.ОтображатьПанелиНавигацииИДействий",
+        });
+    };
+    client_settings(receiver)?
+        .show_navigation_and_actions_panels
+        .set(value);
+    Ok(())
+}
+
+fn show_sections_panel(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+    Ok(Value::Boolean(
+        client_settings(receiver)?.show_sections_panel.get(),
+    ))
+}
+
+fn set_show_sections_panel(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let Value::Boolean(value) = value else {
+        return Err(RtError::TypeError {
+            expected: "Булево",
+            op: "НастройкиКлиентскогоПриложения.ОтображатьПанельРазделов",
+        });
+    };
+    client_settings(receiver)?.show_sections_panel.set(value);
+    Ok(())
+}
+
+fn application_forms_openning_mode(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Enum(
+        client_settings(receiver)?.forms_openning_mode.get(),
+    ))
+}
+
+fn set_application_forms_openning_mode(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let Value::Enum(
+        value @ (EnumValue::ApplicationFormsOpenningModeTabs
+        | EnumValue::ApplicationFormsOpenningModeSingleWindows),
+    ) = value
+    else {
+        return Err(RtError::TypeError {
+            expected: "РежимОткрытияФормПриложения",
+            op: "НастройкиКлиентскогоПриложения.РежимОткрытияФормПриложения",
+        });
+    };
+    client_settings(receiver)?.forms_openning_mode.set(value);
+    Ok(())
+}
+
+fn client_application_interface_variant(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Enum(
+        client_settings(receiver)?.interface_variant.get(),
+    ))
+}
+
+fn set_client_application_interface_variant(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let Value::Enum(
+        value @ (EnumValue::ClientApplicationInterfaceVariantVersion8_2
+        | EnumValue::ClientApplicationInterfaceVariantTaxi),
+    ) = value
+    else {
+        return Err(RtError::TypeError {
+            expected: "ВариантИнтерфейсаКлиентскогоПриложения",
+            op: "НастройкиКлиентскогоПриложения.ВариантИнтерфейсаКлиентскогоПриложения",
+        });
+    };
+    client_settings(receiver)?.interface_variant.set(value);
+    Ok(())
+}
+
+fn construct_command_interface_settings(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(CommandInterfaceSettingsObject {
+        sections_panel_representation: Cell::new(
+            EnumValue::SectionsPanelRepresentationPictureAndText,
+        ),
+    }))
+}
+
+fn command_interface_settings(
+    receiver: &dyn ObjectProtocol,
+) -> RtResult<&CommandInterfaceSettingsObject> {
+    receiver
+        .downcast_ref::<CommandInterfaceSettingsObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn sections_panel_representation(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    Ok(Value::Enum(
+        command_interface_settings(receiver)?
+            .sections_panel_representation
+            .get(),
+    ))
+}
+
+fn set_sections_panel_representation(
+    receiver: &dyn ObjectProtocol,
+    value: Value,
+    _: &mut CallContext<'_>,
+) -> RtResult<()> {
+    let Value::Enum(
+        value @ (EnumValue::SectionsPanelRepresentationPicture
+        | EnumValue::SectionsPanelRepresentationPictureAndText
+        | EnumValue::SectionsPanelRepresentationPictureOnTopAndText
+        | EnumValue::SectionsPanelRepresentationPictureOnLeftAndText
+        | EnumValue::SectionsPanelRepresentationText),
+    ) = value
+    else {
+        return Err(RtError::TypeError {
+            expected: "ОтображениеПанелиРазделов",
+            op: "НастройкиКомандногоИнтерфейса.ОтображениеПанелиРазделов",
+        });
+    };
+    command_interface_settings(receiver)?
+        .sections_panel_representation
+        .set(value);
+    Ok(())
+}
+
+fn new_client_application_interface_content_settings_group() -> Value {
+    Value::new_object(ClientApplicationInterfaceContentSettingsGroupObject {
+        items: RefCell::new(Vec::new()),
+    })
+}
+
+fn construct_client_application_interface_settings(
+    _: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    Ok(Value::new_object(
+        ClientApplicationInterfaceSettingsObject {
+            content: RefCell::new(None),
+        },
+    ))
+}
+
+fn construct_client_application_interface_content_settings(
+    _: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    Ok(Value::new_object(
+        ClientApplicationInterfaceContentSettingsObject {
+            top: new_client_application_interface_content_settings_group(),
+            left: new_client_application_interface_content_settings_group(),
+            bottom: new_client_application_interface_content_settings_group(),
+            right: new_client_application_interface_content_settings_group(),
+        },
+    ))
+}
+
+fn construct_client_application_interface_content_settings_group(
+    _: &mut CallContext<'_>,
+    _: &[Value],
+) -> RtResult<Value> {
+    Ok(new_client_application_interface_content_settings_group())
+}
+
+fn construct_client_application_interface_content_settings_item(
+    _: &mut CallContext<'_>,
+    arguments: &[Value],
+) -> RtResult<Value> {
+    let Value::Str(name) = &arguments[0] else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "Новый ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+        });
+    };
+    Ok(Value::new_object(
+        ClientApplicationInterfaceContentSettingsItemObject {
+            name: Arc::from(name.to_string()),
+        },
+    ))
+}
+
+fn client_application_interface_settings(
+    receiver: &dyn ObjectProtocol,
+) -> RtResult<&ClientApplicationInterfaceSettingsObject> {
+    receiver
+        .downcast_ref::<ClientApplicationInterfaceSettingsObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn get_client_application_interface_content(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    client_application_interface_settings(receiver)?
+        .content
+        .borrow()
+        .clone()
+        .ok_or_else(|| {
+            RtError::DynamicError(
+                "исходный состав интерфейса клиентского приложения не предоставлен".into(),
+            )
+        })
+}
+
+fn set_client_application_interface_content(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let Some(content) = arguments.first() else {
+        return Err(RtError::DynamicError(
+            "состав интерфейса клиентского приложения не передан".into(),
+        ));
+    };
+    let valid = content
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<ClientApplicationInterfaceContentSettingsObject>())
+        .is_some();
+    if !valid {
+        return Err(RtError::TypeError {
+            expected: "НастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+            op: "УстановитьСостав",
+        });
+    }
+    *client_application_interface_settings(receiver)?
+        .content
+        .borrow_mut() = Some(content.clone());
+    Ok(Value::Undefined)
+}
+
+fn client_application_interface_content_settings(
+    receiver: &dyn ObjectProtocol,
+) -> RtResult<&ClientApplicationInterfaceContentSettingsObject> {
+    receiver
+        .downcast_ref::<ClientApplicationInterfaceContentSettingsObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+macro_rules! client_application_interface_content_property {
+    ($function:ident, $field:ident) => {
+        fn $function(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<Value> {
+            Ok(client_application_interface_content_settings(receiver)?
+                .$field
+                .clone())
+        }
+    };
+}
+
+client_application_interface_content_property!(client_interface_content_top, top);
+client_application_interface_content_property!(client_interface_content_left, left);
+client_application_interface_content_property!(client_interface_content_bottom, bottom);
+client_application_interface_content_property!(client_interface_content_right, right);
+
+fn client_application_interface_content_settings_group(
+    receiver: &dyn ObjectProtocol,
+) -> RtResult<&ClientApplicationInterfaceContentSettingsGroupObject> {
+    receiver
+        .downcast_ref::<ClientApplicationInterfaceContentSettingsGroupObject>()
+        .ok_or(RtError::NotAnObject)
+}
+
+fn add_client_application_interface_content(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let value = &arguments[0];
+    let Some(object) = value.object_ref() else {
+        return Err(RtError::TypeError {
+            expected: "Элемент или группа настройки состава интерфейса клиентского приложения",
+            op: "Добавить",
+        });
+    };
+    if object
+        .downcast_ref::<ClientApplicationInterfaceContentSettingsItemObject>()
+        .is_none()
+        && object
+            .downcast_ref::<ClientApplicationInterfaceContentSettingsGroupObject>()
+            .is_none()
+    {
+        return Err(RtError::TypeError {
+            expected: "Элемент или группа настройки состава интерфейса клиентского приложения",
+            op: "Добавить",
+        });
+    }
+    let group = client_application_interface_content_settings_group(receiver)?;
+    let mut items = group.items.borrow_mut();
+    items.try_reserve(1).map_err(|_| {
+        RtError::ResourceLimit("не удалось расширить группу состава интерфейса".into())
+    })?;
+    items.push(value.clone());
+    Ok(Value::Undefined)
+}
+
+fn count_client_application_interface_content(
+    receiver: &dyn ObjectProtocol,
+    _: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let len = client_application_interface_content_settings_group(receiver)?
+        .items
+        .borrow()
+        .len();
+    Ok(Value::number_from_i64(
+        i64::try_from(len).unwrap_or(i64::MAX),
+    ))
+}
+
+fn get_client_application_interface_content_item(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[Value],
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let Value::Number(index) = &arguments[0] else {
+        return Err(RtError::BadIndex);
+    };
+    let index = index.to_i64_exact().ok_or(RtError::BadIndex)?;
+    let position = usize::try_from(index).map_err(|_| RtError::BadIndex)?;
+    let items = client_application_interface_content_settings_group(receiver)?
+        .items
+        .borrow();
+    items
+        .get(position)
+        .cloned()
+        .ok_or(RtError::IndexOutOfBounds {
+            index,
+            len: items.len(),
+        })
+}
+
+fn client_application_interface_content_item_name(
+    receiver: &dyn ObjectProtocol,
+    _: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let item = receiver
+        .downcast_ref::<ClientApplicationInterfaceContentSettingsItemObject>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::Str(item.name.as_ref().into()))
 }
 
 fn unsafe_operation_protection_description(
@@ -2841,6 +5228,90 @@ fn system_information_app_version(
 
 const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
+        code: ConstructorCode::new(24),
+        names: &["АдминистрированиеСервера", "ServerAdministration"],
+        arity: Arity::range(0, 2),
+        call: construct_server_administration,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(23),
+        names: &[
+            "СовместноеИспользованиеПриложенийСистемыВзаимодействия",
+            "CollaborationSystemApplicationLinks",
+        ],
+        arity: Arity::exact(0),
+        call: construct_collaboration_application,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(22),
+        names: &[
+            "КоллекцияИдентификаторовПриложенийСистемыВзаимодействия",
+            "CollaborationSystemApplicationIDCollection",
+        ],
+        arity: Arity::exact(0),
+        call: construct_collaboration_application,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(21),
+        names: &[
+            "ИдентификаторСообщенияСистемыВзаимодействия",
+            "CollaborationSystemMessageID",
+        ],
+        arity: Arity::exact(1),
+        call: construct_collaboration_application,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(20),
+        names: &[
+            "ИдентификаторПриложенияСистемыВзаимодействия",
+            "CollaborationSystemApplicationID",
+        ],
+        arity: Arity::exact(1),
+        call: construct_collaboration_application,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(19),
+        names: &["ИнтернетПочтовоеСообщение", "InternetMailMessage"],
+        arity: Arity::exact(0),
+        call: construct_internet_mail_message,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(18),
+        names: &[
+            "КонтекстОбсужденияСистемыВзаимодействия",
+            "CollaborationSystemConversationContext",
+        ],
+        arity: Arity::exact(1),
+        call: construct_collaboration_conversation_context,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(17),
+        names: &[
+            "ИдентификаторОбсужденияСистемыВзаимодействия",
+            "CollaborationSystemConversationID",
+        ],
+        arity: Arity::exact(1),
+        call: construct_collaboration_conversation_id,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(15),
+        names: &[
+            "ОтборОбсужденийСистемыВзаимодействия",
+            "CollaborationSystemConversationsFilter",
+        ],
+        arity: Arity::exact(0),
+        call: construct_collaboration_filter,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(16),
+        names: &[
+            "ОтборСообщенийСистемыВзаимодействия",
+            "CollaborationSystemMessagesFilter",
+        ],
+        arity: Arity::exact(0),
+        call: construct_collaboration_filter,
+    },
+    ConstructorDescriptor {
         code: ConstructorCode::new(1),
         names: &["СистемнаяИнформация", "SystemInfo"],
         arity: Arity::exact(0),
@@ -2879,6 +5350,75 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: construct_unsafe_operation_protection_description,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(7),
+        names: &["ИспользованиеСобытияЖурналаРегистрации", "EventLogEventUse"],
+        arity: Arity::range(0, 2),
+        call: construct_event_log_event_use,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(8),
+        names: &["НастройкиКлиентскогоПриложения", "ClientSettings"],
+        arity: Arity::exact(0),
+        call: construct_client_settings,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(9),
+        names: &["НастройкиКомандногоИнтерфейса", "CommandInterfaceSettings"],
+        arity: Arity::exact(0),
+        call: construct_command_interface_settings,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(10),
+        names: &[
+            "НастройкиИнтерфейсаКлиентскогоПриложения",
+            "ClientApplicationInterfaceSettings",
+        ],
+        arity: Arity::exact(0),
+        call: construct_client_application_interface_settings,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(11),
+        names: &[
+            "НастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+            "ClientApplicationInterfaceContentSettings",
+        ],
+        arity: Arity::exact(0),
+        call: construct_client_application_interface_content_settings,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(12),
+        names: &[
+            "ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+            "ClientApplicationInterfaceContentSettingsGroup",
+        ],
+        arity: Arity::exact(0),
+        call: construct_client_application_interface_content_settings_group,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(13),
+        names: &[
+            "ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения",
+            "ClientApplicationInterfaceContentSettingsItem",
+        ],
+        arity: Arity::exact(1),
+        call: construct_client_application_interface_content_settings_item,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(14),
+        names: &[
+            "ОписаниеИспользованияСобытияДоступЖурналаРегистрации",
+            "EventLogAccessEventUseDescription",
+        ],
+        arity: Arity::range(0, 1),
+        call: construct_event_log_access_event_use_description,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(25),
+        names: &["ЭлементПланировщика", "PlannerItem"],
+        arity: Arity::exact(0),
+        call: planner_item::construct,
+    },
 ];
 
 const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
@@ -2890,6 +5430,34 @@ const CONSTRUCTOR_TYPES: &[(ConstructorCode, &TypeDescriptor)] = &[
     (
         ConstructorCode::new(6),
         &UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE,
+    ),
+    (ConstructorCode::new(7), &EVENT_LOG_EVENT_USE_TYPE),
+    (ConstructorCode::new(8), &CLIENT_SETTINGS_TYPE),
+    (ConstructorCode::new(9), &COMMAND_INTERFACE_SETTINGS_TYPE),
+    (
+        ConstructorCode::new(10),
+        &CLIENT_APPLICATION_INTERFACE_SETTINGS_TYPE,
+    ),
+    (
+        ConstructorCode::new(11),
+        &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_TYPE,
+    ),
+    (
+        ConstructorCode::new(12),
+        &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_TYPE,
+    ),
+    (
+        ConstructorCode::new(13),
+        &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_TYPE,
+    ),
+    (
+        ConstructorCode::new(14),
+        &EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_TYPE,
+    ),
+    (ConstructorCode::new(25), &planner_item::TYPE),
+    (
+        ConstructorCode::new(17),
+        &COLLABORATION_CONVERSATION_ID_TYPE,
     ),
 ];
 
@@ -3012,11 +5580,162 @@ static UNSAFE_OPERATION_PROTECTION_DESCRIPTION_PROPERTIES: &[PropertyDescriptor]
         set: Some(set_unsafe_operation_warnings),
     }];
 
+static EVENT_LOG_EVENT_USE_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Использование", "Use"],
+        get: event_log_use,
+        set: Some(set_event_log_use),
+    },
+    PropertyDescriptor {
+        names: &["ОписаниеИспользования", "UseDescription"],
+        get: event_log_use_description,
+        set: Some(set_event_log_use_description),
+    },
+];
+
+static EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Объект", "Object"],
+        get: event_log_access_object,
+        set: Some(set_event_log_access_object),
+    },
+    PropertyDescriptor {
+        names: &["ПоляДоступа", "AccessFields"],
+        get: event_log_access_fields,
+        set: Some(set_event_log_access_fields),
+    },
+    PropertyDescriptor {
+        names: &["ПоляРегистрации", "LoggedFields"],
+        get: event_log_logged_fields,
+        set: Some(set_event_log_logged_fields),
+    },
+];
+
+static CLIENT_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &[
+            "ОтображатьПанелиНавигацииИДействий",
+            "ShowNavigationAndActionsPanels",
+        ],
+        get: show_navigation_and_actions_panels,
+        set: Some(set_show_navigation_and_actions_panels),
+    },
+    PropertyDescriptor {
+        names: &["ОтображатьПанельРазделов", "ShowSectionsPanel"],
+        get: show_sections_panel,
+        set: Some(set_show_sections_panel),
+    },
+    PropertyDescriptor {
+        names: &[
+            "РежимОткрытияФормПриложения",
+            "ApplicationFormsOpenningMode",
+        ],
+        get: application_forms_openning_mode,
+        set: Some(set_application_forms_openning_mode),
+    },
+    PropertyDescriptor {
+        names: &[
+            "ВариантИнтерфейсаКлиентскогоПриложения",
+            "ClientApplicationInterfaceVariant",
+        ],
+        get: client_application_interface_variant,
+        set: Some(set_client_application_interface_variant),
+    },
+];
+
+static COMMAND_INTERFACE_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["ОтображениеПанелиРазделов", "SectionsPanelRepresentation"],
+    get: sections_panel_representation,
+    set: Some(set_sections_panel_representation),
+}];
+
+static CLIENT_APPLICATION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["ТипПриложения", "ApplicationType"],
+    Arity::exact(0),
+    client_application_type,
+)];
+
+static CLIENT_APPLICATION_INTERFACE_SETTINGS_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["ПолучитьСостав", "GetContent"],
+        Arity::exact(0),
+        get_client_application_interface_content,
+    ),
+    MethodDescriptor::new(
+        &["УстановитьСостав", "SetContent"],
+        Arity::range(0, 1),
+        set_client_application_interface_content,
+    )
+    .as_procedure(),
+];
+
+static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["Верх", "Top"],
+        get: client_interface_content_top,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Лево", "Left"],
+        get: client_interface_content_left,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Низ", "Bottom"],
+        get: client_interface_content_bottom,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["Право", "Right"],
+        get: client_interface_content_right,
+        set: None,
+    },
+];
+
+static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor::new(
+        &["Добавить", "Add"],
+        Arity::exact(1),
+        add_client_application_interface_content,
+    )
+    .as_procedure(),
+    MethodDescriptor::new(
+        &["Количество", "Count"],
+        Arity::exact(0),
+        count_client_application_interface_content,
+    ),
+    MethodDescriptor::new(
+        &["Получить", "Get"],
+        Arity::exact(1),
+        get_client_application_interface_content_item,
+    ),
+];
+
+static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_PROPERTIES: &[PropertyDescriptor] =
+    &[PropertyDescriptor {
+        names: &["Имя", "Name"],
+        get: client_application_interface_content_item_name,
+        set: None,
+    }];
+
 static INFOBASE_SESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     &["ПолучитьФоновоеЗадание", "GetBackgroundJob"],
     Arity::exact(0),
     current_background_job,
 )];
+
+static INFOBASE_SESSION_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["НомерСеанса", "SessionNumber"],
+        get: current_infobase_session_number,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["НачалоСеанса", "SessionStarted"],
+        get: current_infobase_session_started,
+        set: None,
+    },
+];
 
 static CURRENT_BACKGROUND_JOB_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
     names: &["ИмяМетода", "MethodName"],
@@ -3059,6 +5778,22 @@ static STANDARD_SETTINGS_STORAGE_METHODS: &[MethodDescriptor] = &[
         Arity::range(0, 1),
         select_client_settings,
     ),
+    MethodDescriptor::new(
+        &["ПолучитьСписок", "GetList"],
+        Arity::range(1, 2),
+        list_client_settings,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьОписание", "GetDescription"],
+        Arity::range(1, 3),
+        describe_client_setting,
+    ),
+    MethodDescriptor::new(
+        &["Удалить", "Delete"],
+        Arity::exact(3),
+        delete_client_settings,
+    )
+    .as_procedure(),
 ];
 
 static STANDARD_SETTINGS_SELECTION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
@@ -3151,7 +5886,228 @@ static ERROR_PROCESSING_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
     },
 ];
 
+fn get_sessions_lock(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Текущий режим блокировки хранится в базе, а не выводится из параметров
+    // отдельного сеанса. Без администрационного адаптера он неизвестен.
+    Err(RtError::DynamicError(
+        "чтение блокировки сеансов не предоставлено этим хостом".into(),
+    ))
+}
+
+fn set_sessions_lock(_: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
+    // Принять настройку без записи в базу означало бы сообщить ложный успех.
+    Err(RtError::DynamicError(
+        "запись блокировки сеансов не предоставлена этим хостом".into(),
+    ))
+}
+
 const FUNCTIONS: &[FunctionDescriptor] = &[
+    FunctionDescriptor {
+        code: FunctionCode::new(61),
+        names: &["КодЛокализацииИнформационнойБазы", "InfoBaseLocaleCode"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: infobase_locale_code,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(60),
+        names: &[
+            "ТекущийВариантИнтерфейсаКлиентскогоПриложения",
+            "ClientApplicationInterfaceCurrentVariant",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: current_client_interface_variant,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(58),
+        names: &["ПолучитьБлокировкуСеансов", "GetSessionsLock"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_sessions_lock,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(59),
+        names: &["УстановитьБлокировкуСеансов", "SetSessionsLock"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Procedure,
+        call: set_sessions_lock,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(57),
+        names: &[
+            "ДополнительныеНастройкиАутентификации",
+            "AdditionalAuthenticationSettings",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: additional_authentication_settings,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(56),
+        names: &[
+            "УстановитьНастройкиКлиентаЛицензирования",
+            "SetLicensingClientParameters",
+        ],
+        arity: Arity::range(0, 3),
+        kind: FunctionKind::Procedure,
+        call: set_licensing_client_parameters,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(55),
+        names: &[
+            "ПолучитьДополнительныйПараметрКлиентаЛицензирования",
+            "GetLicensingClientAdditionalParameter",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_licensing_client_additional_parameter,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(54),
+        names: &["ПолучитьИдентификаторКонфигурации", "GetConfigurationID"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_configuration_id,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(53),
+        names: &["ПолучитьИмяКлиентаЛицензирования", "GetLicensingClientName"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_licensing_client_name,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(52),
+        names: &["ПолучитьРазделительПутиСервера", "GetServerPathSeparator"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_server_path_separator,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(51),
+        names: &["ПолнотекстовыйПоиск", "FullTextSearch"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: full_text_search,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(50),
+        names: &["ПредставлениеКодаЛокализации", "LocaleCodePresentation"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: locale_code_presentation,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(49),
+        names: &[
+            "ПолучитьДопустимыеКодыЛокализации",
+            "GetAvailableLocaleCodes",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: available_locale_codes,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(48),
+        names: &["ПараметрыДоступа", "AccessParameters"],
+        arity: Arity::range(3, 4),
+        kind: FunctionKind::Function,
+        call: access_parameters,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(47),
+        names: &["НайтиПомеченныеНаУдаление", "FindMarkedForDeletion"],
+        arity: Arity::range(0, 3),
+        kind: FunctionKind::Function,
+        call: find_marked_for_deletion,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(39),
+        names: &["ПолучитьИсториюРаботыПользователяСеанса"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: user_work_history,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(38),
+        names: &["ПолучитьХранилищеВариантовОтчетовСеанса"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: reports_variants_storage,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(35),
+        names: &["ВыгрузитьЖурналРегистрации", "UnloadEventLog"],
+        arity: Arity::range(1, 5),
+        kind: FunctionKind::Procedure,
+        call: unload_event_log,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(34),
+        names: &[
+            "ПолучитьНавигационнуюСсылкуИнформационнойБазы",
+            "GetInfoBaseURL",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: infobase_url,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(33),
+        names: &[
+            "ПолучитьСкоростьКлиентскогоСоединения",
+            "GetClientConnectionSpeed",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: client_connection_speed,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(32),
+        names: &["НомерСеансаИнформационнойБазы", "InfoBaseSessionNumber"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: infobase_session_number,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(31),
+        names: &["СистемаВзаимодействия", "CollaborationSystem"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: collaboration_system,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(30),
+        names: &["РегламентныеЗадания", "ScheduledJobs"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: scheduled_jobs,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(29),
+        names: &["ПолучитьСеансыИнформационнойБазы", "GetInfoBaseSessions"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: infobase_sessions,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(28),
+        names: &["ИмяКомпьютера", "ComputerName"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: computer_name,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(27),
+        names: &[
+            "ПолучитьИнформациюЭкрановКлиента",
+            "GetClientDisplaysInformation",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: client_displays_information,
+    },
     FunctionDescriptor {
         code: FunctionCode::new(1),
         names: &["ПолучитьПараметрыСеанса"],
@@ -3307,6 +6263,26 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         call: form_data_settings_storage,
     },
     FunctionDescriptor {
+        code: FunctionCode::new(25),
+        names: &[
+            "ПолучитьСтандартноеХранилищеПользовательскихНастроекОтчетов",
+            "GetStandardReportsUserSettingsStorage",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: reports_user_settings_storage,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(26),
+        names: &[
+            "ПолучитьСтандартноеХранилищеПользовательскихНастроекДинамическихСписков",
+            "GetStandardDynamicListsUserSettingsStorage",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: dynamic_lists_user_settings_storage,
+    },
+    FunctionDescriptor {
         code: FunctionCode::new(20),
         names: &[
             "УстановитьБезопасныйРежимРазделенияДанных",
@@ -3317,15 +6293,149 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         call: set_data_separation_safe_mode,
     },
     FunctionDescriptor {
+        code: FunctionCode::new(36),
+        names: &["БезопасныйРежимРазделенияДанных", "DataSeparationSafeMode"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: data_separation_safe_mode,
+    },
+    FunctionDescriptor {
         code: FunctionCode::new(21),
         names: &["ПодключитьВнешнююКомпоненту", "AttachAddIn"],
         arity: Arity::range(1, 4),
         kind: FunctionKind::Function,
         call: attach_add_in,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(22),
+        names: &[
+            "ПолучитьИспользованиеСобытияЖурналаРегистрации",
+            "GetEventLogEventUse",
+        ],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: get_event_log_event_use,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(23),
+        names: &[
+            "УстановитьИспользованиеСобытияЖурналаРегистрации",
+            "SetEventLogEventUse",
+        ],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Procedure,
+        call: set_event_log_event_use,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(24),
+        names: &[
+            "ПолучитьИспользованиеЖурналаРегистрации",
+            "GetEventLogUsing",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_event_log_using,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(40),
+        names: &["КлиентскоеПриложение", "ClientApplication"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: client_application,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(41),
+        names: &["ТекущийКодЛокализации", "CurrentLocaleCode"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: current_locale_code,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(42),
+        names: &["ТекущийЯзыкСистемы", "CurrentSystemLanguage"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: current_system_language,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(43),
+        names: &["ПолучитьРежимВнешнихРесурсов", "GetExternalResourcesMode"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_external_resources_mode,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(44),
+        names: &[
+            "ОтправкаДоставляемыхУведомлений",
+            "DeliverableNotificationSend",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: deliverable_notification_send,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(45),
+        names: &["СредстваКриптографии", "CryptoTools"],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: crypto_tools,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(46),
+        names: &[
+            "ПолучитьЧасовойПоясИнформационнойБазы",
+            "GetInfoBaseTimeZone",
+        ],
+        arity: Arity::exact(0),
+        kind: FunctionKind::Function,
+        call: get_infobase_time_zone,
+    },
 ];
 
 const GLOBALS: &[GlobalDescriptor] = &[
+    GlobalDescriptor {
+        names: &[
+            "ДополнительныеНастройкиАутентификации",
+            "AdditionalAuthenticationSettings",
+        ],
+        function: FunctionCode::new(57),
+    },
+    GlobalDescriptor {
+        names: &["ПолнотекстовыйПоиск", "FullTextSearch"],
+        function: FunctionCode::new(51),
+    },
+    GlobalDescriptor {
+        names: &["СредстваКриптографии", "CryptoTools"],
+        function: FunctionCode::new(45),
+    },
+    GlobalDescriptor {
+        names: &[
+            "ОтправкаДоставляемыхУведомлений",
+            "DeliverableNotificationSend",
+        ],
+        function: FunctionCode::new(44),
+    },
+    GlobalDescriptor {
+        names: &["КлиентскоеПриложение", "ClientApplication"],
+        function: FunctionCode::new(40),
+    },
+    GlobalDescriptor {
+        names: &["ИсторияРаботыПользователя", "UserWorkHistory"],
+        function: FunctionCode::new(39),
+    },
+    GlobalDescriptor {
+        names: &["ХранилищеВариантовОтчетов", "ReportsVariantsStorage"],
+        function: FunctionCode::new(38),
+    },
+    GlobalDescriptor {
+        names: &["СистемаВзаимодействия", "CollaborationSystem"],
+        function: FunctionCode::new(31),
+    },
+    GlobalDescriptor {
+        names: &["РегламентныеЗадания", "ScheduledJobs"],
+        function: FunctionCode::new(30),
+    },
     GlobalDescriptor {
         names: &["ПараметрыСеанса", "SessionParameters"],
         function: FunctionCode::new(1),
@@ -3343,12 +6453,27 @@ const GLOBALS: &[GlobalDescriptor] = &[
         function: FunctionCode::new(19),
     },
     GlobalDescriptor {
+        names: &[
+            "ХранилищеПользовательскихНастроекОтчетов",
+            "ReportsUserSettingsStorage",
+        ],
+        function: FunctionCode::new(25),
+    },
+    GlobalDescriptor {
+        names: &[
+            "ХранилищеПользовательскихНастроекДинамическихСписков",
+            "DynamicListsUserSettingsStorage",
+        ],
+        function: FunctionCode::new(26),
+    },
+    GlobalDescriptor {
         names: &["ОбработкаОшибок", "ErrorProcessing"],
         function: FunctionCode::new(16),
     },
 ];
 
 const TYPES: &[&TypeDescriptor] = &[
+    &COLLABORATION_CONVERSATION_ID_TYPE,
     &PARAMETERS_TYPE,
     &SYSTEM_INFORMATION_TYPE,
     &INFOBASE_SESSION_TYPE,
@@ -3362,6 +6487,17 @@ const TYPES: &[&TypeDescriptor] = &[
     &SETTINGS_DESCRIPTION_TYPE,
     &JOB_SCHEDULE_TYPE,
     &UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE,
+    &EVENT_LOG_EVENT_USE_TYPE,
+    &EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_TYPE,
+    &CLIENT_SETTINGS_TYPE,
+    &CLIENT_APPLICATION_TYPE,
+    &COMMAND_INTERFACE_SETTINGS_TYPE,
+    &CLIENT_APPLICATION_INTERFACE_SETTINGS_TYPE,
+    &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_TYPE,
+    &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_TYPE,
+    &CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_TYPE,
+    &CLIENT_DISPLAY_INFORMATION_TYPE,
+    &planner_item::TYPE,
 ];
 
 const API_MEMBERS: &[ObjectMembersDescriptor] = &[
@@ -3370,7 +6506,9 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
         .with_dynamic_properties(),
     ObjectMembersDescriptor::new(&SYSTEM_INFORMATION_TYPE)
         .with_properties(SYSTEM_INFORMATION_PROPERTIES),
-    ObjectMembersDescriptor::new(&INFOBASE_SESSION_TYPE).with_methods(INFOBASE_SESSION_METHODS),
+    ObjectMembersDescriptor::new(&INFOBASE_SESSION_TYPE)
+        .with_methods(INFOBASE_SESSION_METHODS)
+        .with_properties(INFOBASE_SESSION_PROPERTIES),
     ObjectMembersDescriptor::new(&INFOBASE_CONNECTION_TYPE)
         .with_properties(INFOBASE_CONNECTION_PROPERTIES),
     ObjectMembersDescriptor::new(&STANDARD_SETTINGS_STORAGE_TYPE)
@@ -3389,6 +6527,25 @@ const API_MEMBERS: &[ObjectMembersDescriptor] = &[
     ObjectMembersDescriptor::new(&JOB_SCHEDULE_TYPE).with_properties(JOB_SCHEDULE_PROPERTIES),
     ObjectMembersDescriptor::new(&UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE)
         .with_properties(UNSAFE_OPERATION_PROTECTION_DESCRIPTION_PROPERTIES),
+    ObjectMembersDescriptor::new(&EVENT_LOG_EVENT_USE_TYPE)
+        .with_properties(EVENT_LOG_EVENT_USE_PROPERTIES),
+    ObjectMembersDescriptor::new(&EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_TYPE)
+        .with_properties(EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_PROPERTIES),
+    ObjectMembersDescriptor::new(&CLIENT_SETTINGS_TYPE).with_properties(CLIENT_SETTINGS_PROPERTIES),
+    ObjectMembersDescriptor::new(&CLIENT_APPLICATION_TYPE).with_methods(CLIENT_APPLICATION_METHODS),
+    ObjectMembersDescriptor::new(&COMMAND_INTERFACE_SETTINGS_TYPE)
+        .with_properties(COMMAND_INTERFACE_SETTINGS_PROPERTIES),
+    ObjectMembersDescriptor::new(&CLIENT_APPLICATION_INTERFACE_SETTINGS_TYPE)
+        .with_methods(CLIENT_APPLICATION_INTERFACE_SETTINGS_METHODS),
+    ObjectMembersDescriptor::new(&CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_TYPE)
+        .with_properties(CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_PROPERTIES),
+    ObjectMembersDescriptor::new(&CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_TYPE)
+        .with_methods(CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_METHODS),
+    ObjectMembersDescriptor::new(&CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_TYPE)
+        .with_properties(CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_PROPERTIES),
+    ObjectMembersDescriptor::new(&CLIENT_DISPLAY_INFORMATION_TYPE)
+        .with_properties(CLIENT_DISPLAY_INFORMATION_PROPERTIES),
+    ObjectMembersDescriptor::new(&planner_item::TYPE).with_properties(planner_item::PROPERTIES),
 ];
 
 const OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[API_MEMBERS];
@@ -3410,3 +6567,38 @@ pub const fn library() -> LibraryDescriptor {
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "factory_dynamic_common_modules_tests.rs"]
+mod factory_dynamic_common_modules_tests;
+
+#[cfg(test)]
+#[path = "factory_separation_parameters_tests.rs"]
+mod factory_separation_parameters_tests;
+
+#[cfg(test)]
+#[path = "settings_call_context_tests.rs"]
+mod settings_call_context_tests;
+
+#[cfg(test)]
+#[path = "factory_kind_tests.rs"]
+mod factory_kind_tests;
+
+#[cfg(test)]
+#[path = "session_initialization_privilege_tests.rs"]
+mod session_initialization_privilege_tests;
+
+#[cfg(test)]
+#[path = "linked_query_parameter_tests.rs"]
+mod linked_query_parameter_tests;
+
+#[path = "source_context.rs"]
+mod source_context;
+
+#[cfg(test)]
+#[path = "initialization_index_tests.rs"]
+mod initialization_index_tests;
+
+#[cfg(test)]
+#[path = "file_source_session_tests.rs"]
+mod file_source_session_tests;
