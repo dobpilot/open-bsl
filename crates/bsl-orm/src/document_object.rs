@@ -793,32 +793,23 @@ fn fill(
     object.require_selected()?;
     let mut standard_processing = true;
     let mut filling_data = arguments[0].clone();
-    if let Some(module) = object.metadata()?.object_module()
-        && let Some(count) =
-            context.configuration_function_parameter_count(module, "ОбработкаЗаполнения")?
-    {
-        let mut params = vec![arguments[0].clone()];
-        match count {
-            2 => {}
-            3 => params.push(Value::Undefined),
-            _ => {
-                return Err(RtError::DynamicError(
-                    "число параметров ОбработкаЗаполнения не поддерживается".into(),
-                ));
-            }
-        }
-        params.push(Value::Boolean(true));
-        let (_, params) = context.call_configuration_instance_handler(
-            module,
-            &object.0.instance,
-            "ОбработкаЗаполнения",
-            params,
-            Value::new_object(object.clone()),
-            open_bsl::ConfigurationInstanceEntryMode::Inherit,
-        )?;
+    let data = arguments[0].clone();
+    if let Some(params) = attribute_filling::call_object_handler(
+        context,
+        object.metadata()?.object_module(),
+        &object.0.instance,
+        Value::new_object(object.clone()),
+        "ОбработкаЗаполнения",
+        |count| match count {
+            2 => Some(vec![data, Value::Boolean(true)]),
+            3 => Some(vec![data, Value::Undefined, Value::Boolean(true)]),
+            _ => None,
+        },
+        "число параметров ОбработкаЗаполнения не поддерживается",
+    )? {
         // После обработчика платформа заполняет реквизиты из возвращённого параметра.
         filling_data = params[0].clone();
-        standard_processing = open_bsl::convert_to_boolean(&params[count - 1])?;
+        standard_processing = open_bsl::convert_to_boolean(&params[params.len() - 1])?;
     }
     if !standard_processing {
         return Ok(Value::Undefined);

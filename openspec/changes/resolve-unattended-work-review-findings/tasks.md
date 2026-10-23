@@ -29,7 +29,7 @@
 - [x] 4.2 Merge `call_configuration_instance_handler{,_without_safe_mode,_with_safe_mode}` into one call taking the entry mode; share date/zone parsing between `to_universal_time` and `to_local_time`.
 
 ## 5. Configuration and session
-- [ ] 5.1 Extract one fill / fill-check handler protocol for catalog, document and business-process objects.
+- [x] 5.1 Extract one fill / fill-check handler protocol for catalog, document and business-process objects.
 - [x] 5.2 Replace the `Строка(12)`/`Строка(12,1)` special case in business-process fill checking with general qualifier handling or an explicit unsupported error per type.
 - [x] 5.3 Split `bsl-orm/src/lib.rs` and `bsl-session/src/lib.rs` into modules along existing seams. The data-composition constructors in `bsl-orm` turned out not to duplicate `bsl-rt/src/data_composition.rs` (disjoint names, required by `configuration-session-runtime`); they are grouped in `bsl-orm/src/data_composition.rs` instead of removed.
 - [x] 5.4 Move `run_in_session`, interface-language resolution and host-connection authorization from `bsl-cli` into the library; move the `rustls` provider installation with it.

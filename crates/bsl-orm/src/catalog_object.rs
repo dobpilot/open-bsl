@@ -907,23 +907,14 @@ fn check_filling(
     }
     let paths = Value::Object(Rc::new(BslObject::Array(RefCell::new(paths))));
     let mut refused = false;
-    if let Some(module) = metadata.object_module()
-        && let Some(count) =
-            context.configuration_function_parameter_count(module, "ОбработкаПроверкиЗаполнения")?
-    {
-        if count != 2 {
-            return Err(RtError::DynamicError(
-                "число параметров ОбработкаПроверкиЗаполнения не поддерживается".into(),
-            ));
-        }
-        let (_, params) = context.call_configuration_instance_handler(
-            module,
-            &object.0.instance,
-            "ОбработкаПроверкиЗаполнения",
-            vec![Value::Boolean(false), paths.clone()],
-            Value::new_object(object.clone()),
-            open_bsl::ConfigurationInstanceEntryMode::Inherit,
-        )?;
+    if let Some(params) = attribute_filling::call_check_filling_handler(
+        context,
+        metadata.object_module(),
+        &object.0.instance,
+        Value::new_object(object.clone()),
+        &paths,
+        "число параметров ОбработкаПроверкиЗаполнения не поддерживается",
+    )? {
         refused = attribute_filling::handler_refused(&params[0]);
         // Нативная проба закрепляет исходный массив: его мутация влияет на
         // проверку, а присваивание нового массива параметру — нет.

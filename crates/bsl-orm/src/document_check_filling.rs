@@ -46,23 +46,14 @@ pub(super) fn check_filling(
     }
     let paths = Value::new_array(paths);
     let mut refused = false;
-    if let Some(module) = metadata.object_module()
-        && let Some(count) =
-            context.configuration_function_parameter_count(module, "ОбработкаПроверкиЗаполнения")?
-    {
-        if count != 2 {
-            return Err(RtError::DynamicError(
-                "эта сигнатура ОбработкаПроверкиЗаполнения не поддерживается".into(),
-            ));
-        }
-        let (_, parameters) = context.call_configuration_instance_handler(
-            module,
-            &object.0.instance,
-            "ОбработкаПроверкиЗаполнения",
-            vec![Value::Boolean(false), paths.clone()],
-            Value::new_object(object.clone()),
-            open_bsl::ConfigurationInstanceEntryMode::Inherit,
-        )?;
+    if let Some(parameters) = attribute_filling::call_check_filling_handler(
+        context,
+        metadata.object_module(),
+        &object.0.instance,
+        Value::new_object(object.clone()),
+        &paths,
+        "эта сигнатура ОбработкаПроверкиЗаполнения не поддерживается",
+    )? {
         refused = attribute_filling::handler_refused(&parameters[0]);
     }
     // Сохраняем исходный массив: его очистка влияет на проверку,
