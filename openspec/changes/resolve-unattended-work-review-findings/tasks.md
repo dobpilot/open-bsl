@@ -43,7 +43,7 @@
 - [x] 6.3 Specify `Error::InModule` in the execution-engine specification; drop facade re-exports with no external user (`ExecutionCatalog`; the `uuid` module stays, `bsl-cli`, `bsl-config-db` and the consumer use it).
 
 ## 7. Tests and tooling
-- [ ] 7.1 Merge single-probe integration test files into table-driven targets per crate; record `target/` size of one debug test run before and after.
+- [x] 7.1 Merge single-probe integration test files into table-driven targets per crate; record `target/` size of one debug test run before and after.
 - [x] 7.2 Replace the per-probe branches of `tests/conformance/measure/1c/run-on-1c.sh` with a setup manifest beside each probe; remove fixed `/tmp` information-base paths.
 
 ## 8. Verification

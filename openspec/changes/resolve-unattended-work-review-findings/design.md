@@ -112,3 +112,23 @@ identical, `step_cold` 0xa0 bytes smaller.
 - `run-on-1c.sh` gets one generic setup mechanism (a manifest beside each
   probe naming input XML and `ChildObjects` additions); the per-probe
   branches and fixed `/tmp` information bases go away.
+
+## Integration test targets
+
+Every former `tests/*.rs` of the twelve crates that had more than one is now a
+module of a single `tests/integration/main.rs` target per crate, so a test's
+full name gains the file as a `module::` prefix; the tests that re-run their
+own binary through `current_exe()` pass `--exact module::name` to the child.
+Two files stay separate targets: `bsl-syntax/tests/nbody_ast_snapshot.rs`,
+because `insta` derives snapshot names from the module path and file location,
+and `open-bsl/tests/file_async.rs`, whose
+`single_worker_pool_runs_other_jobs_and_wakes_or_cancels_file_waiters` sees a
+canceled search finish reading the directory when the CPU is loaded — it failed
+3 of 5 runs inside the merged binary and 2 of 8 runs in its own binary next to
+CPU-burning processes, so the race predates the merge and is left for a
+separate fix. Measured with `CARGO_PROFILE_DEV_DEBUG=0
+CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0` and a fresh
+`CARGO_TARGET_DIR` (2026-10-23): `cargo test --workspace --no-run` left 16 GB
+in the target directory and 601 executables in `debug/deps` before, 1.9 GB and
+63 executables after. `cargo test --workspace --no-fail-fast` passed 4110
+tests with 1 ignored both before and after.

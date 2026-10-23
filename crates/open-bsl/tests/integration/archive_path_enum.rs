@@ -1,0 +1,32 @@
+use open_bsl::{BslObject, Engine, Value, format_value};
+
+#[test]
+fn archive_path_enumeration_matches_native_identity_and_presentations() {
+    let engine = Engine::builder().build().unwrap();
+    let mut state = engine.new_state();
+    // Меняется только приёмник сообщений; выражения остаются нативным контролем.
+    let source = include_str!("../../../../docs/research/fixtures/archive-path-enum/measure.bsl")
+        .replace("Сообщить(", "РезультатыПробы.Добавить(");
+    let result = state
+        .exec(&format!(
+            "РезультатыПробы = Новый Массив; {source} Возврат РезультатыПробы;"
+        ))
+        .unwrap();
+    let Value::Object(result) = result else {
+        panic!("массив результатов");
+    };
+    let BslObject::Array(result) = result.as_ref() else {
+        panic!("массив результатов");
+    };
+    let lines = result
+        .borrow()
+        .iter()
+        .map(|value| format_value(value, None).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(lines.len(), 14);
+    assert_eq!(
+        lines.join("\n"),
+        include_str!("../../../../docs/research/fixtures/archive-path-enum/measure.platform.txt")
+            .trim_end()
+    );
+}

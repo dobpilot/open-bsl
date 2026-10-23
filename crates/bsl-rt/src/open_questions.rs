@@ -8,7 +8,7 @@
 //! прогоняемый скрипт.
 //!
 //! Три вещи держатся согласованными и проверяются тестом
-//! `crates/bsl-rt/tests/open_questions_registry.rs`:
+//! `crates/bsl-rt/tests/integration/open_questions_registry.rs`:
 //!
 //! 1. метка в коде — комментарий вида `НЕ ИЗМЕРЕНО(ID)`; ID обязателен,
 //!    метка без скобок теперь ошибка теста;
@@ -241,7 +241,7 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
                  от f64» подтверждено на 13 из 14 измеренных точек (разные \
                  магнитуды, Exp, Log, Sin); воспроизвести четырнадцатую значит \
                  эмулировать чужой квадратный корень вслепую",
-        blocks: "bsl-number/tests/oracle.rs::sqrt_of_002_differs_from_the_platform_by_one_ulp",
+        blocks: "bsl-number/tests/integration/oracle.rs::sqrt_of_002_differs_from_the_platform_by_one_ulp",
     },
     OpenQuestion {
         id: "DATE.ADD_MONTH_CLAMP",

@@ -196,7 +196,7 @@ pub fn compile_linked_program(
 `text.rs` печатает и разбирает `function_names` с точкой (`Псевдоним.Имя`).
 Правится пара `write_instr`/`parse_instr`-соседних мест, где имя функции
 печатается и читается, плюс раунд-трип-корпус в
-`crates/bsl-compiler/tests/text_round_trip.rs` пополняется слитой программой.
+`crates/bsl-compiler/tests/integration/text_round_trip.rs` пополняется слитой программой.
 `FORMAT_VERSION` не трогается: расширилась грамматика имени, кодировка
 инструкций не менялась. `bundle.rs` не трогается вовсе — новых опкодов нет,
 классификация эффектов исчерпывающа и остаётся таковой.

@@ -1,7 +1,7 @@
 ﻿// Двусторонние цели скрипта tests/conformance/measure/measure-background-jobs.bsl:
 // модуль исполняется и платформой (в составе cfg-src-server), и open-bsl
 // (runner — тест the_background_jobs_measure_script_runs_with_the_platform_catalog
-// в crates/open-bsl/tests/measure_scripts.rs). Поэтому здесь только
+// в crates/open-bsl/tests/integration/measure_scripts.rs). Поэтому здесь только
 // конструкции, которые компилируют ОБЕ стороны: ни «Новый Файл» с
 // файловыми барьерами (их open-bsl пока не знает — они остаются в
 // platform-only модуле ЗамерыФоновыхЗаданий), ни модификатора Асинх.

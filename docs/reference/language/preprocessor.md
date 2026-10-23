@@ -245,7 +245,7 @@ open-bsl. Всё, что здесь названо измеренным, сня�
 ### Клиент-серверное приложение: один исходник, две сборки
 
 Полный код — тест `one_source_compiles_into_a_server_build_and_a_client_build`
-в `crates/open-bsl/tests/embedding.rs`; он же источник правды для этого
+в `crates/open-bsl/tests/integration/embedding.rs`; он же источник правды для этого
 раздела.
 
 ```rust
@@ -424,7 +424,7 @@ let client = Engine::builder()
 доводом не была, и проверять пришлось платформой.
 
 Проверки: 19 юнит-тестов в `bsl-syntax` (по одному на измеренное
-свойство), 3 теста фасада в `crates/open-bsl/tests/embedding.rs` — набор
+свойство), 3 теста фасада в `crates/open-bsl/tests/integration/embedding.rs` — набор
 по умолчанию, переопределение хостом и само отступление про динамику, — и
 фикстура `tests/conformance/fixtures/preproc.bsl`, 13 строк которой
 совпали с платформой построчно. A/B на обоих коммитах, трогавших `bsl-vm`

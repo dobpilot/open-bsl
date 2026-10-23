@@ -28,7 +28,7 @@ pub fn native_child() {
     let marker = std::fs::read("launch-test-marker").unwrap_or_default();
     if !args
         .windows(2)
-        .any(|pair| pair == ["--exact", "native_child"])
+        .any(|pair| pair[0] == "--exact" && pair[1].ends_with("::native_child"))
         || (marker != b"open-bsl-child-17" && marker != b"open-bsl-child-wait")
     {
         return;

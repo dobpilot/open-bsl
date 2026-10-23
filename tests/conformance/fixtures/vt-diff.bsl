@@ -3,7 +3,7 @@
 // Эталон vt-diff.expected СНЯТ С ПЛАТФОРМЫ 8.3.27 прогоном этого файла.
 //
 // На БОЛЬШИХ реальных данных тот же алгоритм проверяется интеграционным
-// тестом `table_compare2_cases` в crates/bsl-cli/tests/table_compare2.rs — данные тех
+// тестом `table_compare2_cases` в crates/bsl-cli/tests/integration/table_compare2.rs — данные тех
 // кейсов конфиденциальны и в репозитории не хранятся, тест берёт их из
 // каталога в переменной окружения OPEN_BSL_TABLE_COMPARE2_CASES.
 
