@@ -1,0 +1,424 @@
+--- a/crates/bsl-config-db/src/data_access.rs
++++ b/crates/bsl-config-db/src/data_access.rs
+@@ -1,4 +1,6 @@
+ //! Сеансовый адаптер чтения через компилятор и соединение `open-sdbl`.
++
++mod logical_result;
+ 
+ use std::cell::{Cell as LocalCell, RefCell};
+ use std::collections::HashMap;
+@@ -263,16 +265,32 @@
+                 "составной результат запроса пока не поддерживается адаптером",
+             ));
+         }
+-        let columns = compiled
+-            .columns
++        let projection = compiled
++            .logical_projection
++            .as_ref()
++            .ok_or_else(|| error("полная логическая проекция результата недоступна"))?;
++        let columns = projection
+             .iter()
+-            .map(|column| column.label.clone())
++            .map(|column| column.name.clone())
+             .collect::<Vec<_>>();
++        // Тип берём из декларации поля, а не из содержимого бинарной колонки.
++        let storage_columns = compiled.columns.iter().map(|column| {
++            matches!(column.kind, ColumnKind::Binary { .. })
++                && column.origin.as_ref().is_some_and(|origin| {
++                    !origin.composite_member && self.metadata.descriptors().iter().any(|descriptor| {
++                        origin.field == open_sdbl::metadata::FieldId::Metadata(
++                            open_sdbl::metadata::AttributeId::from(&descriptor.object_guid))
++                            && descriptor.declared_types.as_ref().is_some_and(|types| {
++                                types.len() == 1 && super::document_attributes::is_value_storage_declared_type(&types[0])
++                            })
++                    })
++                })
++        }).collect::<Vec<_>>();
+         let raw = self
+             .connection
+             .try_borrow_mut()
+             .map_err(|_| error("соединение уже используется вложенным вызовом"))?
+-            .query(&compiled.sql, columns.len())
++            .query(&compiled.sql, compiled.columns.len())
+             .map_err(|failure| error(failure.to_string()))?;
+         let rows = raw
+             .into_iter()
+@@ -282,12 +300,37 @@
+                         "ширина строки SQL не совпадает с результатом компилятора",
+                     ));
+                 }
+-                row.into_iter()
+-                    .zip(&compiled.columns)
+-                    .map(|(cell, column)| {
+-                        value_from_cell_with_metadata(cell, &column.kind, &self.metadata, context)
+-                    })
+-                    .collect::<RtResult<Vec<_>>>()
++                logical_result::materialize_row(row, projection, &mut |index, cell| {
++                    let column = compiled
++                        .columns
++                        .get(index)
++                        .ok_or_else(|| error("индекс физической колонки неверен"))?;
++                    if storage_columns[index]
++                        && let Cell::Bytes(content) = &cell
++                    {
++                        let text = open_sdbl::metadata::decode_stored_value_text(
++                            content,
++                            MAX_PLACEMENT_BYTES,
++                        )
++                        .map_err(|failure| error(failure.to_string()))?;
++                        let catalog = std::sync::Arc::clone(
++                            context
++                                .host_data()?
++                                .downcast_ref::<SessionData>()
++                                .ok_or_else(|| error("данные сеанса не переданы"))?
++                                .catalog(),
++                        );
++                        let mut resolve = |kind: &str, payload: &str| {
++                            resolve_storage_scalar(kind, payload, &self.metadata, &catalog)
++                        };
++                        return bsl_orm::value_storage_from_internal_with_resolver(
++                            &text,
++                            context,
++                            &mut resolve,
++                        );
++                    }
++                    value_from_cell_with_metadata(cell, &column.kind, &self.metadata, context)
++                })
+             })
+             .collect::<RtResult<Vec<_>>>()?;
+         let result =
+@@ -1240,3 +1283,54 @@
+ #[cfg(test)]
+ #[path = "exclusive_mode_tests.rs"]
+ mod exclusive_mode_tests;
++
++fn resolve_storage_scalar(
++    kind: &str,
++    payload: &str,
++    metadata: &MetadataSnapshot,
++    catalog: &std::sync::Arc<bsl_orm::MetadataCatalog>,
++) -> RtResult<Option<Value>> {
++    if kind.eq_ignore_ascii_case("fc01b5df-97fe-449b-83d4-218a090e681e") {
++        return Ok(Some(Value::Object(Rc::new(BslObject::Uuid(
++            open_bsl::uuid::parse(payload)?,
++        )))));
++    }
++    let mut owners = metadata.descriptors().iter().filter(|descriptor| {
++        descriptor
++            .object_reference_type
++            .as_ref()
++            .is_some_and(|ty| ty.as_str().eq_ignore_ascii_case(kind))
++    });
++    let Some(owner) = owners.next() else {
++        return Ok(None);
++    };
++    if owners.next().is_some() {
++        return Err(error("тип внутренней ссылки неоднозначен в метаданных"));
++    }
++    if !catalog
++        .object_by_id(owner.object_guid.as_str())
++        .is_some_and(|object| object.kind() == MetadataKind::Catalog)
++    {
++        return Ok(None);
++    }
++    let (prefix, identity) = payload
++        .split_once(':')
++        .ok_or_else(|| error("неверная скалярная запись ссылки"))?;
++    // Нативный контроль допускает знак и ведущие нули; числовое значение
++    // не меняет тип или UUID ссылки и не является ключом поиска владельца.
++    let digits = prefix
++        .strip_prefix('+')
++        .or_else(|| prefix.strip_prefix('-'))
++        .unwrap_or(prefix);
++    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
++        return Err(error("неверный числовой префикс ссылки"));
++    }
++    let uuid = super::canonical_uuid_from_physical_hex(identity)
++        .ok_or_else(|| error("неверный физический UUID внутренней ссылки"))?;
++    bsl_orm::catalog_reference_value(
++        std::sync::Arc::clone(catalog),
++        owner.object_guid.as_str(),
++        uuid,
++    )
++    .map(Some)
++}
+--- /dev/null
++++ b/crates/bsl-config-db/src/data_access/logical_result.rs
+@@ -0,0 +1,86 @@
++//! Сборка логического результата по окончательной проекции компилятора SDK.
++
++use open_bsl::{RtError, RtResult, Value};
++use open_sdbl::query::{LogicalResultColumn, LogicalResultValue, TypeValue};
++use open_sdbl_db::Cell;
++
++pub(super) fn materialize_row(
++    row: Vec<Cell>,
++    projection: &[LogicalResultColumn],
++    convert: &mut dyn FnMut(usize, Cell) -> RtResult<Value>,
++) -> RtResult<Vec<Value>> {
++    for logical in projection {
++        match &logical.value {
++            LogicalResultValue::Scalar { column } if *column < row.len() => {}
++            LogicalResultValue::Composite {
++                discriminator,
++                members,
++            } if *discriminator < row.len() && !members.is_empty() => {
++                for (index, member) in members.iter().enumerate() {
++                    if member.column.is_some_and(|column| column >= row.len())
++                        || members[..index]
++                            .iter()
++                            .any(|prior| prior.type_tag == member.type_tag)
++                    {
++                        return Err(error(
++                            "неверный индекс или неоднозначный тег логической проекции",
++                        ));
++                    }
++                }
++            }
++            _ => {
++                return Err(error(
++                    "неполный или неподдержанный рецепт логического значения",
++                ));
++            }
++        }
++    }
++    let mut cells = row.into_iter().map(Some).collect::<Vec<_>>();
++    let mut take = |index: usize| {
++        cells
++            .get_mut(index)
++            .and_then(Option::take)
++            .ok_or_else(|| error("индекс логической ячейки неверен или используется повторно"))
++    };
++    projection
++        .iter()
++        .map(|logical| match &logical.value {
++            LogicalResultValue::Scalar { column } => convert(*column, take(*column)?),
++            LogicalResultValue::Composite {
++                discriminator,
++                members,
++            } => {
++                let tag = match take(*discriminator)? {
++                    Cell::Bytes(bytes) if bytes.len() == 1 => bytes[0],
++                    // Внешнее соединение SQL сохраняет прежнее преобразование NULL.
++                    Cell::Null => return Ok(Value::Null),
++                    _ => return Err(error("признак составного типа не является одним байтом")),
++                };
++                let mut active = members.iter().filter(|member| member.type_tag == tag);
++                let member = active.next().ok_or_else(|| {
++                    error("неизвестный признак составного типа")
++                })?;
++                if active.next().is_some() {
++                    return Err(error(
++                        "признак составного типа задаёт несколько активных членов",
++                    ));
++                }
++                match member.column {
++                    Some(column) => convert(column, take(column)?),
++                    None if tag == TypeValue::Null.tag() => Ok(Value::Null),
++                    None if tag == TypeValue::Undefined.tag() => Ok(Value::Undefined),
++                    None => Err(error("активный член составного типа не содержит ячейки")),
++                }
++            }
++            _ => Err(error("неподдержанный рецепт логического значения")),
++        })
++        .collect()
++}
++
++fn error(message: &str) -> RtError {
++    RtError::DynamicError(message.into())
++}
++
++#[cfg(test)]
++#[path = "logical_result_tests.rs"]
++mod tests;
+--- /dev/null
++++ b/crates/bsl-config-db/src/data_access/logical_result_tests.rs
+@@ -0,0 +1,187 @@
++use super::*;
++use open_sdbl::query::{ColumnKind, PostgresBackend, QueryCompiler};
++
++fn snapshot(composite: bool) -> (open_sdbl::metadata::MetadataSnapshot, String) {
++    use open_sdbl::metadata::*;
++    let id = "9893e2d6-f3f8-4d73-bb06-19bf26d216ab";
++    let descriptors = parse_config_descriptors(id, include_bytes!("../../tests/fixtures/functional-options/native/9893e2d6-f3f8-4d73-bb06-19bf26d216ab.deflate")).unwrap();
++    let name = descriptors.iter().find(|item| item.object_guid.as_str() == id).unwrap().name.clone();
++    // Нативный Config задаёт имя владельца; физическая раскладка здесь синтетическая.
++    let types = if composite { vec!["L", "S"] } else { vec!["L"] };
++    let columns = if composite {
++        vec![("_fld2_l", "boolean"), ("_fld2_s", "character varying(120)"), ("_fld2_type", "bytea")]
++    } else { vec![("_fld2", "boolean")] };
++    let snapshot = resolve_metadata(
++        DbNames::from_entries(vec![
++            DbNameEntry { guid: id.parse().unwrap(), alias: "Const".into(), number: 1 },
++            DbNameEntry { guid: id.parse().unwrap(), alias: "Fld".into(), number: 2 },
++        ]), descriptors,
++        SchemaStorage { tables: vec![SchemaTable {
++            name: "Const1".into(), number: 1, owner: None, inline_name: None,
++            columns: vec![SchemaColumn { name: "Fld2".into(), types: types.into_iter().map(|tag| ColumnType { tag: tag.into(), reference_target: None }).collect() }], indexes: vec![],
++        }], anomalies: vec![] },
++        vec![LiveTable { name: "_const1".into(), columns: columns.into_iter().map(|(name, data_type)| LiveColumn { name: name.into(), data_type: data_type.into() }).collect(), indexes: vec![] }],
++    ).snapshot;
++    (snapshot, name)
++}
++
++fn compiled() -> open_sdbl::query::CompiledQuery {
++    let (snapshot, name) = snapshot(false);
++    QueryCompiler::new(&snapshot, PostgresBackend).compile(&format!("SELECT CASE WHEN TRUE THEN FALSE ELSE \"profile\" END AS Value FROM Constant.{name}")).unwrap()
++}
++
++#[test]
++fn active_member_alone_is_converted_to_one_logical_value() {
++    let query = compiled();
++    let plan = query.logical_projection.as_ref().unwrap();
++    assert_eq!(plan.len(), 1);
++    let LogicalResultValue::Composite {
++        discriminator,
++        members,
++    } = &plan[0].value
++    else {
++        panic!("ожидался составной рецепт")
++    };
++    for tag in [2, 5] {
++        let mut row = vec![Cell::Null; query.columns.len()];
++        row[*discriminator] = Cell::Bytes(vec![tag]);
++        for member in members {
++            row[member.column.unwrap()] = if member.type_tag != tag {
++                Cell::Bytes(vec![0xff])
++            } else if tag == 2 {
++                Cell::Bool(false)
++            } else {
++                Cell::Text("profile".into())
++            };
++        }
++        let mut calls = 0;
++        let values = materialize_row(row, plan, &mut |index, cell| {
++            calls += 1;
++            super::super::value_from_cell(cell, &query.columns[index].kind)
++        })
++        .unwrap();
++        assert_eq!(calls, 1);
++        assert_eq!(
++            values,
++            vec![if tag == 2 {
++                Value::Boolean(false)
++            } else {
++                Value::Str("profile".into())
++            }]
++        );
++    }
++}
++
++#[test]
++fn invalid_discriminator_and_indices_fail_explicitly() {
++    let query = compiled();
++    let plan = query.logical_projection.as_ref().unwrap();
++    let LogicalResultValue::Composite { discriminator, .. } = &plan[0].value else {
++        panic!("ожидался составной рецепт")
++    };
++    for bytes in [vec![], vec![2, 0], vec![255]] {
++        let mut row = vec![Cell::Null; query.columns.len()];
++        row[*discriminator] = Cell::Bytes(bytes);
++        assert!(materialize_row(row, plan, &mut |_, _| Ok(Value::Undefined)).is_err());
++    }
++    let mut invalid = plan.clone();
++    invalid[0].value = LogicalResultValue::Scalar {
++        column: query.columns.len(),
++    };
++    assert!(
++        materialize_row(
++            vec![Cell::Null; query.columns.len()],
++            &invalid,
++            &mut |_, _| Ok(Value::Undefined)
++        )
++        .is_err()
++    );
++    assert!(
++        query
++            .columns
++            .iter()
++            .any(|column| matches!(column.kind, ColumnKind::Boolean))
++    );
++}
++
++#[test]
++fn repeated_scalar_fields_keep_independent_logical_positions() {
++    let (snapshot, name) = snapshot(false);
++    let query = QueryCompiler::new(&snapshot, PostgresBackend)
++        .compile(&format!("SELECT T.Value AS First, T.Value AS Second FROM Constant.{name} AS T"))
++        .unwrap();
++    let plan = query.logical_projection.as_ref().unwrap();
++    assert_eq!(
++        plan.iter()
++            .map(|column| column.name.as_str())
++            .collect::<Vec<_>>(),
++        ["First", "Second"]
++    );
++    let values = materialize_row(
++        vec![Cell::Bool(false), Cell::Bool(true)],
++        plan,
++        &mut |index, cell| super::super::value_from_cell(cell, &query.columns[index].kind),
++    )
++    .unwrap();
++    assert_eq!(
++        values,
++        vec![Value::Boolean(false), Value::Boolean(true)]
++    );
++    assert!(
++        materialize_row(vec![Cell::Bool(false)], plan, &mut |_, _| Ok(
++            Value::Undefined
++        ))
++        .is_err()
++    );
++}
++
++#[test]
++fn invalid_inactive_member_and_duplicate_tags_are_rejected() {
++    let query = compiled();
++    let plan = query.logical_projection.as_ref().unwrap();
++    for duplicate in [false, true] {
++        let mut invalid = plan.clone();
++        let LogicalResultValue::Composite {
++            discriminator,
++            members,
++        } = &mut invalid[0].value
++        else {
++            panic!("ожидался составной рецепт")
++        };
++        if duplicate {
++            members[1].type_tag = members[0].type_tag;
++        } else {
++            members[1].column = Some(query.columns.len());
++        }
++        let mut row = vec![Cell::Null; query.columns.len()];
++        row[*discriminator] = Cell::Bytes(vec![members[0].type_tag]);
++        assert!(materialize_row(row, &invalid, &mut |_, _| Ok(Value::Undefined)).is_err());
++    }
++}
++
++#[test]
++fn a_storage_field_undefined_tag_has_no_payload_to_decode() {
++    let (snapshot, name) = snapshot(true);
++    let query = QueryCompiler::new(&snapshot, PostgresBackend)
++        .compile(&format!("SELECT Value AS Value FROM Constant.{name}")).unwrap();
++    let plan = query.logical_projection.as_ref().unwrap();
++    let LogicalResultValue::Composite {
++        discriminator,
++        members,
++    } = &plan[0].value
++    else {
++        panic!("ожидался составной рецепт")
++    };
++    assert!(
++        members
++            .iter()
++            .any(|member| member.type_tag == TypeValue::Undefined.tag() && member.column.is_none())
++    );
++    let mut row = vec![Cell::Null; query.columns.len()];
++    row[*discriminator] = Cell::Bytes(vec![TypeValue::Undefined.tag()]);
++    let values = materialize_row(row, plan, &mut |_, _| {
++        panic!("у Неопределено нет полезной ячейки")
++    })
++    .unwrap();
++    assert_eq!(values, vec![Value::Undefined]);
++}

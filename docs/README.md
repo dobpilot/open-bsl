@@ -23,6 +23,15 @@
 
 ## Справочник BSL API
 
+Запуск исходного модуля сеанса с подключением к базе описан в
+[`reference/configuration-session-cli.md`](reference/configuration-session-cli.md).
+Там приведены выбор тонкого или веб-сеанса, параметры подключения и границы
+текущей реализации.
+[Файловые источники XML и EDT](reference/configuration-file-sources.md) описывают
+подключение локального кода и ресурсов при сохранении ORM и прав из БД.
+Подготовка модулей и подробных метаданных при первом обращении описана в
+[`architecture/on-demand-session-preparation.md`](architecture/on-demand-session-preparation.md).
+
 Сводный справочник функций, конструкторов, объектов, методов и свойств
 генерируется из runtime-дескрипторов:
 

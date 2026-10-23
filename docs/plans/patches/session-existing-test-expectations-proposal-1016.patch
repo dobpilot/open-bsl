@@ -1,0 +1,130 @@
+--- a/crates/bsl-orm/src/tests.rs
++++ b/crates/bsl-orm/src/tests.rs
+@@ -2531,7 +2531,7 @@
+         access.calls.borrow().as_slice(),
+         [(
+             "ВЫБРАТЬ &Значение КАК Значение".into(),
+-            vec![("Значение".into(), Value::number_from_i64(42))],
++            vec![("зНаЧеНиЕ".into(), Value::number_from_i64(42))],
+         )]
+     );
+ }
+--- a/crates/bsl-spreadsheet/src/lib.rs
++++ b/crates/bsl-spreadsheet/src/lib.rs
+@@ -118,6 +118,6 @@
+             .iter()
+             .map(|constructor| constructor.code.get())
+             .collect::<Vec<_>>();
+-        assert_eq!(codes, (1..=3).collect::<Vec<_>>());
++        assert_eq!(codes, (1..=4).collect::<Vec<_>>());
+     }
+ }
+--- a/crates/bsl-session/tests/data_processor_templates.rs
++++ b/crates/bsl-session/tests/data_processor_templates.rs
+@@ -76,14 +76,12 @@
+                 .is_err()
+         );
+     }
+-    for kind in [MetadataKind::Constant, MetadataKind::AccumulationRegister] {
+-        assert!(
+-            !kind
+-                .receiver_methods()
+-                .iter()
+-                .any(|method| method.names().contains(&"ПолучитьМакет"))
+-        );
+-    }
++    assert!(
++        !MetadataKind::Constant
++            .receiver_methods()
++            .iter()
++            .any(|method| method.names().contains(&"ПолучитьМакет"))
++    );
+ }
+ 
+ #[test]
+--- a/crates/bsl-session/tests/document_templates.rs
++++ b/crates/bsl-session/tests/document_templates.rs
+@@ -76,14 +76,12 @@
+                 .is_err()
+         );
+     }
+-    for kind in [MetadataKind::Constant, MetadataKind::AccumulationRegister] {
+-        assert!(
+-            !kind
+-                .receiver_methods()
+-                .iter()
+-                .any(|method| method.names().contains(&"ПолучитьМакет"))
+-        );
+-    }
++    assert!(
++        !MetadataKind::Constant
++            .receiver_methods()
++            .iter()
++            .any(|method| method.names().contains(&"ПолучитьМакет"))
++    );
+ }
+ 
+ #[test]
+--- a/crates/bsl-session/tests/information_register_templates.rs
++++ b/crates/bsl-session/tests/information_register_templates.rs
+@@ -78,14 +78,12 @@
+                 .is_err()
+         );
+     }
+-    for kind in [MetadataKind::Constant, MetadataKind::AccumulationRegister] {
+-        assert!(
+-            !kind
+-                .receiver_methods()
+-                .iter()
+-                .any(|method| method.names().contains(&"ПолучитьМакет"))
+-        );
+-    }
++    assert!(
++        !MetadataKind::Constant
++            .receiver_methods()
++            .iter()
++            .any(|method| method.names().contains(&"ПолучитьМакет"))
++    );
+ }
+ 
+ #[test]
+--- a/crates/bsl-bytecode/tests/imports.rs
++++ b/crates/bsl-bytecode/tests/imports.rs
+@@ -39,7 +39,7 @@
+         None,
+     )
+     .unwrap();
+-    assert!(text.starts_with("bslc 44\n"));
++    assert!(text.starts_with("bslc 45\n"));
+     assert!(text.contains(".imports 2"));
+     let bsl_bytecode::BytecodeImage::Configuration {
+         catalog: parsed, ..
+@@ -54,7 +54,7 @@
+     assert!(parsed.modules[0].program.imports[0].global);
+     assert!(parsed.modules[0].program.links.is_empty());
+     assert!(matches!(
+-        bsl_bytecode::parse_image(&text.replacen("bslc 44", "bslc 43", 1)),
++        bsl_bytecode::parse_image(&text.replacen("bslc 45", "bslc 44", 1)),
+         Err(bsl_bytecode::TextError::BadHeader(_))
+     ));
+     for (from, to) in [
+--- a/crates/bsl-bytecode/tests/text_format.rs
++++ b/crates/bsl-bytecode/tests/text_format.rs
+@@ -26,7 +26,7 @@
+ #[test]
+ fn format_without_open_method_argument_modes_is_rejected() {
+     let text = write_program(&one_const(), None).unwrap();
+-    let old = text.replacen("bslc 44", "bslc 43", 1);
++    let old = text.replacen("bslc 45", "bslc 44", 1);
+     assert_ne!(old, text);
+     assert!(matches!(parse_program(&old), Err(TextError::BadHeader(_))));
+ }
+@@ -45,7 +45,7 @@
+         assert_eq!(parsed.chunks[0].consts, program.chunks[0].consts);
+         assert_eq!(write_program(&parsed, None).unwrap(), text);
+         assert!(matches!(
+-            parse_program(&text.replacen("bslc 44", "bslc 43", 1)),
++            parse_program(&text.replacen("bslc 45", "bslc 44", 1)),
+             Err(TextError::BadHeader(_))
+         ));
+         for invalid in ["-1", "3155378976000000", "18446744073709551615", "1.5"] {

@@ -1,0 +1,439 @@
+{
+  "evidence": "Native Designer XML export of UNF Document.Событие; descriptors only, not decoded Config or a runtime oracle.",
+  "attributes": [
+    {
+      "id": "12fcaefd-e8e5-40f6-9305-25199681a2f6",
+      "name": "Автор",
+      "types": [
+        "cfg:CatalogRef.Пользователи"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "d26afd11-215e-453c-85ba-55c39f59463b",
+      "name": "Важность",
+      "types": [
+        "cfg:EnumRef.ВариантыВажности"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "true",
+      "fill_value": {
+        "nil": false,
+        "type": "xr:DesignTimeRef",
+        "text": "Enum.ВариантыВажности.EnumValue.Обычная"
+      }
+    },
+    {
+      "id": "f9a0d435-0a6b-4700-bf68-6f89499ea8fb",
+      "name": "ВходящееИсходящееСобытие",
+      "types": [
+        "cfg:EnumRef.ВходящееИсходящееСобытие"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xr:DesignTimeRef",
+        "text": "Enum.ВходящееИсходящееСобытие.EnumValue.Исходящее"
+      }
+    },
+    {
+      "id": "e350fdab-d2d1-45e8-bd75-a2ee410245f1",
+      "name": "ДокументОснование",
+      "types": [],
+      "type_sets": [
+        "cfg:DefinedType.ОснованиеСобытия"
+      ],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "14318c47-a5b1-4de4-980f-7ac0e8d690e1",
+      "name": "ЗагрузитьПриОткрытии",
+      "types": [
+        "xs:boolean"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "3fdc6163-42a4-49a5-848a-686822b7ac40",
+      "name": "ИмяОтправителяSMS",
+      "types": [
+        "xs:string"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "StringQualifiers": {
+          "Length": "50",
+          "AllowedLength": "Variable"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xs:string",
+        "text": null
+      }
+    },
+    {
+      "id": "86c07f5d-13ac-4c2a-93d5-4f667d20c7b6",
+      "name": "ИсточникПривлечения",
+      "types": [
+        "cfg:CatalogRef.ИсточникиПривлеченияПокупателей"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "b4169386-b1eb-46e9-a7bc-54d900c86e7b",
+      "name": "КалендарьСотрудника",
+      "types": [
+        "cfg:CatalogRef.КалендариСотрудников"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "4cfbb712-7962-4e04-9374-4e1b1fff3731",
+      "name": "КартинкиHTML",
+      "types": [
+        "v8:ValueStorage"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "70a7612a-7aa7-4aba-ac91-52f915bf6b89",
+      "name": "НачалоСобытия",
+      "types": [
+        "xs:dateTime"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "DateQualifiers": {
+          "DateFractions": "DateTime"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "f0e15979-0e0d-4a83-a615-dbbdae54f915",
+      "name": "ОкончаниеСобытия",
+      "types": [
+        "xs:dateTime"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "DateQualifiers": {
+          "DateFractions": "DateTime"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "dacffd75-cb08-4741-a129-8c7a62abe7da",
+      "name": "Ответственный",
+      "types": [
+        "cfg:CatalogRef.Сотрудники"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xr:DesignTimeRef",
+        "text": "Catalog.Сотрудники.EmptyRef"
+      }
+    },
+    {
+      "id": "2e88930f-233b-4580-bb88-152d137b9fdd",
+      "name": "Проект",
+      "types": [
+        "cfg:CatalogRef.Проекты"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "8c7a9073-0cb8-4dcf-80e2-fe0727d6a6d0",
+      "name": "Содержание",
+      "types": [
+        "xs:string"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "StringQualifiers": {
+          "Length": "0",
+          "AllowedLength": "Variable"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xs:string",
+        "text": null
+      }
+    },
+    {
+      "id": "7d832eea-0456-4415-9cd1-9c158d63a44b",
+      "name": "СодержаниеHTML",
+      "types": [
+        "xs:string"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "StringQualifiers": {
+          "Length": "0",
+          "AllowedLength": "Variable"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "22164984-eeb8-4a63-903f-d680f590f8cf",
+      "name": "Состояние",
+      "types": [
+        "cfg:CatalogRef.СостоянияСобытий"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xr:DesignTimeRef",
+        "text": "Catalog.СостоянияСобытий.Запланировано"
+      }
+    },
+    {
+      "id": "ce2cceef-57e5-4fff-88da-a4ed86873ead",
+      "name": "СписокУчастников",
+      "types": [
+        "xs:string"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "StringQualifiers": {
+          "Length": "0",
+          "AllowedLength": "Variable"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xs:string",
+        "text": null
+      }
+    },
+    {
+      "id": "a947fb87-d7d6-4b6c-b256-5dfe8175048b",
+      "name": "Тема",
+      "types": [
+        "xs:string",
+        "cfg:CatalogRef.ТемыСобытий"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "StringQualifiers": {
+          "Length": "200",
+          "AllowedLength": "Variable"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xs:string",
+        "text": null
+      }
+    },
+    {
+      "id": "dd4f8221-ae19-40d1-8f6f-cdf12a0e800d",
+      "name": "ТемаИСодержание",
+      "types": [
+        "xs:string"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "StringQualifiers": {
+          "Length": "0",
+          "AllowedLength": "Variable"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xs:string",
+        "text": null
+      }
+    },
+    {
+      "id": "23c3bc38-0bb4-45ae-b9e3-343f892c3193",
+      "name": "ТипСобытия",
+      "types": [
+        "cfg:EnumRef.ТипыСобытий"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xr:DesignTimeRef",
+        "text": "Enum.ТипыСобытий.EnumValue.Прочее"
+      }
+    },
+    {
+      "id": "9d287fc6-8e57-4fbc-a6c1-017ccdfd0f5c",
+      "name": "УдалитьВходящееИсходящееСобытие",
+      "types": [
+        "cfg:EnumRef.ВходящееИсходящееСобытие"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xr:DesignTimeRef",
+        "text": "Enum.ВходящееИсходящееСобытие.EnumValue.Входящее"
+      }
+    },
+    {
+      "id": "823a076f-ec13-4ef8-8647-73873a20b492",
+      "name": "УчетнаяЗапись",
+      "types": [
+        "cfg:CatalogRef.УчетныеЗаписиЭлектроннойПочты"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "622f957c-a067-4ed5-bf6b-57c018c35c02",
+      "name": "ХозяйственнаяОперация",
+      "types": [
+        "cfg:CatalogRef.ХозяйственныеОперации"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "9cb32bc7-0ab4-4afa-8161-9d6dafe2371e",
+      "name": "КонтактыПеренесены",
+      "types": [
+        "xs:boolean"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xs:boolean",
+        "text": "false"
+      }
+    },
+    {
+      "id": "6a0b2aeb-0c38-49be-bfb2-110e7b701ad2",
+      "name": "ЗадачаАссистентаУправления",
+      "types": [
+        "cfg:CatalogRef.ЗадачиАссистентаУправления"
+      ],
+      "type_sets": [],
+      "qualifiers": {},
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": true,
+        "type": null,
+        "text": null
+      }
+    },
+    {
+      "id": "01f8a59b-abaa-47bf-a8a9-6ffa87bce758",
+      "name": "АдресОбсуждения",
+      "types": [
+        "xs:string"
+      ],
+      "type_sets": [],
+      "qualifiers": {
+        "StringQualifiers": {
+          "Length": "0",
+          "AllowedLength": "Variable"
+        }
+      },
+      "fill_from_filling_value": "false",
+      "fill_value": {
+        "nil": false,
+        "type": "xs:string",
+        "text": null
+      }
+    }
+  ]
+}

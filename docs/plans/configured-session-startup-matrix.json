@@ -1,0 +1,2449 @@
+{
+  "date": "2026-10-16",
+  "scope": "Original session initialization; user-approved protected export stubs by default",
+  "on_demand_matrix_2026_10_21": {
+    "status": "sdk37_all9_verified",
+    "current_receipts": "docs/research/fixtures/on-demand-session-matrix-sdk37-1021/result.json",
+    "previous_candidate_receipts": "docs/research/fixtures/on-demand-session-matrix-1021/result.json",
+    "regression": "docs/plans/findings/on-demand-scheduled-job-method-dependency.md",
+    "scope": "Original initialization with previously approved protected export stubs; background procedure bodies are not invoked",
+    "previous_dependency_fix_receipts": "docs/research/fixtures/on-demand-session-matrix-fixed-dependency-1021/result.json",
+    "cache_regression": "docs/plans/findings/deferred-prepared-module-caches.md",
+    "passed": 9,
+    "failed": 0,
+    "current_full_workspace_gate": "docs/research/fixtures/deferred-prepared-module-caches-1021/sdk37-final-checks/results.json",
+    "first_full_workspace_gate": "docs/research/fixtures/deferred-prepared-module-caches-1021/final-checks/results.json",
+    "previous_sdk35_receipts": "docs/research/fixtures/on-demand-session-matrix-deferred-cache-1021/result.json",
+    "known_additional_projection_defect": "docs/research/fixtures/document-reference-owner-acquisition-1021/result.json",
+    "last_completed_sdk36_matrix": "docs/research/fixtures/on-demand-session-matrix-sdk36-1021/result.json",
+    "pending": 0,
+    "resolved_projection_control": "docs/research/fixtures/document-reference-owner-acquisition-sdk37-1021/result.json",
+    "final_receipt_review": "docs/research/fixtures/on-demand-session-matrix-sdk37-1021/final-review.json"
+  },
+  "goal_scope_decision_2026_10_21": {
+    "scope_document": "docs/plans/session-initialization-goal.md",
+    "deferred_work": "decompile-native-module-images",
+    "full_protected_body_execution_required_for_current_goal": false,
+    "protected_export_mode": "previously approved default stubs",
+    "protected_body_execution_parity_claimed": false,
+    "live_document_number_allocation_required_for_current_goal": false,
+    "deferred_numbering_plan": "docs/plans/document-live-number-allocation.md"
+  },
+  "evidence_directory": "target/diagnostics/readonly-startup",
+  "cases": [
+    {
+      "database": "demo",
+      "kind": "ThinClient",
+      "status": "passed",
+      "log": "demo-index-fixed-1015-startup.log",
+      "exit_code": 0,
+      "receipt": "docs/research/fixtures/session-startup-demo-exchange-node-access-1016/result.json",
+      "sdk_version": "0.9.20",
+      "verification_freshness": "Current production library implementation with measured exchange-plan references and authorized host-local snapshots",
+      "previous_verification": {
+        "database": "demo",
+        "kind": "ThinClient",
+        "status": "failed",
+        "log": "demo-index-fixed-1015-startup.log",
+        "exit_code": 1
+      }
+    },
+    {
+      "database": "demo",
+      "kind": "WebClient",
+      "status": "passed",
+      "receipt": "docs/research/fixtures/session-startup-demo-web-exchange-1016/result.json",
+      "exit_code": 0,
+      "sdk_version": "0.9.20",
+      "verification_freshness": "Current production library implementation with measured exchange-plan references and authorized host-local snapshots",
+      "previous_verification": {
+        "database": "demo",
+        "kind": "WebClient",
+        "status": "not_started"
+      }
+    },
+    {
+      "database": "demo",
+      "kind": "BackgroundJob",
+      "status": "passed",
+      "receipt": "docs/research/fixtures/session-startup-demo-background-exchange-1016/result.json",
+      "exit_code": 0,
+      "sdk_version": "0.9.20",
+      "verification_freshness": "Current production library implementation with measured exchange-plan references and authorized host-local snapshots",
+      "previous_verification": {
+        "database": "demo",
+        "kind": "BackgroundJob",
+        "status": "not_started"
+      }
+    },
+    {
+      "database": "buh",
+      "kind": "ThinClient",
+      "status": "passed",
+      "startup_passed": true,
+      "process_exit_code": 0,
+      "selected_parameter_passed": true,
+      "session_id": 83119,
+      "seconds": 811.99,
+      "observed_peak_rss_kib": 11003984,
+      "worker_threads": 24,
+      "sdk_version": "0.9.20",
+      "parameters_total": 112,
+      "parameters_initialized": 8,
+      "receipt": "docs/research/fixtures/session-startup-buh-host-matrix-1016/result.json",
+      "previous_verification": {
+        "database": "buh",
+        "kind": "ThinClient",
+        "status": "passed",
+        "startup_passed": true,
+        "process_exit_code": 0,
+        "selected_parameter_passed": true,
+        "session_id": 83119,
+        "seconds": 811.99,
+        "observed_peak_rss_kib": 11003984,
+        "worker_threads": 24,
+        "sdk_version": "0.9.20",
+        "parameters_total": 112,
+        "parameters_initialized": 8,
+        "receipt": "docs/research/fixtures/buh-selected-parameter-allocation-1016/lazy-worker-catalog/original-startup/result.json",
+        "previous_verification": {
+          "database": "buh",
+          "kind": "ThinClient",
+          "status": "passed",
+          "startup_passed": true,
+          "log": "buh-default-interface-sdk20-review-1016-startup.log",
+          "process_exit_code": 134,
+          "process_failure_stage": "selected-parameter check AFTER successful original SessionFactory::open",
+          "seconds": 720.83,
+          "observed_peak_rss_kib": 12305612,
+          "configuration_compiled_seconds": 552.15,
+          "receipt": "docs/research/fixtures/configuration-default-interface-implementation-1016/original-startup/result.json",
+          "parameters_total": 112,
+          "parameters_initialized": 8,
+          "previous_failure": {
+            "database": "buh",
+            "kind": "ThinClient",
+            "status": "failed",
+            "log": "buh-option-mode-sdk20-review-1016-startup.log",
+            "exit_code": 1,
+            "seconds": 682.55,
+            "observed_peak_rss_kib": 12428464,
+            "configuration_compiled_seconds": 548.95,
+            "failure": "UnknownProperty(ОсновнойИнтерфейс)",
+            "receipt": "docs/research/fixtures/buh-functional-option-mode-1016/original-startup/result.json",
+            "compiled_catalog_modules": 5660,
+            "worker_image_bytes": 989212994,
+            "memory_failure_reached_again": false,
+            "functional_option_mode_failure_reached_again": false,
+            "previous_failure": {
+              "database": "buh",
+              "kind": "ThinClient",
+              "status": "failed",
+              "log": "buh-access-token-sdk20-review-1016-startup.log",
+              "exit_code": 1,
+              "seconds": 696.14,
+              "observed_peak_rss_kib": 12414432,
+              "configuration_compiled_seconds": 566.89,
+              "failure": "FunctionalOption ИспользуютсяПрофилиБезопасности: режим получения функциональной опции неизвестен",
+              "receipt": "docs/research/fixtures/buh-access-token-startup-1016/result.json",
+              "compiled_catalog_modules": 5660,
+              "worker_image_bytes": 989212994,
+              "memory_failure_reached_again": false,
+              "access_token_compilation_failure_reached_again": false,
+              "previous_failure": {
+                "database": "buh",
+                "kind": "ThinClient",
+                "status": "failed",
+                "log": "buh-shared-imports-sdk20-review-1016-startup.log",
+                "exit_code": 1,
+                "seconds": 680.3,
+                "observed_peak_rss_kib": 12276848,
+                "configuration_compiled_seconds": 559.49,
+                "failure": "ModuleCompilation: не поддержано: тип «ТокенДоступа» в выражении Новый",
+                "previous_failure": {
+                  "database": "buh",
+                  "kind": "ThinClient",
+                  "status": "failed",
+                  "log": "buh-shared-tables-sdk20-review-1016-startup.log",
+                  "exit_code": 134,
+                  "seconds": 659.15,
+                  "observed_peak_rss_kib": 9503548,
+                  "configuration_compiled_seconds": 560.94,
+                  "failure": "Name/shape sharing alone insufficient: write_image allocation2967994368bytes still exceeds12GiB",
+                  "previous_failure": {
+                    "database": "buh",
+                    "kind": "ThinClient",
+                    "status": "failed",
+                    "log": "buh-allocation-trace-sdk20-review-1016-startup.log",
+                    "exit_code": 134,
+                    "seconds": 661.89,
+                    "observed_peak_rss_kib": 9498696,
+                    "configuration_compiled_seconds": 561.89,
+                    "failure": "memory allocation of2967994368bytes failed",
+                    "previous_failure": {
+                      "database": "buh",
+                      "kind": "ThinClient",
+                      "status": "failed",
+                      "log": "buh-constant-type-sdk20-review-1016-startup.log",
+                      "exit_code": 134,
+                      "seconds": 622.88,
+                      "observed_peak_rss_kib": 9493200,
+                      "configuration_compiled_seconds": 526.78,
+                      "failure": "memory allocation of 2967994368 bytes failed under 12 GiB address-space limit",
+                      "previous_failure": {
+                        "database": "buh",
+                        "kind": "ThinClient",
+                        "status": "failed",
+                        "log": "buh-extension-types-sdk20-review-1016-startup.log",
+                        "exit_code": 1,
+                        "seconds": 626.68,
+                        "observed_peak_rss_kib": 9408244,
+                        "configuration_compiled_seconds": 533.88,
+                        "failure": "Boolean-тип константы условия разделения неизвестен",
+                        "previous_failure": {
+                          "database": "buh",
+                          "kind": "ThinClient",
+                          "status": "failed",
+                          "log": "buh-name-capacity-sdk20-review-1016-startup.log",
+                          "exit_code": 1,
+                          "seconds": 654.32,
+                          "observed_peak_rss_kib": 9408128,
+                          "configuration_compiled_seconds": 555.03,
+                          "failure": "Read access denied for Catalog.ВерсииРасширений.Attribute.ОписаниеМетаданных during ВерсияРасширений",
+                          "previous_failure": {
+                            "database": "buh",
+                            "kind": "ThinClient",
+                            "status": "failed",
+                            "log": "buh-reg-pressure-sdk20-review-1016-startup.log",
+                            "previous_failure": {
+                              "database": "buh",
+                              "kind": "ThinClient",
+                              "status": "failed",
+                              "log": "buh-data-load-sdk20-review-1016-startup.log",
+                              "previous_failure": {
+                                "database": "buh",
+                                "kind": "ThinClient",
+                                "status": "failed",
+                                "log": "buh-plot-area-sdk20-review-1016-startup.log",
+                                "previous_failure": {
+                                  "database": "buh",
+                                  "kind": "ThinClient",
+                                  "status": "failed",
+                                  "log": "buh-pattern-sdk20-review-1016-startup.log",
+                                  "previous_failure": {
+                                    "database": "buh",
+                                    "kind": "ThinClient",
+                                    "status": "failed",
+                                    "log": "buh-accum-template-sdk20-review-1016-startup.log",
+                                    "previous_failure": {
+                                      "database": "buh",
+                                      "kind": "ThinClient",
+                                      "status": "failed",
+                                      "log": "buh-controlled-transactions-sdk20-review-1016-startup.log",
+                                      "previous_failure": {
+                                        "database": "buh",
+                                        "kind": "ThinClient",
+                                        "status": "failed",
+                                        "log": "buh-equipment-installation-sdk20-review-1016-startup.log",
+                                        "previous_failure": {
+                                          "log": "buh-vat-real-estate-sdk20-review-1016-startup.log",
+                                          "error": "UndefinedVariable(\"Оборудование\") in Документ.ПередачаОборудованияВМонтаж.МодульОбъекта",
+                                          "exit_code": 1
+                                        },
+                                        "exit_code": 1,
+                                        "error": "UndefinedVariable(\"УведомлениеОКонтролируемойСделке\") in Документ.ПрочиеКонтролируемыеСделки.МодульОбъекта",
+                                        "sdk_version": "0.9.20",
+                                        "sdk_review_fix": "SDK20 frozen stack through current40/header2 section fallback",
+                                        "elapsed_seconds": 255.69
+                                      },
+                                      "exit_code": 1,
+                                      "error": "UndefinedFunction(\"ПолучитьМакет\") in РегистрНакопления.УменьшениеНалогаНаСтраховыеВзносыИП.МодульМенеджера",
+                                      "sdk_version": "0.9.20",
+                                      "sdk_review_fix": "SDK20 frozen stack through measured Legacy38 own textual comments",
+                                      "elapsed_seconds": 277.68,
+                                      "receipt": "docs/research/fixtures/buh-controlled-transactions-metadata-1016/buh-controlled-transactions-sdk20-review-1016-result.json"
+                                    },
+                                    "exit_code": 1,
+                                    "error": "UndefinedVariable(\"ТипУзораТабличногоДокумента\") in Отчет.РегламентированныйОтчетУСН.МодульОбъекта",
+                                    "sdk_version": "0.9.20",
+                                    "sdk_review_fix": "SDK20 frozen stack through measured Legacy38 own textual comments",
+                                    "elapsed_seconds": 259.45,
+                                    "receipt": "docs/research/fixtures/accumulation-register-template-1016/buh-accum-template-sdk20-review-1016-result.json"
+                                  },
+                                  "exit_code": 1,
+                                  "error": "UndefinedVariable(\"РасположениеОбластиПостроенияДиаграммы\") in Отчет.АнализДвиженийДенежныхСредств.МодульМенеджера",
+                                  "sdk_version": "0.9.20",
+                                  "sdk_review_fix": "SDK20 frozen stack through measured Legacy38 own textual comments",
+                                  "elapsed_seconds": 269.22,
+                                  "receipt": "docs/research/fixtures/spreadsheet-pattern-native-1016/buh-pattern-sdk20-review-1016-result.json"
+                                },
+                                "exit_code": 1,
+                                "error": "UndefinedVariable(\"ДатаЗавершения\") in Справочник.СеансыЗагрузкиДанныхВнешнихСистем.МодульОбъекта",
+                                "sdk_version": "0.9.20",
+                                "sdk_review_fix": "SDK20 frozen stack through measured Legacy38 own textual comments",
+                                "elapsed_seconds": 272.53,
+                                "receipt": "docs/research/fixtures/chart-plot-area-native-1016/buh-plot-area-sdk20-review-1016-result.json"
+                              },
+                              "exit_code": 1,
+                              "error": "TooManyRegisters in ЗаполнениеБухгалтерскойОтчетностиУпрощенная.ЗаполнитьМПФормаОтчета2012Кв4_БалансПоГрафе2012Кв4",
+                              "sdk_version": "0.9.20",
+                              "sdk_review_fix": "SDK20 frozen stack through measured Legacy38 own textual comments",
+                              "elapsed_seconds": 468.15,
+                              "receipt": "docs/research/fixtures/buh-data-load-sessions-metadata-1016/buh-data-load-sdk20-review-1016-result.json"
+                            },
+                            "exit_code": 1,
+                            "error": "TooManyNames in Отчет.СведенияОбОтклоненияхИСМП.МодульОбъекта.ПриСозданииНаСервере",
+                            "sdk_version": "0.9.20",
+                            "sdk_review_fix": "SDK20 frozen stack through measured Legacy38 own textual comments",
+                            "elapsed_seconds": 464.24,
+                            "receipt": "docs/research/fixtures/buh-register-pressure-1016/buh-reg-pressure-sdk20-review-1016-result.json"
+                          },
+                          "diagnosis": {
+                            "catalog": "ВерсииРасширений",
+                            "sdk_declared_types_known": false,
+                            "native_xml_types": [
+                              "String(unbounded Variable)",
+                              "DateTime"
+                            ],
+                            "full_access_role_confirmed": true,
+                            "candidate_fix": "/tmp/open-sdbl-extension-version-types-review",
+                            "candidate_independent_public_api_check": "passed",
+                            "candidate_full_gates_and_corpus": "1057 passed / two inherited failures /13 ignored; other gates passed;751catalogs unchanged, only reached owner gained two types;455documents identical in corpus comparison",
+                            "evidence": "docs/research/fixtures/buh-extension-version-field-access-1016"
+                          }
+                        }
+                      }
+                    },
+                    "allocation_evidence": "docs/research/fixtures/buh-startup-job-runtime-allocation-1016/result.json"
+                  },
+                  "allocation_evidence": "docs/research/fixtures/buh-startup-job-runtime-allocation-1016/result.json"
+                },
+                "allocation_evidence": "docs/research/fixtures/buh-startup-job-runtime-allocation-1016/result.json",
+                "compiled_catalog_modules": 5660,
+                "worker_image_bytes": 989211225,
+                "memory_failure_reached_again": false
+              }
+            }
+          }
+        },
+        "verification_freshness": "Historical passing receipt before exchange-plan Config class correction and manager declarations; replay required on final source"
+      },
+      "verification_freshness": "Current exchange-plan implementation; shared public factory and three separate connections",
+      "exit_code": 0
+    },
+    {
+      "database": "buh",
+      "kind": "WebClient",
+      "status": "passed",
+      "session_id": 51866,
+      "scope": "Original WebClient startup on same immutable SDK20/deferred-worker snapshot; readonly12GiB cap",
+      "receipt": "docs/research/fixtures/session-startup-buh-host-matrix-1016/result.json",
+      "startup_passed": true,
+      "process_exit_code": 0,
+      "seconds": 634.76,
+      "observed_peak_rss_kib": 11000592,
+      "verification_freshness": "Current exchange-plan implementation; shared public factory and three separate connections",
+      "exit_code": 0,
+      "sdk_version": "0.9.20",
+      "previous_verification": {
+        "database": "buh",
+        "kind": "WebClient",
+        "status": "passed",
+        "session_id": 51866,
+        "scope": "Original WebClient startup on same immutable SDK20/deferred-worker snapshot; readonly12GiB cap",
+        "receipt": "docs/research/fixtures/session-startup-buh-web-1016/result.json",
+        "startup_passed": true,
+        "process_exit_code": 0,
+        "seconds": 634.76,
+        "observed_peak_rss_kib": 11000592,
+        "verification_freshness": "Historical passing receipt before exchange-plan Config class correction and manager declarations; replay required on final source"
+      }
+    },
+    {
+      "database": "buh",
+      "kind": "BackgroundJob",
+      "status": "passed",
+      "session_id": 51030,
+      "receipt": "docs/research/fixtures/session-startup-buh-host-matrix-1016/result.json",
+      "startup_passed": true,
+      "process_exit_code": 0,
+      "seconds": 801.5,
+      "observed_peak_rss_kib": 11026820,
+      "parent_backend": 2615415,
+      "child_backend": 2615417,
+      "parameter_container_isolated": true,
+      "parameters_total": 112,
+      "parameters_initialized": 8,
+      "verification_freshness": "Current exchange-plan implementation; shared public factory and three separate connections",
+      "exit_code": 0,
+      "sdk_version": "0.9.20",
+      "previous_verification": {
+        "database": "buh",
+        "kind": "BackgroundJob",
+        "status": "passed",
+        "session_id": 51030,
+        "receipt": "docs/research/fixtures/session-startup-buh-background-1016/result.json",
+        "startup_passed": true,
+        "process_exit_code": 0,
+        "seconds": 801.5,
+        "observed_peak_rss_kib": 11026820,
+        "parent_backend": 2615415,
+        "child_backend": 2615417,
+        "parameter_container_isolated": true,
+        "parameters_total": 112,
+        "parameters_initialized": 8,
+        "verification_freshness": "Historical passing receipt before exchange-plan Config class correction and manager declarations; replay required on final source"
+      }
+    },
+    {
+      "database": "unf",
+      "kind": "ThinClient",
+      "status": "passed",
+      "startup_passed": true,
+      "process_exit_code": 0,
+      "session_id": 29936,
+      "seconds": 548.81,
+      "observed_peak_rss_kib": 7714496,
+      "sdk_version": "0.9.20",
+      "receipt": "docs/research/fixtures/session-startup-unf-host-matrix-1016/result.json",
+      "scope": "Original ThinClient parent startup before separately verified BackgroundJob child",
+      "previous_verification": {
+        "database": "unf",
+        "kind": "ThinClient",
+        "status": "passed",
+        "startup_passed": true,
+        "process_exit_code": 0,
+        "session_id": 29936,
+        "seconds": 548.81,
+        "observed_peak_rss_kib": 7714496,
+        "sdk_version": "0.9.20",
+        "receipt": "docs/research/fixtures/session-startup-unf-thin-exchange-1016/result.json",
+        "scope": "Original ThinClient parent startup before separately verified BackgroundJob child",
+        "previous_verification": {
+          "database": "unf",
+          "kind": "ThinClient",
+          "status": "passed",
+          "startup_passed": true,
+          "process_exit_code": 0,
+          "session_id": 29936,
+          "seconds": 548.81,
+          "observed_peak_rss_kib": 7714496,
+          "sdk_version": "0.9.20",
+          "receipt": "docs/research/fixtures/session-startup-unf-background-sdk20-1016/result.json",
+          "scope": "Original ThinClient parent startup before separately verified BackgroundJob child",
+          "previous_verification": {
+            "database": "unf",
+            "kind": "ThinClient",
+            "status": "passed",
+            "log": "unf-selected-longops-sdk20-1016-startup.log",
+            "exit_code": 0,
+            "receipt": "docs/research/fixtures/session-selected-parameter-unf-1016/unf-selected-longops-sdk20-1016.json",
+            "previous_success": {
+              "log": "unf-system-settings-1015-startup.log",
+              "receipt": "unf-thin-success-1015.json"
+            },
+            "sdk_version": "0.9.20",
+            "current_compact_method_verification": {
+              "process_exit_code": 0,
+              "receipt": "docs/research/fixtures/session-selected-parameter-unf-1016/compact-method-cells/result.json",
+              "selected_parameter_passed": true,
+              "sdk_version": "0.9.20 private review stack"
+            }
+          },
+          "verification_freshness": "Historical passing receipt before exchange-plan Config class correction and manager declarations; replay required on final source"
+        },
+        "verification_freshness": "Current production library implementation with measured exchange-plan references and authorized host-local snapshots",
+        "exit_code": 0
+      },
+      "verification_freshness": "Current exchange-plan implementation; existing public factory reuse and three real connections",
+      "exit_code": 0
+    },
+    {
+      "database": "unf",
+      "kind": "WebClient",
+      "status": "passed",
+      "startup_passed": true,
+      "process_exit_code": 0,
+      "selected_parameter_passed": true,
+      "session_id": 95733,
+      "seconds": 522.57,
+      "observed_peak_rss_kib": 7432696,
+      "sdk_version": "0.9.20",
+      "receipt": "docs/research/fixtures/session-startup-unf-host-matrix-1016/result.json",
+      "previous_verification": {
+        "database": "unf",
+        "kind": "WebClient",
+        "status": "passed",
+        "startup_passed": true,
+        "process_exit_code": 0,
+        "selected_parameter_passed": true,
+        "session_id": 95733,
+        "seconds": 522.57,
+        "observed_peak_rss_kib": 7432696,
+        "sdk_version": "0.9.20",
+        "receipt": "docs/research/fixtures/session-startup-unf-web-sdk20-1016/result.json",
+        "previous_verification": {
+          "database": "unf",
+          "kind": "WebClient",
+          "status": "passed",
+          "log": "unf-web-sdk17-1015-startup.log",
+          "exit_code": 0,
+          "receipt": "unf-web-success-1015.json"
+        },
+        "verification_freshness": "Historical passing receipt before exchange-plan Config class correction and manager declarations; replay required on final source"
+      },
+      "verification_freshness": "Current exchange-plan implementation; existing public factory reuse and three real connections",
+      "exit_code": 0
+    },
+    {
+      "database": "unf",
+      "kind": "BackgroundJob",
+      "status": "passed",
+      "startup_passed": true,
+      "process_exit_code": 0,
+      "session_id": 29936,
+      "seconds": 548.81,
+      "observed_peak_rss_kib": 7714496,
+      "sdk_version": "0.9.20",
+      "receipt": "docs/research/fixtures/session-startup-unf-host-matrix-1016/result.json",
+      "scope": "Original BackgroundJob child with separate connection and inherited isolated parameter container",
+      "previous_verification": {
+        "database": "unf",
+        "kind": "BackgroundJob",
+        "status": "passed",
+        "startup_passed": true,
+        "process_exit_code": 0,
+        "session_id": 29936,
+        "seconds": 548.81,
+        "observed_peak_rss_kib": 7714496,
+        "sdk_version": "0.9.20",
+        "receipt": "docs/research/fixtures/session-startup-unf-background-sdk20-1016/result.json",
+        "scope": "Original BackgroundJob child with separate connection and inherited isolated parameter container",
+        "previous_verification": {
+          "database": "unf",
+          "kind": "BackgroundJob",
+          "status": "passed",
+          "log": "unf-background-scheduled-job-1015-startup.log",
+          "previous_failure": {
+            "log": "unf-background-reuse-1015-startup.log",
+            "exit_code": 1,
+            "error": "UnknownProperty(\"ИмяМетода\") in ПропуститьОбработчикПередЗапускомПрограммы"
+          },
+          "exit_code": 0,
+          "receipt": "docs/research/fixtures/session-startup-unf-background-1015/receipt.json"
+        },
+        "verification_freshness": "Historical passing receipt before exchange-plan Config class correction and manager declarations; replay required on final source"
+      },
+      "verification_freshness": "Current exchange-plan implementation; existing public factory reuse and three real connections",
+      "exit_code": 0
+    }
+  ],
+  "cli_checks": [
+    {
+      "database": "unf",
+      "kind": "ThinClient",
+      "status": "passed",
+      "log": "unf-cli-thin-sdk18-1015-startup.log",
+      "sdk_version": "0.9.18",
+      "exit_code": 0,
+      "receipt": "unf-cli-thin-success-1015.json"
+    }
+  ],
+  "active_checks": [],
+  "selected_parameter_checks": [
+    {
+      "database": "demo",
+      "status": "passed",
+      "kind": "ThinClient",
+      "parameter": "ДлительныеОперации",
+      "receipt": "docs/research/fixtures/session-startup-demo-exchange-node-access-1016/result.json",
+      "exit_code": 0,
+      "sdk_version": "0.9.20",
+      "verification_freshness": "Current exchange-plan/host-local snapshot implementation",
+      "previous_verification": {
+        "database": "demo",
+        "status": "not_started"
+      }
+    },
+    {
+      "database": "buh",
+      "status": "passed",
+      "parameter": "ДлительныеОперации",
+      "process_exit_code": 0,
+      "session_id": 83119,
+      "startup_passed_before_check": true,
+      "receipt": "docs/research/fixtures/session-startup-buh-host-matrix-1016/result.json",
+      "previous_failure": {
+        "database": "buh",
+        "status": "failed",
+        "parameter": "ДлительныеОперации",
+        "process_exit_code": 134,
+        "failure": "memory allocation of3145728bytes failed under unchanged12GiB address-space ceiling",
+        "startup_passed_before_check": true,
+        "receipt": "docs/research/fixtures/configuration-default-interface-implementation-1016/original-startup/result.json"
+      },
+      "verification_freshness": "Current exchange-plan implementation; unset to set",
+      "exit_code": 0,
+      "previous_verification": {
+        "database": "buh",
+        "status": "passed",
+        "parameter": "ДлительныеОперации",
+        "process_exit_code": 0,
+        "session_id": 83119,
+        "startup_passed_before_check": true,
+        "receipt": "docs/research/fixtures/buh-selected-parameter-allocation-1016/lazy-worker-catalog/original-startup/result.json",
+        "previous_failure": {
+          "database": "buh",
+          "status": "failed",
+          "parameter": "ДлительныеОперации",
+          "process_exit_code": 134,
+          "failure": "memory allocation of3145728bytes failed under unchanged12GiB address-space ceiling",
+          "startup_passed_before_check": true,
+          "receipt": "docs/research/fixtures/configuration-default-interface-implementation-1016/original-startup/result.json"
+        },
+        "verification_freshness": "Historical passing receipt before exchange-plan correction; current matrix replay in progress"
+      }
+    },
+    {
+      "database": "unf",
+      "kind": "ThinClient",
+      "status": "passed",
+      "parameter": "ДлительныеОперации",
+      "session_id": 95733,
+      "exit_code": 0,
+      "sdk_version": "0.9.20",
+      "receipt": "docs/research/fixtures/session-startup-unf-host-matrix-1016/result.json",
+      "previous_verification": {
+        "database": "unf",
+        "kind": "ThinClient",
+        "status": "passed",
+        "parameter": "ДлительныеОперации",
+        "session_id": 95733,
+        "exit_code": 0,
+        "sdk_version": "0.9.20",
+        "receipt": "docs/research/fixtures/session-startup-unf-thin-exchange-1016/result.json",
+        "previous_verification": {
+          "database": "unf",
+          "kind": "WebClient",
+          "status": "passed",
+          "parameter": "ДлительныеОперации",
+          "session_id": 95733,
+          "exit_code": 0,
+          "sdk_version": "0.9.20",
+          "receipt": "docs/research/fixtures/session-startup-unf-web-sdk20-1016/result.json",
+          "previous_verification": {
+            "database": "unf",
+            "status": "passed",
+            "parameter": "ДлительныеОперации",
+            "session_id": 24764,
+            "log": "unf-compact-method-sdk20-review-1016-startup.log",
+            "sdk_version": "0.9.20",
+            "exit_code": 0,
+            "receipt": "docs/research/fixtures/session-selected-parameter-unf-1016/compact-method-cells/result.json",
+            "previous_verification": {
+              "database": "unf",
+              "status": "passed",
+              "parameter": "ДлительныеОперации",
+              "session_id": 59911,
+              "log": "unf-selected-longops-sdk20-1016-startup.log",
+              "sdk_version": "0.9.20",
+              "exit_code": 0,
+              "receipt": "docs/research/fixtures/session-selected-parameter-unf-1016/unf-selected-longops-sdk20-1016.json"
+            }
+          }
+        },
+        "verification_freshness": "Current exchange-plan/host-local snapshot implementation"
+      },
+      "verification_freshness": "Current exchange-plan implementation; unset to set"
+    }
+  ],
+  "regression": {
+    "passed": 3921,
+    "failed": 0,
+    "ignored": 1,
+    "result_blocks": 601,
+    "scope": "All8 ROOT checks after reviewed canonical SDK0.9.26; settings95/95 native reads independently passed. Original9 startup checkpoint remains separate.",
+    "evidence": "docs/research/fixtures/sdk26-settings-user-namespace-review-1019/root-gates/result.json"
+  },
+  "probe_metric_scope": {
+    "configuration.modules": "Input ConfigurationCodeSnapshot module count, not an independently counted compiled Engine catalog",
+    "configuration.compiled": "Seconds elapsed from probe main start until SessionFactory::new completed; includes acquisition and setup; legacy configuration_compiled_seconds fields retain this cumulative meaning"
+  },
+  "worker_buffer_trim_result": {
+    "process_exit_code": 134,
+    "startup_passed": true,
+    "selected_parameter_passed": false,
+    "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/worker-trim-run",
+    "conclusion": "Capacity reduced by494784190bytes without pointer movement; selected read still OOM in verification name interner"
+  },
+  "selected_link_memory_result": {
+    "process_exit_code": 134,
+    "startup_passed": true,
+    "selected_parameter_passed": false,
+    "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/link-memory-run",
+    "observed_peak_rss_kib": 12306876
+  },
+  "selected_live_bytes_result": {
+    "process_exit_code": 134,
+    "startup_passed": true,
+    "selected_parameter_passed": false,
+    "observed_peak_rss_kib": 12317688,
+    "rust_live_bytes_before_selected": 8030047284,
+    "rust_live_bytes_before_terminal_allocation": 11348776167,
+    "rust_peak_before_terminal_allocation": 11350527289,
+    "terminal_allocation_bytes": 3145728,
+    "all_watched_hashes_match": true,
+    "raw_log_sha256": "bb07200f4a1951abfffcb09a32ea12b889ae5e415fd5de1da25ca505c05a8848",
+    "scope": "Rust requested bytes exclude foreign C allocation and allocator retention. Preparation raises live bytes by3318728883 before failure. This does not alone prove prelink reordering would fit.",
+    "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/live-bytes-run"
+  },
+  "compact_method_cells_result": {
+    "process_exit_code": 134,
+    "startup_passed": true,
+    "selected_parameter_passed": false,
+    "observed_peak_rss_kib": 12304116,
+    "rust_live_bytes_before_selected": 8054070988,
+    "rust_live_bytes_before_terminal_allocation": 11341406198,
+    "terminal_allocation_bytes": 3145728,
+    "all_watched_hashes_match": true,
+    "raw_log_sha256": "2b04d2f47f0fb39d27e3964d98d522d7cbbd84bdde7ca73189257b12af23947d",
+    "conclusion": "Compact method cells meet measured per-instruction budget but do not resolve selected-stage OOM under12GiB cap. No general memory or speed improvement claimed.",
+    "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/original-startup"
+  },
+  "scoped_memory_result": {
+    "process_exit_code": 134,
+    "startup_passed": true,
+    "selected_parameter_passed": false,
+    "observed_peak_rss_kib": 12321416,
+    "failed_module_index": 887,
+    "terminal_allocation_bytes": 3145728,
+    "rust_live_before_failure": 11344887769,
+    "rust_live_before_selected": 7933681823,
+    "attach_live_increase": 745498861,
+    "all_watched_hashes_match": true,
+    "raw_log_sha256": "f0b73dbde00430c7ad0ad79023c9b64d8929b626762fe41446f760540e7e39de",
+    "scope": "Successful-allocation backtraces disabled. Global LIVE increases between sampled verify entry/exit; this is not thread-specific attribution. Original startup succeeds; selected read fails under same12GiB cap.",
+    "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/scoped-memory-run"
+  },
+  "thread_memory_result": {
+    "process_exit_code": 134,
+    "startup_passed": true,
+    "selected_parameter_passed": false,
+    "observed_peak_rss_kib": 12330168,
+    "worker_threads_at_selected_start": 24,
+    "terminal_module_index": 880,
+    "terminal_allocation_bytes": 3145728,
+    "rust_live_before_failure": 11353970226,
+    "main_thread_net_before_after_verify_module_0": [
+      4515786260,
+      4515786260
+    ],
+    "main_thread_net_before_after_verify_module_500": [
+      4536539628,
+      4536539628
+    ],
+    "main_thread_net_before_after_verify_module_750": [
+      4550578652,
+      4550578652
+    ],
+    "all_watched_hashes_match": true,
+    "raw_log_sha256": "8b075ef6a95afbeba4ff2e18b9cf0e82fafb72c9d340f2c975c85280e31effa1",
+    "conclusion": "No retained main-thread allocation across sampled verify calls; global growth is concurrent with24background workers. worker_main immediately builds its own engine from shared image; CPU-sized pool replication is the concrete resource candidate. One-worker same-binary control remains necessary.",
+    "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/thread-memory-run"
+  },
+  "buh_one_worker_diagnostic_control": {
+    "session_id": 68464,
+    "status": "passed",
+    "process_exit_code": 0,
+    "startup_passed": true,
+    "selected_parameter_passed": true,
+    "worker_threads": 1,
+    "seconds": 914.69,
+    "observed_peak_rss_kib": 12030956,
+    "receipt": "docs/research/fixtures/buh-selected-parameter-allocation-1016/one-worker-control/result.json",
+    "scope": "Diagnostic affinity control only; production default-affinity fix not verified. Does not replace required normal-host matrix case."
+  },
+  "lazy_worker_catalog_sandboxed_gates": {
+    "status": "completed_with_environment_failures",
+    "passed": 3711,
+    "failed": 43,
+    "ignored": 1,
+    "filtered": 0,
+    "result_blocks": 577,
+    "additional_socket_setup_failures": 34,
+    "fmt": true,
+    "clippy": true,
+    "rustdoc": true,
+    "strict_items": 125,
+    "rt_vm_dependencies_unchanged": true,
+    "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/lazy-worker-catalog/gates/"
+  },
+  "approved_existing_test_expectations": {
+    "status": "applied",
+    "patch": "docs/plans/patches/session-existing-test-expectations-proposal-1016.patch",
+    "user_answer": "Да, применить общий патч",
+    "files": 7,
+    "known_failure_expectations": 8,
+    "native_sdk_right_expectation_unchanged": true,
+    "validation_pending": false,
+    "resolved_failures": 8,
+    "evidence": "docs/research/fixtures/session-approved-test-expectations-1016/gates/test-totals.json"
+  },
+  "pending_sdk_0916_integration": {
+    "status": "superseded_by_authorized_sdk_0920_integration",
+    "current_head": "305f4f1",
+    "ready_head": "a96a53b",
+    "branch": "fix/native-root-right-guids-0.9.16",
+    "clean_worktree": true,
+    "fast_forward_available": true,
+    "sdk_previous_full_test_passed": 911,
+    "sdk_previous_full_test_failed": 0,
+    "root_native_expectation_preserved": true,
+    "current_branch": "feat/extension-purpose-0.9.15",
+    "scope": "Update the dependency working checkout to ready0.9.16 after authorization; actual main branch need not be changed",
+    "integrated_sdk_version": "0.9.20",
+    "authorization": "User approved SDK update and both existing-test patches",
+    "committed": false
+  },
+  "pending_demo_connection_snapshot_scope": {
+    "status": "accepted",
+    "options": [
+      "All real Session instances of current open-bsl host",
+      "All information-base connections including native1C"
+    ],
+    "current_contract_preserved": true,
+    "synthetic_fallback_added": false,
+    "selected_scope": "All real Session instances of current open-bsl host",
+    "native_1c_connections_included": false,
+    "implementation_status": "implemented_and_regression_checked",
+    "openspec_change": "supply-cli-host-connection-snapshot",
+    "openspec_strict_passed": true,
+    "focused_new_tests_passed": 7,
+    "workspace_passed": 3760,
+    "workspace_failed": 1,
+    "remaining_failure": "Inherited SDK0.9.15 SaveUserData GUID",
+    "demo_previous_barrier_passed": true,
+    "demo_new_failure": "UnknownProperty: ИнтегрированныеСистемы",
+    "replay_evidence": "docs/research/fixtures/session-startup-demo-host-connections-1016/result.json",
+    "archived_change": "2026-10-16-supply-cli-host-connection-snapshot"
+  },
+  "actual_cli_review_stack_check": {
+    "status": "passed",
+    "database": "demo",
+    "sdk_version": "0.9.20",
+    "receipt": "docs/research/fixtures/configured-cli-demo-host-connections-1016/result.json",
+    "root_settings_adapter_integration_pending_sdk_publication": false
+  },
+  "review_stack_acceptance": {
+    "startup_cases_passed": 9,
+    "startup_cases_total": 9,
+    "selected_databases_passed": 3,
+    "selected_databases_total": 3,
+    "sdk_version": "0.9.20",
+    "root_production_sdk_and_adapter_integration_complete": true,
+    "all_original_replay_frozen_hashes_match": true,
+    "root_post_integration_gates": "passed"
+  },
+  "approved_sdk_integration": {
+    "sdk_version": "0.9.20",
+    "manifest": "docs/plans/patches/open-sdbl-approved-integration-manifest-1016.json",
+    "sdk_git_head_still_base": true,
+    "integration_uncommitted": true,
+    "existing_test_patches_applied": true,
+    "root_adapter_patch_applied": true,
+    "gates": "target/diagnostics/approved-sdk-integration-gates-1016/results.json",
+    "sdk_tests": {
+      "passed": 1065,
+      "failed": 0,
+      "ignored": 13
+    },
+    "first_root_tests": {
+      "passed": 3793,
+      "failed": 1,
+      "ignored": 1
+    },
+    "additional_test_patch_authorized": true,
+    "additional_test_patch_applied": true,
+    "final_gates": "target/diagnostics/approved-sdk-integration-final-gates-1016/results.json",
+    "final_result": {
+      "passed": 3794,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 577
+    },
+    "all_required_gates_passed": true,
+    "archived_changes": [
+      "2026-10-16-supply-cli-host-connection-snapshot",
+      "2026-10-16-add-exchange-plan-session-references",
+      "2026-10-16-forward-configured-cli-event-log",
+      "2026-10-16-defer-idle-worker-catalog-loading",
+      "2026-10-16-support-reached-user-data-separation",
+      "2026-10-16-start-configuration-session"
+    ],
+    "strict_after_archive": {
+      "passed": 123,
+      "failed": 0
+    }
+  },
+  "actual_cli_production_check": {
+    "status": "passed",
+    "database": "demo",
+    "sdk_version": "0.9.20",
+    "seconds": 157.55,
+    "receipt": "docs/research/fixtures/configured-cli-production-integration-1016/result.json",
+    "diagnostic_hooks": false
+  },
+  "start_configuration_session_change": {
+    "status": "archived",
+    "path": "openspec/changes/archive/2026-10-16-start-configuration-session",
+    "acceptance_audit": "docs/research/fixtures/approved-sdk-production-integration-1016/start-change-acceptance-audit.json"
+  },
+  "runtime_plan_reconciliation": {
+    "completed_stale_items": 26,
+    "unchecked_items_remaining": 46,
+    "evidence": "docs/research/fixtures/approved-sdk-production-integration-1016/runtime-task-reconciliation.json",
+    "does_not_certify_remaining_implementations": true,
+    "data_path_evidence": "docs/research/fixtures/approved-sdk-production-integration-1016/data-path-task-audit.json"
+  },
+  "runtime_requirement_audit": {
+    "index": "docs/research/fixtures/approved-sdk-production-integration-1016/runtime-requirement-audit.json",
+    "verified": 38,
+    "not_audited": 430,
+    "completion_proven": false,
+    "incomplete_backend_validation": 1,
+    "incomplete_native_validation": 1
+  },
+  "sdk_0921_rls_integration": {
+    "status": "final_capture_guard_workspace_and_actual_adapter_checks_passed",
+    "evidence_directory": "docs/research/fixtures/ordinary-rls-sdk21-integration-1016",
+    "sdk_tests": {
+      "passed": 1070,
+      "failed": 0,
+      "ignored": 13
+    },
+    "root_tests": {
+      "passed": 3804,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 577,
+      "scope": "Final source after the pre-capture authorization guard; external SQL branches are verified separately."
+    },
+    "actual_current_balance_rls_cases": 10,
+    "existing_test_changes": [],
+    "rt_vm_normal_dependencies_unchanged": true,
+    "original_startup_replay": {
+      "status": "all_three_production_CLI_thin_client_cases_passed",
+      "source_provenance": "fresh target;0private source references;no VM diagnostic marker",
+      "binary_sha256": "2fc2f154c060a953e54761d9b33619af0c77e7fa53c6eaa64df003e725d631e8",
+      "results": [
+        {
+          "database": "demo",
+          "process_exit_code": 0,
+          "seconds": 155.09,
+          "canary_passed": true
+        },
+        {
+          "database": "buh",
+          "process_exit_code": 0,
+          "seconds": 806.62,
+          "canary_passed": true
+        },
+        {
+          "database": "unf",
+          "process_exit_code": 0,
+          "seconds": 565.42,
+          "canary_passed": true
+        }
+      ],
+      "selected_parameter": "ДлительныеОперации",
+      "evidence": "docs/research/fixtures/ordinary-rls-sdk21-integration-1016/clean-production-cli",
+      "remaining_scope": "WebClient and actual background-session matrix after SDK21 not repeated; previous nine-case proof remains SDK20 review-stack scope"
+    },
+    "information_register_get": "separate_positive_read_failure_before_SQL_remains; SDK22 agent approval pending",
+    "root_tests_scope": "Final source after the pre-capture authorization guard; external SQL branches are verified separately.",
+    "actual_adapter_capture_guard": "Both focused tests passed with clean PostgreSQL statement log; ten current Balance cases plus no unchecked nested placement read",
+    "web_startup_replay": {
+      "status": "all_three_passed",
+      "results": [
+        {
+          "database": "demo",
+          "session_kind": "WebClient",
+          "process_exit_code": 0,
+          "seconds": 154.93,
+          "canary_passed": true
+        },
+        {
+          "database": "buh",
+          "session_kind": "WebClient",
+          "process_exit_code": 0,
+          "seconds": 811.29,
+          "canary_passed": true
+        },
+        {
+          "database": "unf",
+          "session_kind": "WebClient",
+          "process_exit_code": 0,
+          "seconds": 572.8,
+          "canary_passed": true
+        }
+      ],
+      "binary_sha256": "2fc2f154c060a953e54761d9b33619af0c77e7fa53c6eaa64df003e725d631e8",
+      "evidence": "docs/research/fixtures/ordinary-rls-sdk21-integration-1016/clean-production-web"
+    },
+    "background_startup_replay": {
+      "scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source.",
+      "demo": {
+        "database": "demo",
+        "session_kind": "BackgroundJob",
+        "process_exit_code": 0,
+        "seconds": 178.62,
+        "parent_passed": true,
+        "canary_passed": true,
+        "binary_sha256": "b650353d7c8ec3fe31e06519638c3c21d2647a7e029779a3d760dc56e1c8ba51",
+        "scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source."
+      },
+      "buh": {
+        "database": "buh",
+        "session_kind": "BackgroundJob",
+        "process_exit_code": 0,
+        "seconds": 1149.52,
+        "parent_passed": true,
+        "canary_passed": true,
+        "binary_sha256": "b650353d7c8ec3fe31e06519638c3c21d2647a7e029779a3d760dc56e1c8ba51",
+        "scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source."
+      },
+      "unf": {
+        "database": "unf",
+        "session_kind": "BackgroundJob",
+        "process_exit_code": 0,
+        "seconds": 700.24,
+        "parent_passed": true,
+        "canary_passed": true,
+        "binary_sha256": "b650353d7c8ec3fe31e06519638c3c21d2647a7e029779a3d760dc56e1c8ba51",
+        "scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source."
+      },
+      "evidence_directory": "docs/research/fixtures/ordinary-rls-sdk21-integration-1016/background-host",
+      "status": "all_three_initializations_passed"
+    },
+    "current_initialization_matrix": {
+      "passed": 9,
+      "failed": 0,
+      "contexts": [
+        "ThinClient",
+        "WebClient",
+        "BackgroundJob"
+      ],
+      "databases": [
+        "demo",
+        "buh",
+        "unf"
+      ],
+      "foreground_scope": "Actual CLI executes original acquired initialization and selected parameter read.",
+      "background_scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source."
+    }
+  },
+  "functional_option_constant_backend_check": {
+    "evidence": "docs/research/fixtures/functional-option-adapter-1016/result.json",
+    "actual_postgres": "passed",
+    "root_gates": "all_passed",
+    "scope": "Constant source privilege boundary only; existing tests unchanged."
+  },
+  "regression_before_functional_option_test": {
+    "scope": "Final ROOT SDK0.9.21 integration with authorization before materialized placement capture",
+    "log": "docs/research/fixtures/ordinary-rls-sdk21-integration-1016/root-gates/tests.log",
+    "passed": 3804,
+    "failed": 0,
+    "ignored": 1,
+    "filtered_out": 0,
+    "count_scope": "577 result blocks; complete unfiltered workspace run with local sockets permitted",
+    "other_gates": "fmt, Clippy, warning-free rustdoc, facade consumer, optimizer corpus and OpenSpec123/123 passed; RT/VM normal trees byte-identical",
+    "failure_groups": [],
+    "external_sql_controls": "Ten current Balance cases and pre-capture rejection pass on disposable PostgreSQL. The separate positive information-register Get remains a failure before SQL; its two negative controls pass. Default workspace skips external SQL branches without the environment variable.",
+    "previous_regression": {
+      "scope": "Frozen ROOT host connections and measured exchange-plan implementation, canonical SDK0.9.15",
+      "log": "docs/research/fixtures/exchange-plan-session-reference-1016/final-root-gates/tests.log",
+      "passed": 3769,
+      "failed": 1,
+      "ignored": 1,
+      "filtered_out": 0,
+      "count_scope": "577result blocks; complete unfiltered socket-enabled workspace run",
+      "other_gates": "fmt/strict/Clippy/rustdoc passed; consumer and optimization corpus passed; RT/VM normal trees unchanged",
+      "failure_groups": [
+        {
+          "count": 1,
+          "test": "acquired_root_rights_match_native_current_role_and_user_results",
+          "cause": "Main SDK0.9.15 maps SaveUserData to an unmeasured wrong GUID, so native subject admin/right.current returns false instead of true",
+          "action": "Ready clean SDK0.9.16 correction awaits dependency-checkout authorization; preserve native expectation"
+        }
+      ],
+      "evidence": "docs/research/fixtures/session-approved-test-expectations-1016/gates/test-totals.json",
+      "previous_regression": {
+        "scope": "ROOT deferred idle-worker catalog construction; main SDK15 distinct from private SDK20 replay",
+        "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/lazy-worker-catalog/gates/tests-sockets-enabled.log",
+        "passed": 3745,
+        "failed": 9,
+        "ignored": 1,
+        "filtered_out": 0,
+        "count_scope": "577result blocks; unfiltered workspace run with local sockets permitted;7new tests pass and9unchanged failures",
+        "other_gates": "fmt/strict/Clippy/rustdoc passed; consumer and optimization corpus passed; RT/VM normal trees unchanged",
+        "failure_groups": [
+          {
+            "count": 1,
+            "test": "acquired_root_rights_match_native_current_role_and_user_results",
+            "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+            "action": "Integrate reviewed SDK fix; preserve native test expectation"
+          },
+          {
+            "count": 1,
+            "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+            "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+            "action": "Prepared test correction awaits approval"
+          },
+          {
+            "count": 1,
+            "test": "constructor_codes_are_static_and_dense",
+            "cause": "Existing constructor density expectation3 versus4",
+            "action": "Prepared test correction awaits approval"
+          },
+          {
+            "count": 3,
+            "tests": [
+              "data_processor_templates",
+              "document_templates",
+              "information_register_templates"
+            ],
+            "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+            "action": "Prepared three-file test correction awaits approval"
+          },
+          {
+            "count": 3,
+            "tests": [
+              "declared_imports_round_trip_without_static_links",
+              "format_without_open_method_argument_modes_is_rejected",
+              "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+            ],
+            "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+            "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+          }
+        ],
+        "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/lazy-worker-catalog/gates/test-totals.json",
+        "previous_regression": {
+          "scope": "ROOT compact typed-method cells after worker trim; private SDK20 remains distinct from main SDK15",
+          "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/tests.log",
+          "passed": 3738,
+          "failed": 9,
+          "ignored": 1,
+          "filtered_out": 0,
+          "count_scope": "577result blocks, full workspace --no-fail-fast",
+          "other_gates": "fmt/strict/Clippy/rustdoc passed; consumer and optimization corpus passed; RT/VM normal trees unchanged",
+          "failure_groups": [
+            {
+              "count": 1,
+              "test": "acquired_root_rights_match_native_current_role_and_user_results",
+              "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+              "action": "Integrate reviewed SDK fix; preserve native test expectation"
+            },
+            {
+              "count": 1,
+              "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+              "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+              "action": "Prepared test correction awaits approval"
+            },
+            {
+              "count": 1,
+              "test": "constructor_codes_are_static_and_dense",
+              "cause": "Existing constructor density expectation3 versus4",
+              "action": "Prepared test correction awaits approval"
+            },
+            {
+              "count": 3,
+              "tests": [
+                "data_processor_templates",
+                "document_templates",
+                "information_register_templates"
+              ],
+              "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+              "action": "Prepared three-file test correction awaits approval"
+            },
+            {
+              "count": 3,
+              "tests": [
+                "declared_imports_round_trip_without_static_links",
+                "format_without_open_method_argument_modes_is_rejected",
+                "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+              ],
+              "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+              "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+            }
+          ],
+          "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates",
+          "previous_regression": {
+            "scope": "Current ROOT after measured acquired-empty DefaultInterface; main SDK305f4f1/0.9.15 distinct from privateSDK20 startup",
+            "log": "target/diagnostics/default-interface-gates-1016/tests.log",
+            "passed": 3737,
+            "failed": 9,
+            "ignored": 1,
+            "filtered_out": 0,
+            "count_scope": "Single complete workspace run outside socket-restricted sandbox; 577 result blocks; nine unchanged failures",
+            "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency trees identical; API freshness, consumer and optimization corpus pass",
+            "failure_groups": [
+              {
+                "count": 1,
+                "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                "action": "Integrate reviewed SDK fix; preserve native test expectation"
+              },
+              {
+                "count": 1,
+                "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                "action": "Prepared test correction awaits approval"
+              },
+              {
+                "count": 1,
+                "test": "constructor_codes_are_static_and_dense",
+                "cause": "Existing constructor density expectation3 versus4",
+                "action": "Prepared test correction awaits approval"
+              },
+              {
+                "count": 3,
+                "tests": [
+                  "data_processor_templates",
+                  "document_templates",
+                  "information_register_templates"
+                ],
+                "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                "action": "Prepared three-file test correction awaits approval"
+              },
+              {
+                "count": 3,
+                "tests": [
+                  "declared_imports_round_trip_without_static_links",
+                  "format_without_open_method_argument_modes_is_rejected",
+                  "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                ],
+                "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+              }
+            ],
+            "evidence": "docs/research/fixtures/configuration-default-interface-implementation-1016/gates/test-totals.json",
+            "previous_regression": {
+              "scope": "Current ROOT format45 shared imports, automatic entry and AccessToken declaration; main SDK305f4f1/0.9.15 distinct from privateSDK20 startup",
+              "log": "target/diagnostics/access-token-gates-1016/tests.log",
+              "passed": 3732,
+              "failed": 9,
+              "ignored": 1,
+              "filtered_out": 0,
+              "count_scope": "Combined effective outcomes: full sandbox run3699passed/42failed/1ignored; all33 socket-permission failures rechecked successfully outside sandbox, without test changes",
+              "raw_sandbox_passed": 3699,
+              "raw_sandbox_failed": 42,
+              "socket_failures_rechecked_successfully": 33,
+              "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM trees identical; full optimization corpus, consumer and API freshness passed",
+              "failure_groups": [
+                {
+                  "count": 1,
+                  "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                  "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                  "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                },
+                {
+                  "count": 1,
+                  "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                  "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                  "action": "Prepared test correction awaits approval"
+                },
+                {
+                  "count": 1,
+                  "test": "constructor_codes_are_static_and_dense",
+                  "cause": "Existing constructor density expectation3 versus4",
+                  "action": "Prepared test correction awaits approval"
+                },
+                {
+                  "count": 3,
+                  "tests": [
+                    "data_processor_templates",
+                    "document_templates",
+                    "information_register_templates"
+                  ],
+                  "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                  "action": "Prepared three-file test correction awaits approval"
+                },
+                {
+                  "count": 3,
+                  "tests": [
+                    "declared_imports_round_trip_without_static_links",
+                    "format_without_open_method_argument_modes_is_rejected",
+                    "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                  ],
+                  "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                  "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+                }
+              ],
+              "evidence": "docs/research/fixtures/buh-access-token-startup-1016/gates/test-totals.json",
+              "previous_regression": {
+                "scope": "CurrentROOTformat45including sharedimportsandautomaticentry; mainSDK305f4f1/0.9.15, distinct from privateSDK20startup",
+                "log": "target/diagnostics/shared-imports-gates-1016/tests.log",
+                "passed": 3729,
+                "failed": 9,
+                "ignored": 1,
+                "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency trees identical; full optimization corpus and consumer passed",
+                "failure_groups": [
+                  {
+                    "count": 1,
+                    "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                    "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                    "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                  },
+                  {
+                    "count": 1,
+                    "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                    "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                    "action": "Prepared test correction awaits approval"
+                  },
+                  {
+                    "count": 1,
+                    "test": "constructor_codes_are_static_and_dense",
+                    "cause": "Existing constructor density expectation3 versus4",
+                    "action": "Prepared test correction awaits approval"
+                  },
+                  {
+                    "count": 3,
+                    "tests": [
+                      "data_processor_templates",
+                      "document_templates",
+                      "information_register_templates"
+                    ],
+                    "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                    "action": "Prepared three-file test correction awaits approval"
+                  },
+                  {
+                    "count": 3,
+                    "tests": [
+                      "declared_imports_round_trip_without_static_links",
+                      "format_without_open_method_argument_modes_is_rejected",
+                      "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                    ],
+                    "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                    "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+                  }
+                ],
+                "filtered_out": 0,
+                "previous_regression": {
+                  "scope": "Previous ROOT format45 names/shapes-only snapshot; shared import suffix extension awaits its own complete gates; main SDK305f4f1/0.9.15 distinct from private SDK20",
+                  "log": "target/diagnostics/shared-configuration-tables-gates-1016/tests.log",
+                  "passed": 3726,
+                  "failed": 9,
+                  "ignored": 1,
+                  "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency trees identical; full optimization corpus and consumer passed",
+                  "failure_groups": [
+                    {
+                      "count": 1,
+                      "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                      "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                      "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                    },
+                    {
+                      "count": 1,
+                      "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                      "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                      "action": "Prepared test correction awaits approval"
+                    },
+                    {
+                      "count": 1,
+                      "test": "constructor_codes_are_static_and_dense",
+                      "cause": "Existing constructor density expectation3 versus4",
+                      "action": "Prepared test correction awaits approval"
+                    },
+                    {
+                      "count": 3,
+                      "tests": [
+                        "data_processor_templates",
+                        "document_templates",
+                        "information_register_templates"
+                      ],
+                      "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                      "action": "Prepared three-file test correction awaits approval"
+                    },
+                    {
+                      "count": 3,
+                      "tests": [
+                        "declared_imports_round_trip_without_static_links",
+                        "format_without_open_method_argument_modes_is_rejected",
+                        "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                      ],
+                      "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                      "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+                    }
+                  ],
+                  "filtered_out": 0,
+                  "previous_regression": {
+                    "scope": "ROOT automatic session-entry mode fix at format44; subsequent format45 shared-table change not yet covered",
+                    "log": "target/diagnostics/session-entry-gates-1016/tests.log",
+                    "passed": 3724,
+                    "failed": 6,
+                    "ignored": 1,
+                    "other_gates": "Clippy/doc/fmt/strict passed; RT/VM normal trees identical; optimization corpus passed; added WebClient open-question registry check passed separately",
+                    "failure_groups": [
+                      {
+                        "count": 1,
+                        "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                        "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                        "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                      },
+                      {
+                        "count": 1,
+                        "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                        "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                        "action": "Prepared test correction awaits approval"
+                      },
+                      {
+                        "count": 1,
+                        "test": "constructor_codes_are_static_and_dense",
+                        "cause": "Existing constructor density expectation3 versus4",
+                        "action": "Prepared test correction awaits approval"
+                      },
+                      {
+                        "count": 3,
+                        "tests": [
+                          "data_processor_templates",
+                          "document_templates",
+                          "information_register_templates"
+                        ],
+                        "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                        "action": "Prepared three-file test correction awaits approval"
+                      }
+                    ],
+                    "filtered_out": 0
+                  }
+                }
+              }
+            },
+            "worker_buffer_trim_verification": {
+              "passed": 3737,
+              "failed": 9,
+              "ignored": 1,
+              "filtered_out": 0,
+              "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/worker-trim-gates",
+              "failure_set": "Same nine failures as the preceding DefaultInterface run; existing tests unchanged",
+              "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency hashes unchanged"
+            }
+          },
+          "all_strict": {
+            "passed": 124,
+            "failed": 0,
+            "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/all-strict.log"
+          }
+        },
+        "all_strict": {
+          "passed": 124,
+          "failed": 0,
+          "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/all-strict.log"
+        }
+      },
+      "all_strict": {
+        "passed": 124,
+        "failed": 0,
+        "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/all-strict.log"
+      },
+      "previous_verification": {
+        "scope": "ROOT after approved7-file existing-test expectation correction; production release binary remains byte-identical; main SDK still0.9.15",
+        "log": "docs/research/fixtures/session-approved-test-expectations-1016/gates/tests.log",
+        "passed": 3753,
+        "failed": 1,
+        "ignored": 1,
+        "filtered_out": 0,
+        "count_scope": "577result blocks; complete unfiltered socket-enabled workspace run",
+        "other_gates": "fmt/strict/Clippy/rustdoc passed; consumer and optimization corpus passed; RT/VM normal trees unchanged",
+        "failure_groups": [
+          {
+            "count": 1,
+            "test": "acquired_root_rights_match_native_current_role_and_user_results",
+            "cause": "Main SDK0.9.15 maps SaveUserData to an unmeasured wrong GUID, so native subject admin/right.current returns false instead of true",
+            "action": "Ready clean SDK0.9.16 correction awaits dependency-checkout authorization; preserve native expectation"
+          }
+        ],
+        "evidence": "docs/research/fixtures/session-approved-test-expectations-1016/gates/test-totals.json",
+        "previous_regression": {
+          "scope": "ROOT deferred idle-worker catalog construction; main SDK15 distinct from private SDK20 replay",
+          "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/lazy-worker-catalog/gates/tests-sockets-enabled.log",
+          "passed": 3745,
+          "failed": 9,
+          "ignored": 1,
+          "filtered_out": 0,
+          "count_scope": "577result blocks; unfiltered workspace run with local sockets permitted;7new tests pass and9unchanged failures",
+          "other_gates": "fmt/strict/Clippy/rustdoc passed; consumer and optimization corpus passed; RT/VM normal trees unchanged",
+          "failure_groups": [
+            {
+              "count": 1,
+              "test": "acquired_root_rights_match_native_current_role_and_user_results",
+              "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+              "action": "Integrate reviewed SDK fix; preserve native test expectation"
+            },
+            {
+              "count": 1,
+              "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+              "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+              "action": "Prepared test correction awaits approval"
+            },
+            {
+              "count": 1,
+              "test": "constructor_codes_are_static_and_dense",
+              "cause": "Existing constructor density expectation3 versus4",
+              "action": "Prepared test correction awaits approval"
+            },
+            {
+              "count": 3,
+              "tests": [
+                "data_processor_templates",
+                "document_templates",
+                "information_register_templates"
+              ],
+              "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+              "action": "Prepared three-file test correction awaits approval"
+            },
+            {
+              "count": 3,
+              "tests": [
+                "declared_imports_round_trip_without_static_links",
+                "format_without_open_method_argument_modes_is_rejected",
+                "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+              ],
+              "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+              "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+            }
+          ],
+          "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/lazy-worker-catalog/gates/test-totals.json",
+          "previous_regression": {
+            "scope": "ROOT compact typed-method cells after worker trim; private SDK20 remains distinct from main SDK15",
+            "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/tests.log",
+            "passed": 3738,
+            "failed": 9,
+            "ignored": 1,
+            "filtered_out": 0,
+            "count_scope": "577result blocks, full workspace --no-fail-fast",
+            "other_gates": "fmt/strict/Clippy/rustdoc passed; consumer and optimization corpus passed; RT/VM normal trees unchanged",
+            "failure_groups": [
+              {
+                "count": 1,
+                "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                "action": "Integrate reviewed SDK fix; preserve native test expectation"
+              },
+              {
+                "count": 1,
+                "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                "action": "Prepared test correction awaits approval"
+              },
+              {
+                "count": 1,
+                "test": "constructor_codes_are_static_and_dense",
+                "cause": "Existing constructor density expectation3 versus4",
+                "action": "Prepared test correction awaits approval"
+              },
+              {
+                "count": 3,
+                "tests": [
+                  "data_processor_templates",
+                  "document_templates",
+                  "information_register_templates"
+                ],
+                "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                "action": "Prepared three-file test correction awaits approval"
+              },
+              {
+                "count": 3,
+                "tests": [
+                  "declared_imports_round_trip_without_static_links",
+                  "format_without_open_method_argument_modes_is_rejected",
+                  "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                ],
+                "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+              }
+            ],
+            "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates",
+            "previous_regression": {
+              "scope": "Current ROOT after measured acquired-empty DefaultInterface; main SDK305f4f1/0.9.15 distinct from privateSDK20 startup",
+              "log": "target/diagnostics/default-interface-gates-1016/tests.log",
+              "passed": 3737,
+              "failed": 9,
+              "ignored": 1,
+              "filtered_out": 0,
+              "count_scope": "Single complete workspace run outside socket-restricted sandbox; 577 result blocks; nine unchanged failures",
+              "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency trees identical; API freshness, consumer and optimization corpus pass",
+              "failure_groups": [
+                {
+                  "count": 1,
+                  "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                  "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                  "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                },
+                {
+                  "count": 1,
+                  "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                  "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                  "action": "Prepared test correction awaits approval"
+                },
+                {
+                  "count": 1,
+                  "test": "constructor_codes_are_static_and_dense",
+                  "cause": "Existing constructor density expectation3 versus4",
+                  "action": "Prepared test correction awaits approval"
+                },
+                {
+                  "count": 3,
+                  "tests": [
+                    "data_processor_templates",
+                    "document_templates",
+                    "information_register_templates"
+                  ],
+                  "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                  "action": "Prepared three-file test correction awaits approval"
+                },
+                {
+                  "count": 3,
+                  "tests": [
+                    "declared_imports_round_trip_without_static_links",
+                    "format_without_open_method_argument_modes_is_rejected",
+                    "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                  ],
+                  "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                  "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+                }
+              ],
+              "evidence": "docs/research/fixtures/configuration-default-interface-implementation-1016/gates/test-totals.json",
+              "previous_regression": {
+                "scope": "Current ROOT format45 shared imports, automatic entry and AccessToken declaration; main SDK305f4f1/0.9.15 distinct from privateSDK20 startup",
+                "log": "target/diagnostics/access-token-gates-1016/tests.log",
+                "passed": 3732,
+                "failed": 9,
+                "ignored": 1,
+                "filtered_out": 0,
+                "count_scope": "Combined effective outcomes: full sandbox run3699passed/42failed/1ignored; all33 socket-permission failures rechecked successfully outside sandbox, without test changes",
+                "raw_sandbox_passed": 3699,
+                "raw_sandbox_failed": 42,
+                "socket_failures_rechecked_successfully": 33,
+                "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM trees identical; full optimization corpus, consumer and API freshness passed",
+                "failure_groups": [
+                  {
+                    "count": 1,
+                    "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                    "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                    "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                  },
+                  {
+                    "count": 1,
+                    "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                    "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                    "action": "Prepared test correction awaits approval"
+                  },
+                  {
+                    "count": 1,
+                    "test": "constructor_codes_are_static_and_dense",
+                    "cause": "Existing constructor density expectation3 versus4",
+                    "action": "Prepared test correction awaits approval"
+                  },
+                  {
+                    "count": 3,
+                    "tests": [
+                      "data_processor_templates",
+                      "document_templates",
+                      "information_register_templates"
+                    ],
+                    "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                    "action": "Prepared three-file test correction awaits approval"
+                  },
+                  {
+                    "count": 3,
+                    "tests": [
+                      "declared_imports_round_trip_without_static_links",
+                      "format_without_open_method_argument_modes_is_rejected",
+                      "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                    ],
+                    "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                    "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+                  }
+                ],
+                "evidence": "docs/research/fixtures/buh-access-token-startup-1016/gates/test-totals.json",
+                "previous_regression": {
+                  "scope": "CurrentROOTformat45including sharedimportsandautomaticentry; mainSDK305f4f1/0.9.15, distinct from privateSDK20startup",
+                  "log": "target/diagnostics/shared-imports-gates-1016/tests.log",
+                  "passed": 3729,
+                  "failed": 9,
+                  "ignored": 1,
+                  "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency trees identical; full optimization corpus and consumer passed",
+                  "failure_groups": [
+                    {
+                      "count": 1,
+                      "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                      "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                      "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                    },
+                    {
+                      "count": 1,
+                      "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                      "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                      "action": "Prepared test correction awaits approval"
+                    },
+                    {
+                      "count": 1,
+                      "test": "constructor_codes_are_static_and_dense",
+                      "cause": "Existing constructor density expectation3 versus4",
+                      "action": "Prepared test correction awaits approval"
+                    },
+                    {
+                      "count": 3,
+                      "tests": [
+                        "data_processor_templates",
+                        "document_templates",
+                        "information_register_templates"
+                      ],
+                      "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                      "action": "Prepared three-file test correction awaits approval"
+                    },
+                    {
+                      "count": 3,
+                      "tests": [
+                        "declared_imports_round_trip_without_static_links",
+                        "format_without_open_method_argument_modes_is_rejected",
+                        "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                      ],
+                      "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                      "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+                    }
+                  ],
+                  "filtered_out": 0,
+                  "previous_regression": {
+                    "scope": "Previous ROOT format45 names/shapes-only snapshot; shared import suffix extension awaits its own complete gates; main SDK305f4f1/0.9.15 distinct from private SDK20",
+                    "log": "target/diagnostics/shared-configuration-tables-gates-1016/tests.log",
+                    "passed": 3726,
+                    "failed": 9,
+                    "ignored": 1,
+                    "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency trees identical; full optimization corpus and consumer passed",
+                    "failure_groups": [
+                      {
+                        "count": 1,
+                        "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                        "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                        "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                      },
+                      {
+                        "count": 1,
+                        "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                        "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                        "action": "Prepared test correction awaits approval"
+                      },
+                      {
+                        "count": 1,
+                        "test": "constructor_codes_are_static_and_dense",
+                        "cause": "Existing constructor density expectation3 versus4",
+                        "action": "Prepared test correction awaits approval"
+                      },
+                      {
+                        "count": 3,
+                        "tests": [
+                          "data_processor_templates",
+                          "document_templates",
+                          "information_register_templates"
+                        ],
+                        "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                        "action": "Prepared three-file test correction awaits approval"
+                      },
+                      {
+                        "count": 3,
+                        "tests": [
+                          "declared_imports_round_trip_without_static_links",
+                          "format_without_open_method_argument_modes_is_rejected",
+                          "date_constants_round_trip_ticks_and_refuse_the_seconds_format"
+                        ],
+                        "cause": "Existing literal headers remain44 while public format is45; four-line correction requested and not applied",
+                        "action": "Await approval for target/diagnostics/shared-tables-format45-old-tests-proposal-1016.patch"
+                      }
+                    ],
+                    "filtered_out": 0,
+                    "previous_regression": {
+                      "scope": "ROOT automatic session-entry mode fix at format44; subsequent format45 shared-table change not yet covered",
+                      "log": "target/diagnostics/session-entry-gates-1016/tests.log",
+                      "passed": 3724,
+                      "failed": 6,
+                      "ignored": 1,
+                      "other_gates": "Clippy/doc/fmt/strict passed; RT/VM normal trees identical; optimization corpus passed; added WebClient open-question registry check passed separately",
+                      "failure_groups": [
+                        {
+                          "count": 1,
+                          "test": "acquired_root_rights_match_native_current_role_and_user_results",
+                          "cause": "Main SDK returns false for native admin/right.current; current root dependency still305f4f1/0.9.15",
+                          "action": "Integrate reviewed SDK fix; preserve native test expectation"
+                        },
+                        {
+                          "count": 1,
+                          "test": "query_uses_the_session_adapter_and_exposes_a_measured_linear_result",
+                          "cause": "Existing expectation normalizes parameter key casing; actual preserves submitted casing",
+                          "action": "Prepared test correction awaits approval"
+                        },
+                        {
+                          "count": 1,
+                          "test": "constructor_codes_are_static_and_dense",
+                          "cause": "Existing constructor density expectation3 versus4",
+                          "action": "Prepared test correction awaits approval"
+                        },
+                        {
+                          "count": 3,
+                          "tests": [
+                            "data_processor_templates",
+                            "document_templates",
+                            "information_register_templates"
+                          ],
+                          "cause": "Existing absence assertions prohibit measured accumulation-register GetTemplate declaration",
+                          "action": "Prepared three-file test correction awaits approval"
+                        }
+                      ],
+                      "filtered_out": 0
+                    }
+                  }
+                }
+              },
+              "worker_buffer_trim_verification": {
+                "passed": 3737,
+                "failed": 9,
+                "ignored": 1,
+                "filtered_out": 0,
+                "evidence": "docs/research/fixtures/buh-selected-parameter-allocation-1016/worker-trim-gates",
+                "failure_set": "Same nine failures as the preceding DefaultInterface run; existing tests unchanged",
+                "other_gates": "fmt/strict/Clippy/rustdoc passed; RT/VM normal dependency hashes unchanged"
+              }
+            },
+            "all_strict": {
+              "passed": 124,
+              "failed": 0,
+              "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/all-strict.log"
+            }
+          },
+          "all_strict": {
+            "passed": 124,
+            "failed": 0,
+            "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/all-strict.log"
+          }
+        },
+        "all_strict": {
+          "passed": 124,
+          "failed": 0,
+          "log": "docs/research/fixtures/buh-selected-parameter-allocation-1016/compact-method-cells/gates/all-strict.log"
+        }
+      }
+    }
+  },
+  "owner_read_and_option_source_validation": {
+    "evidence_directory": "docs/research/fixtures/functional-option-source-adapter-1016",
+    "actual_postgres": "passed_with_original_native_role_resources_for_all_three_sources",
+    "native_roles": "all_three_source_grant_profiles_and_actual_execution_verified",
+    "root_gates": "3809_passed_after_parameterized_option_tests_before_linked_query_callback_fix",
+    "fresh_cli_binary_sha256": "26d9d1945bca6eced6c4c2a641947148572947de6fb570d258d6f51b344146dc",
+    "current_replay": {
+      "demo_thin": {
+        "database": "demo",
+        "process_exit_code": 0,
+        "seconds": 157.09,
+        "canary_passed": true,
+        "sdk_readonly_transactions": true,
+        "diagnostic_network_guard": false,
+        "binary_sha256": "26d9d1945bca6eced6c4c2a641947148572947de6fb570d258d6f51b344146dc",
+        "scope": "Production ROOT CLI after measured owner Read rights and actual functional-option boundary validation; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+      },
+      "buh_thin": {
+        "database": "buh",
+        "process_exit_code": 0,
+        "seconds": 811.59,
+        "canary_passed": true,
+        "sdk_readonly_transactions": true,
+        "diagnostic_network_guard": false,
+        "binary_sha256": "26d9d1945bca6eced6c4c2a641947148572947de6fb570d258d6f51b344146dc",
+        "scope": "Production ROOT CLI after measured owner Read rights and actual functional-option boundary validation; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+      },
+      "demo_web": {
+        "database": "demo",
+        "session_kind": "WebClient",
+        "process_exit_code": 0,
+        "seconds": 161.63,
+        "canary_passed": true,
+        "sdk_readonly_transactions": true,
+        "diagnostic_network_guard": false,
+        "binary_sha256": "26d9d1945bca6eced6c4c2a641947148572947de6fb570d258d6f51b344146dc",
+        "scope": "Production ROOT CLI after measured owner Read rights and actual functional-option boundary validation; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+      },
+      "unf_thin": {
+        "database": "unf",
+        "process_exit_code": 0,
+        "seconds": 561.99,
+        "canary_passed": true,
+        "sdk_readonly_transactions": true,
+        "diagnostic_network_guard": false,
+        "binary_sha256": "26d9d1945bca6eced6c4c2a641947148572947de6fb570d258d6f51b344146dc",
+        "scope": "Production ROOT CLI after measured owner Read rights and actual functional-option boundary validation; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+      },
+      "buh_web": {
+        "database": "buh",
+        "session_kind": "WebClient",
+        "process_exit_code": 0,
+        "seconds": 807.06,
+        "canary_passed": true,
+        "sdk_readonly_transactions": true,
+        "diagnostic_network_guard": false,
+        "binary_sha256": "26d9d1945bca6eced6c4c2a641947148572947de6fb570d258d6f51b344146dc",
+        "scope": "Production ROOT CLI after measured owner Read rights and actual functional-option boundary validation; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+      },
+      "unf_web": {
+        "database": "unf",
+        "session_kind": "WebClient",
+        "process_exit_code": 0,
+        "seconds": 525.52,
+        "canary_passed": true,
+        "sdk_readonly_transactions": true,
+        "diagnostic_network_guard": false,
+        "binary_sha256": "26d9d1945bca6eced6c4c2a641947148572947de6fb570d258d6f51b344146dc",
+        "scope": "Production ROOT CLI after measured owner Read rights and actual functional-option boundary validation; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+      },
+      "demo_background": {
+        "database": "demo",
+        "session_kind": "BackgroundJob",
+        "process_exit_code": 0,
+        "seconds": 185.04,
+        "parent_passed": true,
+        "canary_passed": true,
+        "binary_sha256": "d2853d9adf21dbab995ffebb5a1ea9bf7e7decf59fb3c451d4be7963db0ea4b0",
+        "scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source."
+      },
+      "buh_background": {
+        "database": "buh",
+        "session_kind": "BackgroundJob",
+        "process_exit_code": 0,
+        "seconds": 1160.93,
+        "parent_passed": true,
+        "canary_passed": true,
+        "binary_sha256": "d2853d9adf21dbab995ffebb5a1ea9bf7e7decf59fb3c451d4be7963db0ea4b0",
+        "scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source."
+      },
+      "unf_background": {
+        "database": "unf",
+        "session_kind": "BackgroundJob",
+        "process_exit_code": 0,
+        "seconds": 707.64,
+        "parent_passed": true,
+        "canary_passed": true,
+        "binary_sha256": "d2853d9adf21dbab995ffebb5a1ea9bf7e7decf59fb3c451d4be7963db0ea4b0",
+        "scope": "Actual public SessionFactory API, original acquired source, shared compiled factory, two distinct retained READ ONLY database connections, isolated parameter containers. Initialization only; background procedure body is not invoked. No VM diagnostic hooks or private dependency source."
+      }
+    },
+    "previous_matrix_scope": "Nine passing initialization contexts precede the owner Read fix; no claim of fresh replay for the changed adapter.",
+    "current_replay_source_scope": "All nine owner-Read-fix initialization contexts passed on the recorded binaries. These replays precede the linked Query method callback VM fix and do not prove replay of that later source state."
+  },
+  "functional_option_parameterized_backend_check": {
+    "evidence": "docs/research/fixtures/functional-option-parameterized-adapter-1016/results.json",
+    "actual_postgres": "all_three_sources_passed",
+    "calls": 60,
+    "root_gates": "all_passed",
+    "production_changes": "none_after_owner_Read_fix"
+  },
+  "regression_before_parameterized_tests": {
+    "passed": 3805,
+    "failed": 0,
+    "ignored": 1,
+    "result_blocks": 577,
+    "scope": "All required ROOT gates after the constant functional-option backend test; SQL branch independently executed on own PostgreSQL.",
+    "evidence": "docs/research/fixtures/functional-option-adapter-1016/root-gates/results.json"
+  },
+  "linked_query_callback_check": {
+    "status": "regression_test_and_final_full_gates_passed_shared_backend_failure_remains",
+    "scope": "Linked object methods now carry the existing configuration callback used for lazy Session parameter initialization; no new language semantics or public API. Original database CLI replays have not been repeated after this VM change.",
+    "test": "crates/bsl-session/src/linked_query_parameter_tests.rs",
+    "conditional_backend_status": "String and Number Independent passed on actual PostgreSQL; both Shared profiles fail even with explicitly set B/2 in Session. Expected values are read from retained native platform.txt. See native-oracle-red/.",
+    "request": "docs/plans/open-sdbl-shared-separator-lazy-value-request.md",
+    "evidence": "docs/research/fixtures/conditional-separation-adapter-1016/",
+    "first_full_gates": {
+      "passed": 3811,
+      "failed": 0,
+      "ignored": 1,
+      "scope": "Runtime code after callback fix; new SQL test split occurred during run. Final composition rerun pending. SQL Shared failures remain explicit."
+    },
+    "final_full_gates": {
+      "passed": 3814,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 577,
+      "evidence": "docs/research/fixtures/conditional-separation-adapter-1016/root-gates"
+    },
+    "demo_cli_replay": {
+      "status": "passed",
+      "database": "demo",
+      "process_exit_code": 0,
+      "seconds": 151.73,
+      "canary_passed": true,
+      "sdk_readonly_transactions": true,
+      "diagnostic_network_guard": false,
+      "binary_sha256": "c96bd958fb2f5a79aedaeced1884cb6a2c4d5aac2738bfd1c8c8872158dd426f",
+      "scope": "Production ROOT CLI after linked Query method callback fix; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary.",
+      "stderr_identical_to_previous_run": true,
+      "evidence": "docs/research/fixtures/conditional-separation-adapter-1016/production-cli"
+    },
+    "buh_cli_replay": {
+      "status": "passed",
+      "database": "buh",
+      "process_exit_code": 0,
+      "seconds": 832.87,
+      "canary_passed": true,
+      "sdk_readonly_transactions": true,
+      "diagnostic_network_guard": false,
+      "binary_sha256": "c96bd958fb2f5a79aedaeced1884cb6a2c4d5aac2738bfd1c8c8872158dd426f",
+      "scope": "Production ROOT CLI after linked Query method callback fix; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary.",
+      "stderr_comparison": {
+        "identical_to_previous_owner_read_run": true,
+        "old_sha256": "b98e3c049986ccbf62124c469f1abf97ae7f3b08022403cf813dabce001f8ad1",
+        "new_sha256": "b98e3c049986ccbf62124c469f1abf97ae7f3b08022403cf813dabce001f8ad1"
+      },
+      "scope_note": "Before subsequent GMT overflow fix; verifies the linked-callback CLI state.",
+      "evidence": "docs/research/fixtures/conditional-separation-adapter-1016/production-cli"
+    },
+    "unf_cli_replay": {
+      "status": "passed",
+      "database": "unf",
+      "process_exit_code": 0,
+      "seconds": 525.23,
+      "canary_passed": true,
+      "sdk_readonly_transactions": true,
+      "diagnostic_network_guard": false,
+      "binary_sha256": "c96bd958fb2f5a79aedaeced1884cb6a2c4d5aac2738bfd1c8c8872158dd426f",
+      "scope": "Production ROOT CLI after linked Query method callback fix; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary.",
+      "stderr_comparison": {
+        "identical_to_previous_owner_read_run": true,
+        "old_sha256": "0e689c7770d93c59aa15aa1b179b05c4f1f028d756eb047019c0c5b94f9abb25",
+        "new_sha256": "0e689c7770d93c59aa15aa1b179b05c4f1f028d756eb047019c0c5b94f9abb25"
+      },
+      "scope_note": "Before subsequent GMT overflow fix; verifies linked-callback ThinClient state only.",
+      "evidence": "docs/research/fixtures/conditional-separation-adapter-1016/production-cli"
+    }
+  },
+  "current_requirement_audit": {
+    "artifact": "docs/research/fixtures/approved-sdk-production-integration-1016/runtime-requirement-audit.json",
+    "summary": {
+      "verified_requirements": 466,
+      "not_audited_requirements": 0,
+      "incomplete_backend_validation_requirements": 4,
+      "incomplete_native_validation_requirements": 0,
+      "incomplete_implementation_requirements": 2,
+      "overall_completion_proven": false
+    },
+    "scope": "Requirement-specific source/native/focused-test review; not a count of implemented features. Some unverified entries include partial review notes. No full-completion or archive claim.",
+    "registered_question_policy": "Verification of stated scenarios and implementation retains explicitly registered native questions; it does not claim all platform causes measured."
+  },
+  "time_zone_overflow_fix": {
+    "status": "focused_tests_and_full_gates_passed",
+    "evidence": "docs/research/fixtures/time-zone-overflow-1016",
+    "scope": "Only invalid-name arithmetic overflow changes. The running BUH CLI binary predates this fix and proves the earlier linked-callback state only.",
+    "full_gates": {
+      "passed": 3815,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 578
+    }
+  },
+  "temporary_table_backend_validation": {
+    "status": "retained_literal_parameter_and_database_source_controls_passed",
+    "evidence": "docs/research/fixtures/temporary-table-adapter-1016/result.json",
+    "scope": "Actual disposable PostgreSQL controls; current requirement-specific scenarios pass. No all-query-feature or all-backend claim."
+  },
+  "workspace_regression_1017": {
+    "results": "docs/research/fixtures/approved-sdk-production-integration-1016/workspace-regression-1017/totals.json",
+    "passed": 3825,
+    "failed": 0,
+    "ignored": 1,
+    "result_blocks": 579,
+    "includes": "New document/report audit tests; other previously recorded full gates remain separately scoped.",
+    "additional_gates": "docs/research/fixtures/approved-sdk-production-integration-1016/workspace-regression-1017/additional-gates.json"
+  },
+  "workspace_regression_1017_frozen": {
+    "evidence": "docs/research/fixtures/approved-sdk-production-integration-1016/workspace-regression-1017-frozen/README.md",
+    "passed": 3838,
+    "failed": 0,
+    "ignored": 1,
+    "all_gates_passed": true,
+    "source_snapshot_unchanged": true
+  },
+  "workspace_regression_pending_messages_1017": {
+    "evidence": "docs/research/fixtures/session-pending-user-messages/README.md",
+    "passed": 3844,
+    "failed": 0,
+    "ignored": 1,
+    "all_gates_passed": true
+  },
+  "native_full_name_closure_1017": {
+    "evidence": "docs/research/fixtures/approved-sdk-production-integration-1016/native-full-name-closure-1017/result.json",
+    "workspace_tests": {
+      "exit_code": 0,
+      "result_blocks": 590,
+      "passed": 3853,
+      "failed": 0,
+      "ignored": 1
+    },
+    "scope": "Measured full-name projection closure; not a fresh production startup matrix or all-backend validation."
+  },
+  "critical_settings_load_1017": {
+    "artifact": "docs/research/fixtures/approved-sdk-production-integration-1016/critical-settings-load-1017/result.json",
+    "workspace_tests": {
+      "exit_code": 0,
+      "result_blocks": 592,
+      "passed": 3859,
+      "failed": 0,
+      "ignored": 1
+    },
+    "production_startup": {
+      "demo": "docs/research/fixtures/approved-sdk-production-integration-1016/critical-settings-load-1017/cli-demo-critical-settings-1017-result.json",
+      "buh": "historical only",
+      "unf": "historical only"
+    },
+    "completion_proven": false
+  },
+  "settings_storage_error_policy_and_names_1017": {
+    "artifact": "docs/research/fixtures/approved-sdk-production-integration-1016/settings-storage-runtime-error-classes-1017/result.json",
+    "workspace_tests": {
+      "exit_code": 0,
+      "result_blocks": 594,
+      "passed": 3868,
+      "failed": 0,
+      "ignored": 1
+    },
+    "current_release_demo_startup": {
+      "database": "demo",
+      "process_exit_code": 0,
+      "seconds": 151.97,
+      "canary_passed": true,
+      "sdk_readonly_transactions": true,
+      "diagnostic_network_guard": false,
+      "binary_sha256": "df150fda89185478a2d27a90c659149e6df2f60962409980f11f713708d2b852",
+      "binary_unchanged_during_run": true,
+      "scope": "Current ROOT CLI after phase-aware settings-handler errors and measured handler-name fallback; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+    },
+    "native_handler_names": "Russian priority across both ScriptVariant values and both definition orders; English fallback and inner catch measured",
+    "native_preparation_correction": "Detailed report identified invalid manager body as ScriptCompileError; no new initialization error type remains",
+    "overall_completion_proven": false
+  },
+  "current_source_thin_client_startup_recheck": {
+    "scope": "Current candidate with SDK0.9.25, Document owner Read and State-owned instance field names. Original initialization and unchanged acceptance script. ThinClient passed; WebClient now running and BackgroundJob queued.",
+    "cases": [
+      {
+        "database": "demo",
+        "kind": "ThinClient",
+        "receipt": "docs/research/fixtures/session-instance-value-names-1019/production-startup/cli-demo-instance-values-1019-result.json",
+        "seconds": 151.07,
+        "binary_sha256": "519000915265e686a0ef6bf403d6d34dba941f52f0e44b232ad67217f9cd91fb"
+      },
+      {
+        "database": "buh",
+        "kind": "ThinClient",
+        "receipt": "docs/research/fixtures/session-instance-value-names-1019/production-startup/cli-buh-instance-values-1019-result.json",
+        "seconds": 759.69,
+        "binary_sha256": "519000915265e686a0ef6bf403d6d34dba941f52f0e44b232ad67217f9cd91fb"
+      },
+      {
+        "database": "unf",
+        "kind": "ThinClient",
+        "receipt": "docs/research/fixtures/session-instance-value-names-1019/production-startup/cli-unf-instance-values-1019-result.json",
+        "seconds": 505.41,
+        "binary_sha256": "519000915265e686a0ef6bf403d6d34dba941f52f0e44b232ad67217f9cd91fb"
+      }
+    ]
+  },
+  "prior_source_thin_client_startup_rechecks": [
+    {
+      "scope": "Original initialization and unchanged acceptance script on all three live databases. Only ThinClient refreshed; earlier WebClient/BackgroundJob receipts keep their original scope.",
+      "cases": [
+        {
+          "database": "demo",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/database-verification-production-startup-1017/cli-demo-db-verification-1017-result.json",
+          "seconds": 151.73,
+          "binary_sha256": "7f99e9d16d4e57d288029aa70ea67459d7fbfe7e86bd418e365855180f4fa18e"
+        },
+        {
+          "database": "buh",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/database-verification-production-startup-1017/cli-buh-db-verification-1017-result.json",
+          "seconds": 779.51,
+          "binary_sha256": "7f99e9d16d4e57d288029aa70ea67459d7fbfe7e86bd418e365855180f4fa18e"
+        },
+        {
+          "database": "unf",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/database-verification-production-startup-1017/cli-unf-db-verification-1017-result.json",
+          "seconds": 517.62,
+          "binary_sha256": "7f99e9d16d4e57d288029aa70ea67459d7fbfe7e86bd418e365855180f4fa18e"
+        }
+      ]
+    },
+    {
+      "scope": "SDK0.9.22 corrected metadata-right production binary; original initialization and unchanged acceptance script on all three live databases. ThinClient only; earlier other-kind evidence retains its original scope.",
+      "cases": [
+        {
+          "database": "demo",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/metadata-right-host-integration-1018/production-startup-corrected/cli-demo-metadata-rights-corrected-1018-result.json",
+          "seconds": 151.98,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "1205447efeefb5e38b45a9fb6016faa027829ede756bbc2c1cb2cfc64099ca6f",
+          "sdk_version": "0.9.22"
+        },
+        {
+          "database": "buh",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/metadata-right-host-integration-1018/production-startup-corrected/cli-buh-metadata-rights-corrected-1018-result.json",
+          "seconds": 782.67,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "1205447efeefb5e38b45a9fb6016faa027829ede756bbc2c1cb2cfc64099ca6f",
+          "sdk_version": "0.9.22"
+        },
+        {
+          "database": "unf",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/metadata-right-host-integration-1018/production-startup-corrected/cli-unf-metadata-rights-corrected-1018-result.json",
+          "seconds": 556.07,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "1205447efeefb5e38b45a9fb6016faa027829ede756bbc2c1cb2cfc64099ca6f",
+          "sdk_version": "0.9.22"
+        }
+      ]
+    },
+    {
+      "scope": "Last completed candidate: SDK0.9.23 field-right/document-reference integration BEFORE explicit-catalog-subject host extension. Not proof of latest source or fresh other Session kinds.",
+      "cases": [
+        {
+          "database": "demo",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/sdk23-field-rights-review-1018/production-startup/cli-demo-sdk23-field-rights-1018-result.json",
+          "seconds": 153.83,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "176728e108f2f00ff467a9ac1340f3a723a7c49fff24e1e6b44f24e3d3288644",
+          "sdk_version": "0.9.23"
+        },
+        {
+          "database": "buh",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/sdk23-field-rights-review-1018/production-startup/cli-buh-sdk23-field-rights-1018-result.json",
+          "seconds": 777.76,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "176728e108f2f00ff467a9ac1340f3a723a7c49fff24e1e6b44f24e3d3288644",
+          "sdk_version": "0.9.23"
+        },
+        {
+          "database": "unf",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/sdk23-field-rights-review-1018/production-startup/cli-unf-sdk23-field-rights-1018-result.json",
+          "seconds": 526.09,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "176728e108f2f00ff467a9ac1340f3a723a7c49fff24e1e6b44f24e3d3288644",
+          "sdk_version": "0.9.23"
+        }
+      ]
+    },
+    {
+      "scope": "Latest completed ab0b6b2d candidate includes SDK0.9.23, host explicit catalog-subject rights and Document reference correction; original ThinClient starts and unchanged acceptance script. Other Session-kind receipts retain original scope.",
+      "cases": [
+        {
+          "database": "demo",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/cli-demo-explicit-subjects-1018-result.json",
+          "seconds": 151.98,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+          "sdk_version": "0.9.23"
+        },
+        {
+          "database": "buh",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/cli-buh-explicit-subjects-1018-result.json",
+          "seconds": 775.24,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+          "sdk_version": "0.9.23"
+        },
+        {
+          "database": "unf",
+          "kind": "ThinClient",
+          "receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/cli-unf-explicit-subjects-1018-result.json",
+          "seconds": 520.07,
+          "process_exit_code": 0,
+          "canary_passed": true,
+          "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+          "sdk_version": "0.9.23"
+        }
+      ]
+    }
+  ],
+  "sdk23_production_refresh": {
+    "status": "passed_before_explicit_subject_extension",
+    "receipt": "docs/research/fixtures/sdk23-field-rights-review-1018/production-startup/result.json",
+    "binary_sha256": "176728e108f2f00ff467a9ac1340f3a723a7c49fff24e1e6b44f24e3d3288644"
+  },
+  "explicit_subject_production_refresh": {
+    "status": "passed",
+    "receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/result.json",
+    "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8"
+  },
+  "sdk24_user_language_validation": {
+    "status": "terminal partial: BUH passed; DEMO form37 and UNF form31 explicitly refused as unknown SDK language",
+    "release": "docs/research/fixtures/sdk24-user-language-review-1018/release.json",
+    "demo_receipt": "docs/research/fixtures/sdk24-user-language-review-1018/production-startup/cli-demo-user-language-1018-result.json",
+    "actual_native_database": "docs/research/fixtures/sdk24-user-language-review-1018/actual-result.json",
+    "sdk_followup": "docs/plans/open-sdbl-user-language-form37-request.md",
+    "historical_startup_receipts": "SDK0.9.23 receipts above describe their original binary, not current SDK0.9.24 success",
+    "production_receipt": "docs/research/fixtures/sdk24-user-language-review-1018/production-startup/result.json",
+    "root_gates": "docs/research/fixtures/sdk24-user-language-review-1018/root-gates/result.json"
+  },
+  "sdk25_user_language_validation": {
+    "status": "terminal passed: DEMO/BUH/UNF ThinClient",
+    "release": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/release-build.json",
+    "demo_receipt": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/production-startup/cli-demo-user-language-1019-result.json",
+    "actual_native_database": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/actual-result.json",
+    "sdk_transfer": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/canonical-transfer.json",
+    "root_gates": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/root-gates/result.json",
+    "scope": "Current SDK0.9.25 ThinClient refresh only; no completion claim for all9 original session cases or main goal.",
+    "buh_receipt": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/production-startup/cli-buh-user-language-1019-result.json",
+    "unf_receipt": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/production-startup/cli-unf-user-language-1019-result.json",
+    "production_receipt": "docs/research/fixtures/sdk25-legacy-user-language-review-1019/production-startup/result.json"
+  },
+  "document_owner_read_followup_1019": {
+    "status": "host bug and subsequent same-State field-name defect fixed; current final-source all8 gates passed",
+    "proof": "docs/research/fixtures/document-owner-read-right-1019/README.md",
+    "root_gates": "docs/research/fixtures/document-owner-read-right-1019/root-gates/result.json",
+    "actual_native_read_verify": "docs/research/fixtures/document-owner-read-right-1019/verification/actual-result.json",
+    "cross_module_reproduction": "docs/research/fixtures/document-owner-read-right-1019/structure-cross-module-result.json",
+    "production_scope": "SDK25 historical ThinClient receipts above precede these host fixes. Current-candidate receipt is recorded separately below; pending cases remain unverified.",
+    "current_journal_receipt": "docs/research/fixtures/session-instance-value-names-1019/actual-journal/verification/actual-result.json"
+  },
+  "instance_value_names_validation_1019": {
+    "status": "terminal_passed_all9_current_source_startup_cases",
+    "root_gates": "docs/research/fixtures/session-instance-value-names-1019/root-gates/result.json",
+    "hot_code_screen": "docs/research/fixtures/session-instance-value-names-1019/hot-code/result.json",
+    "release": "docs/research/fixtures/session-instance-value-names-1019/release-build.json",
+    "production_receipt": "docs/research/fixtures/session-instance-value-names-1019/production-startup/result.json",
+    "scope": "DEMO/BUH/UNF ThinClient, WebClient and BackgroundJob all passed against current release libraries and unchanged original initialization. Background procedure bodies were not invoked. All SDK transactions READ ONLY;12GiB address-space ceiling unchanged. Broad runtime requirements remain open."
+  },
+  "prior_regression_snapshots": [
+    {
+      "passed": 3817,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 578,
+      "scope": "All eight ROOT gates passed after the GMT arithmetic fix and both temporary-table tests. A later added empty-description membership test passed separately with formatting and focused Clippy; it was not discovered by this already-running full test invocation. External SQL branches have separate actual PostgreSQL evidence.",
+      "evidence": "docs/research/fixtures/temporary-table-adapter-1016/root-gates/results.json"
+    },
+    {
+      "passed": 3916,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 600,
+      "scope": "All8 final-source ROOT gates passed after the State-owned instance name fix. Original ThinClient/WebClient cases all passed; BackgroundJob receipt remains separate. Optional native/confidential environment gates retain their own scope. No broad runtime completion claim.",
+      "evidence": "docs/research/fixtures/session-instance-value-names-1019/root-gates/result.json"
+    },
+    {
+      "passed": 3917,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 600,
+      "scope": "All8 checks after adding native array-bounds regression and narrowing existing question prose. Runtime execution unchanged; original9-case checkpoint retained separately.",
+      "evidence": "docs/research/fixtures/settings-storage-index-error-1019/root-gates/result.json"
+    },
+    {
+      "passed": 3921,
+      "failed": 0,
+      "ignored": 1,
+      "result_blocks": 601,
+      "scope": "All8 checks after Document attribute target forwarding, subject/catalog isolation and explicit database guard. Broad SDK evaluation remains open.",
+      "evidence": "docs/research/fixtures/document-attribute-right-targets-1019/root-gates/result.json"
+    }
+  ],
+  "settings_storage_array_bounds_1019": {
+    "observation": "docs/research/fixtures/settings-storage-index-error-1019/observation.json",
+    "gates": "docs/research/fixtures/settings-storage-index-error-1019/root-gates/result.json",
+    "execution_source_scope": "docs/research/fixtures/settings-storage-index-error-1019/execution-source-scope.json",
+    "remaining_question": "SETTINGSSTORAGE.LOAD_HANDLER_ERROR"
+  },
+  "document_attribute_right_targets_1019": {
+    "evidence": "docs/research/fixtures/document-attribute-right-targets-1019/README.md",
+    "host_forwarding_verified": true,
+    "sdk_attribute_evaluation_complete": false,
+    "original_nine_startup_checkpoint_unchanged": true
+  },
+  "sdk26_settings_namespace_validation": {
+    "status": "verified",
+    "transfer": "docs/research/fixtures/sdk26-settings-user-namespace-review-1019/canonical-transfer.json",
+    "native_comparison": "docs/research/fixtures/client-settings-sdk26-replay-1019/result.json",
+    "root_gates": "docs/research/fixtures/sdk26-settings-user-namespace-review-1019/root-gates/result.json",
+    "contract_map": "docs/research/fixtures/approved-sdk-production-integration-1016/client-settings-contract-map-1019.json",
+    "scope": "Exact user namespace read contract; no new production startup replay or unsupported write/layout/provider promise."
+  },
+  "sdk29_guarded_memory_investigation_1019": {
+    "status": "in_progress",
+    "cli_concurrency_limit": 1,
+    "baseline": "docs/research/fixtures/sdk29-buh-memory-diagnostic-1019",
+    "ast_only_candidate": "docs/research/fixtures/buh-ast-lifetime-candidate-1019/b1",
+    "current_candidate": "docs/research/fixtures/buh-intermediate-lifetimes-1019",
+    "known_facts": [
+      "Early6GiB diagnostic guard stopped all three BUH runs; no startup canary.",
+      "Observed phases include AST collection, semantic resolution, bytecode assembly/import cloning, and verification.",
+      "Current internal changes consume AST during resolution and release resolved bodies before image verification.",
+      "Facade576tests, fmt, Clippy, rustdoc and facade consumer passed after both changes."
+    ],
+    "performance_improvement_proven": false,
+    "full_workspace": {
+      "result": "3932passed/1known-failed/1ignored",
+      "summary": "docs/research/fixtures/buh-intermediate-lifetimes-1019/full-workspace/summary.json",
+      "new_failures": 0,
+      "green": false
+    },
+    "next": "Trace the caught FindByName warning and its scope; preserve single-CLI execution. Do not infer full compatibility from a canary. Other session kinds and full green gate remain open.",
+    "main_goal_complete": false,
+    "guarded_startup": {
+      "status": "stopped_for_memory",
+      "directory": "docs/research/fixtures/buh-intermediate-lifetimes-1019/guarded-startup",
+      "rss_limit_gib": 8,
+      "address_space_limit_gib": 10,
+      "host_available_ram_stop_gib": 3,
+      "review": "docs/research/fixtures/buh-intermediate-lifetimes-1019/guarded-startup/review.json"
+    },
+    "unf_startup": {
+      "status": "passed_guarded_diagnostic_run",
+      "evidence": "docs/research/fixtures/unf-intermediate-lifetimes-1019",
+      "candidate": "bsl-cli-intermediate-lifetimes-1019",
+      "cli_concurrency_limit": 1,
+      "rss_stop_gib": 8,
+      "address_space_limit_gib": 10,
+      "exit_code": 0,
+      "canary_passed": true,
+      "seconds": 538.79,
+      "debugger_attached": true,
+      "performance_certified": false
+    },
+    "demo_startup": {
+      "status": "passed_without_debugger",
+      "exit_code": 0,
+      "canary_passed": true,
+      "seconds": 156.05,
+      "evidence": "docs/research/fixtures/demo-intermediate-lifetimes-1019"
+    },
+    "buh_original_startup": {
+      "status": "canary_passed_with_unsupported_call_warning",
+      "exit_code": 0,
+      "seconds": 785.87,
+      "debugger_attached": false,
+      "evidence": "docs/research/fixtures/buh-guarded-original-startup-1019/verification.json"
+    }
+  }
+}
