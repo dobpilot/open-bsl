@@ -1,0 +1,60 @@
+{
+  "platform": "8.3.27.2342",
+  "division": {
+    "runner_exit_code": 1,
+    "timeout_seconds": 120,
+    "dialog": "Further operation is only possible after restart; Restart / Finalize",
+    "before_line": true,
+    "caught_and_after_lines": false,
+    "native_body_error_is_critical": true,
+    "detailed_error": "Error working with settings storage / Error running processor LoadProcessing / Division by zero / ScriptRuntimeError, ScriptUseError",
+    "detailed_error_image": "division-report/text/0xc001f5.png"
+  },
+  "initialization": {
+    "classification": "ScriptCompileError; not a runtime initialization Raised",
+    "detailed_error": "Logical end of module source text encountered after the procedure definition",
+    "native_manager_body_operators_permitted": false,
+    "runtime_initialization_and_retry_proven": false,
+    "proof": "initialization-report/text/0xc00232.png",
+    "followup_scope": "A later client action executes after the compilation refusal, not after a measured runtime initialization exception."
+  },
+  "classification_basis": "Controlled source and PID-bound dialog captures; a timeout by itself is not an oracle.",
+  "inner_catch": {
+    "runner_exit_code": 0,
+    "output": "settings.inner.result\tcaught-inside\nsettings.inner.after\tYES\n"
+  },
+  "handler_alias_priority_profiles": [
+    {
+      "artifact": "dual-handlers-english/result.json",
+      "script_variant": "English",
+      "english_first_in_source": false,
+      "runner_exit_code": 0,
+      "output": "settings.handler-name\trussian\n"
+    },
+    {
+      "artifact": "dual-handlers-english-reverse/result.json",
+      "script_variant": "English",
+      "english_first_in_source": true,
+      "runner_exit_code": 0,
+      "output": "settings.handler-name\trussian\n"
+    },
+    {
+      "artifact": "dual-handlers-russian/result.json",
+      "script_variant": "Russian",
+      "english_first_in_source": false,
+      "runner_exit_code": 0,
+      "output": "settings.handler-name\trussian\n"
+    },
+    {
+      "artifact": "dual-handlers-russian-reverse/result.json",
+      "script_variant": "Russian",
+      "english_first_in_source": true,
+      "runner_exit_code": 0,
+      "output": "settings.handler-name\trussian\n"
+    }
+  ],
+  "english_only": {
+    "runner_exit_code": 0,
+    "output": "settings.inner.result\tcaught-inside\nsettings.inner.after\tYES\n"
+  }
+}

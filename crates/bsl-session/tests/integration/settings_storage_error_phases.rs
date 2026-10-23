@@ -70,26 +70,45 @@ const CAUGHT_LOAD: &str = r#"
 Возврат "missed";
 "#;
 
-#[test]
-fn arithmetic_error_inside_load_handler_is_critical_and_preserves_its_cause() {
-    let factory = factory(include_str!(
-        "../../../../docs/research/fixtures/settings-storage-load/manager-division-error.bsl"
-    ));
+const LOAD: &str = r#"ХранилищаНастроек.ЗамерХранилища.Загрузить("probe");"#;
+
+/// По справке `Загрузить` вызывает `ОбработкаЗагрузки`, поэтому ошибка
+/// обработчика выходит из `Загрузить` ловимым исключением с исходной
+/// причиной, а сеанс остаётся рабочим (сознательное отклонение от 8.3.27,
+/// где платформа требует перезапуска).
+pub(super) fn assert_handler_error_is_catchable(
+    factory: &SessionFactory,
+    cause: impl Fn(&RtError) -> bool,
+) {
     let mut session = factory
         .open(
             Principal::new("user", "user", vec![]),
             SessionResources::new(Box::new(()), 1),
         )
         .unwrap();
-    let error = session.execute(CAUGHT_LOAD).unwrap_err();
-    let SessionError::OpenBsl(Error::Runtime(RtError::CriticalConfiguration { operation, cause })) =
-        error
-    else {
-        panic!("ожидалась критическая ошибка: {error:?}");
+    let probe = session
+        .instantiate(&format!(
+            "Функция Проба() Экспорт {CAUGHT_LOAD} КонецФункции"
+        ))
+        .unwrap();
+    assert_eq!(
+        session.call(&probe, "Проба", vec![]).unwrap().0,
+        Value::Str("caught".into())
+    );
+    let error = session.execute(LOAD).unwrap_err();
+    let SessionError::OpenBsl(Error::Runtime(error)) = error else {
+        panic!("ожидалась ошибка исполнения: {error:?}");
     };
-    assert_eq!(operation, "ОбработкаЗагрузки");
-    assert!(matches!(*cause, RtError::Num(_)), "{cause:?}");
-    assert!(session.execute("Возврат 42;").is_err());
+    assert!(cause(&error), "{error:?}");
+    session.execute("Возврат 42;").unwrap();
+}
+
+#[test]
+fn arithmetic_error_inside_load_handler_is_catchable_with_its_cause() {
+    let factory = factory(include_str!(
+        "../../../../docs/research/fixtures/settings-storage-load/manager-division-error.bsl"
+    ));
+    assert_handler_error_is_catchable(&factory, |error| matches!(error, RtError::Num(_)));
 }
 
 fn normal_load(factory: &SessionFactory) -> Value {
@@ -154,32 +173,18 @@ fn russian_handler_wins_for_both_script_variants_and_both_definition_orders() {
 }
 
 #[test]
-fn english_handler_failure_retains_the_critical_policy_and_original_cause() {
+fn english_handler_failure_is_catchable_with_its_original_cause() {
     let source = r#"Процедура LoadProcessing(КлючОбъекта, КлючНастроек, Настройки, ОписаниеНастроек, ИмяПользователяИБ)
         ВызватьИсключение "english-handler-probe";
     КонецПроцедуры"#;
-    let factory = factory(source);
-    let mut session = factory
-        .open(
-            Principal::new("user", "user", vec![]),
-            SessionResources::new(Box::new(()), 1),
-        )
-        .unwrap();
-    let error = session.execute(CAUGHT_LOAD).unwrap_err();
-    let SessionError::OpenBsl(Error::Runtime(RtError::CriticalConfiguration { operation, cause })) =
-        error
-    else {
-        panic!("ожидался критический отказ английского обработчика: {error:?}");
-    };
-    assert_eq!(operation, "ОбработкаЗагрузки");
-    assert!(
-        matches!(*cause, RtError::Raised(Value::Str(ref text)) if text.to_string() == "english-handler-probe")
+    assert_handler_error_is_catchable(
+        &factory(source),
+        |error| matches!(error, RtError::Raised(Value::Str(text)) if text.to_string() == "english-handler-probe"),
     );
-    assert!(session.execute("Возврат 42;").is_err());
 }
 
 #[test]
-fn absent_handler_preserves_the_original_diagnostic_without_critical_promotion() {
+fn absent_handler_preserves_the_original_diagnostic() {
     let factory = factory("Процедура Другая() КонецПроцедуры");
     let mut session = factory
         .open(

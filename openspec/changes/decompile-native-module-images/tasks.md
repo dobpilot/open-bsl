@@ -104,3 +104,7 @@
 - [x] Measure shared-try-body in an isolated native infobase, replay both entries and all four receipt lines, and reject changed guards, frames and interior entries.
 
 - [x] Measure public traversal of an overlapping entry with the observed unknown frame flags, preserve the independent private-call process failure separately, and retain explicit whole-image rejection rather than discard the declaration.
+
+## 9. Probe receipts
+- [ ] 9.1 Run the 25 `tests/conformance/measure/1c/measure-native-image-*.bsl` probes that have no `.platform.txt` on a machine holding their inputs, or delete them; mark in each manifest whether the image is compiled from an own control module or assembled by hand, and keep vendor-derived images (`target/diagnostics/original-*`) outside the repository (see "Legal position" in design.md).
+

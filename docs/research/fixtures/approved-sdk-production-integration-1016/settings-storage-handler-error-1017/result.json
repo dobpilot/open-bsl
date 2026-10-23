@@ -1,0 +1,11 @@
+{
+  "platform": "8.3.27.2342",
+  "base": "owned temporary file infobase",
+  "script": "docs/research/fixtures/settings-storage-load/measure-handler-error.bsl",
+  "native_runner_exit_code": 1,
+  "enterprise_timeout_seconds": 120,
+  "completed_control_lines": 4,
+  "handler_error_result_present": false,
+  "semantics_proven": false,
+  "finding": "Normal/default/context/explicit-user/numeric-key controls complete. Error-triggering Load does not produce the caller caught/missed line before timeout. A modal or native error path remains unresolved; no oracle accepted and no source marker removed."
+}

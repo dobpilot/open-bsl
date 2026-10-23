@@ -1,3 +1,8 @@
+# Снимается только вручную: исключение внутри `ОбработкаЗагрузки` на 1С 8.3.27.2342
+# показывает модальный диалог перезапуска, текстового вывода нет. Квитанции окна
+# подробного отчёта: docs/research/fixtures/approved-sdk-production-integration-1016/
+# settings-storage-handler-error-1017/ и settings-storage-runtime-error-classes-1017/.
+# open-bsl сознательно следует справке (ловимое исключение), а не этому поведению.
 mkdir SettingsStorages/ЗамерХранилища/Ext
 copy docs/research/fixtures/settings-storage-load/storage.xml SettingsStorages/ЗамерХранилища.xml
 copy docs/research/fixtures/settings-storage-load/manager-module.bsl SettingsStorages/ЗамерХранилища/Ext/ManagerModule.bsl

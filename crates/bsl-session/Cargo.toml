@@ -8,3 +8,7 @@ license.workspace = true
 bsl-config = { path = "../bsl-config" }
 bsl-orm = { path = "../bsl-orm" }
 open-bsl = { path = "../open-bsl" }
+
+[dev-dependencies]
+# Тесты файлового источника сеанса читают выгрузку XML.
+open-bsl = { path = "../open-bsl", features = ["configuration-files"] }

@@ -1,0 +1,26 @@
+{
+  "base": "/tmp/open-bsl-settings-initialization-report-1017-ib",
+  "enterprise_pid": 1176203,
+  "windows": [
+    {
+      "id": "0xc000be",
+      "title": "WM_NAME(STRING) = \"Configuration\"\n_NET_WM_NAME(UTF8_STRING) = \"Configuration\"\n",
+      "image": "0xc000be.png"
+    },
+    {
+      "id": "0xc000d2",
+      "title": "WM_NAME(STRING) = \"1C:Enterprise\"\n_NET_WM_NAME(UTF8_STRING) = \"1C:Enterprise\"\n",
+      "image": "0xc000d2.png"
+    },
+    {
+      "id": "0xc00159",
+      "title": "WM_NAME(STRING) = \"Report about error\"\n_NET_WM_NAME(UTF8_STRING) = \"Report about error\"\n",
+      "image": "0xc00159.png"
+    },
+    {
+      "id": "0xc00232",
+      "title": "WM_NAME(STRING) = \"Error info\"\n_NET_WM_NAME(UTF8_STRING) = \"Error info\"\n",
+      "image": "0xc00232.png"
+    }
+  ]
+}
