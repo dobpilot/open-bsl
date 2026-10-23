@@ -15,6 +15,10 @@ bsl-rt = { path = "../bsl-rt" }
 bsl-format = { path = "../bsl-format" }
 bsl-orm = { path = "../bsl-orm" }
 bsl-session = { path = "../bsl-session" }
+bsl-config-db = { path = "../bsl-config-db" }
+open-sdbl = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.5.1" }
+open-sdbl-db = { git = "https://github.com/dobpilot/open-sdbl", tag = "v0.5.1" }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # Единственная внешняя зависимость всего рабочего пространства сверх
 # num-bigint: сырой режим терминала, редактирование строки и история для
 # REPL. Подсветку и дополнение реализуем сами через её трейты Highlighter и
@@ -39,3 +43,6 @@ serde_json = "1"
 counters = ["bsl-vm/counters"]
 copyprop = ["bsl-compiler/copyprop", "open-bsl/copyprop"]
 constprop = ["bsl-compiler/constprop", "open-bsl/constprop"]
+
+[dev-dependencies]
+bsl-config = { path = "../bsl-config" }

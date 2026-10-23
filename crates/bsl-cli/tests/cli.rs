@@ -58,6 +58,12 @@ fn help_is_printed_to_stdout_with_a_zero_exit_code() {
             "--run-bytecode",
             "--ingest-measurements",
             "--help",
+            "--config-db",
+            "--principal",
+            "--db-plaintext",
+            "--db-trust-server-certificate",
+            "PGPASSWORD",
+            "MSSQL_PASSWORD",
         ] {
             assert!(
                 text.contains(expected),
@@ -66,6 +72,37 @@ fn help_is_printed_to_stdout_with_a_zero_exit_code() {
         }
         // Подсказка — это не ошибка: stderr пуст.
         assert!(out.stderr.is_empty(), "{flag}: {:?}", out.stderr);
+    }
+}
+
+#[test]
+fn database_only_modifiers_are_rejected_without_database_mode() {
+    for args in [
+        vec!["--principal", "Тест", "script.bsl"],
+        vec!["--db-host", "database", "script.bsl"],
+        vec!["--db-plaintext", "script.bsl"],
+    ] {
+        let out = run(&args);
+        assert!(!out.status.success(), "{args:?}");
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(error.contains("--config-db"), "{error}");
+        assert!(out.stdout.is_empty());
+    }
+}
+
+#[test]
+fn database_password_is_never_accepted_as_an_argument() {
+    for flag in ["--password=secret", "--db-password=secret"] {
+        let out = run(&[flag, "script.bsl"]);
+        assert!(!out.status.success(), "{flag}");
+        let error = String::from_utf8_lossy(&out.stderr);
+        assert!(error.contains("PGPASSWORD"), "{error}");
+        assert!(error.contains("MSSQL_PASSWORD"), "{error}");
+        assert!(
+            !error.contains("secret"),
+            "пароль попал в диагностику: {error}"
+        );
+        assert!(out.stdout.is_empty());
     }
 }
 
@@ -433,6 +470,30 @@ fn script_arguments_land_in_the_command_line_arguments_array() {
     assert_eq!(String::from_utf8_lossy(&out.stdout), "0\n0\n");
 
     let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn database_shaped_script_arguments_keep_the_ordinary_path() {
+    let path = std::env::temp_dir().join(format!(
+        "bsl-cli-test-db-shaped-args-{}.bsl",
+        std::process::id()
+    ));
+    std::fs::write(
+        &path,
+        "Для Каждого Арг Из АргументыКоманднойСтроки Цикл Сообщить(Арг); КонецЦикла;",
+    )
+    .unwrap();
+    let out = run(&[
+        path.to_str().unwrap(),
+        "--config-db",
+        "--principal=Другой",
+        "--db-password=аргумент",
+    ]);
+    assert_eq!(
+        stdout_of(&out),
+        "--config-db\n--principal=Другой\n--db-password=аргумент\n"
+    );
+    let _ = std::fs::remove_file(path);
 }
 
 /// Регрессия на разбор аргументов: путь к скрипту не должен спутаться с

@@ -12,6 +12,8 @@
 mod api_reference;
 mod bytecode;
 mod complete;
+mod config_db;
+mod config_db_event_log;
 mod dap;
 mod highlight;
 mod ingest;
@@ -175,6 +177,26 @@ fn help() -> String {
         "      несовместимо с --optimize=copy-elim: проход удаляет инструкции, а строку\n",
     );
     out.push_str("      из байт-кода не вывести — её можно только донести\n");
+    // Продолжения строк печатаются отдельными вызовами: перенос `\` в литерале
+    // съел бы их отступ.
+    out.push_str("  bsl-cli --config-db <postgres|mssql> --db-host АДРЕС --db-name БАЗА\n");
+    out.push_str("          --db-user ЛОГИН --platform-version ВЕРСИЯ [--principal ИМЯ]\n");
+    out.push_str("          [--locale-code КОД] [--infobase-locale-code КОД]\n");
+    out.push_str("          [--system-language ЯЗЫК] [--session-kind thin-client|web-client]\n");
+    out.push_str(
+        "          [--infobase-connection-string СТРОКА] [--decompile-protected-modules]\n",
+    );
+    out.push_str("          [--config-xml КАТАЛОГ | --config-edt КАТАЛОГ]\n");
+    out.push_str("          [--config-extension UUID=КАТАЛОГ] <файл.bsl>\n");
+    out.push_str("      запустить тестовый скрипт в сеансе конфигурации\n");
+    out.push_str("      защищённые модули по умолчанию: только экспорты, пустые процедуры,\n");
+    out.push_str("      функции возвращают Истина\n");
+    out.push_str("      порт: 5432 для postgres, 1433 для mssql; переопределяется --db-port\n");
+    out.push_str("      postgres: --db-plaintext явно разрешает незащищённое соединение\n");
+    out.push_str(
+        "      mssql: --db-trust-server-certificate явно разрешает непроверенный сертификат\n",
+    );
+    out.push_str("      пароль читается из PGPASSWORD или MSSQL_PASSWORD\n");
 
     out.push_str("\nОКРУЖЕНИЕ:\n");
     out.push_str("  NO_COLOR      отключает цвет в REPL (как и TERM=dumb)\n");
@@ -219,15 +241,30 @@ fn main() {
             std::process::exit(2);
         }
     }
+    let config_db = match config_db::take(&mut args) {
+        Ok(options) => options,
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(2);
+        }
+    };
     let code = match args.get(1).map(String::as_str) {
-        None => {
+        None if config_db.is_none() => {
             repl::run();
             0
+        }
+        None => {
+            eprintln!("--config-db требует <файл.bsl>");
+            2
         }
         // Всё, что начинается с дефиса, — команда, а не имя файла: молча
         // пытаться прочитать «--emitbytecode» как скрипт хуже, чем сказать,
         // что такой команды нет.
         Some(arg) if arg.starts_with('-') => {
+            if config_db.is_some() {
+                eprintln!("--config-db допустим только при запуске <файл.bsl>");
+                std::process::exit(2);
+            }
             let Some(cmd) = COMMANDS
                 .iter()
                 .find(|c| c.flag == arg || c.alias == Some(arg))
@@ -240,7 +277,10 @@ fn main() {
         Some(path) => {
             // Всё после имени скрипта — его собственные аргументы: скрипт
             // читает их массивом АргументыКоманднойСтроки.
-            run_file(path, args[2..].to_vec());
+            match config_db {
+                Some(options) => config_db::run(path, args[2..].to_vec(), options),
+                None => run_file(path, args[2..].to_vec()),
+            }
             0
         }
     };

@@ -54,6 +54,10 @@ fn render(registry: &RuntimeRegistry) -> String {
 
     write_builtin_functions(&mut out);
     write_builtin_methods(&mut out);
+    out.push_str(
+        "Свойства нативного `ОписаниеТипов` описаны в \
+         [справочнике квалификаторов](type-description-qualifiers.md).\n\n",
+    );
 
     out.push_str("## Компоненты\n\n");
     for library in registry.libraries() {
