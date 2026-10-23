@@ -90,6 +90,8 @@ The only snapshot tests are the parser ones in `crates/bsl-syntax/tests/snapshot
 
 One `bsl-cli` test is silently environment-gated: `crates/bsl-cli/tests/table_compare2.rs` replays the value-table diff on large confidential cases from the directory in `OPEN_BSL_TABLE_COMPARE2_CASES` (one subdirectory per case, four `ЗначениеВФайл` dumps each). Without the variable it skips with a note — a green run does not mean it ran.
 
+The configuration-database tests have gates of the same kind. The `local_*_tests.rs` and `session_transactions_tests.rs` modules in `crates/bsl-config-db/src` need a disposable PostgreSQL control server whose port is in `OPEN_SDBL_TRANSACTION_CONTROL_PORT` (user `sdbl_control`, database `postgres`, no TLS); `OPEN_BSL_RLS_CONTROL_POSTGRES_LOG` additionally lets the RLS test check that server's statement log. `native_image_tests.rs` decompiles real module images named by `OPEN_BSL_BUH_NATIVE_IMAGE`, `OPEN_BSL_BUH_SECOND_NATIVE_IMAGE`, `OPEN_BSL_BUH_FOURTH_NATIVE_IMAGE` and `OPEN_BSL_BUH_SCSU_IMAGE`. Fixtures copied from vendor configurations are never committed: they live under the gitignored `private/fixtures/`, mirroring their former path below `docs/research/fixtures/`, and the tests that read them (`ws_references`, the `native_buh_*` tests in `bsl-config-db`, `bsl-config-edt` and `bsl-config-xml`) skip with a note when the file is absent. In every case a green run without the environment means the test did not run.
+
 Divergence introduced by compiler passes is caught by `the_optimizing_passes_agree_with_the_plain_run_on_every_script`, which runs the whole fixture corpus with and without `--optimize`.
 
 ### Measuring on the 1C platform
