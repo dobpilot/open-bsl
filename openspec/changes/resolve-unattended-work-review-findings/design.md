@@ -85,9 +85,10 @@ identical, `step_cold` 0xa0 bytes smaller.
 - `bsl-orm`: one handler protocol for `ОбработкаЗаполнения` and
   `ОбработкаПроверкиЗаполнения`; the `Отказ` coercion is measured once and
   applied everywhere. The roots of `bsl-orm` and `bsl-session` are split along
-  the seams `catalog_object.rs`/`document_object.rs` already show. The
-  data-composition stubs in `bsl-orm` are removed in favour of
-  `bsl-rt/src/data_composition.rs`.
+  the seams `catalog_object.rs`/`document_object.rs` already show.  The
+  data-composition constructors of `bsl-orm` stay: the review assumed they
+  duplicate `bsl-rt/src/data_composition.rs`, but the names are disjoint and
+  `configuration-session-runtime` requires them to resolve.
 - `bsl-cli`: `run_in_session`, interface-language resolution and the
   `ActiveUsers` authorization of host connections move to `bsl-config-db`
   (or `bsl-session`); the CLI parses flags and calls one function. The
