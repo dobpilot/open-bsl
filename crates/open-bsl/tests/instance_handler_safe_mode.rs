@@ -77,12 +77,13 @@ fn create(ctx: &mut CallContext<'_>, _: &[Value]) -> RtResult<Value> {
 }
 fn invoke(ctx: &mut CallContext<'_>, args: &[Value]) -> RtResult<Value> {
     let object = probe(&args[0])?;
-    let (result, params) = ctx.call_configuration_instance_handler_without_safe_mode(
+    let (result, params) = ctx.call_configuration_instance_handler(
         MODULE,
         &object.instance,
         "оБрАбОтКа",
         vec![Value::Boolean(true)],
         args[0].clone(),
+        open_bsl::ConfigurationInstanceEntryMode::WithoutSafeMode,
     )?;
     Ok(Value::new_array(vec![result, params[0].clone()]))
 }
@@ -101,6 +102,7 @@ fn ordinary(ctx: &mut CallContext<'_>, args: &[Value]) -> RtResult<Value> {
         "Обычный",
         vec![],
         args[0].clone(),
+        open_bsl::ConfigurationInstanceEntryMode::Inherit,
     )
     .map(|(v, _)| v)
 }

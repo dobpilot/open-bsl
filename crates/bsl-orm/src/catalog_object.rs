@@ -922,6 +922,7 @@ fn check_filling(
             "ОбработкаПроверкиЗаполнения",
             vec![Value::Boolean(false), paths.clone()],
             Value::new_object(object.clone()),
+            open_bsl::ConfigurationInstanceEntryMode::Inherit,
         )?;
         refused = attribute_filling::handler_refused(&params[0]);
         // Нативная проба закрепляет исходный массив: его мутация влияет на
@@ -1091,36 +1092,25 @@ fn set_new_code(
                     ));
                 }
             };
-            let (_, params) =
+            let entry_mode =
                 if let Some(safe_mode) = metadata.own_extension_object_module_safe_mode() {
-                    context.call_configuration_instance_handler_with_safe_mode(
-                        module,
-                        &object.0.instance,
-                        handler,
-                        arguments,
-                        Value::new_object(object.clone()),
-                        safe_mode,
-                    )?
+                    open_bsl::ConfigurationInstanceEntryMode::OwnExtensionSafeMode(safe_mode)
                 } else if metadata.object_module_is_extension() {
                     // НЕ ИЗМЕРЕНО(CATALOG.NEW_CODE_EXTENSION_SAFE_MODE)
                     // Справка исключает обработчик расширения из подавления режима;
                     // отдельный нативный контроль расширения ещё не завершён.
-                    context.call_configuration_instance_handler(
-                        module,
-                        &object.0.instance,
-                        handler,
-                        arguments,
-                        Value::new_object(object.clone()),
-                    )?
+                    open_bsl::ConfigurationInstanceEntryMode::Inherit
                 } else {
-                    context.call_configuration_instance_handler_without_safe_mode(
-                        module,
-                        &object.0.instance,
-                        handler,
-                        arguments,
-                        Value::new_object(object.clone()),
-                    )?
+                    open_bsl::ConfigurationInstanceEntryMode::WithoutSafeMode
                 };
+            let (_, params) = context.call_configuration_instance_handler(
+                module,
+                &object.0.instance,
+                handler,
+                arguments,
+                Value::new_object(object.clone()),
+                entry_mode,
+            )?;
             if !open_bsl::convert_to_boolean(&params[0])? {
                 return Ok(Value::Undefined);
             }

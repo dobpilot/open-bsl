@@ -554,6 +554,7 @@ fn fill(
             "ОбработкаЗаполнения",
             vec![handler_data, Value::Undefined, Value::Boolean(true)],
             Value::new_object(object.clone()),
+            open_bsl::ConfigurationInstanceEntryMode::Inherit,
         )?;
         if !matches!(&parameters[1], Value::Undefined) {
             return Err(RtError::DynamicError(
@@ -691,6 +692,7 @@ fn check_filling(
             "ОбработкаПроверкиЗаполнения",
             vec![Value::Boolean(false), paths.clone()],
             Value::new_object(object.clone()),
+            open_bsl::ConfigurationInstanceEntryMode::Inherit,
         )?;
         // Приведение небулева `Отказ` измерено на справочнике и документе
         // (`attribute_filling::handler_refused`); база бизнес-процесса для

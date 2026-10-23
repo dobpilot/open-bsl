@@ -4,7 +4,7 @@ use bsl_bytecode::Program;
 use bsl_rt::RuntimeShapes;
 
 pub(super) fn bind(program: &mut Program, runtime: &mut RuntimeShapes) -> Result<(), crate::Error> {
-    bsl_bytecode::bind_program_shapes(program, runtime)
+    bsl_vm::bind_program_shapes(program, runtime)
         .map(|_| ())
         .map_err(|error| match error {
             bsl_rt::RtError::DynamicError(message) => crate::Error::Configuration(message),

@@ -15,18 +15,18 @@
 - [ ] 2.6 Pin the measurement session environment. Interface language (`Value list`/`Список значений`, `Ascending`/`По возрастанию`, `Да`/`Yes`, and which strings `Булево()` accepts) and script variant (`SortDirection`/`НаправлениеСортировки`) come from the platform `/L` setting and the information base, not from `run-on-1c.sh`; a recreated `/tmp/open-bsl-ib` silently switches them. Committed oracles mix both interface languages (August: Russian, October: English). Decide the canonical environment, set it in the runner, and re-measure the oracles that depend on it.
 
 ## 3. Front end, compiler and VM
-- [ ] 3.1 Replace the constructor-code literals in `bsl-sema/src/core_receivers.rs` with descriptor properties read from the runtime table; remove the added `expect`.
+- [x] 3.1 Replace the constructor-code literals in `bsl-sema/src/core_receivers.rs` with descriptor properties read from the runtime table; remove the added `expect`.
 - [ ] 3.2 Make the register-capacity fallback a named plain-pipeline stage that starts from clean tables; compile a configuration catalog once; split `name_methods` from `allow_sparse_large_frame`.
 - [ ] 3.3 Run `benchmarks/hot-code-diff.sh` and an alternating A/B for the `Frame`/`step` changes; move the handled-error stack out of `Frame` if the difference is measurable.
-- [ ] 3.4 Resolve `GetImportedModule` targets through an index fixed at verification.
-- [ ] 3.5 Move `bind_program_shapes` from `bsl-bytecode` to `bsl-vm`.
+- [x] 3.4 Resolve `GetImportedModule` targets through an index fixed at verification.
+- [x] 3.5 Move `bind_program_shapes` from `bsl-bytecode` to `bsl-vm`.
 - [ ] 3.6 Replace the `include!` copy in `bsl-sema/src/sendable.rs` with a single resolved-tree definition that can cross threads.
 - [ ] 3.7 Collapse the `resolve_*_with_*`, `compile_dynamic_snippet_with_*` and `call_configuration_handler_with_*` families into options-struct entry points.
 - [ ] 3.8 Remove the per-lexer keyword map layered over the global one, unless an A/B shows it pays; delete `crates/bsl-compiler/examples/name_table_storage.rs`.
 
 ## 4. Runtime
 - [ ] 4.1 Generate every per-enumeration table in `enums.rs`/`types.rs`/`value/mod.rs` from one declaration; replace the linear lookups by indexed ones; make `kind()` non-panicking.
-- [ ] 4.2 Merge `call_configuration_instance_handler{,_without_safe_mode,_with_safe_mode}` into one call taking the entry mode; share date/zone parsing between `to_universal_time` and `to_local_time`.
+- [x] 4.2 Merge `call_configuration_instance_handler{,_without_safe_mode,_with_safe_mode}` into one call taking the entry mode; share date/zone parsing between `to_universal_time` and `to_local_time`.
 
 ## 5. Configuration and session
 - [ ] 5.1 Extract one fill / fill-check handler protocol for catalog, document and business-process objects.

@@ -1630,15 +1630,10 @@ impl<'a> Resolver<'a> {
                 ..
             } => {
                 let descriptor = self.registry?.library_by_package(library.as_str())?;
-                // Старые конструкторы сохраняют закрытые методы ядра;
-                // `СписокЗначений` читает таблицу компонента.
-                if library.as_str() == bsl_rt::PACKAGE_NAME {
-                    if constructor.get() == 6 {
-                        return Some(CoreReceiver::BackgroundJobs);
-                    }
-                    if core_receivers::uses_builtin_core_methods(*constructor) {
-                        return Some(CoreReceiver::Core);
-                    }
+                if let Some(core) =
+                    core_receivers::core_constructor_receiver(library.as_str(), *constructor)
+                {
+                    return Some(core);
                 }
                 descriptor
                     .constructor_type(*constructor)

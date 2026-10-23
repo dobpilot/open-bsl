@@ -83,6 +83,7 @@ fn invoke(ctx: &mut CallContext<'_>, args: &[Value]) -> RtResult<Value> {
         "оБрАбОтКа",
         vec![Value::Boolean(true)],
         args[0].clone(),
+        open_bsl::ConfigurationInstanceEntryMode::Inherit,
     )?;
     Ok(Value::new_array(vec![result, params[0].clone()]))
 }

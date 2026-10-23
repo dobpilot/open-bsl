@@ -1,6 +1,6 @@
 //! Холодное связывание форм программы с пространством имён исполнения.
 
-use crate::Program;
+use bsl_bytecode::Program;
 use bsl_rt::{RtError, RuntimeShapes, Shape};
 use std::rc::Rc;
 

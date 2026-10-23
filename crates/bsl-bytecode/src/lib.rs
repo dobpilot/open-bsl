@@ -19,8 +19,6 @@ pub mod dynamic;
 pub mod image;
 mod imports;
 mod instr;
-mod namespace;
-pub use namespace::bind_program_shapes;
 mod text;
 
 pub use bsl_rt::LibraryRequirement;

@@ -332,6 +332,7 @@ fn copy(
             "ПриКопировании",
             vec![Value::new_object(source.clone())],
             value.clone(),
+            open_bsl::ConfigurationInstanceEntryMode::Inherit,
         )?;
     }
     Ok(value)
@@ -751,6 +752,7 @@ fn set_new_number(
             "ПриУстановкеНовогоНомера",
             arguments,
             Value::new_object(object.clone()),
+            open_bsl::ConfigurationInstanceEntryMode::Inherit,
         )?;
         standard_processing = open_bsl::convert_to_boolean(&params[0])?;
         if count == 2 {
@@ -812,6 +814,7 @@ fn fill(
             "ОбработкаЗаполнения",
             params,
             Value::new_object(object.clone()),
+            open_bsl::ConfigurationInstanceEntryMode::Inherit,
         )?;
         // После обработчика платформа заполняет реквизиты из возвращённого параметра.
         filling_data = params[0].clone();

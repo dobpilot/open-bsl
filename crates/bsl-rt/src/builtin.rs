@@ -166,94 +166,74 @@ fn time_offset(args: &[BslValue], env: &mut HostEnv, daylight: bool) -> RtResult
 }
 
 fn to_universal_time(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslValue> {
-    let (local, zone_name) = match args {
-        [local] => (local, &BslValue::Undefined),
-        [local, zone_name] => (local, zone_name),
+    shift_time_zone(args, env, false)
+}
+
+fn to_local_time(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslValue> {
+    shift_time_zone(args, env, true)
+}
+
+/// Общий разбор `УниверсальноеВремя` и `МестноеВремя`: дата или строка цифр
+/// даты, затем необязательное имя пояса. Направления различаются только
+/// тем, по какому времени ищется смещение и в какую сторону оно применяется.
+fn shift_time_zone(args: &[BslValue], env: &mut HostEnv, to_local: bool) -> RtResult<BslValue> {
+    let op = if to_local {
+        "МестноеВремя"
+    } else {
+        "УниверсальноеВремя"
+    };
+    let (date, zone_name) = match args {
+        [date] => (date, &BslValue::Undefined),
+        [date, zone_name] => (date, zone_name),
+        _ if to_local => {
+            return Err(RtError::InvalidBytecode(
+                "МестноеВремя получило неверное число аргументов",
+            ));
+        }
         _ => {
             return Err(RtError::InvalidBytecode(
                 "УниверсальноеВремя получила неверное число аргументов",
             ));
         }
     };
-    let local = match local {
+    let date = match date {
         BslValue::Date(date) => *date,
         BslValue::Str(text) => {
-            crate::BslDate::parse_digits(&text.to_string()).ok_or(RtError::DateOutOfRange {
-                op: "УниверсальноеВремя",
-            })?
+            crate::BslDate::parse_digits(&text.to_string()).ok_or(RtError::DateOutOfRange { op })?
         }
         _ => {
             return Err(RtError::TypeError {
                 expected: "Дата или Строка даты",
-                op: "УниверсальноеВремя",
+                op,
             });
         }
     };
-    let wall_seconds = crate::pseudo_unix_seconds(local);
+    let seconds = crate::pseudo_unix_seconds(date);
     let zone = env.zone();
     let offset = match zone_name {
-        BslValue::Undefined => zone.offset_for_local(wall_seconds),
-        BslValue::Str(name) => zone
-            .named_offset_for_local(&name.to_string(), wall_seconds)
-            .ok_or_else(|| RtError::DynamicError(format!("часовой пояс «{name}» не найден")))?,
+        BslValue::Undefined if to_local => zone.offset_seconds(seconds),
+        BslValue::Undefined => zone.offset_for_local(seconds),
+        BslValue::Str(name) => if to_local {
+            zone.named_offset_seconds(&name.to_string(), seconds)
+        } else {
+            zone.named_offset_for_local(&name.to_string(), seconds)
+        }
+        .ok_or_else(|| RtError::DynamicError(format!("часовой пояс «{name}» не найден")))?,
         _ => {
             return Err(RtError::TypeError {
                 expected: "Строка или Неопределено",
-                op: "УниверсальноеВремя",
+                op,
             });
         }
     };
-    local
-        .shift_seconds(-i64::from(offset))
+    let shift = if to_local {
+        i64::from(offset)
+    } else {
+        -i64::from(offset)
+    };
+    date.shift_seconds(shift)
         .map(BslValue::Date)
-        .ok_or(RtError::DateOutOfRange {
-            op: "УниверсальноеВремя",
-        })
-}
-
-fn to_local_time(args: &[BslValue], env: &mut HostEnv) -> RtResult<BslValue> {
-    let (utc, zone_name) = match args {
-        [utc] => (utc, &BslValue::Undefined),
-        [utc, zone_name] => (utc, zone_name),
-        _ => {
-            return Err(RtError::InvalidBytecode(
-                "МестноеВремя получило неверное число аргументов",
-            ));
-        }
-    };
-    let utc = match utc {
-        BslValue::Date(date) => *date,
-        BslValue::Str(text) => {
-            crate::BslDate::parse_digits(&text.to_string()).ok_or(RtError::DateOutOfRange {
-                op: "МестноеВремя",
-            })?
-        }
-        _ => {
-            return Err(RtError::TypeError {
-                expected: "Дата или Строка даты",
-                op: "МестноеВремя",
-            });
-        }
-    };
-    let unix_seconds = crate::pseudo_unix_seconds(utc);
-    let zone = env.zone();
-    let offset = match zone_name {
-        BslValue::Undefined => zone.offset_seconds(unix_seconds),
-        BslValue::Str(name) => zone
-            .named_offset_seconds(&name.to_string(), unix_seconds)
-            .ok_or_else(|| RtError::DynamicError(format!("часовой пояс «{name}» не найден")))?,
-        _ => {
-            return Err(RtError::TypeError {
-                expected: "Строка или Неопределено",
-                op: "МестноеВремя",
-            });
-        }
-    };
-    utc.shift_seconds(i64::from(offset))
-        .map(BslValue::Date)
-        .ok_or(RtError::DateOutOfRange {
-            op: "МестноеВремя"
-        })
+        .ok_or(RtError::DateOutOfRange { op })
 }
 
 /// Встроенные функции, вызываемые по голому имени (`Sqrt(x)`, `Pow(x,y)`,

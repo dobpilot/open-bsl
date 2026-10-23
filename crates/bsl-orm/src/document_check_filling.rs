@@ -61,6 +61,7 @@ pub(super) fn check_filling(
             "ОбработкаПроверкиЗаполнения",
             vec![Value::Boolean(false), paths.clone()],
             Value::new_object(object.clone()),
+            open_bsl::ConfigurationInstanceEntryMode::Inherit,
         )?;
         refused = attribute_filling::handler_refused(&parameters[0]);
     }

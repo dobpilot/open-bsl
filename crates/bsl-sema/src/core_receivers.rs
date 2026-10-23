@@ -35,10 +35,20 @@ use bsl_syntax::{Expr, LValue, Param, Stmt, StmtKind};
 
 use crate::resolver::NEW_TYPES;
 
-/// Старые конструкторы ядра сохраняют закрытые методы; `СписокЗначений`
-/// использует собственную таблицу с измеренными пропущенными позициями.
-pub(crate) fn uses_builtin_core_methods(constructor: bsl_rt::ConstructorCode) -> bool {
-    (constructor.get() <= 16 && constructor.get() != 3) || constructor.get() == 27 // `ЗаписьТекста` по-прежнему пользуется закрытыми методами ядра.
+/// Приёмник объекта, созданного конструктором `constructor` пакета
+/// `package`, если его методы обслуживает ядро. Классификация принадлежит
+/// таблице конструкторов `bsl-rt` ([`bsl_rt::core_constructor_methods`]).
+pub(crate) fn core_constructor_receiver(
+    package: &str,
+    constructor: bsl_rt::ConstructorCode,
+) -> Option<CoreReceiver> {
+    if package != bsl_rt::PACKAGE_NAME {
+        return None;
+    }
+    Some(match bsl_rt::core_constructor_methods(constructor)? {
+        bsl_rt::CoreConstructorMethods::Builtin => CoreReceiver::Core,
+        bsl_rt::CoreConstructorMethods::BackgroundJobs => CoreReceiver::BackgroundJobs,
+    })
 }
 
 /// Статически доказанный класс приёмника. Для компонента конкретный тип
@@ -163,18 +173,11 @@ impl Collector<'_> {
         if let Some(registry) = self.registry
             && let Some((library, constructor)) = registry.lookup_constructor(type_name)
         {
-            let descriptor = registry
-                .library(library)
-                .expect("индекс получен из таблицы конструкторов этого реестра");
-            // Старые конструкторы сохраняют закрытый путь, кроме
-            // `СписокЗначений` с пропущенными аргументами `Добавить`.
-            if descriptor.package() == bsl_rt::PACKAGE_NAME {
-                if constructor.get() == 6 {
-                    return Some(CoreReceiver::BackgroundJobs);
-                }
-                if uses_builtin_core_methods(constructor) {
-                    return Some(CoreReceiver::Core);
-                }
+            let core = registry.library(library).and_then(|descriptor| {
+                core_constructor_receiver(descriptor.package(), constructor)
+            });
+            if core.is_some() {
+                return core;
             }
             return registry
                 .constructor_type(library, constructor)

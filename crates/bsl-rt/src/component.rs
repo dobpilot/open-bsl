@@ -790,6 +790,12 @@ impl<'a> CallContext<'a> {
     /// Вызывает платформенный обработчик конкретного объекта без `Экспорт`.
     /// Получатель и память модуля остаются привязаны к переданному экземпляру.
     /// Обычный вызов метода объекта сохраняет проверку экспорта.
+    /// `entry_mode` задаёт безопасный режим на время обработчика:
+    /// [`ConfigurationInstanceEntryMode::WithoutSafeMode`] — для обработчика
+    /// основной конфигурации (происхождение компонент обязан установить
+    /// заранее), [`ConfigurationInstanceEntryMode::OwnExtensionSafeMode`] —
+    /// для события собственного объекта расширения. Режимы вызывающего
+    /// сохраняются при возврате результата и при ошибке.
     /// Возвращает результат и конечные значения параметров обработчика.
     ///
     /// # Errors
@@ -803,72 +809,14 @@ impl<'a> CallContext<'a> {
         handler: &str,
         args: Vec<BslValue>,
         this_object: BslValue,
+        entry_mode: ConfigurationInstanceEntryMode,
     ) -> RtResult<(BslValue, Vec<BslValue>)> {
         self.call_configuration_target(
             FunctionCall::ConfigurationInstance {
                 module,
                 export: Some(handler),
                 require_export: false,
-                entry_mode: ConfigurationInstanceEntryMode::Inherit,
-                instance,
-                this_object,
-                runtime_shapes: None,
-            },
-            args,
-        )
-    }
-
-    /// Вызывает обработчик основной конфигурации с временно отключённым
-    /// безопасным режимом. Режимы вызывающего сохраняются при возврате
-    /// результата и при ошибке; другие вызовы обработчиков не меняются.
-    /// Компонент обязан предварительно установить происхождение обработчика:
-    /// для обработчика расширения эта точка входа неприменима.
-    ///
-    /// # Errors
-    /// Возвращает ошибки обычного вызова обработчика экземпляра.
-    pub fn call_configuration_instance_handler_without_safe_mode(
-        &mut self,
-        module: &str,
-        instance: &crate::ConfigurationInstance,
-        handler: &str,
-        args: Vec<BslValue>,
-        this_object: BslValue,
-    ) -> RtResult<(BslValue, Vec<BslValue>)> {
-        self.call_configuration_target(
-            FunctionCall::ConfigurationInstance {
-                module,
-                export: Some(handler),
-                require_export: false,
-                entry_mode: ConfigurationInstanceEntryMode::WithoutSafeMode,
-                instance,
-                this_object,
-                runtime_shapes: None,
-            },
-            args,
-        )
-    }
-
-    /// Вызывает событие собственного объекта расширения с приобретённой
-    /// настройкой безопасности источника. Режимы вызывающего не меняются;
-    /// политика не распространяется на обычные экспортные методы объекта.
-    ///
-    /// # Errors
-    /// Возвращает ошибки обычного вызова обработчика экземпляра.
-    pub fn call_configuration_instance_handler_with_safe_mode(
-        &mut self,
-        module: &str,
-        instance: &crate::ConfigurationInstance,
-        handler: &str,
-        args: Vec<BslValue>,
-        this_object: BslValue,
-        safe_mode: bool,
-    ) -> RtResult<(BslValue, Vec<BslValue>)> {
-        self.call_configuration_target(
-            FunctionCall::ConfigurationInstance {
-                module,
-                export: Some(handler),
-                require_export: false,
-                entry_mode: ConfigurationInstanceEntryMode::OwnExtensionSafeMode(safe_mode),
+                entry_mode,
                 instance,
                 this_object,
                 runtime_shapes: None,
@@ -2167,6 +2115,56 @@ fn construct_text_writer(
         _ => Err(RtError::DynamicError(
             "дополнительные параметры конструктора ЗаписьТекста пока не поддерживаются".into(),
         )),
+    }
+}
+
+/// Как статически доказанный приёмник, созданный конструктором ядра,
+/// получает методы: закрытым `BuiltinMethod` или особым путём фоновых
+/// заданий. Остальные конструкторы ядра обслуживаются таблицей своего типа.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoreConstructorMethods {
+    Builtin,
+    BackgroundJobs,
+}
+
+/// Конструкторы ядра, объекты которых сохраняют закрытые методы ядра.
+/// Список задан каноническими именами, а не кодами: порядок регистрации в
+/// [`CORE_CONSTRUCTORS`] не должен становиться скрытым контрактом.
+/// `СписокЗначений` сюда не входит: у него собственная таблица с
+/// измеренными пропущенными позициями.
+const BUILTIN_METHOD_CONSTRUCTORS: &[&str] = &[
+    "ДвоичныеДанные",
+    "УникальныйИдентификатор",
+    "КвалификаторыДаты",
+    "ОписаниеТипов",
+    "ФиксированныйМассив",
+    "СообщениеПользователю",
+    "Файл",
+    "ОписаниеОповещения",
+    "ФиксированнаяСтруктура",
+    "ФиксированноеСоответствие",
+    "ПолеКомпоновкиДанных",
+    "СтандартнаяДатаНачала",
+    "КвалификаторыСтроки",
+    "КвалификаторыЧисла",
+    "ЗаписьТекста",
+];
+
+/// Способ вызова методов объекта, созданного конструктором ядра с кодом
+/// `code`; `None` — методы берутся из таблицы типа.
+#[must_use]
+pub fn core_constructor_methods(code: ConstructorCode) -> Option<CoreConstructorMethods> {
+    let name = CORE_CONSTRUCTORS
+        .iter()
+        .find(|descriptor| descriptor.code == code)?
+        .names
+        .first()?;
+    if *name == "ФоновыеЗадания" {
+        Some(CoreConstructorMethods::BackgroundJobs)
+    } else if BUILTIN_METHOD_CONSTRUCTORS.contains(name) {
+        Some(CoreConstructorMethods::Builtin)
+    } else {
+        None
     }
 }
 
@@ -3654,6 +3652,37 @@ impl RuntimeRegistry {
 mod tests {
     use super::*;
     use crate::RtError;
+
+    #[test]
+    fn core_method_constructors_are_named_in_the_core_table() {
+        for name in BUILTIN_METHOD_CONSTRUCTORS
+            .iter()
+            .chain(&["ФоновыеЗадания"])
+        {
+            assert!(
+                CORE_CONSTRUCTORS
+                    .iter()
+                    .any(|d| d.names.first() == Some(name)),
+                "{name}"
+            );
+        }
+        // Прежнее правило по кодам: 1–16 без 3, плюс 27; 6 — фоновые задания.
+        for descriptor in CORE_CONSTRUCTORS {
+            let code = descriptor.code.get();
+            let expected = if code == 6 {
+                Some(CoreConstructorMethods::BackgroundJobs)
+            } else if (code <= 16 && code != 3) || code == 27 {
+                Some(CoreConstructorMethods::Builtin)
+            } else {
+                None
+            };
+            assert_eq!(
+                core_constructor_methods(descriptor.code),
+                expected,
+                "{code}"
+            );
+        }
+    }
 
     /// Строковый путь диспетчеризации доводит приостанавливающий метод
     /// блокирующе: транспорт завершается из другого потока, а вызов

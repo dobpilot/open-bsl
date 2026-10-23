@@ -33,10 +33,12 @@ use modules::{
     ModuleInitState, ModuleState, ModulesCtx, bind_module_argument, ensure_module_ready,
     find_module_alias, load_module_argument,
 };
+mod namespace;
 mod notifications;
 mod scheduler;
 mod snippet;
 
+pub use namespace::bind_program_shapes;
 use scheduler::{
     AsyncState, PromiseState, ReadyEvent, Task, TaskCompletion, TaskId,
     consume_scheduler_safe_point, crossed_scheduler_safe_point, resume_parked_task,
@@ -639,7 +641,7 @@ impl RunCaches {
                         }
                     }
                 }
-                caches.shapes = bsl_bytecode::bind_program_shapes(program, runtime)?;
+                caches.shapes = bind_program_shapes(program, runtime)?;
                 Ok(Some(Box::new(BoundRun { caches })))
             })
             .as_ref()
@@ -4952,15 +4954,9 @@ fn step_cold(
             let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
                 "ссылка на общий модуль вне каталога конфигурации",
             ))?;
-            if !program
-                .imports
-                .iter()
-                .any(|import| import.module.index() == module as usize)
-            {
-                return Err(RtError::InvalidBytecode(
-                    "ссылка на необъявленный общий модуль",
-                ));
-            }
+            // Объявленность модуля в `imports` доказал периметр образа
+            // (`image::verify`) до первой инструкции; выход за пределы сессии
+            // ниже остаётся ошибкой байт-кода.
             if ensure_module_ready(module, ctx, modules.session, frames, stack)? {
                 return Ok(None);
             }
