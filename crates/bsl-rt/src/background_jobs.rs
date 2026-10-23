@@ -45,9 +45,18 @@ pub trait BackgroundJobService {
         description: Option<String>,
     ) -> Result<Arc<JobSnapshotDto>, HostError>;
     /// Свежий снимок по идентификатору; `None` — неизвестный/вытесненный.
-    fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>>;
+    ///
+    /// # Errors
+    ///
+    /// `RuntimeBroken`, если runtime заданий не удалось построить: пустой
+    /// ответ выдал бы сломанный runtime за отсутствие заданий.
+    fn snapshot(&self, id: JobId) -> Result<Option<Arc<JobSnapshotDto>>, HostError>;
     /// Все снимки: живые и история.
-    fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>>;
+    ///
+    /// # Errors
+    ///
+    /// Как у [`Self::snapshot`].
+    fn snapshots(&self) -> Result<Vec<Arc<JobSnapshotDto>>, HostError>;
     /// Ожидание terminal-состояния всех `ids`. Снимки результата сервис
     /// удерживает под тем же локом, что и финальную проверку: между
     /// решением «дождались» и чтением снимков вытеснение невозможно.
@@ -402,7 +411,7 @@ fn manager_get_jobs(
         }
     }
     let jobs: Vec<BslValue> = manager
-        .snapshots_sorted()
+        .snapshots_sorted()?
         .into_iter()
         .filter(|snapshot| filters.iter().all(|filter| filter.matches(snapshot)))
         .map(|snapshot| job_value(&manager.service, snapshot))
@@ -503,10 +512,10 @@ impl BackgroundJobsManager {
     // по идентификатору и строгое сравнение `Конец`. Граница `Начало`
     // уже ИЗМЕРЕНА нестрогой (сессия 2026-08-27) и закреплена в
     // `JobFilter::matches`.
-    fn snapshots_sorted(&self) -> Vec<Arc<JobSnapshotDto>> {
-        let mut snapshots = self.service.snapshots();
+    fn snapshots_sorted(&self) -> RtResult<Vec<Arc<JobSnapshotDto>>> {
+        let mut snapshots = self.service.snapshots().map_err(HostError::raise)?;
         snapshots.sort_by_key(|snapshot| snapshot.id.0);
-        snapshots
+        Ok(snapshots)
     }
 }
 
@@ -518,12 +527,14 @@ fn manager_find(
     let manager =
         receiver_of::<BackgroundJobsManager>(receiver, "НайтиПоУникальномуИдентификатору")?;
     let id = job_id_from_value(args.first(), "НайтиПоУникальномуИдентификатору")?;
-    Ok(match manager.service.snapshot(id) {
-        Some(snapshot) => job_value(&manager.service, snapshot),
-        // Неизвестный и вытесненный идентификатор — `Неопределено`;
-        // точное поведение — за `JOB.FIND.MISSING`.
-        None => BslValue::Undefined,
-    })
+    Ok(
+        match manager.service.snapshot(id).map_err(HostError::raise)? {
+            Some(snapshot) => job_value(&manager.service, snapshot),
+            // Неизвестный и вытесненный идентификатор — `Неопределено`;
+            // точное поведение — за `JOB.FIND.MISSING`.
+            None => BslValue::Undefined,
+        },
+    )
 }
 
 fn wait_ids(args: &[BslValue]) -> RtResult<Vec<JobId>> {
@@ -561,11 +572,12 @@ fn manager_wait(
             let state = manager
                 .service
                 .snapshot(*id)
+                .map_err(HostError::raise)?
                 .map(|snapshot| snapshot.state)
                 .unwrap_or(JobStateDto::Completed);
-            (*id, state)
+            Ok((*id, state))
         })
-        .collect();
+        .collect::<RtResult<_>>()?;
     let snapshots = manager
         .service
         .wait_first_change(&jobs, timeout)

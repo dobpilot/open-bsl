@@ -111,20 +111,22 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
             .map(Arc::new)
     }
 
-    fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
-        self.shared
+    fn snapshot(&self, id: JobId) -> Result<Option<Arc<JobSnapshotDto>>, HostError> {
+        Ok(self
+            .shared
             .registry
             .lock()
             .expect("реестр без отравления")
-            .snapshot(id)
+            .snapshot(id))
     }
 
-    fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
-        self.shared
+    fn snapshots(&self) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
+        Ok(self
+            .shared
             .registry
             .lock()
             .expect("реестр без отравления")
-            .snapshots()
+            .snapshots())
     }
 
     fn wait_terminal(
@@ -268,14 +270,12 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
             .map(Arc::new)
     }
 
-    fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
-        self.runtime().ok()?.snapshot(id)
+    fn snapshot(&self, id: JobId) -> Result<Option<Arc<JobSnapshotDto>>, HostError> {
+        Ok(self.runtime()?.snapshot(id))
     }
 
-    fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
-        self.runtime()
-            .map(|runtime| runtime.snapshots())
-            .unwrap_or_default()
+    fn snapshots(&self) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
+        Ok(self.runtime()?.snapshots())
     }
 
     fn wait_terminal(

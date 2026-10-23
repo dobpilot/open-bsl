@@ -39,7 +39,7 @@
 
 ## 6. Facade and jobs
 - [ ] 6.1 Resolve background-job target chunks by method name; share the server common-module filter with `EngineBuilder::configuration_source`.
-- [ ] 6.2 Report a failed runtime build from `EngineJobService`; reset `preparing` through a guard.
+- [x] 6.2 Report a failed runtime build from `EngineJobService`; reset `preparing` through a guard.
 - [ ] 6.3 Specify `Error::InModule` in the execution-engine specification; drop facade re-exports with no external user (`ExecutionCatalog`, the whole `uuid` module).
 
 ## 7. Tests and tooling

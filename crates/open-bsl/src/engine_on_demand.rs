@@ -394,9 +394,16 @@ impl OnDemandCatalog {
                 "повторная подготовка каталога во время загрузки исходника".into(),
             ));
         }
-        let result = self.prepare_batch(first);
-        self.preparing.set(false);
-        result
+        // Флаг сбрасывается и при панике подготовки: иначе каталог навсегда
+        // остался бы в состоянии «идёт подготовка».
+        struct Preparing<'a>(&'a Cell<bool>);
+        impl Drop for Preparing<'_> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+        let _preparing = Preparing(&self.preparing);
+        self.prepare_batch(first)
     }
 
     fn prepare_batch(&self, first: ModuleId) -> Result<(), Error> {
