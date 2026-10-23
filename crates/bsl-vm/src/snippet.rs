@@ -385,9 +385,8 @@ pub(super) fn push_dynamic_frame(
         own_base: call_start,
         call_start,
         return_reg: dst,
-        module_copybacks: Vec::new(),
         numeric_for_state: None,
-        handled_errors: Vec::new(),
+        cold: None,
     });
     Ok(())
 }
@@ -470,7 +469,10 @@ fn start_dynamic_snippet(
         if canonical == index
             && let Some((owner, slot)) = module_slot
         {
-            root_frame.module_copybacks.push((canonical, owner, slot));
+            root_frame
+                .cold_mut()
+                .module_copybacks
+                .push((canonical, owner, slot));
         }
     }
     root_frame.own_base = old_count;

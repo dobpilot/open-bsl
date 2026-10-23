@@ -8,6 +8,15 @@ use bsl_sema::resolve_program;
 use bsl_syntax::parse;
 
 #[test]
+fn a_frame_fits_the_inline_copy_budget() {
+    // Крупнее 128 байт кадр копируется в стек кадров через `memcpy` на
+    // каждом вызове: так `call_overhead` потерял 10% времени (профиль
+    // `docs/research/performance/hotspots-2026-10-24`). Новое редкое поле
+    // кадра место себе ищет в `FrameCold`.
+    assert!(std::mem::size_of::<Frame>() <= 128);
+}
+
+#[test]
 fn scheduler_quantum_defaults_to_the_confirmed_value() {
     assert_eq!(SchedulerConfig::default().safe_points_per_quantum, 1_024);
 }

@@ -59,7 +59,7 @@ pub(crate) fn find_module_alias(frames: &[Frame], owner: u32, slot: usize) -> Op
     frames
         .iter()
         .rev()
-        .flat_map(|frame| &frame.module_copybacks)
+        .flat_map(|frame| frame.module_copybacks())
         .find_map(|&(index, module, target)| (module == owner && target == slot).then_some(index))
 }
 
@@ -126,7 +126,7 @@ pub(crate) fn publish_aliases(
     session: &mut SessionModules,
 ) -> Result<(), RtError> {
     for frame in &task.frames {
-        for &(index, owner, slot) in &frame.module_copybacks {
+        for &(index, owner, slot) in frame.module_copybacks() {
             let state = state_for_module(owner, root, session)?;
             reg_store(&mut state.slots, slot, reg_load(&task.stack, index)?)?;
         }
@@ -142,7 +142,7 @@ pub(crate) fn refresh_aliases(
     session: &mut SessionModules,
 ) -> Result<(), RtError> {
     for frame in &task.frames {
-        for &(index, owner, slot) in &frame.module_copybacks {
+        for &(index, owner, slot) in frame.module_copybacks() {
             let state = state_for_module(owner, root, session)?;
             reg_store(&mut task.stack, index, reg_load(&state.slots, slot)?)?;
         }

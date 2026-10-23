@@ -182,9 +182,8 @@ pub(crate) fn call_reference(
                 own_base: callee.n_params as usize,
                 call_start: 0,
                 return_reg: 0,
-                module_copybacks: Vec::new(),
                 numeric_for_state: None,
-                handled_errors: Vec::new(),
+                cold: None,
             }],
             // НЕ ИЗМЕРЕНО(SECURITY.ASYNC_INHERITANCE) — отдельная async-задача
             // получает снимок режимов в момент вызова.
@@ -228,9 +227,8 @@ pub(crate) fn call_reference(
         own_base,
         call_start,
         return_reg: dst,
-        module_copybacks: copybacks,
         numeric_for_state: None,
-        handled_errors: Vec::new(),
+        cold: crate::FrameCold::with_copybacks(copybacks),
     });
     Ok(None)
 }

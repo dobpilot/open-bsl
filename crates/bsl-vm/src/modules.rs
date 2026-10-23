@@ -343,15 +343,19 @@ impl<'a> CatalogContext<'a> {
         module: u32,
         caches: &'s [RunCaches],
     ) -> Result<(&'a Program, &'s LinkedComponents<'a>, &'s RunCaches), RtError> {
+        // Цикл исполнения зовёт это на каждом шаге кадра модуля, а каждое
+        // обращение к каталогу — два динамических вызова: программа
+        // берётся один раз.
+        let program = self.program(module)?;
         Ok((
-            self.program(module)?,
+            program,
             self.linked(module)?,
             at(
                 caches,
                 module as usize,
                 "номер модуля вне таблицы кэшей запуска",
             )?
-            .ready(self.program(module)?),
+            .ready(program),
         ))
     }
 }
@@ -405,9 +409,8 @@ pub(super) fn ensure_module_ready(
                 own_base,
                 call_start,
                 return_reg: 0,
-                module_copybacks: Vec::new(),
                 numeric_for_state: None,
-                handled_errors: Vec::new(),
+                cold: None,
             });
             Ok(true)
         }

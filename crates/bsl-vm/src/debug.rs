@@ -209,7 +209,7 @@ impl DebugValues for FrameValues<'_, '_, '_, '_> {
         let frame = &frames[index];
         let module_aliases: Vec<_> = frames
             .iter()
-            .flat_map(|frame| frame.module_copybacks.iter().copied())
+            .flat_map(|frame| frame.module_copybacks().iter().copied())
             .collect();
         run_dynamic_snippet(
             source,

@@ -70,14 +70,22 @@ struct SecurityModeSnapshot {
 
 type DataSeparationFrameModes = RefCell<Vec<(std::rc::Rc<str>, u32)>>;
 
+/// Режимы, включённые одним кадром вызова.
+#[derive(Default)]
+struct FrameSecurityModes {
+    safe: Cell<u32>,
+    safe_disabled: Cell<u32>,
+    safe_disabled_latch: Cell<bool>,
+    privileged: Cell<u32>,
+    data_separation: DataSeparationFrameModes,
+}
+
 #[derive(Default)]
 struct TaskSecurityModes {
     inherited: SecurityModeSnapshot,
-    safe_by_frame: Vec<Cell<u32>>,
-    safe_disabled_by_frame: Vec<Cell<u32>>,
-    safe_disabled_latch_by_frame: Vec<Cell<bool>>,
-    privileged_by_frame: Vec<Cell<u32>>,
-    data_separation_by_frame: Vec<DataSeparationFrameModes>,
+    /// Одна запись на кадр задачи. Один вектор, а не пять, потому что
+    /// синхронизация с числом кадров идёт на каждом вызове и возврате.
+    by_frame: Vec<FrameSecurityModes>,
 }
 
 impl TaskSecurityModes {
@@ -89,31 +97,24 @@ impl TaskSecurityModes {
     }
 
     fn synchronize_frames(&mut self, count: usize) {
-        self.safe_by_frame.resize_with(count, Cell::default);
-        self.safe_disabled_by_frame
-            .resize_with(count, Cell::default);
-        self.safe_disabled_latch_by_frame
-            .resize_with(count, Cell::default);
-        self.privileged_by_frame.resize_with(count, Cell::default);
-        self.data_separation_by_frame
-            .resize_with(count, RefCell::default);
-        self.safe_by_frame.truncate(count);
-        self.safe_disabled_by_frame.truncate(count);
-        self.safe_disabled_latch_by_frame.truncate(count);
-        self.privileged_by_frame.truncate(count);
-        self.data_separation_by_frame.truncate(count);
+        // Цикл исполнения зовёт синхронизацию вокруг каждого шага, а число
+        // кадров меняется только на вызове, возврате и раскрутке.
+        if self.by_frame.len() != count {
+            self.by_frame
+                .resize_with(count, FrameSecurityModes::default);
+        }
     }
 
     fn safe_enabled(&self) -> bool {
-        self.inherited.safe || self.safe_by_frame.iter().any(|depth| depth.get() != 0)
+        self.inherited.safe || self.by_frame.iter().any(|frame| frame.safe.get() != 0)
     }
 
     fn safe_disabled(&self) -> bool {
         self.inherited.safe_disabled
             || self
-                .safe_disabled_latch_by_frame
+                .by_frame
                 .iter()
-                .any(|disabled| disabled.get())
+                .any(|frame| frame.safe_disabled_latch.get())
     }
 
     fn safe(&self) -> bool {
@@ -124,9 +125,9 @@ impl TaskSecurityModes {
         !self.safe()
             && (self.inherited.privileged
                 || self
-                    .privileged_by_frame
+                    .by_frame
                     .iter()
-                    .any(|depth| depth.get() != 0))
+                    .any(|frame| frame.privileged.get() != 0))
     }
 
     fn data_separation(&self, common_attribute: &str) -> bool {
@@ -134,8 +135,9 @@ impl TaskSecurityModes {
             .data_separation
             .iter()
             .any(|name| bsl_rt::folded_eq(name, common_attribute))
-            || self.data_separation_by_frame.iter().any(|modes| {
-                modes
+            || self.by_frame.iter().any(|frame| {
+                frame
+                    .data_separation
                     .borrow()
                     .iter()
                     .any(|(name, depth)| *depth != 0 && bsl_rt::folded_eq(name, common_attribute))
@@ -144,8 +146,8 @@ impl TaskSecurityModes {
 
     fn snapshot(&self) -> SecurityModeSnapshot {
         let mut data_separation = self.inherited.data_separation.to_vec();
-        for modes in &self.data_separation_by_frame {
-            for (name, depth) in modes.borrow().iter() {
+        for frame in &self.by_frame {
+            for (name, depth) in frame.data_separation.borrow().iter() {
                 if *depth != 0
                     && !data_separation
                         .iter()
@@ -160,9 +162,9 @@ impl TaskSecurityModes {
             safe_disabled: self.safe_disabled(),
             privileged: self.inherited.privileged
                 || self
-                    .privileged_by_frame
+                    .by_frame
                     .iter()
-                    .any(|depth| depth.get() != 0),
+                    .any(|frame| frame.privileged.get() != 0),
             data_separation: data_separation.into(),
         }
     }
@@ -197,7 +199,7 @@ impl bsl_rt::SecurityModeControl for VmSecurityModeControl<'_> {
 
     fn set_safe_mode(&self, enabled: bool) -> Result<(), RtError> {
         Self::change(
-            &self.modes.safe_by_frame[self.frame],
+            &self.modes.by_frame[self.frame].safe,
             enabled,
             "БезопасныйРежим",
         )
@@ -205,18 +207,20 @@ impl bsl_rt::SecurityModeControl for VmSecurityModeControl<'_> {
 
     fn set_safe_mode_disabled(&self, disabled: bool) -> Result<(), RtError> {
         Self::change(
-            &self.modes.safe_disabled_by_frame[self.frame],
+            &self.modes.by_frame[self.frame].safe_disabled,
             disabled,
             "ОтключениеБезопасногоРежима",
         )?;
         if disabled {
-            self.modes.safe_disabled_latch_by_frame[self.frame].set(true);
+            self.modes.by_frame[self.frame]
+                .safe_disabled_latch
+                .set(true);
         }
         Ok(())
     }
 
     fn safe_mode_disabled(&self) -> bool {
-        self.modes.safe_disabled_by_frame[self.frame].get() != 0
+        self.modes.by_frame[self.frame].safe_disabled.get() != 0
     }
 
     fn privileged_mode(&self) -> bool {
@@ -225,7 +229,7 @@ impl bsl_rt::SecurityModeControl for VmSecurityModeControl<'_> {
 
     fn set_privileged_mode(&self, enabled: bool) -> Result<(), RtError> {
         Self::change(
-            &self.modes.privileged_by_frame[self.frame],
+            &self.modes.by_frame[self.frame].privileged,
             enabled,
             "ПривилегированныйРежим",
         )
@@ -240,7 +244,7 @@ impl bsl_rt::SecurityModeControl for VmSecurityModeControl<'_> {
         common_attribute: &str,
         enabled: bool,
     ) -> Result<(), RtError> {
-        let mut modes = self.modes.data_separation_by_frame[self.frame].borrow_mut();
+        let mut modes = self.modes.by_frame[self.frame].data_separation.borrow_mut();
         if let Some(position) = modes
             .iter()
             .position(|(name, _)| bsl_rt::folded_eq(name, common_attribute))
@@ -292,18 +296,61 @@ struct Frame {
     /// Регистр РОДИТЕЛЬСКОГО кадра, куда положить результат при возврате
     /// (не используется для самого нижнего/верхнего кадра).
     return_reg: u8,
+    /// Активен только внутри доказанно пустого числового цикла. Его тело не
+    /// может наблюдать счётчик, поэтому обычный `BslValue` материализуется
+    /// лишь при выходе из цикла.
+    numeric_for_state: Option<NumericForState>,
+    /// Редко заполняемые части кадра; `None`, пока они пусты.
+    ///
+    /// Кадр кладётся в стек на каждом вызове, и его размер — часть цены
+    /// вызова: до 128 байт LLVM пишет его прямо на место, крупнее — строит
+    /// во временной памяти и копирует через `memcpy`. Эти поля нужны лишь
+    /// при передаче модульной переменной по ссылке и при пойманной ошибке.
+    cold: Option<Box<FrameCold>>,
+}
+
+/// Редкие части [`Frame`], вынесенные из него ради размера кадра.
+#[derive(Default)]
+struct FrameCold {
     /// Временные слоты параметров, созданные для передачи модульной либо
     /// импортированной переменной по ссылке: (индекс в стеке, модуль,
     /// слот). При возврате значения записываются обратно в `ModuleState`
     /// соответствующего модуля.
     module_copybacks: Vec<(usize, u32, usize)>,
-    /// Активен только внутри доказанно пустого числового цикла. Его тело не
-    /// может наблюдать счётчик, поэтому обычный `BslValue` материализуется
-    /// лишь при выходе из цикла.
-    numeric_for_state: Option<NumericForState>,
     /// Пойманные ошибки текущего вызова и явные области их обработчиков.
     /// Отбор по `pc` восстанавливает внешнюю ошибку без проверок в горячей петле.
     handled_errors: Vec<(bsl_bytecode::ExceptionRange, BslValue)>,
+}
+
+impl FrameCold {
+    /// Холодная часть нового кадра вызова: память выделяется, только если
+    /// вызову понадобились обратные записи модульных переменных.
+    fn with_copybacks(module_copybacks: Vec<(usize, u32, usize)>) -> Option<Box<Self>> {
+        (!module_copybacks.is_empty()).then(|| {
+            Box::new(Self {
+                module_copybacks,
+                handled_errors: Vec::new(),
+            })
+        })
+    }
+}
+
+impl Frame {
+    fn module_copybacks(&self) -> &[(usize, u32, usize)] {
+        self.cold
+            .as_deref()
+            .map_or(&[], |cold| cold.module_copybacks.as_slice())
+    }
+
+    fn handled_errors(&self) -> &[(bsl_bytecode::ExceptionRange, BslValue)] {
+        self.cold
+            .as_deref()
+            .map_or(&[], |cold| cold.handled_errors.as_slice())
+    }
+
+    fn cold_mut(&mut self) -> &mut FrameCold {
+        self.cold.get_or_insert_with(Box::default)
+    }
 }
 
 struct NumericForState {
@@ -868,9 +915,8 @@ impl ProgramExecution {
                 own_base: 0,
                 call_start: 0,
                 return_reg: 0,
-                module_copybacks: Vec::new(),
                 numeric_for_state: None,
-                handled_errors: Vec::new(),
+                cold: None,
             }],
             security_modes: TaskSecurityModes::default(),
             stack,
@@ -994,9 +1040,8 @@ impl ProgramExecution {
                 own_base,
                 call_start,
                 return_reg: 0,
-                module_copybacks: Vec::new(),
                 numeric_for_state: None,
-                handled_errors: Vec::new(),
+                cold: None,
             });
         }
         Ok(())
@@ -3253,9 +3298,8 @@ fn step(
                             own_base: callee_chunk.n_params as usize,
                             call_start: 0,
                             return_reg: 0,
-                            module_copybacks: Vec::new(),
                             numeric_for_state: None,
-                            handled_errors: Vec::new(),
+                            cold: None,
                         }],
                         // НЕ ИЗМЕРЕНО(SECURITY.ASYNC_INHERITANCE) — отдельная
                         // async-задача получает снимок режимов в момент вызова.
@@ -3373,9 +3417,8 @@ fn step(
                     own_base,
                     call_start,
                     return_reg: ret,
-                    module_copybacks,
                     numeric_for_state: None,
-                    handled_errors: Vec::new(),
+                    cold: FrameCold::with_copybacks(module_copybacks),
                 });
             }
             Instr::Await { dst, promise } => {
@@ -4864,9 +4907,8 @@ fn step_cold(
                 own_base,
                 call_start,
                 return_reg: ret,
-                module_copybacks,
                 numeric_for_state: None,
-                handled_errors: Vec::new(),
+                cold: FrameCold::with_copybacks(module_copybacks),
             });
         }
         // Чтение экспортной переменной чужого модуля — с той же ленивой
@@ -5152,7 +5194,7 @@ fn copy_back_module_arguments(
     module_state: &mut ModuleState,
     modules: &mut ModulesCtx<'_, '_>,
 ) -> Result<(), RtError> {
-    for (stack_slot, target_module, module_slot) in &frame.module_copybacks {
+    for (stack_slot, target_module, module_slot) in frame.module_copybacks() {
         let value = reg_load(stack, *stack_slot)?;
         // При возврате current_module — модуль текущего кадра, изъятый
         // драйвером на время шага. При разматывании это ROOT_MODULE:
@@ -5300,10 +5342,11 @@ fn unwind_to_handler(
             let frame = &mut frames[frame_idx];
             // Сохраняем только внешние обработчики точки броска. Завершённый
             // вложенный обработчик не должен накапливаться при повторе цикла.
-            frame.handled_errors.retain(|(handler, _)| {
+            let handled = &mut frame.cold_mut().handled_errors;
+            handled.retain(|(handler, _)| {
                 check_pc >= handler.handler_pc && check_pc < handler.handler_end_pc
             });
-            frame.handled_errors.push((range, value.clone()));
+            handled.push((range, value.clone()));
             *current_exception = Some(value);
             frame.pc = range.handler_pc;
             return true;
@@ -5369,7 +5412,7 @@ fn current_handler_description(frame: &Frame) -> Result<BslValue, RtError> {
     // обработчик не заслоняет внешний после выхода из него —
     // `measure-error-description-scope.platform.txt`.
     let Some((_, value)) = frame
-        .handled_errors
+        .handled_errors()
         .iter()
         .rev()
         .find(|(range, _)| frame.pc >= range.handler_pc && frame.pc < range.handler_end_pc)

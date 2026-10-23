@@ -298,8 +298,10 @@ pub(super) fn call(
             .as_mut()
             .expect("создана корневая задача");
         root.security_modes.synchronize_frames(root.frames.len());
-        root.security_modes.safe_disabled_by_frame[0].set(1);
-        root.security_modes.safe_disabled_latch_by_frame[0].set(true);
+        root.security_modes.by_frame[0].safe_disabled.set(1);
+        root.security_modes.by_frame[0]
+            .safe_disabled_latch
+            .set(true);
     }
     execution.root_catalog_module = Some(target);
     execution.attach_catalog(catalog.catalog);
