@@ -261,7 +261,8 @@ pub fn compile_program_with(
     opts.check()?;
     let mut names = NameInterner::new();
     let mut shapes = ShapeTable::new();
-    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts, false)?;
+    let (chunks, lines) =
+        compile_module_chunks(resolved, &mut names, &mut shapes, opts, false, false)?;
     Ok(assemble_program(
         resolved,
         chunks,
@@ -315,7 +316,7 @@ fn compile_configuration_with_names(
     let mut compiled = Vec::with_capacity(modules.len());
     for (name, resolved) in modules {
         compiled.push(
-            compile_module_chunks(resolved, &mut names, &mut shapes, opts, true)
+            compile_module_chunks(resolved, &mut names, &mut shapes, opts, true, true)
                 .map_err(|source| CompileError::InModule(Box::new((name.clone(), source))))?,
         );
     }
@@ -325,6 +326,7 @@ fn compile_configuration_with_names(
             &mut names,
             &mut shapes,
             opts,
+            false,
             false,
         )?),
         None => None,
@@ -392,7 +394,8 @@ pub fn compile_entry_program(
     opts.check()?;
     let mut names = NameInterner::from_existing(base_names.to_vec());
     let mut shapes = ShapeTable::from_existing(base_shapes.to_vec());
-    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts, false)?;
+    let (chunks, lines) =
+        compile_module_chunks(resolved, &mut names, &mut shapes, opts, false, false)?;
     Ok(assemble_program(
         resolved,
         chunks,
@@ -409,6 +412,7 @@ fn compile_module_chunks(
     shapes: &mut ShapeTable,
     opts: BuildOptions,
     name_methods: bool,
+    allow_sparse_large_frame: bool,
 ) -> Result<(Vec<Chunk>, Vec<Vec<u32>>), CompileError> {
     let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
     // Таблица строк собирается ПАРАЛЛЕЛЬНО чанкам, запись к записи: у
@@ -449,7 +453,7 @@ fn compile_module_chunks(
                 0,
                 f.is_procedure,
                 f.is_async,
-                name_methods,
+                allow_sparse_large_frame,
                 names,
                 shapes,
                 opts,
@@ -759,6 +763,35 @@ pub fn compile_snippet_with_requirements(
     })
 }
 
+/// Ступень обычного конвейера для методов конфигурации: если даже
+/// помещающиеся локали не оставили места временным регистрам, метод
+/// компилируется повторно с раскладкой локалей по живым диапазонам.
+/// Ступень детерминирована и повторяет только отказавший метод: успешные
+/// сохраняют прежний путь и раскладку. Повтор начинается с таблиц имён и
+/// форм, откатанных к состоянию до первой попытки, и случается не больше
+/// одного раза: в повторе `ssa_regalloc` уже включён. Кадры с обработчиками
+/// раскладка по-прежнему исключает своей проверкой.
+fn register_pressure_fallback(
+    error: &CompileError,
+    allow_sparse_large_frame: bool,
+    sparse_large_frame: bool,
+    materialize_locals: bool,
+    opts: BuildOptions,
+) -> Option<BuildOptions> {
+    if !matches!(error, CompileError::TooManyRegisters)
+        || !allow_sparse_large_frame
+        || sparse_large_frame
+        || materialize_locals
+        || opts.debug_info
+        || opts.optimizations.ssa_regalloc
+    {
+        return None;
+    }
+    let mut retry = opts;
+    retry.optimizations.ssa_regalloc = true;
+    Some(retry)
+}
+
 // Тринадцать аргументов — это и есть весь входной контекст чанка;
 // структура ради их упаковки ничего бы не объяснила.
 #[allow(clippy::too_many_arguments)]
@@ -780,6 +813,9 @@ fn compile_chunk(
     shapes: &mut ShapeTable,
     opts: BuildOptions,
 ) -> Result<(Chunk, Vec<u32>), CompileError> {
+    // Точка отката для ступени `register_pressure_fallback`: повтор обязан
+    // начинаться с тех же таблиц, что и эта попытка.
+    let (names_mark, shapes_mark) = (names.len(), shapes.len());
     let sparse_large_frame = u8::try_from(locals.len()).is_err();
     if sparse_large_frame
         && (!allow_sparse_large_frame
@@ -910,21 +946,15 @@ fn compile_chunk(
     c.max_reg = n_locals;
     c.compile_param_defaults(params)?;
     if let Err(error) = c.compile_block(body) {
-        // Даже помещающиеся локали могут не оставить места временным
-        // регистрам. Повторяем только отказавший метод конфигурации;
-        // успешные методы сохраняют прежний путь и раскладку.
-        if matches!(&error, CompileError::TooManyRegisters)
-            && allow_sparse_large_frame
-            && !sparse_large_frame
-            && !materialize_locals
-            && !opts.debug_info
-            && !opts.optimizations.ssa_regalloc
-        {
-            let mut retry_opts = opts;
-            retry_opts.optimizations.ssa_regalloc = true;
-            // Повторные имена и формы интернируются с прежними ID.
-            // Флаг распределителя ограничивает повтор одной попыткой;
-            // его существующая проверка исключает кадры с обработчиками.
+        if let Some(retry_opts) = register_pressure_fallback(
+            &error,
+            allow_sparse_large_frame,
+            sparse_large_frame,
+            materialize_locals,
+            opts,
+        ) {
+            c.names.truncate(names_mark);
+            c.shapes.truncate(shapes_mark);
             return compile_chunk(
                 locals,
                 params,

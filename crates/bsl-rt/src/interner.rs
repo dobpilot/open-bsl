@@ -149,6 +149,34 @@ impl NameInterner {
         id
     }
 
+    /// Число имён в таблице — точка отката для [`truncate`](Self::truncate).
+    pub fn len(&self) -> usize {
+        self.names.len()
+    }
+
+    /// Таблица пуста.
+    pub fn is_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
+    /// Возвращает таблицу к первым `len` именам: компилятор откатывает
+    /// имена отказавшей попытки, чтобы повтор начинался с той же таблицы,
+    /// что и первая попытка. Идентификаторы за границей становятся
+    /// недействительными.
+    pub fn truncate(&mut self, len: usize) {
+        if len >= self.names.len() {
+            return;
+        }
+        self.names.truncate(len);
+        self.index.retain(|_, bucket| {
+            match bucket {
+                Bucket::One(id) => return id.index() < len,
+                Bucket::Many(ids) => ids.retain(|id| id.index() < len),
+            }
+            !bucket.ids().is_empty()
+        });
+    }
+
     /// Поиск БЕЗ интернирования: `None` — такого имени в таблице ещё нет.
     ///
     /// Нужен `ЗаполнитьЗначенияСвойств`, который проверяет, есть ли у

@@ -179,6 +179,18 @@ impl ShapeTable {
 
     /// Сколько форм сейчас в таблице — для тестов на то, что она
     /// перестаёт расти после деградации.
+    /// Возвращает таблицу к первым `len` формам — откат форм отказавшей
+    /// попытки компиляции, как [`crate::NameInterner::truncate`]. Переходы
+    /// между формами заводит только исполнение, поэтому у компиляционных
+    /// форм ссылок на отброшенные нет.
+    pub fn truncate(&mut self, len: usize) {
+        if len >= self.shapes.len() {
+            return;
+        }
+        self.shapes.truncate(len);
+        self.by_keys.retain(|_, index| (*index as usize) < len);
+    }
+
     pub fn len(&self) -> usize {
         self.shapes.len()
     }
@@ -280,6 +292,24 @@ mod tests {
             interner.intern(&format!("f{i}"));
         }
         interner.intern(&format!("f{n}"))
+    }
+
+    #[test]
+    fn truncate_rolls_names_and_shapes_back_to_a_mark() {
+        let mut names = crate::NameInterner::new();
+        let kept = names.intern("Поле");
+        let mut shapes = ShapeTable::new();
+        let kept_shape = shapes.intern(&[kept]);
+        let (names_mark, shapes_mark) = (names.len(), shapes.len());
+        let dropped = names.intern("Лишнее");
+        shapes.intern(&[kept, dropped]);
+        names.truncate(names_mark);
+        shapes.truncate(shapes_mark);
+        assert_eq!(names.lookup("Лишнее"), None);
+        assert_eq!(names.lookup("поле"), Some(kept));
+        assert_eq!(names.intern("Другое"), dropped);
+        assert_eq!(shapes.intern(&[kept]), kept_shape);
+        assert_eq!(shapes.intern(&[kept, dropped]), shapes_mark as u32);
     }
 
     #[test]

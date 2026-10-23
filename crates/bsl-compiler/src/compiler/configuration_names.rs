@@ -73,8 +73,14 @@ fn collect_module(
     // Повторяем существующий кодоген по одному модулю, не собирая связи
     // и не вводя второй обход семантических выражений. Крупные кадры
     // конфигурации сохраняют свой разрешённый путь уплотнения.
-    let (chunks, _) =
-        compile_module_chunks(resolved, &mut names, &mut shapes, opts, configuration)?;
+    let (chunks, _) = compile_module_chunks(
+        resolved,
+        &mut names,
+        &mut shapes,
+        opts,
+        configuration,
+        configuration,
+    )?;
     for name in names.as_names() {
         canonical.intern(name);
     }
