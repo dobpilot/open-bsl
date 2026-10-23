@@ -1,0 +1,12 @@
+{
+  "platform": "8.3.27.2342",
+  "source": "open-sdbl 0.9.14 isolated native CF/XML conditional-separation pair",
+  "native_receipt": "independent-string.platform.txt",
+  "attribute_guid": "03f9d2d0-eae4-4098-a70e-4eb569b11fd9",
+  "constant_guid": "9893e2d6-f3f8-4d73-bb06-19bf26d216ab",
+  "resource_sha256": {
+    "03f9d2d0-eae4-4098-a70e-4eb569b11fd9.deflate": "960a6dcd369866f804106c28536121daae13fa751dba8cba60ef539f45acb867",
+    "no-condition.deflate": "c5eebde2f7a029c38c327b7c884dd6331e705190920f5d926a7e2e4baacb5bb5",
+    "9893e2d6-f3f8-4d73-bb06-19bf26d216ab.deflate": "960a13a07b01bca664397fe93ee85be2be11e10eda77082b0638f4fb4717ed02"
+  }
+}

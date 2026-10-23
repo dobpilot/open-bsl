@@ -1,12 +1,130 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use open_sdbl::metadata::{InfoBaseUser, UserRow};
-use open_sdbl_db::ConfigResource;
+use bsl_config::{ConfigurationModule, ModuleExecution, ModuleKind};
+use bsl_orm::MetadataCatalog;
+use open_sdbl::metadata::{
+    InfoBaseUser, UserRow, parse_extension_catalog, parse_extension_objects,
+};
+use open_sdbl_db::{ConfigResource, ConfigSelector};
+
+#[path = "module_source_origin_tests.rs"]
+mod module_source_origin;
 
 use super::{
-    LoadError, apply_source_overlay, common_execution, load_base, load_catalog_base, metadata_kind,
-    principal_candidates,
+    BaseObject, FactoryConfigSelector, LoadError, Resources, STYLE_ITEM, SUBSYSTEM,
+    append_subsystem, apply_extension_object, common_execution, load_base, load_catalog_base,
+    metadata_kind, ordered_active_positions, principal_candidates,
+    project_extension_metadata_catalog, reject_extension_session_module, retain_factory_resource,
+    retain_factory_resources,
 };
+
+#[cfg(test)]
+#[path = "document_registers_tests.rs"]
+mod document_registers_tests;
+
+#[path = "catalog_owners_tests.rs"]
+mod catalog_owners_tests;
+
+#[path = "common_attributes_tests.rs"]
+mod common_attributes_tests;
+
+#[path = "fill_checking_tests.rs"]
+mod fill_checking_tests;
+
+#[path = "catalog_hierarchy_tests.rs"]
+mod catalog_hierarchy_tests;
+
+#[path = "document_filling_acquisition_tests.rs"]
+mod document_filling_acquisition_tests;
+
+#[cfg(test)]
+#[path = "document_numbering_tests.rs"]
+mod document_numbering_tests;
+
+#[path = "native_module_loading_tests.rs"]
+mod native_module_loading_tests;
+
+#[path = "protected_module_options_tests.rs"]
+mod protected_module_options_tests;
+
+#[test]
+fn selected_acquisition_keeps_unlisted_bare_guid_descriptors() {
+    let selected = std::collections::HashSet::new();
+    assert!(retain_factory_resource(
+        &selected,
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    ));
+    assert!(!retain_factory_resource(
+        &selected,
+        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.0"
+    ));
+}
+
+#[test]
+fn extension_settings_preserve_boolean_and_named_profile_modes() {
+    use bsl_orm::{ConfigurationExtensionScope, ExtensionSafeMode};
+    use open_sdbl_db::ExtensionScope;
+
+    for safe in [false, true] {
+        assert_eq!(
+            super::extension_settings(Some(safe), Some(""), Some(ExtensionScope::InfoBase)),
+            Some((
+                ExtensionSafeMode::Enabled(safe),
+                ConfigurationExtensionScope::InfoBase
+            ))
+        );
+    }
+    assert_eq!(
+        super::extension_settings(Some(true), Some("Профиль"), Some(ExtensionScope::InfoBase)),
+        Some((
+            ExtensionSafeMode::profile("Профиль"),
+            ConfigurationExtensionScope::InfoBase
+        ))
+    );
+}
+
+#[test]
+fn extension_settings_refuse_unknown_properties_instead_of_using_defaults() {
+    use open_sdbl_db::ExtensionScope;
+
+    assert!(super::extension_settings(None, Some(""), Some(ExtensionScope::InfoBase)).is_none());
+    assert!(super::extension_settings(Some(true), None, Some(ExtensionScope::InfoBase)).is_none());
+    assert!(super::extension_settings(Some(true), Some(""), None).is_none());
+}
+
+#[test]
+fn extension_identity_rejects_malformed_storage_identifiers() {
+    for identity in [
+        "",
+        "00",
+        "0000000000000000000000000000000x",
+        "я0000000000000000000000000000000",
+    ] {
+        assert!(super::extension_identity(identity).is_none());
+    }
+}
+
+#[test]
+fn extension_identity_matches_the_native_platform_uuid() {
+    let native: open_sdbl::metadata::Guid = "222d62b8-bcb8-11f1-87bb-02d78b8d8e99".parse().unwrap();
+    assert_eq!(
+        super::extension_identity("87bb02d78b8d8e9911f1bcb8222d62b8"),
+        Some(native.to_bytes())
+    );
+}
+
+#[test]
+fn native_language_descriptor_agrees_with_the_xml_language_code() {
+    let descriptor = r#"{1,{0,{3,{1,0,af1b61ff-d1b9-4053-ad85-8259b6626adc},"Русский",{1,"ru","Русский"},"",0,0,00000000-0000-0000-0000-000000000000,0},"ru"},0}"#;
+    let value = open_sdbl::metadata::parse_serialized(descriptor.as_bytes()).unwrap();
+    assert_eq!(super::language_code(&value), Some("ru"));
+    let empty = open_sdbl::metadata::parse_serialized(b"{1,{0,{},\"\"},0}").unwrap();
+    assert_eq!(super::language_code(&empty), Some(""));
+    for descriptor in ["{1,{0,{}},0}", "{1,{1,{},\"ru\"},0}", "{1,{0,{},{}},0}"] {
+        let value = open_sdbl::metadata::parse_serialized(descriptor.as_bytes()).unwrap();
+        assert_eq!(super::language_code(&value), None);
+    }
+}
 
 #[test]
 fn enumeration_metadata_class_is_projected() {
@@ -35,7 +153,7 @@ fn language_metadata_class_is_projected() {
 #[test]
 fn sequence_metadata_class_is_projected() {
     assert_eq!(
-        metadata_kind("bc587f20-35d2-11d6-a3c7-0050bae0a776"),
+        metadata_kind("bc587f20-35d9-11d6-a3c7-0050bae0a776"),
         Some(bsl_orm::MetadataKind::Sequence)
     );
 }
@@ -47,8 +165,95 @@ fn resource(name: &str, bytes: &[u8]) -> ConfigResource {
     }
 }
 
+#[test]
+fn native_numeric_catalog_settings_reach_orm_without_string_defaults() {
+    use bsl_orm::{CatalogCodeType, CatalogStandardAttributes, MetadataKind, MetadataObject};
+    let id = "4bb0f7c3-62f3-4352-9bc8-e243dd18fe4a";
+    let descriptor = open_sdbl::metadata::parse_config_descriptor(
+        id,
+        include_bytes!("../tests/fixtures/catalog-standard-attributes/versions.deflate"),
+    )
+    .unwrap()
+    .unwrap();
+    let object = MetadataObject::new(id, descriptor.name, MetadataKind::Catalog)
+        .with_catalog_standard_attributes(super::catalog_standard_attributes(
+            descriptor.catalog_standard_attributes.unwrap(),
+        ))
+        .with_catalog_default_presentation(super::catalog_default_presentation(
+            descriptor.catalog_default_presentation.unwrap(),
+        ));
+    assert_eq!(object.name(), "ВерсииРасширений");
+    assert_eq!(
+        object.catalog_default_presentation(),
+        Some(bsl_orm::CatalogDefaultPresentation::AsCode)
+    );
+    assert_eq!(
+        object.catalog_standard_attributes(),
+        Some(CatalogStandardAttributes {
+            code_type: CatalogCodeType::Number,
+            code_length: 9,
+            description_length: 0,
+        })
+    );
+}
+
+#[test]
+fn object_module_binding_uses_owner_and_kind_instead_of_display_name() {
+    use bsl_orm::{MetadataKind, MetadataObject};
+    let code = bsl_config::ConfigurationCodeSnapshot::new(
+        "configuration",
+        vec![
+            ConfigurationModule::new(
+                "manager",
+                "Менеджер",
+                "",
+                ModuleKind::Manager,
+                ModuleExecution::default().with_server(true),
+            )
+            .with_owner("ABC"),
+            ConfigurationModule::new(
+                "other",
+                "ЧужойОбъект",
+                "",
+                ModuleKind::Object,
+                ModuleExecution::default().with_server(true),
+            )
+            .with_owner("other"),
+            ConfigurationModule::new(
+                "object",
+                "Справочник.Тест.МодульОбъекта",
+                "",
+                ModuleKind::Object,
+                ModuleExecution::default().with_server(true),
+            )
+            .with_owner("ABC"),
+        ],
+    )
+    .unwrap();
+    let object = super::bind_object_module(
+        MetadataObject::new("abc", "Тест", MetadataKind::Catalog),
+        &code,
+    );
+    assert_eq!(
+        object.object_module(),
+        Some("Справочник.Тест.МодульОбъекта")
+    );
+    assert_eq!(object.manager_module(), None);
+    assert_eq!(
+        super::bind_object_module(
+            MetadataObject::new("absent", "Тест", MetadataKind::Catalog),
+            &code
+        )
+        .object_module(),
+        None
+    );
+}
+
 fn text_resource(name: &str, text: &str) -> ConfigResource {
-    let bytes = text.as_bytes();
+    bytes_resource(name, text.as_bytes())
+}
+
+fn bytes_resource(name: &str, bytes: &[u8]) -> ConfigResource {
     assert!(bytes.len() <= u16::MAX as usize);
     let length = bytes.len() as u16;
     let mut compressed = vec![1];
@@ -61,7 +266,7 @@ fn text_resource(name: &str, text: &str) -> ConfigResource {
 #[test]
 fn catalog_is_projected_from_the_same_root_and_links_default_roles() {
     let root = r#"{2,{11111111-1111-1111-1111-111111111111},1,{9cd510cd-abfc-11d4-9434-004095e12fc7,{1,{68,{0,{3,{1,0,44444444-4444-4444-4444-444444444444},"Конфигурация"}},"",1,{0,0},{0,0},{0,0},{0,0},{0,0},00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,0,"Поставщик","1.2.3","",1,{0,0},1,{0,0},1,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,80324,{0,0},1,0,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,{0,0},00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,2,00000000-0000-0000-0000-000000000000,2,{1,55555555-5555-5555-5555-555555555555},{0,0},0,"",80327,1,0,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,00000000-0000-0000-0000-000000000000,1,00000000-0000-0000-0000-000000000000,{0,0},{0,0},{0,0},{0,0},00000000-0000-0000-0000-000000000000,"",0,1,{0,0},1},2,{0fe48980-252d-11d6-a3c7-0050bae0a776,1,22222222-2222-2222-2222-222222222222},{09736b02-9cac-4e3f-b4f7-d3e9576ab948,1,55555555-5555-5555-5555-555555555555}}}}"#;
-    let resources = vec![
+    let mut resources = vec![
         text_resource("root", "{1,{11111111-1111-1111-1111-111111111111}}"),
         text_resource("11111111-1111-1111-1111-111111111111", root),
         text_resource(
@@ -72,9 +277,45 @@ fn catalog_is_projected_from_the_same_root_and_links_default_roles() {
             "55555555-5555-5555-5555-555555555555",
             r#"{1,{12,{2,{1,0,55555555-5555-5555-5555-555555555555},"Основная",{1,"ru","Основная"},"",0,0,66666666-6666-6666-6666-666666666666},0}}"#,
         ),
+        text_resource(
+            "22222222-2222-2222-2222-222222222222.0",
+            "Функция Ответ() Экспорт Возврат 42; КонецФункции",
+        ),
+        text_resource("22222222-2222-2222-2222-222222222222.9", "макет"),
     ];
+    let mut selector = FactoryConfigSelector::default();
+    assert_eq!(
+        selector.root_resource_name(&resources[0]).unwrap(),
+        "11111111-1111-1111-1111-111111111111"
+    );
+    selector.configure(&resources[1]).unwrap();
+    let selected_names = resources
+        .iter()
+        .filter(|resource| selector.retain(&resource.file_name))
+        .map(|resource| resource.file_name.clone())
+        .collect::<Vec<_>>();
+    assert!(selector.retain("22222222-2222-2222-2222-222222222222.0"));
+    assert!(!selector.retain("22222222-2222-2222-2222-222222222222.9"));
+    retain_factory_resources(&mut resources).expect("отбор ресурсов фабрики");
+    assert_eq!(
+        resources
+            .iter()
+            .map(|resource| resource.file_name.clone())
+            .collect::<Vec<_>>(),
+        selected_names
+    );
+    assert!(
+        resources
+            .iter()
+            .any(|resource| { resource.file_name == "22222222-2222-2222-2222-222222222222.0" })
+    );
+    assert!(
+        resources
+            .iter()
+            .all(|resource| { resource.file_name != "22222222-2222-2222-2222-222222222222.9" })
+    );
     let code = load_base(&resources).expect("снимок кода");
-    let catalog = load_catalog_base(&resources, &code).expect("каталог метаданных");
+    let catalog = load_catalog_base(&resources, &code, Vec::new()).expect("каталог метаданных");
 
     assert_eq!(catalog.identity(), code.identity());
     assert_eq!(catalog.objects().len(), 2);
@@ -82,6 +323,34 @@ fn catalog_is_projected_from_the_same_root_and_links_default_roles() {
         catalog.main_role_ids().collect::<Vec<_>>(),
         ["55555555-5555-5555-5555-555555555555"]
     );
+}
+
+#[test]
+fn nested_subsystem_descriptors_preserve_their_parent() {
+    let parent = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    let child = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    let parent_record = format!(
+        "{{1,{{22,{{3,{{1,0,{parent}}},\"Раздел\",{{1,\"ru\",\"Раздел\"}},\"\",0,0,00000000-0000-0000-0000-000000000000,0}},1,{{0,0}},1}},1,{{{SUBSYSTEM},1,{child}}}}}"
+    );
+    let child_record = format!(
+        "{{1,{{22,{{3,{{1,0,{child}}},\"Подраздел\",{{1,\"ru\",\"Подраздел\"}},\"\",0,0,00000000-0000-0000-0000-000000000000,0}},1,{{0,0}},0}},1,{{{SUBSYSTEM},0}}}}"
+    );
+    let resources = [
+        text_resource(parent, &parent_record),
+        text_resource(child, &child_record),
+    ];
+    let resources = Resources::new(&resources).unwrap();
+    let mut seen = std::collections::HashSet::new();
+    let mut objects = Vec::new();
+    append_subsystem(&resources, parent, None, &mut seen, &mut objects).unwrap();
+    assert_eq!(objects.len(), 2);
+    assert_eq!(objects[0].name(), "Раздел");
+    assert_eq!(objects[0].subsystem_parent(), None);
+    assert_eq!(objects[0].subsystem_command_interface(), Some(true));
+    assert_eq!(objects[1].name(), "Подраздел");
+    assert_eq!(objects[1].subsystem_parent(), Some(parent));
+    assert_eq!(objects[1].subsystem_command_interface(), Some(false));
+    MetadataCatalog::new("configuration", objects).unwrap();
 }
 
 fn user(
@@ -152,6 +421,22 @@ fn principal_candidates_preserve_identity_roles_and_authentication_decision() {
     assert!(candidates[0].can_authenticate());
     assert!(candidates[1].can_authenticate());
     assert!(!candidates[2].can_authenticate());
+}
+
+#[test]
+fn principal_candidates_keep_full_name_separate_from_user_name() {
+    let mut decoded_user = user(
+        "11111111-1111-1111-1111-111111111111",
+        "Краткое",
+        &[],
+        true,
+        "",
+    );
+    decoded_user.data.full_name = "Полное имя".into();
+    decoded_user.description = "Описание строки".into();
+    let principal = principal_candidates(&[decoded_user]);
+    assert_eq!(principal[0].principal().name(), "Краткое");
+    assert_eq!(principal[0].principal().full_name(), "Полное имя");
 }
 
 #[test]
@@ -241,35 +526,616 @@ fn duplicate_resource_is_rejected_before_decoding() {
     ));
 }
 
-#[test]
-fn active_extension_replaces_an_existing_source_resource() {
-    let mut base = vec![resource("module.0", &[1, 2, 3])];
-    let replacement = resource(
-        "MODULE.0",
-        &[
-            77, 140, 49, 10, 128, 48, 16, 4, 251, 188, 226, 74, 125, 66, 240, 115, 49, 130, 150,
-            130, 141, 96, 109, 43, 136, 16, 12, 66, 226, 23, 230, 126, 228, 149, 86, 203, 238, 44,
-            195, 174, 3, 133, 71, 71, 178, 206, 194, 106, 229, 212, 137, 100, 153, 73, 77, 43, 28,
-            70, 123, 94, 170, 6, 141, 78, 88, 168, 220, 92, 26, 236, 24, 197, 251, 206, 177, 217,
-            84, 72, 38, 249, 233, 200, 31,
-        ],
+const CATALOG_CLASS: &str = "cf4abea6-37b2-11d4-940f-008048da11f9";
+const BASE_OBJECT: &str = "11111111-1111-1111-1111-111111111111";
+const LOCAL_OBJECT: &str = "22222222-2222-2222-2222-222222222222";
+
+fn extension_object(belonging: u8, extends: &str) -> open_sdbl::metadata::ExtensionObject {
+    let source = format!(
+        r#"{{3,{{1,0,{LOCAL_OBJECT}}},"Локальный",{{1,"ru","Локальный"}},"",{belonging},0,{extends},0}}"#
     );
-    apply_source_overlay(&mut base, "Тестовое", &[replacement]).unwrap();
-    let decoded = open_sdbl::metadata::inflate_raw_deflate(base[0].compressed.as_ref()).unwrap();
-    assert!(String::from_utf8(decoded).unwrap().contains("Возврат 99"));
+    parse_extension_objects(source.as_bytes())
+        .unwrap()
+        .pop()
+        .unwrap()
 }
 
 #[test]
-fn structural_extension_is_rejected_with_its_name() {
-    let mut base = vec![resource("module.0", &[1, 2, 3])];
-    let error = apply_source_overlay(
-        &mut base,
-        "Структурное",
-        &[resource("new-module.0", &[4, 5, 6])],
-    )
-    .unwrap_err();
+fn active_extensions_are_selected_in_platform_order() {
+    let extensions = [
+        (0, "Позднее", Some(true), 20),
+        (1, "Отключенное", Some(false), 1),
+        (2, "Раннее", Some(true), 10),
+    ];
+
+    assert_eq!(
+        ordered_active_positions(extensions.into_iter()).unwrap(),
+        [2, 0]
+    );
+}
+
+#[test]
+fn unknown_extension_activity_fails_instead_of_looking_inactive() {
+    let extensions = [(0, "Известное", Some(true), 1), (1, "Неизвестное", None, 2)];
+
+    let error = ordered_active_positions(extensions.into_iter()).unwrap_err();
+
     assert!(matches!(
         error,
-        LoadError::UnsupportedExtension { name, .. } if name == "Структурное"
+        LoadError::UnsupportedExtension {
+            name,
+            activity_known: false,
+        } if name == "Неизвестное"
     ));
 }
+
+fn base_objects_for_test() -> HashMap<String, BaseObject> {
+    HashMap::from([(
+        BASE_OBJECT.into(),
+        BaseObject {
+            class: CATALOG_CLASS.into(),
+            name: "Базовый".into(),
+        },
+    )])
+}
+
+#[test]
+fn own_extension_object_adds_its_module_under_local_identity() {
+    let resources = vec![text_resource(
+        &format!("{LOCAL_OBJECT}.3"),
+        "Функция Новая() Экспорт\nВозврат 1;\nКонецФункции",
+    )];
+    let resources = Resources::new(&resources).unwrap();
+    let mut modules = Vec::new();
+
+    apply_extension_object(
+        &mut modules,
+        &base_objects_for_test(),
+        &resources,
+        CATALOG_CLASS,
+        &extension_object(0, "00000000-0000-0000-0000-000000000000"),
+        "Тестовое",
+    )
+    .unwrap();
+
+    assert_eq!(modules.len(), 1);
+    assert_eq!(modules[0].id(), format!("{LOCAL_OBJECT}.3"));
+    assert_eq!(modules[0].name(), "Справочник.Локальный.МодульМенеджера");
+    assert_eq!(modules[0].owner(), Some(LOCAL_OBJECT));
+}
+
+#[test]
+fn adopted_extension_object_replaces_module_only_through_explicit_link() {
+    let resources = vec![text_resource(
+        &format!("{LOCAL_OBJECT}.3"),
+        "Функция Измененная() Экспорт\nВозврат 2;\nКонецФункции",
+    )];
+    let resources = Resources::new(&resources).unwrap();
+    let mut modules = vec![
+        ConfigurationModule::new(
+            format!("{BASE_OBJECT}.3"),
+            "Справочник.Базовый.МодульМенеджера",
+            "Возврат 1;",
+            ModuleKind::Manager,
+            ModuleExecution::default().with_server(true),
+        )
+        .with_owner(BASE_OBJECT),
+    ];
+
+    apply_extension_object(
+        &mut modules,
+        &base_objects_for_test(),
+        &resources,
+        CATALOG_CLASS,
+        &extension_object(1, BASE_OBJECT),
+        "Тестовое",
+    )
+    .unwrap();
+
+    assert_eq!(modules.len(), 1);
+    assert_eq!(modules[0].id(), format!("{BASE_OBJECT}.3"));
+    assert_eq!(modules[0].name(), "Справочник.Базовый.МодульМенеджера");
+    assert!(modules[0].source().contains("Возврат 2"));
+}
+
+#[test]
+fn later_extension_replaces_the_result_of_the_earlier_one() {
+    let first_resources = vec![text_resource(&format!("{LOCAL_OBJECT}.3"), "Возврат 1;")];
+    let second_resources = vec![text_resource(&format!("{LOCAL_OBJECT}.3"), "Возврат 2;")];
+    let first = Resources::new(&first_resources).unwrap();
+    let second = Resources::new(&second_resources).unwrap();
+    let mut modules = Vec::new();
+    let object = extension_object(1, BASE_OBJECT);
+
+    apply_extension_object(
+        &mut modules,
+        &base_objects_for_test(),
+        &first,
+        CATALOG_CLASS,
+        &object,
+        "Первое",
+    )
+    .unwrap();
+    apply_extension_object(
+        &mut modules,
+        &base_objects_for_test(),
+        &second,
+        CATALOG_CLASS,
+        &object,
+        "Второе",
+    )
+    .unwrap();
+
+    assert_eq!(modules.len(), 1);
+    assert_eq!(modules[0].source(), "Возврат 2;");
+}
+
+#[test]
+fn adopted_by_name_object_is_rejected_instead_of_being_guessed() {
+    let resources = Resources::new(&[]).unwrap();
+    let error = apply_extension_object(
+        &mut Vec::new(),
+        &base_objects_for_test(),
+        &resources,
+        CATALOG_CLASS,
+        &extension_object(1, "00000000-0000-0000-0000-000000000000"),
+        "ПоИмени",
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        LoadError::UnsupportedExtensionOperation { extension, .. }
+            if extension == "ПоИмени"
+    ));
+}
+
+#[test]
+fn adopted_style_item_without_target_follows_the_measured_name_binding() {
+    let resources = Resources::new(&[]).unwrap();
+    let object = extension_object(1, "00000000-0000-0000-0000-000000000000");
+    for identity in [BASE_OBJECT, LOCAL_OBJECT] {
+        let mut base = HashMap::from([(
+            identity.into(),
+            BaseObject {
+                class: STYLE_ITEM.into(),
+                name: object.name.clone(),
+            },
+        )]);
+        apply_extension_object(
+            &mut Vec::new(),
+            &base,
+            &resources,
+            STYLE_ITEM,
+            &object,
+            "ПоИмени",
+        )
+        .unwrap();
+        base.get_mut(identity).unwrap().name = "Переименованный".into();
+        assert!(matches!(
+            apply_extension_object(
+                &mut Vec::new(),
+                &base,
+                &resources,
+                STYLE_ITEM,
+                &object,
+                "ПоИмени"
+            ),
+            Err(LoadError::UnsupportedExtensionOperation { .. })
+        ));
+        base.get_mut(identity).unwrap().name = object.name.to_lowercase();
+        assert!(
+            apply_extension_object(
+                &mut Vec::new(),
+                &base,
+                &resources,
+                STYLE_ITEM,
+                &object,
+                "ПоИмени"
+            )
+            .is_err()
+        );
+        base.get_mut(identity).unwrap().name = object.name.clone();
+        base.get_mut(identity).unwrap().class = CATALOG_CLASS.into();
+        assert!(
+            apply_extension_object(
+                &mut Vec::new(),
+                &base,
+                &resources,
+                STYLE_ITEM,
+                &object,
+                "ПоИмени"
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn an_explicit_style_target_never_falls_back_to_a_matching_name() {
+    let resources = Resources::new(&[]).unwrap();
+    let object = extension_object(1, BASE_OBJECT);
+    let base = HashMap::from([(
+        LOCAL_OBJECT.into(),
+        BaseObject {
+            class: STYLE_ITEM.into(),
+            name: object.name.clone(),
+        },
+    )]);
+    assert!(
+        apply_extension_object(
+            &mut Vec::new(),
+            &base,
+            &resources,
+            STYLE_ITEM,
+            &object,
+            "ПоИдентификатору"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn extension_session_module_is_rejected_instead_of_being_silently_ignored() {
+    let catalog_source =
+        "{2,{33333333-3333-3333-3333-333333333333},1,{0,{0,0,1,{$CLASS,1,$OBJECT}}}}"
+            .replace("$CLASS", CATALOG_CLASS)
+            .replace("$OBJECT", LOCAL_OBJECT);
+    let catalog = parse_extension_catalog(catalog_source.as_bytes()).unwrap();
+    let resources = vec![text_resource(
+        &format!("{}.7", catalog.configuration),
+        "Процедура УстановкаПараметровСеанса() КонецПроцедуры",
+    )];
+    let resources = Resources::new(&resources).unwrap();
+
+    let error = reject_extension_session_module(&resources, &catalog, "Тестовое").unwrap_err();
+
+    assert!(matches!(
+        error,
+        LoadError::UnsupportedExtensionOperation { extension, .. }
+            if extension == "Тестовое"
+    ));
+}
+
+#[test]
+fn extension_catalog_object_without_its_header_is_not_projected() {
+    let catalog_source =
+        "{2,{33333333-3333-3333-3333-333333333333},1,{0,{0,0,1,{$CLASS,1,$OBJECT}}}}"
+            .replace("$CLASS", CATALOG_CLASS)
+            .replace("$OBJECT", LOCAL_OBJECT);
+    let catalog = parse_extension_catalog(catalog_source.as_bytes()).unwrap();
+    let code = bsl_config::ConfigurationCodeSnapshot::new(
+        "44444444-4444-4444-4444-444444444444",
+        Vec::new(),
+    )
+    .unwrap();
+
+    let error =
+        project_extension_metadata_catalog(&mut Vec::new(), &catalog, &[], &code, "Тестовое")
+            .unwrap_err();
+
+    assert!(matches!(
+        error,
+        LoadError::IncompleteExtensionStructure(extension)
+            if extension == "Тестовое"
+    ));
+}
+
+#[test]
+fn own_extension_object_enters_the_effective_metadata_catalog() {
+    let catalog_source =
+        "{2,{33333333-3333-3333-3333-333333333333},1,{0,{0,0,1,{$CLASS,1,$OBJECT}}}}"
+            .replace("$CLASS", CATALOG_CLASS)
+            .replace("$OBJECT", LOCAL_OBJECT);
+    let catalog = parse_extension_catalog(catalog_source.as_bytes()).unwrap();
+    let object = extension_object(0, "00000000-0000-0000-0000-000000000000");
+    let objects = [&object];
+    let code = bsl_config::ConfigurationCodeSnapshot::new(
+        "44444444-4444-4444-4444-444444444444",
+        vec![
+            ConfigurationModule::new(
+                format!("{LOCAL_OBJECT}.3"),
+                "Справочник.Локальный.МодульМенеджера",
+                "Возврат 1;",
+                ModuleKind::Manager,
+                ModuleExecution::default().with_server(true),
+            )
+            .with_owner(LOCAL_OBJECT),
+        ],
+    )
+    .unwrap();
+    let mut projected = Vec::new();
+
+    project_extension_metadata_catalog(&mut projected, &catalog, &objects, &code, "Тестовое")
+        .unwrap();
+
+    assert_eq!(projected.len(), 1);
+    assert_eq!(projected[0].id(), LOCAL_OBJECT);
+    assert_eq!(projected[0].name(), "Локальный");
+    assert_eq!(
+        projected[0].manager_module(),
+        Some("Справочник.Локальный.МодульМенеджера")
+    );
+}
+
+#[test]
+fn measured_legacy_classes_bind_by_exact_name_and_class() {
+    let resources = Resources::new(&[]).unwrap();
+    let object = extension_object(1, "00000000-0000-0000-0000-000000000000");
+    for class in [
+        crate::COMMON_PICTURE,
+        crate::LANGUAGE,
+        crate::ENUMERATION,
+        CATALOG_CLASS,
+        "c045099e-13b9-4fb6-9d50-fca00202971e",
+        "2f1a5187-fb0e-4b05-9489-dc5dd6412348",
+    ] {
+        for id in [BASE_OBJECT, LOCAL_OBJECT] {
+            let mut base = HashMap::from([(
+                id.into(),
+                BaseObject {
+                    class: class.into(),
+                    name: object.name.clone(),
+                },
+            )]);
+            apply_extension_object(
+                &mut Vec::new(),
+                &base,
+                &resources,
+                class,
+                &object,
+                "Измеренное",
+            )
+            .unwrap();
+            base.get_mut(id).unwrap().name = object.name.to_lowercase();
+            assert!(
+                apply_extension_object(
+                    &mut Vec::new(),
+                    &base,
+                    &resources,
+                    class,
+                    &object,
+                    "Измеренное"
+                )
+                .is_err()
+            );
+            base.get_mut(id).unwrap().name = "Переименованный".into();
+            assert!(
+                apply_extension_object(
+                    &mut Vec::new(),
+                    &base,
+                    &resources,
+                    class,
+                    &object,
+                    "Измеренное"
+                )
+                .is_err()
+            );
+        }
+    }
+}
+
+#[test]
+fn native_catalog_attributes_keep_own_order_and_exclude_tabular_fields() {
+    let id = "92876c9e-52ff-480d-9878-5766f4f9d12c";
+    let descriptors = open_sdbl::metadata::parse_config_descriptors(
+        id,
+        include_bytes!("../tests/fixtures/catalog-own-attributes/external-users.deflate"),
+    )
+    .unwrap();
+    let owner = descriptors
+        .iter()
+        .find(|descriptor| descriptor.object_guid.as_str() == id)
+        .unwrap();
+    let rows = include_str!("../tests/fixtures/catalog-own-attributes/external-users.native.tsv")
+        .lines()
+        .map(|line| line.split('\t').collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let own = rows
+        .iter()
+        .filter(|row| row[0] == "own")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        owner
+            .catalog_attributes
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        own.iter().map(|row| row[1]).collect::<Vec<_>>()
+    );
+    let names = super::catalog_attribute_names(owner, &descriptors)
+        .unwrap()
+        .unwrap();
+    assert_eq!(names, own.iter().map(|row| row[2]).collect::<Vec<_>>());
+    for row in rows.iter().filter(|row| row[0] == "tabular") {
+        assert!(!names.iter().any(|name| name == row[2]));
+    }
+    let object = bsl_orm::MetadataObject::new(id, &owner.name, bsl_orm::MetadataKind::Catalog)
+        .with_catalog_attribute_names(names.clone())
+        .with_catalog_hierarchical(owner.catalog_hierarchical.unwrap());
+    assert_eq!(object.catalog_attribute_names(), Some(names.as_slice()));
+    assert_eq!(owner.catalog_hierarchical, Some(false));
+    assert_eq!(object.catalog_hierarchical(), Some(false));
+    let mut unknown = owner.clone();
+    unknown.catalog_attributes = None;
+    assert!(
+        super::catalog_attribute_names(&unknown, &descriptors)
+            .unwrap()
+            .is_none()
+    );
+    let mut empty = owner.clone();
+    empty.catalog_attributes = Some(vec![]);
+    assert_eq!(
+        super::catalog_attribute_names(&empty, &descriptors).unwrap(),
+        Some(vec![])
+    );
+    let mut incomplete = descriptors.clone();
+    incomplete.retain(|descriptor| {
+        descriptor.object_guid.as_str() != "d65c4485-7bac-4206-9a6c-7156f4bb876d"
+    });
+    assert!(super::catalog_attribute_names(owner, &incomplete).is_err());
+}
+
+#[test]
+fn native_catalog_sections_exclude_nested_row_fields() {
+    let id = "a2782760-dd4c-44d2-a785-814d6f610455";
+    let descriptors = open_sdbl::metadata::parse_config_descriptors(
+        id,
+        include_bytes!("../tests/fixtures/catalog-tabular-sections/user-groups.deflate"),
+    )
+    .unwrap();
+    let owner = descriptors
+        .iter()
+        .find(|descriptor| descriptor.object_guid.as_str() == id)
+        .unwrap();
+    let rows = include_str!("../tests/fixtures/catalog-tabular-sections/user-groups.native.tsv")
+        .lines()
+        .map(|line| line.split('\t').collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let sections = rows
+        .iter()
+        .filter(|row| row[0] == "section")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        owner
+            .catalog_tabular_sections
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        sections.iter().map(|row| row[1]).collect::<Vec<_>>()
+    );
+    let names = super::catalog_tabular_section_names(owner, &descriptors)
+        .unwrap()
+        .unwrap();
+    assert_eq!(names, sections.iter().map(|row| row[2]).collect::<Vec<_>>());
+    for field in rows.iter().filter(|row| row[0] == "field") {
+        assert!(!names.iter().any(|name| name == field[2]));
+    }
+    let object = bsl_orm::MetadataObject::new(id, &owner.name, bsl_orm::MetadataKind::Catalog)
+        .with_catalog_tabular_section_names(names.clone());
+    assert_eq!(
+        object.catalog_tabular_section_names(),
+        Some(names.as_slice())
+    );
+    let mut unknown = owner.clone();
+    unknown.catalog_tabular_sections = None;
+    assert_eq!(
+        super::catalog_tabular_section_names(&unknown, &descriptors).unwrap(),
+        None
+    );
+    unknown.catalog_tabular_sections = Some(vec![]);
+    assert_eq!(
+        super::catalog_tabular_section_names(&unknown, &descriptors).unwrap(),
+        Some(vec![])
+    );
+    let incomplete = descriptors
+        .iter()
+        .filter(|descriptor| {
+            descriptor.object_guid.as_str() != "6581ac1f-11ef-42b8-9f3b-590bb7546e63"
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(super::catalog_tabular_section_names(owner, &incomplete).is_err());
+}
+
+#[test]
+fn native_document_number_settings_project_all_measured_variants() {
+    use bsl_orm::{DocumentNumberSettings, DocumentNumberType};
+    for (id, bytes, number_type, number_length) in [
+        (
+            "4dbedad1-342b-54c1-9bcf-1d79091376ef",
+            include_bytes!("../tests/fixtures/document-number-settings/ProbeString.deflate")
+                .as_slice(),
+            DocumentNumberType::String,
+            9,
+        ),
+        (
+            "c96786e5-f0b2-51f7-85a5-5d3bcbff2410",
+            include_bytes!("../tests/fixtures/document-number-settings/ProbeNumeric.deflate")
+                .as_slice(),
+            DocumentNumberType::Number,
+            9,
+        ),
+        (
+            "6080fb5a-cf3e-599a-a005-37de07820830",
+            include_bytes!("../tests/fixtures/document-number-settings/ProbeDisabled.deflate")
+                .as_slice(),
+            DocumentNumberType::String,
+            0,
+        ),
+    ] {
+        let descriptors = open_sdbl::metadata::parse_config_descriptors(id, bytes).unwrap();
+        let owner = descriptors
+            .iter()
+            .find(|entry| entry.object_guid.as_str() == id)
+            .unwrap();
+        assert_eq!(
+            super::document_number_settings(owner.document_number.unwrap()),
+            Some(DocumentNumberSettings {
+                number_type,
+                number_length
+            })
+        );
+    }
+}
+
+#[test]
+fn acquired_basis_reference_guids_match_every_native_owner() {
+    use open_sdbl::metadata::{DbNames, SchemaStorage, parse_config_descriptors, resolve_metadata};
+    let mut descriptors = parse_config_descriptors(
+        "571e1bd9-0f64-4a05-a276-dba4fe242ad0",
+        include_bytes!("../tests/fixtures/document-owned-attributes/event.deflate"),
+    )
+    .unwrap();
+    descriptors.extend(
+        parse_config_descriptors(
+            "51c403a3-e062-4f0d-b39c-11989c0ffe2b",
+            include_bytes!("../tests/fixtures/document-owned-attributes/basis.deflate"),
+        )
+        .unwrap(),
+    );
+    let snapshot = resolve_metadata(
+        DbNames::from_entries(vec![]),
+        descriptors,
+        SchemaStorage {
+            tables: vec![],
+            anomalies: vec![],
+        },
+        vec![],
+    )
+    .snapshot;
+    let types = snapshot
+        .descriptors()
+        .iter()
+        .find(|entry| entry.object_guid.as_str() == "e350fdab-d2d1-45e8-bd75-a2ee410245f1")
+        .unwrap()
+        .declared_types
+        .as_ref()
+        .unwrap();
+    let expected: Vec<_> =
+        include_str!("../../../docs/research/unf-event-basis-reference-identities.tsv")
+            .lines()
+            .skip(1)
+            .map(|line| line.split('\t').nth(2).unwrap())
+            .collect();
+    assert_eq!(types.len(), 56);
+    assert_eq!(expected.len(), 56);
+    for (actual, expected) in types.iter().zip(expected) {
+        assert_eq!(actual.reference.as_ref().unwrap().as_str(), expected);
+    }
+}
+
+#[path = "global_separation_condition_tests.rs"]
+mod global_separation_condition_tests;
+
+#[cfg(test)]
+#[path = "own_extension_policy_tests.rs"]
+mod own_extension_policy;
+
+#[cfg(test)]
+#[path = "own_catalog_metadata_tests.rs"]
+mod own_catalog_metadata;

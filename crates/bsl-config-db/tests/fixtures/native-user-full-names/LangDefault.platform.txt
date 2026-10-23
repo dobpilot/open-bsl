@@ -1,0 +1,8 @@
+USER=LangDefault
+FULLNAME=Native LangDefault
+STORED.TYPE=Не определено
+STORED=
+CURRENT=English
+CURRENT.TYPE=Объект метаданных
+ENGLISH.EQUAL=YES
+PRIMARY=English

@@ -1,0 +1,1 @@
+{6,{a7177622-2cb3-5bfd-a0d7-1ae7a4a9f4d5,"Reference",11},{9893e2d6-f3f8-4d73-bb06-19bf26d216ab,"Const",12},{03f9d2d0-eae4-4098-a70e-4eb569b11fd9,"Fld",20},{9893e2d6-f3f8-4d73-bb06-19bf26d216ab,"Fld",30},{03f9d2d0-eae4-4098-a70e-4eb569b11fd9,"DataSeparationUse",1},{03f9d2d0-eae4-4098-a70e-4eb569b11fd9,"DataSeparationHolder",2}}
