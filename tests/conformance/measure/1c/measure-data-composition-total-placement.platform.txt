@@ -1,8 +1,8 @@
-ROOT	EnumDataCompositionTotalPlacement
-TYPE	DataCompositionTotalPlacement
-AUTO	Auto
-END	End
-BEGIN	Begin
-BOTH	Begin and end
-NONE	None
+ROOT	ПеречислениеРасположениеИтоговКомпоновкиДанных
+TYPE	РасположениеИтоговКомпоновкиДанных
+AUTO	Авто
+END	Конец
+BEGIN	Начало
+BOTH	Начало и конец
+NONE	Нет
 ALIASES	PASS

@@ -41,8 +41,8 @@ VSTR.FORMAT.RT.DENSE	плотно
 VSTR.FORMAT.NESTED	{"S","{""S"",""а""""б""}"}
 VSTR.FORMAT.ERR.GARBAGE	<ошибка>
 VSTR.FORMAT.VT.TWO	{"#",acf6192e-81ca-46ef-93a6-5a6968b78663,<LF>{9,<LF>{2,<LF>{0,"Имя",<LF>{"Pattern"},"",0},<LF>{1,"Возраст",<LF>{"Pattern",<LF>{"N"}<LF>},"",0}<LF>},<LF>{2,2,0,0,1,1,<LF>{1,2,<LF>{2,0,2,<LF>{"S","Аня"},<LF>{"N",7},0},<LF>{2,1,2,<LF>{"S","Боря"},<LF>{"N",9},0}<LF>},1,1},<LF>{0,0}<LF>}<LF>}
-VSTR.FORMAT.REF.TRANSIT	Ок
-VSTR.FORMAT.REF.TYPE	Ок
+VSTR.FORMAT.REF.TRANSIT	изменился
+VSTR.FORMAT.REF.TYPE	изменился
 VSTR.FORMAT.CMP.NS	{"#",acf6192e-81ca-46ef-93a6-5a6968b78663,<LF>{9,<LF>{1,<LF>{0,"К",<LF>{"Pattern",<LF>{"S"},<LF>{"N"}<LF>},"",0}<LF>},<LF>{2,1,0,0,<LF>{1,0},0,-1},<LF>{0,0}<LF>}<LF>}
 VSTR.FORMAT.CMP.SN	{"#",acf6192e-81ca-46ef-93a6-5a6968b78663,<LF>{9,<LF>{1,<LF>{0,"К",<LF>{"Pattern",<LF>{"S"},<LF>{"N"}<LF>},"",0}<LF>},<LF>{2,1,0,0,<LF>{1,0},0,-1},<LF>{0,0}<LF>}<LF>}
 VSTR.FORMAT.CMP.VALUE	{"#",f5c65050-3bbb-11d5-b988-0050bae0a95d,<LF>{"Pattern",<LF>{"S"},<LF>{"N"}<LF>}<LF>}

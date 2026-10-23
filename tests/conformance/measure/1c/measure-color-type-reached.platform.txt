@@ -1,6 +1,6 @@
-ABSOLUTE	Absolute	PASS
-STYLE	Style element	PASS
-WEB	Web color	PASS
-WINDOWS	Windows color	PASS
-AUTO	Auto color	PASS
-TYPE	ColorType
+ABSOLUTE	Абсолютный	PASS
+STYLE	Элемент стиля	PASS
+WEB	Web цвет	PASS
+WINDOWS	Windows цвет	PASS
+AUTO	Авто цвет	PASS
+TYPE	ВидЦвета

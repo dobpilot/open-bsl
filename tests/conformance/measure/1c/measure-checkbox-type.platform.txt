@@ -1,5 +1,5 @@
-AUTO	Auto	PASS
-BOX	Checkbox	PASS
-SWITCH	Switch	PASS
-TUMBLER	Tumblers	PASS
-TYPE	CheckBoxType
+AUTO	Авто	PASS
+BOX	Флажок	PASS
+SWITCH	Выключатель	PASS
+TUMBLER	Тумблер	PASS
+TYPE	ВидФлажка

@@ -1,6 +1,6 @@
-ROOT	EnumDataCompositionTextOutputType
-TYPE	DataCompositionTextOutputType
-AUTO	Auto
-OUTPUT	Output
-DONT	Do not output
+ROOT	ПеречислениеТипВыводаТекстаКомпоновкиДанных
+TYPE	ТипВыводаТекстаКомпоновкиДанных
+AUTO	Авто
+OUTPUT	Выводить
+DONT	Не выводить
 ALIASES	PASS

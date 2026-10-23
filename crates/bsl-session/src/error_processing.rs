@@ -70,14 +70,14 @@ struct ErrorProcessingSettingsObject {
 pub(crate) static ERROR_PROCESSING_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "МенеджерОбработкиОшибок",
-    type_display: "Error processing manager",
+    type_display: "Менеджер обработки ошибок",
     type_names: &["ErrorProcessingManager"],
 };
 
 pub(crate) static ERROR_PROCESSING_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "НастройкиОбработкиОшибок",
-    type_display: "Settings of error processing on the client",
+    type_display: "Настройки обработки ошибок на клиенте",
     type_names: &["ErrorProcessingSettings"],
 };
 

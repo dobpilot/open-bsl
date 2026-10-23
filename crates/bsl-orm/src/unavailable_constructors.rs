@@ -6,14 +6,14 @@ use super::*;
 pub(crate) static QUERY_SCHEMA_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "СхемаЗапроса",
-    type_display: "Query schema",
+    type_display: "Схема запроса",
     type_names: &["QuerySchema"],
 };
 
 pub(crate) static CONFIGURATION_UPDATE_DESCRIPTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ОписаниеОбновленияКонфигурации",
-    type_display: "Configuration update description",
+    type_display: "Описание обновления конфигурации",
     type_names: &["ConfigurationUpdateDescription"],
 };
 
@@ -96,7 +96,7 @@ pub(crate) fn new_standard_period(_: &mut CallContext<'_>, _: &[Value]) -> RtRes
 pub(crate) static ADJUSTED_POINT_IN_TIME_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "МоментВремениСУточнениемПериода",
-    type_display: "Point in time with period adjustment",
+    type_display: "Момент времени с уточнением периода",
     type_names: &["PointInTimeWithPeriodAdjustment"],
 };
 

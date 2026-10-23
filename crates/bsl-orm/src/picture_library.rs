@@ -16,7 +16,7 @@ struct PictureValue {
 pub(crate) static PICTURE_LIBRARY_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "БиблиотекаКартинок",
-    type_display: "Picture library",
+    type_display: "БиблиотекаКартинок",
     type_names: &["PictureLib"],
 };
 

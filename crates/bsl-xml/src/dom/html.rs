@@ -5,7 +5,7 @@ use super::*;
 pub(crate) static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЗаписьHTML",
-    type_display: "HTML writer",
+    type_display: "Запись HTML",
     type_names: &["HTMLWriter"],
 };
 
@@ -92,44 +92,44 @@ const WRITER_METHODS: &[MethodDescriptor] = &[
 pub(crate) static DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ДокументHTML",
-    type_display: "HTML document",
+    type_display: "Документ HTML",
     type_names: &["HTMLDocument"],
 };
 pub(crate) static BODY_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементТелоHTML",
-    type_display: "HTML body element",
+    type_display: "Элемент тело HTML",
     type_names: &["HTMLBodyElement"],
 };
 pub(crate) static ROOT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементРазметкаHTML",
-    type_display: "HTML Marking element",
+    type_display: "Элемент разметка HTML",
     type_names: &["HTMLHtmlElement"],
 };
 pub(crate) static HEAD_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементЗаголовокHTML",
-    type_display: "HTML Title element",
+    type_display: "Элемент заголовок HTML",
     type_names: &["HTMLHeadElement"],
 };
 pub(crate) static DIV_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементБлокHTML",
-    type_display: "HTML Block element",
+    type_display: "Элемент блок HTML",
     type_names: &["HTMLDivElement"],
 };
 pub(crate) static ELEMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементHTML",
-    type_display: "HTML element",
+    type_display: "Элемент HTML",
     type_names: &["HTMLElement"],
 };
 
 pub(crate) static DOCUMENT_TYPE_DEFINITION_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОпределениеТипаДокументаDOM",
-    type_display: "DOM document type definition",
+    type_display: "Определение типа документа DOM",
     type_names: &["DOMDocumentType"],
 };
 

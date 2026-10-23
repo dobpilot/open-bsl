@@ -45,28 +45,28 @@ pub(crate) struct QuerySelectionValue {
 pub(crate) static QUERY_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "Запрос",
-    type_display: "Query",
+    type_display: "Запрос",
     type_names: &["Query"],
 };
 
 pub(crate) static TEMP_TABLES_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "МенеджерВременныхТаблиц",
-    type_display: "Temporary Table Manager",
+    type_display: "Менеджер временных таблиц",
     type_names: &["TempTablesManager"],
 };
 
 pub(crate) static QUERY_RESULT_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "РезультатЗапроса",
-    type_display: "Query result",
+    type_display: "Результат запроса",
     type_names: &["QueryResult"],
 };
 
 pub(crate) static QUERY_SELECTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ВыборкаИзРезультатаЗапроса",
-    type_display: "Selected data from query result",
+    type_display: "Выборка из результата запроса",
     type_names: &["QueryResultSelection"],
 };
 

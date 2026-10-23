@@ -10,7 +10,7 @@ use crate::{BslValue, CallContext, ObjectProtocol, ObjectRef, RtResult, TypeDesc
 pub static PICTURE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "Картинка",
-    type_display: "Picture",
+    type_display: "Картинка",
     type_names: &["Picture"],
 };
 
@@ -31,7 +31,8 @@ impl ObjectProtocol for EmptyPicture {
     }
 
     fn display(&self) -> String {
-        "Picture".to_owned()
+        // `measure-value-presentations-ru.platform.txt`.
+        "Картинка".to_owned()
     }
 }
 

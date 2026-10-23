@@ -16,7 +16,7 @@ use crate::{
 pub(crate) static ERROR_INFO_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ИнформацияОбОшибке",
-    type_display: "Error information",
+    type_display: "Информация об ошибке",
     type_names: &["ErrorInfo"],
 };
 

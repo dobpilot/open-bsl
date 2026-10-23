@@ -33,7 +33,8 @@ fn factory() -> SessionFactory {
             "reference-test",
             vec![
                 MetadataObject::new("catalog", "ЗамерВременныхТаблиц", MetadataKind::Catalog)
-                    .with_manager_module(manager),
+                    .with_manager_module(manager)
+                    .with_reference_type_presentation("Замер временных таблиц"),
                 MetadataObject::new("other", "Другой", MetadataKind::Catalog),
             ],
         )
@@ -88,7 +89,7 @@ fn manager_reference_measurement_matches_native_1c() {
         .map(|(index, value)| {
             format!(
                 "manager.reference.{index}={}",
-                format_value(value, Some("Л=en")).unwrap()
+                format_value(value, None).unwrap()
             )
         })
         .collect::<Vec<_>>()

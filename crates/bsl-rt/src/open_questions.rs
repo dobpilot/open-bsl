@@ -3718,17 +3718,17 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     // --- ХешированиеДанных, клиент 8.3.27 -------------------------
     Anchor {
         id: "CRYPTO.HASH.ENUM.MD5",
-        expect: "MD5 hash function",
+        expect: "Хеш функция MD5",
         note: "английское представление члена ХешФункция.MD5",
     },
     Anchor {
         id: "CRYPTO.HASH.ENUM.SHA1",
-        expect: "SHA-1 hash function",
+        expect: "Хеш функция SHA1",
         note: "английское представление члена ХешФункция.SHA1",
     },
     Anchor {
         id: "CRYPTO.HASH.ENUM.SHA256",
-        expect: "SHA-256 hash function",
+        expect: "Хеш функция SHA256",
         note: "английское представление члена ХешФункция.SHA256",
     },
     Anchor {
@@ -3738,12 +3738,12 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "CRYPTO.HASH.ENUM.TYPE",
-        expect: "HashFunction",
+        expect: "ХешФункция",
         note: "тип члена ХешФункция имеет английское каноническое представление",
     },
     Anchor {
         id: "CRYPTO.HASH.OBJECT.TYPE",
-        expect: "DataHashing",
+        expect: "ХешированиеДанных",
         note: "каноническое представление типа ХешированиеДанных",
     },
     Anchor {
@@ -3753,7 +3753,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "CRYPTO.HASH.CONSTRUCTOR.ENGLISH_ALIAS",
-        expect: "DataHashing",
+        expect: "ХешированиеДанных",
         note: "английский конструктор DataHashing доступен вместе с HashFunction",
     },
     Anchor {
@@ -3875,13 +3875,13 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "HTTP.BOM.TYPE",
-        expect: "ByteOrderMarkUse",
+        expect: "ИспользованиеByteOrderMark",
         note: "каноническое представление типа перечисления — английское имя",
     },
     // --- НСтр, сервер 8.3.27 --------------------------------------
     Anchor {
         id: "NSTR.RU",
-        expect: "",
+        expect: "Привет",
         note: "без явного языка oracle-конфигурация не выбирает русское значение",
     },
     Anchor {
@@ -3891,7 +3891,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "NSTR.MULTI_LANGUAGE",
-        expect: "Hello",
+        expect: "Привет",
         note: "язык oracle-сеанса — английский",
     },
     Anchor {
@@ -3917,7 +3917,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     // --- ЧтениеТекста над потоком, сервер 8.3.27 -----------------
     Anchor {
         id: "TEXTREADER.TYPE",
-        expect: "TextReader",
+        expect: "ЧтениеТекста",
         note: "представление типа ЧтениеТекста — английское имя",
     },
     Anchor {
@@ -4450,17 +4450,17 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "HTTP.URL.ENUM.URL_DISPLAY",
-        expect: "String URL-encoding",
+        expect: "URL-кодировка строки",
         note: "представление члена КодировкаURL измерено на 8.3.27",
     },
     Anchor {
         id: "HTTP.URL.ENUM.URL_IN_URL_DISPLAY",
-        expect: "URL URL-encoding",
+        expect: "URL-кодировка URL",
         note: "представление члена URLВКодировкеURL измерено на 8.3.27",
     },
     Anchor {
         id: "HTTP.URL.ENUM.TYPE",
-        expect: "StringEncodingMethod",
+        expect: "СпособКодированияСтроки",
         note: "тип члена перечисления печатается английским именем",
     },
     Anchor {
@@ -4505,7 +4505,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "HTTP.VALUELIST.TYPE",
-        expect: "Value list",
+        expect: "Список значений",
         note: "тип СписокЗначений имеет английское представление",
     },
     Anchor {
@@ -4545,7 +4545,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "HTTP.VALUELIST.SORT.ASC",
-        expect: "a:A-first;a:A-second;b:B-value;",
+        expect: "a:A-first;a:A-second;b:B-value;c:C-value;",
         note: "СортироватьПоЗначению упорядочивает по Значение",
     },
     Anchor {
@@ -4555,12 +4555,12 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "HTTP.VALUELIST.DIRECTION.DISPLAY",
-        expect: "Ascending",
+        expect: "По возрастанию",
         note: "представление НаправлениеСортировки.Возр измерено",
     },
     Anchor {
         id: "HTTP.VALUELIST.DIRECTION.TYPE",
-        expect: "SortDirection",
+        expect: "НаправлениеСортировки",
         note: "тип направления сортировки измерен",
     },
     Anchor {
@@ -4585,7 +4585,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "HTTP.TYPECONV.DATEPART.DISPLAY",
-        expect: "Date and time",
+        expect: "Дата и время",
         note: "представление ЧастиДаты.ДатаВремя измерено",
     },
     Anchor {
@@ -4660,17 +4660,17 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "HTTP.TLS.CLIENT_WINDOWS.TYPE",
-        expect: "WindowsClientCertificate",
+        expect: "СертификатКлиентаWindows",
         note: "платформа регистрирует тип СертификатКлиентаWindows",
     },
     Anchor {
         id: "HTTP.TLS.ROOTS_FILE.INVALID_CONTENT",
-        expect: "FileCertificationAuthorityCertificates",
+        expect: "СертификатыУдостоверяющихЦентровФайл",
         note: "объект корней не валидирует содержимое файла в конструкторе",
     },
     Anchor {
         id: "HTTP.TLS.CLIENT_FILE.INVALID_CONTENT",
-        expect: "FileClientCertificate",
+        expect: "СертификатКлиентаФайл",
         note: "объект клиентского сертификата не валидирует содержимое в конструкторе",
     },
     Anchor {
@@ -4730,7 +4730,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "DATE.UNIVERSAL.LOCAL_OFFSET",
-        expect: "10800",
+        expect: "10\u{a0}800",
         note: "oracle-сеанс работает в московской зоне UTC+3",
     },
     Anchor {
@@ -4745,12 +4745,12 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "ERROR.INFO.OUTSIDE.TYPE",
-        expect: "Error information",
+        expect: "Информация об ошибке",
         note: "вне исключения возвращается объект информации об ошибке",
     },
     Anchor {
         id: "ERROR.INFO.OUTSIDE.DETAIL",
-        expect: "Unexpected error",
+        expect: "Непредвиденная ошибка",
         note: "подробное представление вне исключения непустое",
     },
     Anchor {
@@ -4985,7 +4985,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
     Anchor {
         id: "TEXTREADER.ENCODING.UNDEFINED",
-        expect: "C390C290C390C2B1",
+        expect: "D0A0D192D0A0C2B1",
         note: "Неопределено выбирает однобайтовое системное умолчание",
     },
     Anchor {

@@ -10,7 +10,7 @@ use crate::{
 pub(crate) static TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОписаниеПередаваемогоФайла",
-    type_display: "Description of file passing",
+    type_display: "Описание передаваемого файла",
     type_names: &["TransferableFileDescription"],
 };
 

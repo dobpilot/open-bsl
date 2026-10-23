@@ -1,5 +1,3 @@
-ARITY_0	OK:Array
-ARITY_1	ERROR:{DataProcessor.Замеры.Form.Форма.Form(42)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,32)}: Too many actual parameters (ПолучитьДопустимыеЧасовыеПояса)
-ALIAS	OK:Array
-COUNT_POSITIVE	Yes
-MOSCOW	Yes
+ARITY_0	OK:Массив
+ARITY_1	ERROR:{Обработка.Замеры.Форма.Форма.Форма(42)}: Ошибка компиляции при вычислении выражения или выполнении фрагмента кода: {<Неизвестный модуль>(1,32)}: Слишком много фактических параметров (ПолучитьДопустимыеЧасовыеПояса)
+ALIAS	OK:Массив

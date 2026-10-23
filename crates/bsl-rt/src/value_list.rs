@@ -10,14 +10,14 @@ use crate::{
 pub(crate) static VALUE_LIST_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СписокЗначений",
-    type_display: "Value list",
+    type_display: "Список значений",
     type_names: &["ValueList"],
 };
 
 pub(crate) static VALUE_LIST_ITEM_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементСпискаЗначений",
-    type_display: "Value list item",
+    type_display: "Элемент списка значений",
     type_names: &["ValueListItem"],
 };
 

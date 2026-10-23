@@ -12,7 +12,7 @@ use crate::{
 pub(crate) static FILE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "Файл",
-    type_display: "File",
+    type_display: "Файл",
     type_names: &["File"],
 };
 

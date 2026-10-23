@@ -1,2 +1,2 @@
-image.native.opcode32.true=Yes
-image.native.opcode32.false=No
+image.native.opcode32.true=Да
+image.native.opcode32.false=Нет

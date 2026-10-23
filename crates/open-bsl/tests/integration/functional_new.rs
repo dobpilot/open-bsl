@@ -57,7 +57,7 @@ fn functional_new_uses_registered_component_constructor() {
 "#,
         )
         .unwrap();
-    assert_eq!(text(result), "File");
+    assert_eq!(text(result), "Файл");
 }
 
 #[test]

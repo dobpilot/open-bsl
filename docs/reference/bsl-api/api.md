@@ -300,32 +300,32 @@
 | Имя | Представление типа | Дополнительные имена |
 |---|---|---|
 | `МоментВремени` | `Момент времени` | `PointInTime` |
-| `ФлагиИнтернетПочтовогоСообщения` | `InternetMailMessageFlags` | — |
-| `ОписаниеПередаваемогоФайла` | `Description of file passing` | `TransferableFileDescription` |
+| `ФлагиИнтернетПочтовогоСообщения` | `ФлагиИнтернетПочтовогоСообщения` | `InternetMailMessageFlags` |
+| `ОписаниеПередаваемогоФайла` | `Описание передаваемого файла` | `TransferableFileDescription` |
 | `МодульBSL` | `Модуль BSL` | `BSLModule` |
-| `ОбщийМодуль` | `Common module` | `CommonModule` |
-| `ОписаниеОповещения` | `Notification description` | `NotifyDescription` |
+| `ОбщийМодуль` | `Общий Модуль` | `CommonModule` |
+| `ОписаниеОповещения` | `Описание оповещения` | `NotifyDescription` |
 | `Обещание` | `Обещание` | — |
-| `Файл` | `File` | — |
-| `ФиксированныйМассив` | `Fixed array` | `FixedArray` |
-| `ФиксированнаяСтруктура` | `Fixed structure` | `FixedStructure` |
-| `ФиксированноеСоответствие` | `Fixed map` | `FixedMap` |
-| `МенеджерФоновыхЗаданий` | `Background jobs manager` | `BackgroundJobsManager` |
-| `ФоновоеЗадание` | `Background job` | `BackgroundJob` |
-| `СообщениеПользователю` | `User message` | `UserMessage` |
-| `ИнформацияОбОшибке` | `Error information` | `ErrorInfo` |
-| `СписокЗначений` | `Value list` | `ValueList` |
-| `ЭлементСпискаЗначений` | `Value list item` | `ValueListItem` |
+| `Файл` | `Файл` | `File` |
+| `ФиксированныйМассив` | `Фиксированный массив` | `FixedArray` |
+| `ФиксированнаяСтруктура` | `Фиксированная структура` | `FixedStructure` |
+| `ФиксированноеСоответствие` | `Фиксированное соответствие` | `FixedMap` |
+| `МенеджерФоновыхЗаданий` | `Менеджер фоновых заданий` | `BackgroundJobsManager` |
+| `ФоновоеЗадание` | `Фоновое задание` | `BackgroundJob` |
+| `СообщениеПользователю` | `Сообщение пользователю` | `UserMessage` |
+| `ИнформацияОбОшибке` | `Информация об ошибке` | `ErrorInfo` |
+| `СписокЗначений` | `Список значений` | `ValueList` |
+| `ЭлементСпискаЗначений` | `Элемент списка значений` | `ValueListItem` |
 | `КоллекцияИндексовТаблицыЗначений` | `Value table index collection` | `ValueTableIndexCollection` |
 | `ИндексТаблицыЗначений` | `Value table index` | `ValueTableIndex` |
-| `КвалификаторыДаты` | `Date qualifiers` | `DateQualifiers` |
-| `КвалификаторыСтроки` | `String qualifiers` | `StringQualifiers` |
-| `КвалификаторыЧисла` | `Number qualifiers` | `NumberQualifiers` |
-| `ПолеКомпоновкиДанных` | `Data composition field` | `DataCompositionField` |
-| `ПараметрКомпоновкиДанных` | `Data composition parameter` | `DataCompositionParameter` |
-| `СтандартнаяДатаНачала` | `Standard beginning date` | `StandardBeginningDate` |
-| `ФорматированнаяСтрока` | `Formatted string` | `FormattedString` |
-| `Картинка` | `Picture` | — |
+| `КвалификаторыДаты` | `Квалификаторы даты` | `DateQualifiers` |
+| `КвалификаторыСтроки` | `Квалификаторы строки` | `StringQualifiers` |
+| `КвалификаторыЧисла` | `Квалификаторы числа` | `NumberQualifiers` |
+| `ПолеКомпоновкиДанных` | `Поле компоновки данных` | `DataCompositionField` |
+| `ПараметрКомпоновкиДанных` | `Параметр компоновки данных` | `DataCompositionParameter` |
+| `СтандартнаяДатаНачала` | `Стандартная дата начала` | `StandardBeginningDate` |
+| `ФорматированнаяСтрока` | `Форматированная строка` | `FormattedString` |
+| `Картинка` | `Картинка` | `Picture` |
 
 #### Члены объектов
 
@@ -605,8 +605,8 @@
 
 | Имя | Представление типа | Дополнительные имена |
 |---|---|---|
-| `ХешированиеДанных` | `DataHashing` | — |
-| `ТокенДоступа` | `AccessToken` | — |
+| `ХешированиеДанных` | `ХешированиеДанных` | `DataHashing` |
+| `ТокенДоступа` | `ТокенДоступа` | `AccessToken` |
 
 #### Члены объектов
 
@@ -648,17 +648,17 @@
 
 | Имя | Представление типа | Дополнительные имена |
 |---|---|---|
-| `СертификатыУдостоверяющихЦентровLinux` | `LinuxCertificationAuthorityCertificates` | — |
+| `СертификатыУдостоверяющихЦентровLinux` | `СертификатыУдостоверяющихЦентровLinux` | `LinuxCertificationAuthorityCertificates` |
 | `HTTPЗапрос` | `HTTPЗапрос` | `HTTPRequest` |
 | `HTTPОтвет` | `HTTPОтвет` | `HTTPResponse` |
 | `HTTPСоединение` | `HTTPСоединение` | `HTTPConnection` |
 | `ИнтернетПрокси` | `ИнтернетПрокси` | `InternetProxy` |
 | `СертификатыУдостоверяющихЦентровОС` | `СертификатыУдостоверяющихЦентровОС` | `CertificationAuthorityCertificatesOS` |
 | `ЗащищенноеСоединениеOpenSSL` | `ЗащищенноеСоединениеOpenSSL` | `OpenSSLSecureConnection` |
-| `СертификатыУдостоверяющихЦентровФайл` | `FileCertificationAuthorityCertificates` | — |
-| `СертификатКлиентаФайл` | `FileClientCertificate` | — |
-| `СертификатКлиентаWindows` | `WindowsClientCertificate` | — |
-| `СертификатыУдостоверяющихЦентровWindows` | `WindowsCertificationAuthorityCertificates` | — |
+| `СертификатыУдостоверяющихЦентровФайл` | `СертификатыУдостоверяющихЦентровФайл` | `FileCertificationAuthorityCertificates` |
+| `СертификатКлиентаФайл` | `СертификатКлиентаФайл` | `FileClientCertificate` |
+| `СертификатКлиентаWindows` | `СертификатКлиентаWindows` | `WindowsClientCertificate` |
+| `СертификатыУдостоверяющихЦентровWindows` | `СертификатыУдостоверяющихЦентровWindows` | `WindowsCertificationAuthorityCertificates` |
 
 #### Члены объектов
 
@@ -974,18 +974,18 @@
 
 | Имя | Представление типа | Дополнительные имена |
 |---|---|---|
-| `Граница` | `Bound` | `Boundary` |
+| `Граница` | `Граница` | `Boundary` |
 | `НастройкаВторогоФактораАутентификации` | `НастройкаВторогоФактораАутентификации` | `SecondAuthenticationFactorSetting` |
 | `ОбъектМетаданныхКонфигурация` | `ОбъектМетаданныхКонфигурация` | — |
 | `КоллекцияОбъектовМетаданных` | `КоллекцияОбъектовМетаданных` | — |
-| `ОбъектМетаданныхКонфигурации` | `Metadata object` | `ОбъектМетаданных`, `MetadataObject` |
+| `ОбъектМетаданныхКонфигурации` | `Объект метаданных` | `ОбъектМетаданных`, `MetadataObject` |
 | `КоллекцияЗначенийСвойстваОбъектаМетаданных` | `КоллекцияЗначенийСвойстваОбъектаМетаданных` | — |
 | `ПеречислимыеСвойстваОбъектовМетаданных` | `ПеречислимыеСвойстваОбъектовМетаданных` | — |
-| `Metadata object enumerated property` | `Metadata object enumerated property` | — |
+| `Metadata object enumerated property` | `Перечислимое свойство объектов метаданных` | — |
 | `МенеджерыОбъектов` | `МенеджерыОбъектов` | — |
 | `МенеджерОбъекта` | `МенеджерОбъекта` | — |
 | `ПеречислениеСсылка` | `Enumeration reference` | `EnumerationRef` |
-| `ТочкиМаршрутаБизнесПроцесса` | `Business process route points` | `BusinessProcessRoutePoints` |
+| `ТочкиМаршрутаБизнесПроцесса` | `Точки маршрута бизнес-процесса` | `BusinessProcessRoutePoints` |
 | `ТочкаМаршрутаБизнесПроцессаСсылка` | `Business process route point reference` | `BusinessProcessRoutePointRef` |
 | `СсылкаКонфигурации` | `СсылкаКонфигурации` | — |
 | `ОбъектСправочникаКонфигурации` | `ОбъектСправочникаКонфигурации` | — |
@@ -993,45 +993,45 @@
 | `ДокументОбъект` | `Документ объект` | `DocumentObject` |
 | `БизнесПроцессОбъект` | `БизнесПроцессОбъект` | `BusinessProcessObject` |
 | `ОбработкаОбъект` | `Обработка объект` | `DataProcessorObject` |
-| `ОтчетОбъект` | `Report Object` | `ReportObject` |
+| `ОтчетОбъект` | `Отчет объект` | `ReportObject` |
 | `КоллекцияДвижений` | `Коллекция движений` | `RegisterRecordsCollection` |
 | `РегистрСведенийНаборЗаписей` | `Регистр сведений набор записей` | `InformationRegisterRecordSet` |
 | `ДокументТабличнаяЧасть` | `Документ табличная часть` | `DocumentTabularSection` |
 | `ДокументТабличнаяЧастьСтрока` | `Документ табличная часть строка` | `DocumentTabularSectionRow` |
 | `ПараметрыОбменаДанными` | `Параметры обмена данными` | `DataExchangeParameters` |
 | `НаборУзлов` | `Коллекция узлов` | `NodeSet` |
-| `БиблиотекаКартинок` | `Picture library` | `PictureLib` |
+| `БиблиотекаКартинок` | `БиблиотекаКартинок` | `PictureLib` |
 | `МенеджерРасширенийКонфигурации` | `МенеджерРасширенийКонфигурации` | — |
-| `МенеджерПользователейИнформационнойБазы` | `InfoBase users manager` | `InfoBaseUsersManager` |
-| `ПользовательИнформационнойБазы` | `InfoBase user` | `InfoBaseUser` |
-| `МенеджерПолитикПаролейПользователей` | `User password policy manager` | `UserPasswordPolicyManager` |
-| `ПолитикаПаролейПользователей` | `User password policy` | `UserPasswordPolicy` |
-| `МенеджерБлокировкиАутентификацииПользователейИнформационнойБазы` | `Manager of infobase users authentication lock` | `InfoBaseUserAuthenticationLockManager` |
-| `НастройкиБлокировкиАутентификацииПользователейИнформационнойБазы` | `Settings for infobase users authentication lock` | `InfoBaseUserAuthenticationLockSettings` |
-| `ГенераторСлучайныхПаролей` | `Random password generator` | `RandomPasswordGenerator` |
+| `МенеджерПользователейИнформационнойБазы` | `Менеджер пользователей` | `InfoBaseUsersManager` |
+| `ПользовательИнформационнойБазы` | `Пользователь информационной базы` | `InfoBaseUser` |
+| `МенеджерПолитикПаролейПользователей` | `Менеджер политик паролей пользователей` | `UserPasswordPolicyManager` |
+| `ПолитикаПаролейПользователей` | `Политика паролей пользователей` | `UserPasswordPolicy` |
+| `МенеджерБлокировкиАутентификацииПользователейИнформационнойБазы` | `Менеджер блокировки аутентификации пользователей информационной базы` | `InfoBaseUserAuthenticationLockManager` |
+| `НастройкиБлокировкиАутентификацииПользователейИнформационнойБазы` | `Настройки блокировки аутентификации пользователей информационной базы` | `InfoBaseUserAuthenticationLockSettings` |
+| `ГенераторСлучайныхПаролей` | `ГенераторСлучайныхПаролей` | `RandomPasswordGenerator` |
 | `МенеджерСервисовИнтеграции` | `Integration services manager` | `IntegrationServicesManager` |
 | `РасширениеКонфигурации` | `РасширениеКонфигурации` | — |
 | `ИнформацияОПроблемеПримененияРасширенияКонфигурации` | `ИнформацияОПроблемеПримененияРасширенияКонфигурации` | — |
-| `Запрос` | `Query` | — |
-| `СхемаЗапроса` | `Query schema` | `QuerySchema` |
-| `КомпоновщикНастроекКомпоновкиДанных` | `Data composition settings composer` | `DataCompositionSettingsComposer` |
-| `ИсточникДоступныхНастроекКомпоновкиДанных` | `Data composition available settings source` | `DataCompositionAvailableSettingsSource` |
-| `ОбработкаРасшифровкиКомпоновкиДанных` | `Data composition details processor` | `DataCompositionDetailsProcess` |
-| `ОписаниеОбновленияКонфигурации` | `Configuration update description` | `ConfigurationUpdateDescription` |
-| `КомпоновщикМакетаКомпоновкиДанных` | `Composer of data composition template` | `DataCompositionTemplateComposer` |
-| `ПроцессорКомпоновкиДанных` | `Data composition processor` | `DataCompositionProcessor` |
-| `ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений` | `Processor of output of data composition result in values collection` | `DataCompositionResultValueCollectionOutputProcessor` |
-| `МенеджерВременныхТаблиц` | `Temporary Table Manager` | `TempTablesManager` |
-| `РезультатЗапроса` | `Query result` | `QueryResult` |
-| `ВыборкаИзРезультатаЗапроса` | `Selected data from query result` | `QueryResultSelection` |
+| `Запрос` | `Запрос` | `Query` |
+| `СхемаЗапроса` | `Схема запроса` | `QuerySchema` |
+| `КомпоновщикНастроекКомпоновкиДанных` | `Компоновщик настроек компоновки данных` | `DataCompositionSettingsComposer` |
+| `ИсточникДоступныхНастроекКомпоновкиДанных` | `Источник доступных настроек компоновки данных` | `DataCompositionAvailableSettingsSource` |
+| `ОбработкаРасшифровкиКомпоновкиДанных` | `Обработка расшифровки компноновки данных` | `DataCompositionDetailsProcess` |
+| `ОписаниеОбновленияКонфигурации` | `Описание обновления конфигурации` | `ConfigurationUpdateDescription` |
+| `КомпоновщикМакетаКомпоновкиДанных` | `Компоновщик макета компоновки данных` | `DataCompositionTemplateComposer` |
+| `ПроцессорКомпоновкиДанных` | `Процессор компоновки данных` | `DataCompositionProcessor` |
+| `ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений` | `Процессор вывода результата компоновки данных в коллекцию значений` | `DataCompositionResultValueCollectionOutputProcessor` |
+| `МенеджерВременныхТаблиц` | `Менеджер временных таблиц` | `TempTablesManager` |
+| `РезультатЗапроса` | `Результат запроса` | `QueryResult` |
+| `ВыборкаИзРезультатаЗапроса` | `Выборка из результата запроса` | `QueryResultSelection` |
 | `СправочникВыборка` | `Catalog selection` | `CatalogSelection` |
-| `СжатиеДанных` | `Compress Data` | `Deflation` |
-| `ХранилищеЗначения` | `Value storage` | `ValueStorage` |
-| `БлокировкаДанных` | `Data lock` | `DataLock` |
-| `ЭлементБлокировкиДанных` | `Data lock item` | `DataLockItem` |
-| `СоставОбщегоРеквизита` | `Content of common attribute` | `CommonAttributeContent` |
-| `ЭлементСоставаОбщегоРеквизита` | `Common attribute content item` | `CommonAttributeContentItem` |
-| `МоментВремениСУточнениемПериода` | `Point in time with period adjustment` | `PointInTimeWithPeriodAdjustment` |
+| `СжатиеДанных` | `Сжатие данных` | `Deflation` |
+| `ХранилищеЗначения` | `Хранилище значения` | `ValueStorage` |
+| `БлокировкаДанных` | `Блокировка данных` | `DataLock` |
+| `ЭлементБлокировкиДанных` | `Элемент блокировки данных` | `DataLockItem` |
+| `СоставОбщегоРеквизита` | `Состав общего реквизита` | `CommonAttributeContent` |
+| `ЭлементСоставаОбщегоРеквизита` | `Элемент состава общего реквизита` | `CommonAttributeContentItem` |
+| `МоментВремениСУточнениемПериода` | `Момент времени с уточнением периода` | `PointInTimeWithPeriodAdjustment` |
 
 #### Члены объектов
 
@@ -1799,31 +1799,31 @@
 
 | Имя | Представление типа | Дополнительные имена |
 |---|---|---|
-| `ИдентификаторОбсужденияСистемыВзаимодействия` | `CollaborationSystemConversationID` | — |
+| `ИдентификаторОбсужденияСистемыВзаимодействия` | `ИдентификаторОбсужденияСистемыВзаимодействия` | `CollaborationSystemConversationID` |
 | `ПараметрыСеанса` | `ПараметрыСеанса` | — |
 | `СистемнаяИнформация` | `СистемнаяИнформация` | — |
-| `СеансИнформационнойБазы` | `Active session` | `InfoBaseSession` |
-| `СоединениеИнформационнойБазы` | `Active connection` | `InfoBaseConnection` |
-| `СтандартноеХранилищеНастроекМенеджер` | `Standard settings storage` | `StandardSettingsStorageManager` |
+| `СеансИнформационнойБазы` | `Активный сеанс` | `InfoBaseSession` |
+| `СоединениеИнформационнойБазы` | `Активное соединение` | `InfoBaseConnection` |
+| `СтандартноеХранилищеНастроекМенеджер` | `Стандартное хранилище настроек` | `StandardSettingsStorageManager` |
 | `СтандартноеХранилищеНастроекВыборка` | `Standard settings storage Selected data` | `StandardSettingsStorageSelection` |
-| `НастройкиНачальнойСтраницы` | `Home page settings` | `HomePageSettings` |
-| `СоставФормНачальнойСтраницы` | `Home page forms` | `HomePageForms` |
-| `МенеджерОбработкиОшибок` | `Error processing manager` | `ErrorProcessingManager` |
-| `НастройкиОбработкиОшибок` | `Settings of error processing on the client` | `ErrorProcessingSettings` |
-| `ОписаниеНастроек` | `Setting description` | `SettingsDescription` |
-| `РасписаниеРегламентногоЗадания` | `Job schedule` | `JobSchedule` |
-| `ОписаниеЗащитыОтОпасныхДействий` | `Unsafe operation protection description` | `UnsafeOperationProtectionDescription` |
-| `ИспользованиеСобытияЖурналаРегистрации` | `Event log event use` | `EventLogEventUse` |
-| `ОписаниеИспользованияСобытияДоступЖурналаРегистрации` | `Description of event log access event use` | `EventLogAccessEventUseDescription` |
-| `НастройкиКлиентскогоПриложения` | `Client application settings` | `ClientSettings` |
-| `КлиентскоеПриложение` | `Client application` | `ClientApplication` |
-| `НастройкиКомандногоИнтерфейса` | `Command interface settings` | `CommandInterfaceSettings` |
-| `НастройкиИнтерфейсаКлиентскогоПриложения` | `Panel settings` | `ClientApplicationInterfaceSettings` |
-| `НастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Client application interface composition settings` | `ClientApplicationInterfaceContentSettings` |
-| `ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Client application interface composition settings group` | `ClientApplicationInterfaceContentSettingsGroup` |
-| `ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Client application interface composition settings item` | `ClientApplicationInterfaceContentSettingsItem` |
-| `ИнформацияЭкранаКлиента` | `ClientDisplayInformation` | — |
-| `ЭлементПланировщика` | `Planner item` | `PlannerItem` |
+| `НастройкиНачальнойСтраницы` | `Настройки начальной страницы` | `HomePageSettings` |
+| `СоставФормНачальнойСтраницы` | `Состав форм начальной страницы` | `HomePageForms` |
+| `МенеджерОбработкиОшибок` | `Менеджер обработки ошибок` | `ErrorProcessingManager` |
+| `НастройкиОбработкиОшибок` | `Настройки обработки ошибок на клиенте` | `ErrorProcessingSettings` |
+| `ОписаниеНастроек` | `Описание настройки` | `SettingsDescription` |
+| `РасписаниеРегламентногоЗадания` | `Расписание задания` | `JobSchedule` |
+| `ОписаниеЗащитыОтОпасныхДействий` | `Описание защиты от опасных действий` | `UnsafeOperationProtectionDescription` |
+| `ИспользованиеСобытияЖурналаРегистрации` | `Использование события журнала регистрации` | `EventLogEventUse` |
+| `ОписаниеИспользованияСобытияДоступЖурналаРегистрации` | `Описание использования события доступ журнала регистрации` | `EventLogAccessEventUseDescription` |
+| `НастройкиКлиентскогоПриложения` | `Настройки клиентского приложения` | `ClientSettings` |
+| `КлиентскоеПриложение` | `Клиентское приложение` | `ClientApplication` |
+| `НастройкиКомандногоИнтерфейса` | `Настройки командного интерфейса` | `CommandInterfaceSettings` |
+| `НастройкиИнтерфейсаКлиентскогоПриложения` | `Настройки панелей` | `ClientApplicationInterfaceSettings` |
+| `НастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettings` |
+| `ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Группа настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettingsGroup` |
+| `ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Элемент настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettingsItem` |
+| `ИнформацияЭкранаКлиента` | `ИнформацияЭкранаКлиента` | `ClientDisplayInformation` |
+| `ЭлементПланировщика` | `Элемент планировщика` | `PlannerItem` |
 
 #### Члены объектов
 
@@ -2063,7 +2063,7 @@
 | `ГеографическаяСхема` | `Поле географической схемы` | `GeographicalSchema` |
 | `ГрафическаяСхема` | `Графическая схема` | `GraphicalSchema` |
 | `ЭлементыГрафическойСхемы` | `Элементы графической схемы` | `GraphicalSchemaItems` |
-| `Диаграмма` | `Chart` | — |
+| `Диаграмма` | `Диаграмма` | `Chart` |
 
 #### Члены объектов
 
@@ -2152,7 +2152,7 @@
 | `МенеджерФайловыхПотоков` | `Менеджер файловых потоков` | `FileStreamsManager` |
 | `ФайловыйПоток` | `Файловый поток` | `FileStream` |
 | `ПотокВПамяти` | `Файловый поток` | `MemoryStream` |
-| `ЧтениеТекста` | `TextReader` | — |
+| `ЧтениеТекста` | `ЧтениеТекста` | `TextReader` |
 
 #### Члены объектов
 
@@ -2410,19 +2410,19 @@
 
 | Имя | Представление типа | Дополнительные имена |
 |---|---|---|
-| `КаноническаяЗаписьXML` | `Canonical XML writing` | `XMLCanonicalizingWriter` |
-| `КаноническийDOM` | `DOM node canonical writing` | `DOMCanonicalization` |
-| `ПреобразованиеККаноническомуXML` | `Canonicalizing DOM document XML writer` | `ConversionToCanonicalXML` |
-| `ДокументHTML` | `HTML document` | `HTMLDocument` |
-| `ОпределениеТипаДокументаDOM` | `DOM document type definition` | `DOMDocumentType` |
-| `ЗаписьHTML` | `HTML writer` | `HTMLWriter` |
-| `ЭлементТелоHTML` | `HTML body element` | `HTMLBodyElement` |
-| `ЭлементРазметкаHTML` | `HTML Marking element` | `HTMLHtmlElement` |
-| `ЭлементЗаголовокHTML` | `HTML Title element` | `HTMLHeadElement` |
-| `ЭлементБлокHTML` | `HTML Block element` | `HTMLDivElement` |
-| `ЭлементHTML` | `HTML element` | `HTMLElement` |
-| `ТипДанныхXML` | `XML data type` | `XMLDataType` |
-| `МенеджерОбработкиСтрокиXML` | `XML string processing manager` | `XMLStringProcessingManager` |
+| `КаноническаяЗаписьXML` | `Каноническая Запись XML` | `XMLCanonicalizingWriter` |
+| `КаноническийDOM` | `Каноническая Запись Узла DOM` | `DOMCanonicalization` |
+| `ПреобразованиеККаноническомуXML` | `Каноническая Запись XML Документа DOM` | `ConversionToCanonicalXML` |
+| `ДокументHTML` | `Документ HTML` | `HTMLDocument` |
+| `ОпределениеТипаДокументаDOM` | `Определение типа документа DOM` | `DOMDocumentType` |
+| `ЗаписьHTML` | `Запись HTML` | `HTMLWriter` |
+| `ЭлементТелоHTML` | `Элемент тело HTML` | `HTMLBodyElement` |
+| `ЭлементРазметкаHTML` | `Элемент разметка HTML` | `HTMLHtmlElement` |
+| `ЭлементЗаголовокHTML` | `Элемент заголовок HTML` | `HTMLHeadElement` |
+| `ЭлементБлокHTML` | `Элемент блок HTML` | `HTMLDivElement` |
+| `ЭлементHTML` | `Элемент HTML` | `HTMLElement` |
+| `ТипДанныхXML` | `Тип данных XML` | `XMLDataType` |
+| `МенеджерОбработкиСтрокиXML` | `Менеджер обработки строки XML` | `XMLStringProcessingManager` |
 | `АннотацияXS` | `Аннотация XML Schema` | `XSAnnotation` |
 | `ИнформацияДляПриложенияXS` | `Информация для приложения XML Schema` | `XSAppInfo` |
 | `ОбъявлениеАтрибутаXS` | `Объявление атрибута XML Schema` | `XSAttributeDeclaration` |

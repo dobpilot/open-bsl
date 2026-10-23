@@ -42,7 +42,7 @@ fn dot_access_matches_the_complete_native_control() {
             .exec("Возврат Строка(Метаданные.ObjectProperties.CompatibilityMode.dOnTuSe);")
             .unwrap()
             .to_string(),
-        "DontUse"
+        "НеИспользовать"
     );
     let error = state
         .exec("Возврат Метаданные.СвойстваОбъектов.РежимСовместимости.НетТакогоЧлена;")

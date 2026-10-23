@@ -486,7 +486,7 @@ struct SettingsDescriptionObject {
 pub(crate) static STANDARD_SETTINGS_STORAGE_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "СтандартноеХранилищеНастроекМенеджер",
-    type_display: "Standard settings storage",
+    type_display: "Стандартное хранилище настроек",
     type_names: &["StandardSettingsStorageManager"],
 };
 
@@ -500,21 +500,21 @@ pub(crate) static STANDARD_SETTINGS_SELECTION_TYPE: TypeDescriptor = TypeDescrip
 pub(crate) static HOME_PAGE_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "НастройкиНачальнойСтраницы",
-    type_display: "Home page settings",
+    type_display: "Настройки начальной страницы",
     type_names: &["HomePageSettings"],
 };
 
 pub(crate) static HOME_PAGE_FORMS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "СоставФормНачальнойСтраницы",
-    type_display: "Home page forms",
+    type_display: "Состав форм начальной страницы",
     type_names: &["HomePageForms"],
 };
 
 pub(crate) static SETTINGS_DESCRIPTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "ОписаниеНастроек",
-    type_display: "Setting description",
+    type_display: "Описание настройки",
     type_names: &["SettingsDescription"],
 };
 

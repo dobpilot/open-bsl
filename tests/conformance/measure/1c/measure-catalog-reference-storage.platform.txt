@@ -1,5 +1,5 @@
-catalog.storage.reference.type=Yes
-catalog.storage.reference.equal=Yes
-catalog.storage.reference.uuid=Yes
-catalog.storage.empty.equal=Yes
-catalog.storage.uuid.equal=Yes
+catalog.storage.reference.type=Да
+catalog.storage.reference.equal=Да
+catalog.storage.reference.uuid=Да
+catalog.storage.empty.equal=Да
+catalog.storage.uuid.equal=Да

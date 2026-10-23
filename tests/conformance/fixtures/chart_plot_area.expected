@@ -1,10 +1,10 @@
 alias=YES
 mixed=YES
-presentation=Use coordinates
-value.type=ChartPlotAreaPlacement
-lookup.ru=ChartPlotAreaPlacement
-lookup.en=ChartPlotAreaPlacement
-enum.type=EnumChartPlotAreaPlacement
-enum.presentation=EnumChartPlotAreaPlacement
+presentation=Указываются координаты
+value.type=РасположениеОбластиПостроенияДиаграммы
+lookup.ru=РасположениеОбластиПостроенияДиаграммы
+lookup.en=РасположениеОбластиПостроенияДиаграммы
+enum.type=ПеречислениеРасположениеОбластиПостроенияДиаграммы
+enum.presentation=ПеречислениеРасположениеОбластиПостроенияДиаграммы
 self.equal=YES
 completed=YES

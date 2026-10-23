@@ -1,6 +1,6 @@
-ROOT	EnumSpreadsheetDocumentShiftType
-TYPE	SpreadsheetDocumentShiftType
-NONE	No shift
-VERTICAL	Vertically
-HORIZONTAL	Horizontally
+ROOT	ПеречислениеТипСмещенияТабличногоДокумента
+TYPE	ТипСмещенияТабличногоДокумента
+NONE	Без смещения
+VERTICAL	По вертикали
+HORIZONTAL	По горизонтали
 ALIASES	PASS

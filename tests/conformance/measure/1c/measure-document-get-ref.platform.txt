@@ -1,7 +1,7 @@
-document.getref.omitted=No:Yes
-document.getref.undefined=No:Yes
+document.getref.omitted=Нет:Да
+document.getref.undefined=Нет:Да
 document.getref.string=rejected
 document.getref.null=rejected
-document.getref.nil=Yes:Yes:00000000-0000-0000-0000-000000000000
-document.getref.explicit=No:Yes:12345678-1234-5678-9012-123456789012
-document.getref.alias=No:Yes:12345678-1234-5678-9012-123456789012
+document.getref.nil=Да:Да:00000000-0000-0000-0000-000000000000
+document.getref.explicit=Нет:Да:12345678-1234-5678-9012-123456789012
+document.getref.alias=Нет:Да:12345678-1234-5678-9012-123456789012

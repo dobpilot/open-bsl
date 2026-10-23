@@ -6,8 +6,8 @@ fn xml_string_processing_manager_matches_the_measured_positions() {
     let module = engine
         .compile(
             r#"
-Если Строка(ТипЗнч(ОбработкаСтрокиXML)) <> "XML string processing manager"
-    Или Строка(ОбработкаСтрокиXML) <> "XMLStringProcessingManager"
+Если Строка(ТипЗнч(ОбработкаСтрокиXML)) <> "Менеджер обработки строки XML"
+    Или Строка(ОбработкаСтрокиXML) <> "МенеджерОбработкиСтрокиXML"
     Или ОбработкаСтрокиXML.НайтиНедопустимыеСимволыXML("ABC") <> 0
     Или ОбработкаСтрокиXML.НайтиНедопустимыеСимволыXML("A" + Символ(1) + "B") <> 2
     Или ОбработкаСтрокиXML.НайтиНедопустимыеСимволыXML("A" + Символ(1) + "B", 3) <> 0

@@ -1,6 +1,6 @@
 file.begin	common-attribute-conditional-separation-shared-1
 conditional.initial_constant	false
-conditional.metadata_identity	Yes
+conditional.metadata_identity	Да
 conditional.initial_use	false
 conditional.initial_query	ok
 conditional.initial_empty_count	1

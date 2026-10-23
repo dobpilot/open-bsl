@@ -1,7 +1,7 @@
 html.document.node.name	#document
-html.document.parent.undefined	Yes
+html.document.parent.undefined	Да
 html.document.children	2
-html.root.parent.document	Yes
-html.body.parent.root	Yes
-html.text.parent.body	Yes
-html.text.owner.document	Yes
+html.root.parent.document	Да
+html.body.parent.root	Да
+html.text.parent.body	Да
+html.text.owner.document	Да

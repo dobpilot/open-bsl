@@ -5,3 +5,5 @@ copy tests/conformance/measure/1c/document-dangling-enum-filling.xml Documents/�
 copy tests/conformance/measure/1c/document-attribute-enum.xml Enums/ЗамерПеречисления.xml
 child Document ЗамерДокумента
 child Enum ЗамерПеречисления
+# Проба читает колонки структуры хранения по английским именам.
+script-variant English

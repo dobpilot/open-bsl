@@ -24,7 +24,7 @@ fn formatted_string_works_through_the_facade_in_both_spellings() {
         )
         .unwrap();
 
-    assert_eq!(text(result), "абвг|Formatted string|Да");
+    assert_eq!(text(result), "абвг|Форматированная строка|Да");
 }
 
 #[test]

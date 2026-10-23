@@ -1,7 +1,7 @@
-VALUE	Auto	ErrorMessageDisplayVariant
-VALUE	Message about error for user 	ErrorMessageDisplayVariant
-VALUE	Short error presentation 	ErrorMessageDisplayVariant
-VALUE	Detailed error presentation 	ErrorMessageDisplayVariant
+VALUE	Авто	ВариантОтображенияСообщенияОбОшибке
+VALUE	Сообщение об ошибке для пользователя 	ВариантОтображенияСообщенияОбОшибке
+VALUE	Краткое представление ошибки 	ВариантОтображенияСообщенияОбОшибке
+VALUE	Подробное представление ошибки 	ВариантОтображенияСообщенияОбОшибке
 AUTO_ALIAS	Yes
 USER_ALIAS	Yes
 BRIEF_ALIAS	Yes

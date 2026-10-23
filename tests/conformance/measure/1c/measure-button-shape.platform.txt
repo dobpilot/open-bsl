@@ -1,4 +1,4 @@
-AUTO	Auto	PASS
-USUAL	Standard	PASS
-OVAL	Rounded	PASS
-TYPE	ButtonShape
+AUTO	Авто	PASS
+USUAL	Обычная	PASS
+OVAL	Овальная	PASS
+TYPE	ФигураКнопки

@@ -183,7 +183,7 @@ fn native_content_surface_replays_without_rewriting_the_oracle() {
         .with_configuration(
             "Замер",
             "1",
-            ScriptVariant::English,
+            ScriptVariant::Russian,
             CompatibilityMode::Version8_3_24,
             [],
         )
@@ -196,7 +196,7 @@ fn native_content_surface_replays_without_rewriting_the_oracle() {
     let source = format!(
         "Перем РезультатыПробы; РезультатыПробы = Новый Массив; {source} Возврат СтрСоединить(РезультатыПробы, Символы.ПС);"
     );
-    assert_eq!(state.exec(&source).unwrap(), Value::Str(include_str!("../../../tests/conformance/measure/1c/measure-common-attribute-content-surface.platform.txt").trim_end().replace("\tYes", "\tДа").replace("\tNo", "\tНет").as_str().into()));
+    assert_eq!(state.exec(&source).unwrap(), Value::Str(include_str!("../../../tests/conformance/measure/1c/measure-common-attribute-content-surface.platform.txt").trim_end().into()));
 }
 
 #[test]
@@ -204,6 +204,14 @@ fn native_content_lookup_types_and_identity_replay() {
     let mut state = state(
         catalog()
             .with_common_attribute_content("common", entries())
+            .unwrap()
+            .with_configuration(
+                "Замер",
+                "1",
+                ScriptVariant::Russian,
+                CompatibilityMode::Version8_3_24,
+                [],
+            )
             .unwrap(),
     );
     let source = include_str!(
@@ -229,7 +237,7 @@ fn native_content_lookup_types_and_identity_replay() {
     let meaningful = |text: &str| {
         text.lines()
             .filter(|line| !line.contains("_EMPTY_REASON\t"))
-            .map(|line| line.replace("\tYes", "\tДа").replace("\tNo", "\tНет"))
+            .map(str::to_owned)
             .collect::<Vec<_>>()
     };
     assert_eq!(

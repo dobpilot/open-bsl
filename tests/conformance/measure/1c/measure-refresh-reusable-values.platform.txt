@@ -1,3 +1,3 @@
 file.begin	refresh-reusable-values-1
-REFRESH.REUSABLE.COMPLETED	Yes
+REFRESH.REUSABLE.COMPLETED	Да
 file.end	refresh-reusable-values-1

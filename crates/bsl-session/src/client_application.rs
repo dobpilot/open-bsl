@@ -103,28 +103,28 @@ struct ClientDisplayInformationObject {
 pub(crate) static CLIENT_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "НастройкиКлиентскогоПриложения",
-    type_display: "Client application settings",
+    type_display: "Настройки клиентского приложения",
     type_names: &["ClientSettings"],
 };
 
 pub(crate) static CLIENT_APPLICATION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "КлиентскоеПриложение",
-    type_display: "Client application",
+    type_display: "Клиентское приложение",
     type_names: &["ClientApplication"],
 };
 
 pub(crate) static COMMAND_INTERFACE_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "НастройкиКомандногоИнтерфейса",
-    type_display: "Command interface settings",
+    type_display: "Настройки командного интерфейса",
     type_names: &["CommandInterfaceSettings"],
 };
 
 pub(crate) static CLIENT_APPLICATION_INTERFACE_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "НастройкиИнтерфейсаКлиентскогоПриложения",
-    type_display: "Panel settings",
+    type_display: "Настройки панелей",
     type_names: &["ClientApplicationInterfaceSettings"],
 };
 
@@ -132,7 +132,7 @@ pub(crate) static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_TYPE: TypeDescri
     TypeDescriptor {
         package: "bsl-session",
         name: "НастройкиСоставаИнтерфейсаКлиентскогоПриложения",
-        type_display: "Client application interface composition settings",
+        type_display: "Настройки состава интерфейса клиентского приложения",
         type_names: &["ClientApplicationInterfaceContentSettings"],
     };
 
@@ -140,7 +140,7 @@ pub(crate) static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_GROUP_TYPE: Type
     TypeDescriptor {
         package: "bsl-session",
         name: "ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения",
-        type_display: "Client application interface composition settings group",
+        type_display: "Группа настройки состава интерфейса клиентского приложения",
         type_names: &["ClientApplicationInterfaceContentSettingsGroup"],
     };
 
@@ -148,14 +148,14 @@ pub(crate) static CLIENT_APPLICATION_INTERFACE_CONTENT_SETTINGS_ITEM_TYPE: TypeD
     TypeDescriptor {
         package: "bsl-session",
         name: "ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения",
-        type_display: "Client application interface composition settings item",
+        type_display: "Элемент настройки состава интерфейса клиентского приложения",
         type_names: &["ClientApplicationInterfaceContentSettingsItem"],
     };
 
 pub(crate) static CLIENT_DISPLAY_INFORMATION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "ИнформацияЭкранаКлиента",
-    type_display: "ClientDisplayInformation",
+    type_display: "ИнформацияЭкранаКлиента",
     type_names: &["ClientDisplayInformation"],
 };
 

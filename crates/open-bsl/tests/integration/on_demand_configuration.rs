@@ -351,7 +351,7 @@ fn background_worker_prepares_its_target_without_reading_unused_modules() {
         .unwrap();
     assert_eq!(
         engine.new_state().run(&entry).unwrap(),
-        Value::Str("Завершено".into())
+        Value::Str("Задание выполнено".into())
     );
     assert!(
         !source

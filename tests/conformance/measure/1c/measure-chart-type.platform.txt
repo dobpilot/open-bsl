@@ -1,96 +1,96 @@
-ROOT	EnumChartType
-TYPE	ChartType
-Stock	Stock
+ROOT	ПеречислениеТипДиаграммы
+TYPE	ТипДиаграммы
+Stock	Биржевая
 ALIAS_Stock	PASS
-OpenHighLowClose	Open-High"-Low-Close"
+OpenHighLowClose	Биржевая "свеча"
 ALIAS_OpenHighLowClose	PASS
-ConcaveSurface	Concave surface
+ConcaveSurface	Вогнутая поверхность
 ALIAS_ConcaveSurface	PASS
-Waterfall	Waterfall
+Waterfall	Водопад
 ALIAS_Waterfall	PASS
-Funnel	Cone
+Funnel	Воронка
 ALIAS_Funnel	PASS
-NormalizedFunnel	Standardized cone
+NormalizedFunnel	Воронка нормированная
 ALIAS_NormalizedFunnel	PASS
-NormalizedFunnel3D	Standardized volumetric cone
+NormalizedFunnel3D	Воронка нормированная объемная
 ALIAS_NormalizedFunnel3D	PASS
-Funnel3D	Volumetric cone
+Funnel3D	Воронка объемная
 ALIAS_Funnel3D	PASS
-ConvexSurface	Convex surface
+ConvexSurface	Выпуклая поверхность
 ALIAS_ConvexSurface	PASS
-Column	Column
+Column	Гистограмма
 ALIAS_Column	PASS
-Bar	Bar
+Bar	Гистограмма горизонтальная
 ALIAS_Bar	PASS
-Bar3D	Bar 3D
+Bar3D	Гистограмма горизонтальная объемная
 ALIAS_Bar3D	PASS
-NormalizedColumn	Normalized bar chart
+NormalizedColumn	Гистограмма нормированная
 ALIAS_NormalizedColumn	PASS
-NormalizedBar	Normalized horizontal bar
+NormalizedBar	Гистограмма нормированная горизонтальная
 ALIAS_NormalizedBar	PASS
-NormalizedBar3D	Normalized horizontal 3D column
+NormalizedBar3D	Гистограмма нормированная горизонтальная объемная
 ALIAS_NormalizedBar3D	PASS
-NormalizedColumn3D	Normalized 3D column
+NormalizedColumn3D	Гистограмма нормированная объемная
 ALIAS_NormalizedColumn3D	PASS
-Column3D	3D column
+Column3D	Гистограмма объемная
 ALIAS_Column3D	PASS
-StackedColumn	Stacked column
+StackedColumn	Гистограмма с накоплением
 ALIAS_StackedColumn	PASS
-StackedBar	Stacked Bar
+StackedBar	Гистограмма с накоплением горизонтальная
 ALIAS_StackedBar	PASS
-StackedBar3D	Stacked bar 3D 
+StackedBar3D	Гистограмма с накоплением горизонтальная объемная 
 ALIAS_StackedBar3D	PASS
-StackedColumn3D	Stacked column 3D
+StackedColumn3D	Гистограмма с накоплением объемная
 ALIAS_StackedColumn3D	PASS
-Line	Line
+Line	График
 ALIAS_Line	PASS
-Step	Step
+Step	График по шагам
 ALIAS_Step	PASS
-StackedLine	Stacked graph
+StackedLine	График с накоплением
 ALIAS_StackedLine	PASS
-Area	Area
+Area	График с областями
 ALIAS_Area	PASS
-StackedArea	Stacked Area
+StackedArea	График с областями и накоплением
 ALIAS_StackedArea	PASS
-NormalizedArea	Normalized area graph
+NormalizedArea	График с областями нормированный
 ALIAS_NormalizedArea	PASS
-ShadedSurface	Shaded surface
+ShadedSurface	Затененная поверхность
 ALIAS_ShadedSurface	PASS
-Gauge	Gauge
+Gauge	Измерительная
 ALIAS_Gauge	PASS
-BarGraph	Bar graph
+BarGraph	Изометрическая обычная
 ALIAS_BarGraph	PASS
-TapeGraph	Tape Graph
+TapeGraph	Изометрическая лента
 ALIAS_TapeGraph	PASS
-CeilGraph	Ceil Graph
+CeilGraph	Изометрическая непрерывная
 ALIAS_CeilGraph	PASS
-PyramidGraph	Pyramid Graph
+PyramidGraph	Изометрическая пирамида
 ALIAS_PyramidGraph	PASS
-WireframeSurface	Wire-frame surface
+WireframeSurface	Каркасная поверхность
 ALIAS_WireframeSurface	PASS
-Donut	Doughnut
+Donut	Кольцевая
 ALIAS_Donut	PASS
-Donut3D	3D doughnut
+Donut3D	Кольцевая объемная
 ALIAS_Donut3D	PASS
-Pie	Pie
+Pie	Круговая
 ALIAS_Pie	PASS
-Pie3D	Pie 3D
+Pie3D	Круговая объемная
 ALIAS_Pie3D	PASS
-Surface	Surface
+Surface	Поверхность
 ALIAS_Surface	PASS
-Bubble	Bubble
+Bubble	Пузырьковая
 ALIAS_Bubble	PASS
-RadarLine	Radar chart
+RadarLine	Радарный график
 ALIAS_RadarLine	PASS
-RadarStackedLine	Stacked radar chart
+RadarStackedLine	Радарный график с накоплением
 ALIAS_RadarStackedLine	PASS
-RadarArea	Radar area chart
+RadarArea	Радарный график с областями
 ALIAS_RadarArea	PASS
-RadarStackedArea	Stacked radar area chart
+RadarStackedArea	Радарный график с областями и накоплением
 ALIAS_RadarStackedArea	PASS
-RadarNormalizedArea	Normalized radar area chart
+RadarNormalizedArea	Радарный график с областями нормированный
 ALIAS_RadarNormalizedArea	PASS
-Honeycomb	Honeycomb
+Honeycomb	Сотовая
 ALIAS_Honeycomb	PASS
-Scatter	Scatter
+Scatter	Точечная
 ALIAS_Scatter	PASS

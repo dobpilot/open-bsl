@@ -26,7 +26,7 @@ pub(super) static TYPE: TypeDescriptor = TypeDescriptor {
 pub(super) static REPORT_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ОтчетОбъект",
-    type_display: "Report Object",
+    type_display: "Отчет объект",
     type_names: &["ReportObject"],
 };
 

@@ -1,7 +1,7 @@
-ROOT	EnumDataCompositionAttributesPlacement
-TYPE	DataCompositionAttributesPlacement
-TOGETHER	Together
-WITH_OWNER	With owner
-SPECIAL	In special position
-SEPARATELY	Separately
+ROOT	ПеречислениеРасположениеРеквизитовКомпоновкиДанных
+TYPE	РасположениеРеквизитовКомпоновкиДанных
+TOGETHER	Вместе
+WITH_OWNER	Вместе с владельцем
+SPECIAL	В специальной позиции
+SEPARATELY	Отдельно
 ALIASES	PASS

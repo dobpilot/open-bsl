@@ -1,25 +1,25 @@
-extension.purpose.Исправление	Patch
-extension.purpose.type.Исправление	Configuration extension purpose
-Configuration extension purpose
-extension.purpose.Адаптация	Customization
-extension.purpose.type.Адаптация	Configuration extension purpose
-Configuration extension purpose
-extension.purpose.Дополнение	AddOn
-extension.purpose.type.Дополнение	Configuration extension purpose
-Configuration extension purpose
-extension.purpose.Patch	Patch
-extension.purpose.type.Patch	Configuration extension purpose
-Configuration extension purpose
-extension.purpose.Customization	Customization
-extension.purpose.type.Customization	Configuration extension purpose
-Configuration extension purpose
-extension.purpose.AddOn	AddOn
-extension.purpose.type.AddOn	Configuration extension purpose
-Configuration extension purpose
+extension.purpose.Исправление	Исправление
+extension.purpose.type.Исправление	Назначение расширения конфигурации
+Назначение расширения конфигурации
+extension.purpose.Адаптация	Адаптация
+extension.purpose.type.Адаптация	Назначение расширения конфигурации
+Назначение расширения конфигурации
+extension.purpose.Дополнение	Дополнение
+extension.purpose.type.Дополнение	Назначение расширения конфигурации
+Назначение расширения конфигурации
+extension.purpose.Patch	Исправление
+extension.purpose.type.Patch	Назначение расширения конфигурации
+Назначение расширения конфигурации
+extension.purpose.Customization	Адаптация
+extension.purpose.type.Customization	Назначение расширения конфигурации
+Назначение расширения конфигурации
+extension.purpose.AddOn	Дополнение
+extension.purpose.type.AddOn	Назначение расширения конфигурации
+Назначение расширения конфигурации
 extension.purpose.alias	1
 extension.purpose.global	rejected
 extension.purpose.type.lookup.НазначениеРасширенияКонфигурации	rejected
 extension.purpose.type.lookup.ConfigurationExtensionPurpose	rejected
 extension.purpose.type.lookup.Configuration extension purpose	rejected
-extension.purpose.namespace	MetadataObjectsPropertyEnumed
-extension.purpose.namespace.type	Metadata object enumerated property
+extension.purpose.namespace	ПеречислимоеСвойствоОбъектовМетаданных
+extension.purpose.namespace.type	Перечислимое свойство объектов метаданных

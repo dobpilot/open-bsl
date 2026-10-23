@@ -1,2 +1,2 @@
-ADDITIONAL_SHOW.DONT_USE	AdditionalShowMode	Do not use	Yes
-ADDITIONAL_SHOW.IRRELEVANCE	AdditionalShowMode	Irrelevance	Yes
+ADDITIONAL_SHOW.DONT_USE	ДополнительныйРежимОтображения	Не использовать	Yes
+ADDITIONAL_SHOW.IRRELEVANCE	ДополнительныйРежимОтображения	Неактуальность	Yes

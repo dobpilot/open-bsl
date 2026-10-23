@@ -1,38 +1,38 @@
 file.begin	compatibility-mode-1
-COMPATIBILITY.CONFIGURATION.TYPE	Compatibility mode
-COMPATIBILITY.CONFIGURATION.VALUE	DontUse
-COMPATIBILITY.VERSION_8_1	Compatibility mode:Version8_1
-COMPATIBILITY.VERSION_8_2_13	Compatibility mode:Version8_2_13
-COMPATIBILITY.VERSION_8_2_16	Compatibility mode:Version8_2_16
-COMPATIBILITY.VERSION_8_3_1	Compatibility mode:Version8_3_1
-COMPATIBILITY.VERSION_8_3_2	Compatibility mode:Version8_3_2
-COMPATIBILITY.VERSION_8_3_3	Compatibility mode:Version8_3_3
-COMPATIBILITY.VERSION_8_3_4	Compatibility mode:Version8_3_4
-COMPATIBILITY.VERSION_8_3_5	Compatibility mode:Version8_3_5
-COMPATIBILITY.VERSION_8_3_6	Compatibility mode:Version8_3_6
-COMPATIBILITY.VERSION_8_3_7	Compatibility mode:Version8_3_7
-COMPATIBILITY.VERSION_8_3_8	Compatibility mode:Version8_3_8
-COMPATIBILITY.VERSION_8_3_9	Compatibility mode:Version8_3_9
-COMPATIBILITY.VERSION_8_3_10	Compatibility mode:Version8_3_10
-COMPATIBILITY.VERSION_8_3_11	Compatibility mode:Version8_3_11
-COMPATIBILITY.VERSION_8_3_12	Compatibility mode:Version8_3_12
-COMPATIBILITY.VERSION_8_3_13	Compatibility mode:Version8_3_13
-COMPATIBILITY.VERSION_8_3_14	Compatibility mode:Version8_3_14
-COMPATIBILITY.VERSION_8_3_15	Compatibility mode:Version8_3_15
-COMPATIBILITY.VERSION_8_3_16	Compatibility mode:Version8_3_16
-COMPATIBILITY.VERSION_8_3_17	Compatibility mode:Version8_3_17
-COMPATIBILITY.VERSION_8_3_18	Compatibility mode:Version8_3_18
-COMPATIBILITY.VERSION_8_3_19	Compatibility mode:Version8_3_19
-COMPATIBILITY.VERSION_8_3_20	Compatibility mode:Version8_3_20
-COMPATIBILITY.VERSION_8_3_21	Compatibility mode:Version8_3_21
-COMPATIBILITY.VERSION_8_3_22	Compatibility mode:Version8_3_22
-COMPATIBILITY.VERSION_8_3_23	Compatibility mode:Version8_3_23
-COMPATIBILITY.VERSION_8_3_24	Compatibility mode:Version8_3_24
-COMPATIBILITY.VERSION_8_3_25	Compatibility mode:Version8_3_25
-COMPATIBILITY.VERSION_8_3_26	Compatibility mode:Version8_3_26
-COMPATIBILITY.DONT_USE	Compatibility mode:DontUse
-COMPATIBILITY.META.STRING	MetadataObjectsPropertyEnumed
-COMPATIBILITY.META.TYPE	Metadata object enumerated property
+COMPATIBILITY.CONFIGURATION.TYPE	Режим совместимости
+COMPATIBILITY.CONFIGURATION.VALUE	НеИспользовать
+COMPATIBILITY.VERSION_8_1	Режим совместимости:Версия8_1
+COMPATIBILITY.VERSION_8_2_13	Режим совместимости:Версия8_2_13
+COMPATIBILITY.VERSION_8_2_16	Режим совместимости:Версия8_2_16
+COMPATIBILITY.VERSION_8_3_1	Режим совместимости:Версия8_3_1
+COMPATIBILITY.VERSION_8_3_2	Режим совместимости:Версия8_3_2
+COMPATIBILITY.VERSION_8_3_3	Режим совместимости:Версия8_3_3
+COMPATIBILITY.VERSION_8_3_4	Режим совместимости:Версия8_3_4
+COMPATIBILITY.VERSION_8_3_5	Режим совместимости:Версия8_3_5
+COMPATIBILITY.VERSION_8_3_6	Режим совместимости:Версия8_3_6
+COMPATIBILITY.VERSION_8_3_7	Режим совместимости:Версия8_3_7
+COMPATIBILITY.VERSION_8_3_8	Режим совместимости:Версия8_3_8
+COMPATIBILITY.VERSION_8_3_9	Режим совместимости:Версия8_3_9
+COMPATIBILITY.VERSION_8_3_10	Режим совместимости:Версия8_3_10
+COMPATIBILITY.VERSION_8_3_11	Режим совместимости:Версия8_3_11
+COMPATIBILITY.VERSION_8_3_12	Режим совместимости:Версия8_3_12
+COMPATIBILITY.VERSION_8_3_13	Режим совместимости:Версия8_3_13
+COMPATIBILITY.VERSION_8_3_14	Режим совместимости:Версия8_3_14
+COMPATIBILITY.VERSION_8_3_15	Режим совместимости:Версия8_3_15
+COMPATIBILITY.VERSION_8_3_16	Режим совместимости:Версия8_3_16
+COMPATIBILITY.VERSION_8_3_17	Режим совместимости:Версия8_3_17
+COMPATIBILITY.VERSION_8_3_18	Режим совместимости:Версия8_3_18
+COMPATIBILITY.VERSION_8_3_19	Режим совместимости:Версия8_3_19
+COMPATIBILITY.VERSION_8_3_20	Режим совместимости:Версия8_3_20
+COMPATIBILITY.VERSION_8_3_21	Режим совместимости:Версия8_3_21
+COMPATIBILITY.VERSION_8_3_22	Режим совместимости:Версия8_3_22
+COMPATIBILITY.VERSION_8_3_23	Режим совместимости:Версия8_3_23
+COMPATIBILITY.VERSION_8_3_24	Режим совместимости:Версия8_3_24
+COMPATIBILITY.VERSION_8_3_25	Режим совместимости:Версия8_3_25
+COMPATIBILITY.VERSION_8_3_26	Режим совместимости:Версия8_3_26
+COMPATIBILITY.DONT_USE	Режим совместимости:НеИспользовать
+COMPATIBILITY.META.STRING	ПеречислимоеСвойствоОбъектовМетаданных
+COMPATIBILITY.META.TYPE	Перечислимое свойство объектов метаданных
 COMPATIBILITY.TYPE.RU	ERROR
 COMPATIBILITY.TYPE.EN	ERROR
 file.end	compatibility-mode-1

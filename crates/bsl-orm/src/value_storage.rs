@@ -16,14 +16,14 @@ pub(crate) struct ValueStorageValue {
 pub(crate) static DEFLATION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "СжатиеДанных",
-    type_display: "Compress Data",
+    type_display: "Сжатие данных",
     type_names: &["Deflation"],
 };
 
 pub(crate) static VALUE_STORAGE_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ХранилищеЗначения",
-    type_display: "Value storage",
+    type_display: "Хранилище значения",
     type_names: &["ValueStorage"],
 };
 

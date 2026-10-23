@@ -1,7 +1,7 @@
-gantt_stretch.root	EnumGanttChartVerticalStretch
-gantt_stretch.type	GanttChartVerticalStretch
-gantt_stretch.None	No
-gantt_stretch.StretchRows	Stretch rows
-gantt_stretch.StretchRowsAndData	Stretch rows and data
+gantt_stretch.root	ПеречислениеРастягиваниеПоВертикалиДиаграммыГанта
+gantt_stretch.type	РастягиваниеПоВертикалиДиаграммыГанта
+gantt_stretch.None	Не растягивать
+gantt_stretch.StretchRows	Растягивать строки
+gantt_stretch.StretchRowsAndData	Растягивать строки и данные
 gantt_stretch.aliases	PASS
 gantt_stretch.folded	PASS

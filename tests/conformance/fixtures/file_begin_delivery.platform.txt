@@ -1,0 +1,9 @@
+file.begin	file-begin-delivery-1
+delivery.return	second|count=0
+delivery.init.ru	same|second|returned=1
+delivery.init.en	same|second|returned=1
+delivery.hidden	error|Информация об ошибке|standard=1|returned=1
+delivery.readonly	error|Информация об ошибке|standard=1|returned=1
+delivery.time	error|Информация об ошибке|standard=1|returned=1
+delivery.utc	error|Информация об ошибке|standard=1|returned=1
+file.end	file-begin-delivery-1

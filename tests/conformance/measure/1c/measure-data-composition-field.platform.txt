@@ -1,12 +1,12 @@
 file.begin	data-composition-field-1
 DCF.STRING	Документ.Ссылка
 DCF.STRING.CASE	документ.ссылка
-DCF.TYPE	Data composition field
-DCF.EQUAL.SAME	Yes
-DCF.EQUAL.CASE	Yes
-DCF.EQUAL.DIFFERENT	No
+DCF.TYPE	Поле компоновки данных
+DCF.EQUAL.SAME	Да
+DCF.EQUAL.CASE	Да
+DCF.EQUAL.DIFFERENT	Нет
 DCF.STRING.EMPTY	
-DCF.EQUAL.EMPTY	Yes
-DCF.FILLED.EMPTY	No
-DCF.FILLED.PATH	Yes
+DCF.EQUAL.EMPTY	Да
+DCF.FILLED.EMPTY	Нет
+DCF.FILLED.PATH	Да
 file.end	data-composition-field-1

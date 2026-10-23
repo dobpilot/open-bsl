@@ -1,5 +1,5 @@
 file.begin	configuration-changed-1
-CONFIG.CHANGED.VALUE	No
-CONFIG.CHANGED.TYPE	Boolean
-CONFIG.CHANGED.ALIAS	Yes
+CONFIG.CHANGED.VALUE	Нет
+CONFIG.CHANGED.TYPE	Булево
+CONFIG.CHANGED.ALIAS	Да
 file.end	configuration-changed-1

@@ -13,6 +13,6 @@ pub static BSL_MODULE_TYPE: crate::TypeDescriptor = crate::TypeDescriptor {
 pub static COMMON_MODULE_TYPE: crate::TypeDescriptor = crate::TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОбщийМодуль",
-    type_display: "Common module",
+    type_display: "Общий Модуль",
     type_names: &["CommonModule"],
 };

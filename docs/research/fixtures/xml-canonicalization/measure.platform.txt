@@ -1,4 +1,4 @@
-canonical.object.type	Canonicalizing DOM document XML writer
+canonical.object.type	Каноническая Запись XML Документа DOM
 canonical.object.type.alias	1
 canonical.КаноническийXML	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
 canonical.КаноническийXMLСКомментариями	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;<!--inside--></r>\n<!--after-->

@@ -1,6 +1,6 @@
-ROOT	EnumDataCompositionGroupType
-TYPE	DataCompositionGroupType
-HIERARCHY	Hierarchy
-HIERARCHY_ONLY	Hierarchy only
-ITEMS	Elements
+ROOT	ПеречислениеТипГруппировкиКомпоновкиДанных
+TYPE	ТипГруппировкиКомпоновкиДанных
+HIERARCHY	Иерархия
+HIERARCHY_ONLY	Только иерархия
+ITEMS	Без иерархии
 ALIASES	PASS

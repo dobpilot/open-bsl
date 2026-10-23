@@ -49,7 +49,7 @@ fn access_token_hs256_matches_native_aliases_type_and_presentation() {
             .new_state()
             .exec("Возврат Строка(ТипЗнч(AccessTokenSignAlgorithm));")
             .unwrap(),
-        open_bsl::Value::Str("EnumAccessTokenSignAlgorithm".into())
+        open_bsl::Value::Str("ПеречислениеАлгоритмПодписиТокенаДоступа".into())
     );
     assert_eq!(
         engine

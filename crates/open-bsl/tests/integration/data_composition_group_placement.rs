@@ -5,16 +5,16 @@ fn group_placement_matches_native_aliases_types_and_presentations() {
     let engine = Engine::builder().build().unwrap();
     let mut state = engine.new_state();
     for (russian, english, presentation) in [
-        ("Конец", "End", "End"),
-        ("Начало", "Begin", "Begin"),
-        ("НачалоИКонец", "BeginAndEnd", "Begin and end"),
-        ("Нет", "None", "None"),
+        ("Конец", "End", "Конец"),
+        ("Начало", "Begin", "Начало"),
+        ("НачалоИКонец", "BeginAndEnd", "Начало и конец"),
+        ("Нет", "None", "Нет"),
     ] {
         let source = format!(
             "ЗначениеПробы = РасположениеГруппировкиКомпоновкиДанных.{russian};
             Возврат ЗначениеПробы = DataCompositionGroupPlacement.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"DataCompositionGroupPlacement\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"РасположениеГруппировкиКомпоновкиДанных\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"DataCompositionGroupPlacement\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"РасположениеГруппировкиКомпоновкиДанных\");"
         );
@@ -24,9 +24,9 @@ fn group_placement_matches_native_aliases_types_and_presentations() {
         state
             .exec(
                 "Возврат Строка(РасположениеГруппировкиКомпоновкиДанных)
-                    = \"EnumDataCompositionGroupPlacement\"
+                    = \"ПеречислениеРасположениеГруппировкиКомпоновкиДанных\"
                     И Строка(ТипЗнч(DataCompositionGroupPlacement))
-                    = \"EnumDataCompositionGroupPlacement\";",
+                    = \"ПеречислениеРасположениеГруппировкиКомпоновкиДанных\";",
             )
             .unwrap(),
         Value::Boolean(true)

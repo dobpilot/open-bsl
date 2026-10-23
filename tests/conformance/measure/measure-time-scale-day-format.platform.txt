@@ -1,8 +1,8 @@
-time_scale_day_format.root	EnumTimeScaleDayFormat
-time_scale_day_format.type	TimeScaleDayFormat
-time_scale_day_format.MonthDay	Day of month
-time_scale_day_format.WeekDay	Day of week
-time_scale_day_format.MonthDayWeekDay	Day of month + day of week
-time_scale_day_format.WeekDayMonthDay	Day of week + day of month
+time_scale_day_format.root	ПеречислениеФорматДняШкалыВремени
+time_scale_day_format.type	ФорматДняШкалыВремени
+time_scale_day_format.MonthDay	День месяца
+time_scale_day_format.WeekDay	День недели
+time_scale_day_format.MonthDayWeekDay	День месяца + день недели
+time_scale_day_format.WeekDayMonthDay	День недели + день месяца
 time_scale_day_format.aliases	PASS
 time_scale_day_format.folded	PASS

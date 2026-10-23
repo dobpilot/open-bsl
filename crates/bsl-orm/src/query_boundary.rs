@@ -11,7 +11,7 @@ struct Boundary {
 pub(crate) static TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "Граница",
-    type_display: "Bound",
+    type_display: "Граница",
     type_names: &["Boundary"],
 };
 

@@ -1,10 +1,10 @@
-ROOT	EnumDataCompositionDetailsProcessingAction
-TYPE	DataCompositionDetailsProcessingAction
-NONE	None
-OPEN	Open value 
-FILTER	Filter
-APPEARANCE	Apply appearance
-DRILL	Drill down
-GROUP	Group
-ORDER	Order
+ROOT	ПеречислениеДействиеОбработкиРасшифровкиКомпоновкиДанных
+TYPE	ДействиеОбработкиРасшифровкиКомпоновкиДанных
+NONE	Нет
+OPEN	Открыть значение 
+FILTER	Отфильтровать
+APPEARANCE	Оформить
+DRILL	Расшифровать
+GROUP	Сгруппировать
+ORDER	Упорядочить
 ALIASES	PASS

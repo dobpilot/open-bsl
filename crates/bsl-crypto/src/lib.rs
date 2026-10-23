@@ -18,7 +18,7 @@ pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub static DATA_HASHING_TYPE: TypeDescriptor = TypeDescriptor {
     package: PACKAGE_NAME,
     name: "ХешированиеДанных",
-    type_display: "DataHashing",
+    type_display: "ХешированиеДанных",
     type_names: &["DataHashing"],
 };
 
@@ -27,7 +27,7 @@ pub static DATA_HASHING_TYPE: TypeDescriptor = TypeDescriptor {
 pub static ACCESS_TOKEN_TYPE: TypeDescriptor = TypeDescriptor {
     package: PACKAGE_NAME,
     name: "ТокенДоступа",
-    type_display: "AccessToken",
+    type_display: "ТокенДоступа",
     type_names: &["AccessToken"],
 };
 

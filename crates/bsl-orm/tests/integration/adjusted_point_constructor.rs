@@ -33,7 +33,7 @@ fn dormant_adjusted_point_constructor_accepts_measured_aliases_and_arities() {
 #[test]
 fn adjusted_point_type_aliases_match_the_native_type_presentation() {
     let engine = engine();
-    let module = engine.compile("Возврат Тип(\"МоментВремениСУточнениемПериода\") = Тип(\"PointInTimeWithPeriodAdjustment\") И Строка(Тип(\"PointInTimeWithPeriodAdjustment\")) = \"Point in time with period adjustment\";").unwrap();
+    let module = engine.compile("Возврат Тип(\"МоментВремениСУточнениемПериода\") = Тип(\"PointInTimeWithPeriodAdjustment\") И Строка(Тип(\"PointInTimeWithPeriodAdjustment\")) = \"Момент времени с уточнением периода\";").unwrap();
     assert_eq!(
         engine.new_state().run(&module).unwrap(),
         Value::Boolean(true)

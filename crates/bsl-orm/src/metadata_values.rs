@@ -79,7 +79,7 @@ pub(crate) static METADATA_COLLECTION_TYPE: TypeDescriptor =
 pub(crate) static METADATA_VALUE_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ОбъектМетаданныхКонфигурации",
-    type_display: "Metadata object",
+    type_display: "Объект метаданных",
     type_names: &["ОбъектМетаданных", "MetadataObject"],
 };
 
@@ -92,7 +92,7 @@ pub(crate) static METADATA_OBJECT_PROPERTIES_TYPE: TypeDescriptor =
 pub(crate) static COMPATIBILITY_MODE_PROPERTY_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "Metadata object enumerated property",
-    type_display: "Metadata object enumerated property",
+    type_display: "Перечислимое свойство объектов метаданных",
     type_names: &[],
 };
 
@@ -373,8 +373,10 @@ impl ObjectProtocol for MetadataPropertyEnumeration {
             .ok_or_else(|| RtError::UnknownProperty(member.to_string()))
     }
 
+    // Представление измерено в русском окружении замеров
+    // (`configuration-extension-purpose`).
     fn display(&self) -> String {
-        "MetadataObjectsPropertyEnumed".into()
+        "ПеречислимоеСвойствоОбъектовМетаданных".into()
     }
 }
 

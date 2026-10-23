@@ -1,5 +1,5 @@
 file.begin	current-infobase-session-1
-SESSION.INFOBASE.TYPE	Active session
-SESSION.INFOBASE.FOREGROUND_JOB	Undefined
-SESSION.INFOBASE.BACKGROUND_JOB	Active session|Background job|ЗамерыФоновыхЗаданий.КонтекстСеансаВХранилище
+SESSION.INFOBASE.TYPE	Активный сеанс
+SESSION.INFOBASE.FOREGROUND_JOB	Не определено
+SESSION.INFOBASE.BACKGROUND_JOB	Активный сеанс|Фоновое задание|ЗамерыФоновыхЗаданий.КонтекстСеансаВХранилище
 file.end	current-infobase-session-1

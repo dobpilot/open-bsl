@@ -1,21 +1,21 @@
 file.begin	common-attribute-conditional-separation-number-1
 conditional.initial_constant	false
-conditional.metadata_identity	Yes
+conditional.metadata_identity	Да
 conditional.initial_use	false
 conditional.initial_query	ok
 conditional.initial_empty_count	1
 conditional.constant_after_write	true
-conditional.query_after_write	error:{DataProcessor.Замеры.Form.Форма.Form(29)}: Error calling context method (Execute): Query execution error: Cannot use a table because some of the separators with independent usage of separated data are not specified
-object: 'Catalog.ЗамерВременныхТаблиц'
+conditional.query_after_write	error:{Обработка.Замеры.Форма.Форма.Форма(29)}: Ошибка при вызове метода контекста (Выполнить): Ошибка выполнения запроса: Нельзя использовать таблицу без указания всех разделителей с независимым использованием разделяемых данных
+объект: 'Справочник.ЗамерВременныхТаблиц'
 conditional.query_use_true	ok
-conditional.query_use_false	error:{DataProcessor.Замеры.Form.Форма.Form(29)}: Error calling context method (Execute): Query execution error: Cannot use a table because some of the separators with independent usage of separated data are not specified
-object: 'Catalog.ЗамерВременныхТаблиц'
+conditional.query_use_false	error:{Обработка.Замеры.Форма.Форма.Форма(29)}: Ошибка при вызове метода контекста (Выполнить): Ошибка выполнения запроса: Нельзя использовать таблицу без указания всех разделителей с независимым использованием разделяемых данных
+объект: 'Справочник.ЗамерВременныхТаблиц'
 conditional.enabled_b_count	1
 conditional.enabled_b_names	B;
 conditional.disabled_b_count	1
 conditional.disabled_c_count	1
 conditional.disabled_c_names	empty;
 conditional.disabled_use_false_count	1
-conditional.reenabled_use_false_query	error:{DataProcessor.Замеры.Form.Форма.Form(29)}: Error calling context method (Execute): Query execution error: Cannot use a table because some of the separators with independent usage of separated data are not specified
-object: 'Catalog.ЗамерВременныхТаблиц'
+conditional.reenabled_use_false_query	error:{Обработка.Замеры.Форма.Форма.Форма(29)}: Ошибка при вызове метода контекста (Выполнить): Ошибка выполнения запроса: Нельзя использовать таблицу без указания всех разделителей с независимым использованием разделяемых данных
+объект: 'Справочник.ЗамерВременныхТаблиц'
 file.end	common-attribute-conditional-separation-number-1

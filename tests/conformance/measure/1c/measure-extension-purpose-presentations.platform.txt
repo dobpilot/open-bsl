@@ -1,0 +1,11 @@
+file.begin	extension-purpose-presentations-1
+EXTENSION_PURPOSE.CONTAINER_TYPE	Перечислимое свойство объектов метаданных
+EXTENSION_PURPOSE.TYPE	Назначение расширения конфигурации
+Назначение расширения конфигурации
+EXTENSION_PURPOSE.PATCH	Исправление
+EXTENSION_PURPOSE.CUSTOMIZATION	Адаптация
+EXTENSION_PURPOSE.ADD_ON	Дополнение
+COMPATIBILITY_MODE.TYPE	Режим совместимости
+COMPATIBILITY_MODE.VERSION8_3_24	Версия8_3_24
+COMPATIBILITY_MODE.DONT_USE	НеИспользовать
+file.end	extension-purpose-presentations-1

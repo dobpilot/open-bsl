@@ -1,0 +1,10 @@
+alias=YES
+mixed=YES
+presentation=Без узора
+value.type=ТипУзораТабличногоДокумента
+lookup.ru=ТипУзораТабличногоДокумента
+lookup.en=ТипУзораТабличногоДокумента
+enum.type=ПеречислениеТипУзораТабличногоДокумента
+enum.presentation=ПеречислениеТипУзораТабличногоДокумента
+self.equal=YES
+completed=YES

@@ -1,6 +1,6 @@
-TYPE	ButtonRepresentation
-AUTO	Auto
-PICTURE	Icon
-PICTURE_AND_TEXT	Icon and text
-TEXT	Text
-ALIASES_EQUAL	Yes
+TYPE	ОтображениеКнопки
+AUTO	Авто
+PICTURE	Картинка
+PICTURE_AND_TEXT	Картинка и текст
+TEXT	Текст
+ALIASES_EQUAL	Да

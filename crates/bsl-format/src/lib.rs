@@ -559,6 +559,12 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
         BslValue::Null => Ok(String::new()),
         BslValue::Object(object) => match object.as_ref() {
             bsl_rt::BslObject::Extension(component) => component.presentation(),
+            // Пустое описание типов печатается пустой строкой:
+            // `measure-value-presentations-ru.platform.txt`.
+            bsl_rt::BslObject::TypeDescription(types) if types.is_empty() => Ok(String::new()),
+            bsl_rt::BslObject::QualifiedTypeDescription(types) if types.is_empty() => {
+                Ok(String::new())
+            }
             bsl_rt::BslObject::TypeDescription(types) => match types.as_slice() {
                 [
                     bsl_rt::TypeRef::Native(id @ (bsl_rt::TypeId::String | bsl_rt::TypeId::Number)),

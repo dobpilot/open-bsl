@@ -1,2 +1,2 @@
-NONE	None	PASS
-TYPE	DuplexPrintingType
+NONE	Нет	PASS
+TYPE	ТипДвустороннейПечати

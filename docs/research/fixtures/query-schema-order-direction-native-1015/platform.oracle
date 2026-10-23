@@ -1,9 +1,9 @@
-﻿enum.type=QuerySchemaOrderDirection
-enum.presentation=Ascending
+enum.type=НаправлениеПорядкаСхемыЗапроса
+enum.presentation=По возрастанию
 enum.alias.asc=ERROR
 enum.alias.ascending=YES
 enum.type.lookup=YES
 enum.desc.alias=YES
-enum.desc.presentation=Descending
+enum.desc.presentation=По убыванию
 enum.distinct=YES
 completed=YES

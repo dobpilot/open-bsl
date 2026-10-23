@@ -1,6 +1,6 @@
-﻿enum.type=SpreadsheetDocumentDetailUse
-enum.none.presentation=No processing
-enum.cell.presentation=Cell
+enum.type=ИспользованиеРасшифровкиТабличногоДокумента
+enum.none.presentation=Без обработки
+enum.cell.presentation=Ячейка
 enum.aliases=YES
 enum.type.lookup=YES
 enum.distinct=YES

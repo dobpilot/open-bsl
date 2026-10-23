@@ -25,4 +25,4 @@ NumSubtract	NumSubtract	PASS
 A	A	PASS
 S	S	PASS
 V	V	PASS
-TYPE	Key
+TYPE	Клавиша

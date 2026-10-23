@@ -12,7 +12,7 @@ fn bare_subscriber_enum_matches_its_separate_native_control() {
         panic!("ожидался тип голого перечисления");
     };
     let actual = format!(
-        "SUBSCRIBER.BARE.BEGIN\t1\nSUBSCRIBER.BARE.TEXT\t{}\nSUBSCRIBER.BARE.TYPE\t{}\nSUBSCRIBER.BARE.ALIAS\tYes\nSUBSCRIBER.BARE.END\t1\n",
+        "SUBSCRIBER.BARE.BEGIN\t1\nSUBSCRIBER.BARE.TEXT\t{}\nSUBSCRIBER.BARE.TYPE\t{}\nSUBSCRIBER.BARE.ALIAS\tДа\nSUBSCRIBER.BARE.END\t1\n",
         kind.meta_ru_name(),
         value_type.name()
     );
@@ -42,7 +42,7 @@ fn subscriber_values_match_the_complete_retained_native_control() {
             panic!("ожидался тип члена перечисления");
         };
         lines.push(format!("SUBSCRIBER.{member}.TYPE\t{}", value_type.name()));
-        lines.push(format!("SUBSCRIBER.{member}.ALIAS\tYes"));
+        lines.push(format!("SUBSCRIBER.{member}.ALIAS\tДа"));
     }
     lines.push("SUBSCRIBER.END\t1".to_owned());
     assert_eq!(

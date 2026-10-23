@@ -1,10 +1,10 @@
 file.begin	data-composition-template-composer-1
-DCS.TEMPLATE.COMPOSER.TYPE	Composer of data composition template
-DCS.PROCESSOR.TYPE	Data composition processor
-DCS.VALUE.OUTPUT.TYPE	Processor of output of data composition result in values collection
-DCS.VALUE.OUTPUT.PERCENT.DEFAULT	No
-DCS.VALUE.OUTPUT.PERCENT.SET	Yes
-DCS.TEMPLATE.COMPOSER.ENGLISH	Composer of data composition template
-DCS.PROCESSOR.ENGLISH	Data composition processor
-DCS.VALUE.OUTPUT.ENGLISH	Processor of output of data composition result in values collection
+DCS.TEMPLATE.COMPOSER.TYPE	Компоновщик макета компоновки данных
+DCS.PROCESSOR.TYPE	Процессор компоновки данных
+DCS.VALUE.OUTPUT.TYPE	Процессор вывода результата компоновки данных в коллекцию значений
+DCS.VALUE.OUTPUT.PERCENT.DEFAULT	Нет
+DCS.VALUE.OUTPUT.PERCENT.SET	Да
+DCS.TEMPLATE.COMPOSER.ENGLISH	Компоновщик макета компоновки данных
+DCS.PROCESSOR.ENGLISH	Процессор компоновки данных
+DCS.VALUE.OUTPUT.ENGLISH	Процессор вывода результата компоновки данных в коллекцию значений
 file.end	data-composition-template-composer-1

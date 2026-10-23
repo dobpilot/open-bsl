@@ -1,4 +1,4 @@
-SINGLE	Single	CommandParameterUseMode
-MULTIPLE	Multiple	CommandParameterUseMode
+SINGLE	Одиночный	РежимИспользованияПараметраКоманды
+MULTIPLE	Множественный	РежимИспользованияПараметраКоманды
 SINGLE_ALIAS	Yes
 MULTIPLE_ALIAS	Yes

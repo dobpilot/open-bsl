@@ -28,7 +28,7 @@ fn chart_legend_visibility_matches_native_aliases_types_and_presentations() {
         .unwrap();
     assert_eq!(
         engine.new_state().run(&module).unwrap(),
-        Value::Str("Auto;Show;Do not show;".into())
+        Value::Str("Авто;Отображать;Не отображать;".into())
     );
 }
 

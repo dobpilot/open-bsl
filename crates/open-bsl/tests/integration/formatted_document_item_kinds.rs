@@ -4,15 +4,15 @@ use open_bsl::{Engine, Error, Value};
 fn reached_formatted_document_item_kinds_match_the_native_control() {
     let engine = Engine::builder().build().unwrap();
     for (russian, english, presentation) in [
-        ("ПереводСтроки", "LineFeed", "LineFeed"),
-        ("Картинка", "Picture", "Picture"),
-        ("Текст", "Text", "Text"),
+        ("ПереводСтроки", "LineFeed", "ПереводСтроки"),
+        ("Картинка", "Picture", "Картинка"),
+        ("Текст", "Text", "Текст"),
     ] {
         let source = format!(
             "ЗначениеПробы = ТипЭлементаФорматированногоДокумента.{russian};
             Возврат ЗначениеПробы = FormattedDocumentItemType.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"FormattedDocumentItemType\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"ТипЭлементаФорматированногоДокумента\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"ТипЭлементаФорматированногоДокумента\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"FormattedDocumentItemType\");"
         );

@@ -8,7 +8,7 @@ use crate::{
 pub(crate) static NOTIFICATION_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОписаниеОповещения",
-    type_display: "Notification description",
+    type_display: "Описание оповещения",
     type_names: &["NotifyDescription"],
 };
 

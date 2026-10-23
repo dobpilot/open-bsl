@@ -1,4 +1,4 @@
-NONE	No border	PASS
-SINGLE	Single	PASS
-UNDERLINE	Underline	PASS
-TYPE	ControlBorderType
+NONE	Без рамки	PASS
+SINGLE	Одинарная	PASS
+UNDERLINE	Подчеркивание	PASS
+TYPE	ТипРамкиЭлементаУправления

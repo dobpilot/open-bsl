@@ -274,13 +274,13 @@ fn item_condition(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtR
 pub(super) static COLLECTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "СоставОбщегоРеквизита",
-    type_display: "Content of common attribute",
+    type_display: "Состав общего реквизита",
     type_names: &["CommonAttributeContent"],
 };
 pub(super) static ITEM_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ЭлементСоставаОбщегоРеквизита",
-    type_display: "Common attribute content item",
+    type_display: "Элемент состава общего реквизита",
     type_names: &["CommonAttributeContentItem"],
 };
 pub(super) static METHODS: &[MethodDescriptor] = &[

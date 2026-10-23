@@ -159,6 +159,25 @@ else
         exit 1
     }
 
+    # Дисплей запуска: `ONEC_DISPLAY`, иначе собственный Xvfb (окна платформы
+    # не появляются на рабочем столе), иначе текущий `DISPLAY`.
+    RUN_DISPLAY=${ONEC_DISPLAY:-}
+    XVFB_PID=
+    if [ -z "$RUN_DISPLAY" ] && command -v Xvfb >/dev/null 2>&1; then
+        for number in $(seq 90 120); do
+            [ -e "/tmp/.X$number-lock" ] && continue
+            Xvfb ":$number" -screen 0 1600x1200x24 -nolisten tcp >/dev/null 2>&1 &
+            XVFB_PID=$!
+            sleep 1
+            if kill -0 "$XVFB_PID" 2>/dev/null; then
+                RUN_DISPLAY=":$number"
+                break
+            fi
+            XVFB_PID=
+        done
+    fi
+    RUN_DISPLAY=${RUN_DISPLAY:-${DISPLAY:-:1}}
+
     # Шим с wk41-сборками; создаётся один раз, /opt не трогается.
     SHIM=${ONEC_SHIM:-$HOME/.local/lib/1c-wk41}
     if [ ! -e "$SHIM/libwx_gtk3u-3.0.so.0" ]; then
@@ -171,7 +190,7 @@ else
     onec() {
         env -u WAYLAND_DISPLAY \
             GDK_BACKEND=x11 \
-            DISPLAY="${DISPLAY:-:1}" \
+            DISPLAY="$RUN_DISPLAY" \
             XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
             LD_LIBRARY_PATH="$SHIM:/usr/lib" \
             "$PLATFORM" "$@"
@@ -199,7 +218,7 @@ fi
 
 # --- сборка конфигурации -------------------------------------------------
 WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT
+trap 'rm -rf "$WORK"; [ -n "${XVFB_PID:-}" ] && kill "$XVFB_PID" 2>/dev/null' EXIT
 
 # Выгружаем ТЕКУЩУЮ конфигурацию базы в XML — на первом прогоне это пустой
 # скелет (Configuration.xml, ConfigDumpInfo.xml, Languages/), на последующих
@@ -222,6 +241,24 @@ fi
 # скелета. Содержимое статично между прогонами — меняется только модуль
 # формы, который генерируется ниже из скрипта замеров.
 cp -r tests/conformance/measure/1c/cfg-src/. "$WORK/cfg/"
+
+# Окружение замера закреплено (решение проекта 2026-10-23): русский вариант
+# встроенного языка и русский язык конфигурации по умолчанию, а интерфейс и
+# локаль сеанса задают `/Lru /VLru` при запуске. Иначе представления типов,
+# перечислений и булевых значений зависели бы от того, где и когда создана
+# база. Манифест пробы может переопределить вариант языка ниже.
+if [ ! -f "$WORK/cfg/Languages/Русский.xml" ]; then
+    mkdir -p "$WORK/cfg/Languages"
+    cp tests/conformance/measure/1c/configuration-enum-russian-language.xml \
+        "$WORK/cfg/Languages/Русский.xml"
+    grep -q '<Language>Русский</Language>' "$WORK/cfg/Configuration.xml" ||
+        sed -i 's|<ChildObjects>|<ChildObjects>\n\t\t\t<Language>Русский</Language>|' \
+            "$WORK/cfg/Configuration.xml"
+fi
+sed -i 's|<ScriptVariant>[^<]*</ScriptVariant>|<ScriptVariant>Russian</ScriptVariant>|' \
+    "$WORK/cfg/Configuration.xml"
+sed -i 's|<DefaultLanguage>[^<]*</DefaultLanguage>|<DefaultLanguage>Language.Русский</DefaultLanguage>|' \
+    "$WORK/cfg/Configuration.xml"
 mkdir -p "$WORK/cfg/DataProcessors/Замеры/Forms/Форма/Ext/Form"
 
 # Серверные общие модули замеров (cfg-src-server) накладываются тем же
@@ -322,10 +359,10 @@ fi
 # необработанное исключение при старте.
 ONEC_TIMEOUT=${ONEC_TIMEOUT:-180}
 timeout --kill-after=10 "$ONEC_TIMEOUT" \
-    env -u WAYLAND_DISPLAY GDK_BACKEND=x11 DISPLAY="${DISPLAY:-:1}" \
+    env -u WAYLAND_DISPLAY GDK_BACKEND=x11 DISPLAY="$RUN_DISPLAY" \
         XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
         LD_LIBRARY_PATH="$SHIM:/usr/lib" \
-        "$ENTERPRISE_PLATFORM" ENTERPRISE /F"$IB" \
+        "$ENTERPRISE_PLATFORM" ENTERPRISE /F"$IB" /Lru /VLru \
         /DisableStartupDialogs /DisableStartupMessages /Out "$WORK/run.log" >/dev/null 2>&1
 RC=$?
 if [ "$RC" -ne 0 ]; then

@@ -1,9 +1,9 @@
-ROOT	EnumChartLineType
-TYPE	ChartLineType
-NONE	None
-DASHED	Dashed
-DASH_DOT	DashDotted
-DASH_DOT_DOT	DotDashDotted
-SOLID	Solid
-DOTTED	Dotted
+ROOT	ПеречислениеТипЛинииДиаграммы
+TYPE	ТипЛинииДиаграммы
+NONE	Нет линии
+DASHED	Пунктирная
+DASH_DOT	Пунктирно-точечная
+DASH_DOT_DOT	Точечно-пунктирно-точечная
+SOLID	Сплошная
+DOTTED	Точечная
 ALIASES	PASS

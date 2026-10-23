@@ -9,13 +9,13 @@ use std::cell::RefCell;
 pub(crate) static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КаноническаяЗаписьXML",
-    type_display: "Canonical XML writing",
+    type_display: "Каноническая Запись XML",
     type_names: &["XMLCanonicalizingWriter"],
 };
 pub(crate) static DOM_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КаноническийDOM",
-    type_display: "DOM node canonical writing",
+    type_display: "Каноническая Запись Узла DOM",
     type_names: &["DOMCanonicalization"],
 };
 
@@ -40,7 +40,9 @@ impl ObjectProtocol for Writer {
         WRITER_METHODS
     }
     fn display(&self) -> String {
-        WRITER_TYPE.type_display.to_owned()
+        // Значение печатается именем типа, а тип — представлением:
+        // `measure-value-presentations-ru.platform.txt`.
+        WRITER_TYPE.name.to_owned()
     }
 }
 impl ObjectProtocol for CanonicalDom {
@@ -51,7 +53,9 @@ impl ObjectProtocol for CanonicalDom {
         DOM_METHODS
     }
     fn display(&self) -> String {
-        DOM_TYPE.type_display.to_owned()
+        // Значение печатается именем типа, а тип — представлением:
+        // `measure-value-presentations-ru.platform.txt`.
+        DOM_TYPE.name.to_owned()
     }
 }
 

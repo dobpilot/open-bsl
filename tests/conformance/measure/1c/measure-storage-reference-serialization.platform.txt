@@ -1,5 +1,5 @@
 storage.serialize.uuid={"#",fc01b5df-97fe-449b-83d4-218a090e681e,12345678-1234-4321-abcd-0123456789ab}
 storage.serialize.reference={"#",f4f1e787-e5b3-59af-ae48-c43f0c92e2c3,53:abcd0123456789ab4321123412345678}
 storage.serialize.empty={"#",f4f1e787-e5b3-59af-ae48-c43f0c92e2c3,53:00000000000000000000000000000000}
-storage.get.reference.equal=Yes
-storage.get.uuid.equal=Yes
+storage.get.reference.equal=Да
+storage.get.uuid.equal=Да

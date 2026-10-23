@@ -1,4 +1,4 @@
-﻿file.begin	file-initialize-identity-1
+file.begin	file-initialize-identity-1
 init.before_await	gamma/c.bin
 init.first_result	gamma/c.bin
 init.second_result	gamma/c.bin
@@ -10,8 +10,8 @@ init.alias_after_result_call	delta/d.dat
 init.third_equals_receiver	1
 init.repeated_first	delta/d.dat
 init.parts	delta/|d.dat|d|.dat
-init.type.boolean	promise=Promise|ok|path=Yes|receiver=Yes|input_string=Yes
-init.type.null	promise=Promise|ok|path=|receiver=|input_string=
-init.type.date	promise=Promise|ok|path=1/2/2020 3:04:05 AM|receiver=1/2/2020 3:04:05 AM|input_string=1/2/2020 3:04:05 AM
-init.type.array	promise=Promise|ok|path=Массив|receiver=Массив|input_string=Массив
+init.type.boolean	promise=Обещание|ok|path=Да|receiver=Да|input_string=Да
+init.type.null	promise=Обещание|ok|path=|receiver=|input_string=
+init.type.date	promise=Обещание|ok|path=02.01.2020 3:04:05|receiver=02.01.2020 3:04:05|input_string=02.01.2020 3:04:05
+init.type.array	promise=Обещание|ok|path=Массив|receiver=Массив|input_string=Массив
 file.end	file-initialize-identity-1

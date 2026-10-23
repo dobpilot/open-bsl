@@ -1,5 +1,5 @@
-ROOT	EnumBoundaryType
-TYPE	BoundaryType
-INCLUDING	Including
-EXCLUDING	Excluding
+ROOT	ПеречислениеВидГраницы
+TYPE	ВидГраницы
+INCLUDING	Включая
+EXCLUDING	Исключая
 ALIASES	PASS

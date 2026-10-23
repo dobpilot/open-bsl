@@ -18,5 +18,8 @@ fn numeric_value_type_matches_the_platform_measurement() {
     let Value::Str(value) = result else {
         panic!("ожидалась строка");
     };
-    assert_eq!(value.to_string(), "NumericValueType|Cardinal|Ordinal|true");
+    assert_eq!(
+        value.to_string(),
+        "ВидЧисловогоЗначения|Количественное|Порядковое|true"
+    );
 }

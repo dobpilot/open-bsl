@@ -1,11 +1,11 @@
-ROOT	EnumPictureSize
-TYPE	PictureSize
-AUTO	Automatic size
-AUTO_IGNORE	Automatic size without scale
-FONT	By font size
-PROPORTIONAL	Proportional
-STRETCH	Stretch
-REAL	Actual size
-REAL_IGNORE	Actual size (no scaling)
-TILE	Tile
+ROOT	ПеречислениеРазмерКартинки
+TYPE	РазмерКартинки
+AUTO	Автоматический размер
+AUTO_IGNORE	Автоматический размер без учета масштаба
+FONT	По размеру шрифта
+PROPORTIONAL	Пропорционально
+STRETCH	Растянуть
+REAL	Реальный размер
+REAL_IGNORE	Реальный размер без учета масштаба
+TILE	Черепица
 ALIASES	PASS

@@ -1,10 +1,10 @@
 catalog.object.before.create
 catalog.object.after.first.create
 catalog.object.after.second.create
-catalog.object.initialized.on.create=Yes
+catalog.object.initialized.on.create=Да
 catalog.object.first.touch=1
 catalog.object.second.touch=1
 catalog.object.first.again=2
-catalog.object.this.first=Yes
-catalog.object.this.second=Yes
+catalog.object.this.first=Да
+catalog.object.this.second=Да
 catalog.object.cross.callback=3

@@ -1,20 +1,20 @@
-FORM_FIELD.HTML	FormFieldType	HTML document field	Yes
-FORM_FIELD.PDF	FormFieldType	PDF document field	Yes
-FORM_FIELD.INPUT	FormFieldType	Input field	Yes
-FORM_FIELD.GEOGRAPHICAL	FormFieldType	Geographical schema field	Yes
-FORM_FIELD.GRAPHICAL	FormFieldType	Graphical schema field	Yes
-FORM_FIELD.DENDROGRAM	FormFieldType	Dendrogram field	Yes
-FORM_FIELD.CHART	FormFieldType	Chart field	Yes
-FORM_FIELD.GANTT	FormFieldType	Gantt chart field	Yes
-FORM_FIELD.PROGRESS	FormFieldType	Progress bar	Yes
-FORM_FIELD.CALENDAR	FormFieldType	Calendar field	Yes
-FORM_FIELD.PICTURE	FormFieldType	Image field	Yes
-FORM_FIELD.LABEL	FormFieldType	Text box	Yes
-FORM_FIELD.RADIO	FormFieldType	Radio buttons	Yes
-FORM_FIELD.PERIOD	FormFieldType	Period field	Yes
-FORM_FIELD.PLANNER	FormFieldType	Planner field	Yes
-FORM_FIELD.TRACK	FormFieldType	Slider field	Yes
-FORM_FIELD.SPREADSHEET	FormFieldType	Spreadsheet document field	Yes
-FORM_FIELD.TEXT	FormFieldType	Text document field	Yes
-FORM_FIELD.CHECK	FormFieldType	Checkbox	Yes
-FORM_FIELD.FORMATTED	FormFieldType	Formatted document field	Yes
+FORM_FIELD.HTML	ВидПоляФормы	Поле HTML документа	Yes
+FORM_FIELD.PDF	ВидПоляФормы	Поле PDF документа	Yes
+FORM_FIELD.INPUT	ВидПоляФормы	Поле ввода	Yes
+FORM_FIELD.GEOGRAPHICAL	ВидПоляФормы	Поле географической схемы	Yes
+FORM_FIELD.GRAPHICAL	ВидПоляФормы	Поле графической схемы	Yes
+FORM_FIELD.DENDROGRAM	ВидПоляФормы	Поле дендрограммы	Yes
+FORM_FIELD.CHART	ВидПоляФормы	Поле диаграммы	Yes
+FORM_FIELD.GANTT	ВидПоляФормы	Поле диаграммы Ганта	Yes
+FORM_FIELD.PROGRESS	ВидПоляФормы	Поле индикатора	Yes
+FORM_FIELD.CALENDAR	ВидПоляФормы	Поле календаря	Yes
+FORM_FIELD.PICTURE	ВидПоляФормы	Поле картинки	Yes
+FORM_FIELD.LABEL	ВидПоляФормы	Поле надписи	Yes
+FORM_FIELD.RADIO	ВидПоляФормы	Поле переключателя	Yes
+FORM_FIELD.PERIOD	ВидПоляФормы	Поле периода	Yes
+FORM_FIELD.PLANNER	ВидПоляФормы	Поле данных планировщика	Yes
+FORM_FIELD.TRACK	ВидПоляФормы	Поле полосы регулирования	Yes
+FORM_FIELD.SPREADSHEET	ВидПоляФормы	Поле табличного документа	Yes
+FORM_FIELD.TEXT	ВидПоляФормы	Поле текстового документа	Yes
+FORM_FIELD.CHECK	ВидПоляФормы	Поле флажка	Yes
+FORM_FIELD.FORMATTED	ВидПоляФормы	Поле форматированного документа	Yes

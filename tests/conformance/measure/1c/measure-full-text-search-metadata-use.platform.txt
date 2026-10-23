@@ -1,3 +1,3 @@
-USE	Use	FullTextSearchMetadataUse
-DONT	Do not use	FullTextSearchMetadataUse
+USE	Использовать	ИспользованиеМетаданныхПолнотекстовогоПоиска
+DONT	Не использовать	ИспользованиеМетаданныхПолнотекстовогоПоиска
 ALIAS	Yes

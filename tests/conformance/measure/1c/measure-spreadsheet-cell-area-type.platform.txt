@@ -1,7 +1,7 @@
-ROOT	EnumSpreadsheetDocumentCellAreaType
-TYPE	SpreadsheetDocumentCellAreaType
-TABLE	Table
-ROWS	Rows
-COLUMNS	Columns
-RECTANGLE	Rectangle
+ROOT	ПеречислениеТипОбластиЯчеекТабличногоДокумента
+TYPE	ТипОбластиЯчеекТабличногоДокумента
+TABLE	Таблица
+ROWS	Строки
+COLUMNS	Колонки
+RECTANGLE	Прямоугольник
 ALIAS_TABLE	PASS

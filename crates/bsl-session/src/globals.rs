@@ -5,7 +5,7 @@ use super::*;
 pub(crate) static COLLABORATION_CONVERSATION_ID_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "ИдентификаторОбсужденияСистемыВзаимодействия",
-    type_display: "CollaborationSystemConversationID",
+    type_display: "ИдентификаторОбсужденияСистемыВзаимодействия",
     type_names: &["CollaborationSystemConversationID"],
 };
 

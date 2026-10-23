@@ -463,7 +463,7 @@ fn settings_description_matches_the_measured_surface() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Setting description:Да:Да:0:1:key:user:caption:42:english".into())
+        Value::Str("Описание настройки:Да:Да:0:1:key:user:caption:42:english".into())
     );
     assert!(
         state
@@ -509,7 +509,7 @@ fn client_settings_match_the_measured_mutable_value() {
     assert_eq!(
         value,
         Value::Str(
-            "Client application settings|Да|Да|Tabs|Version 8.2|Separate windows|Taxi|ApplicationFormsOpenningMode|ClientApplicationInterfaceVariant"
+            "Настройки клиентского приложения|Да|Да|Закладки|Версия 8.2|Отдельные окна|Такси|РежимОткрытияФормПриложения|ВариантИнтерфейсаКлиентскогоПриложения"
                 .into()
         )
     );
@@ -544,7 +544,7 @@ fn command_interface_settings_match_the_measured_mutable_value() {
             )
             .unwrap(),
         Value::Str(
-            "Command interface settings|Icon and text|Text to the right of icon|Text below icon|SectionsPanelRepresentation"
+            "Настройки командного интерфейса|Картинка и текст|Текст справа от картинки|Текст под картинкой|ОтображениеПанелиРазделов"
                 .into()
         )
     );
@@ -594,7 +594,7 @@ fn client_interface_content_settings_match_the_measured_value_graph() {
             )
             .unwrap(),
         Value::Str(
-            "Panel settings|Client application interface composition settings|Client application interface composition settings group|Client application interface composition settings item|ПанельРазделов|0|1|SectionsPanel"
+            "Настройки панелей|Настройки состава интерфейса клиентского приложения|Группа настройки состава интерфейса клиентского приложения|Элемент настройки состава интерфейса клиентского приложения|ПанельРазделов|0|1|SectionsPanel"
                 .into()
         )
     );
@@ -646,7 +646,7 @@ fn job_schedule_matches_the_measured_passive_surface() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Job schedule:Да:1:0:0:0:0:1:1:1:3:0:2".into())
+        Value::Str("Расписание задания:Да:1:0:0:0:0:1:1:1:3:0:2".into())
     );
     assert!(
         state
@@ -681,7 +681,7 @@ fn unsafe_operation_protection_description_is_a_mutable_boolean_value() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Unsafe operation protection description:Да:Нет:Да".into())
+        Value::Str("Описание защиты от опасных действий:Да:Нет:Да".into())
     );
 }
 
@@ -709,7 +709,9 @@ fn event_log_event_use_matches_the_measured_mutable_value() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Event log event use:Да:Не определено:Нет:42:Да:changed".into())
+        Value::Str(
+            "Использование события журнала регистрации:Да:Не определено:Нет:42:Да:changed".into()
+        )
     );
     assert!(
         state
@@ -750,7 +752,7 @@ fn event_log_access_event_use_description_matches_the_measured_value() {
             )
             .unwrap(),
         Value::Str(
-            "Description of event log access event use||0|0|Справочник.Номенклатура|Поле1|Поле2|Catalog.Products"
+            "Описание использования события доступ журнала регистрации||0|0|Справочник.Номенклатура|Поле1|Поле2|Catalog.Products"
                 .into()
         )
     );
@@ -1266,7 +1268,7 @@ fn client_displays_are_owned_by_one_session_and_absent_in_background() {
             Функция Экраны() Экспорт
                 Список = GetClientDisplaysInformation();
                 Возврат Список.Количество() = 2
-                    И Строка(ТипЗнч(Список[0])) = "ClientDisplayInformation"
+                    И Строка(ТипЗнч(Список[0])) = "ИнформацияЭкранаКлиента"
                     И Список[0].Width = 1920
                     И Список[0].Высота = 1080
                     И Список[0].DPI = 96
@@ -2683,7 +2685,7 @@ fn authorized_connection_snapshot_is_exposed_with_both_language_names() {
 
     assert_eq!(
         session.call(&module, "Сведения", vec![]).unwrap().0,
-        Value::Str("Active connection|41|ThinClient|client|2".into())
+        Value::Str("Активное соединение|41|ThinClient|client|2".into())
     );
     assert_eq!(
         session.call(&module, "НовыйМассив", vec![]).unwrap().0,
@@ -3422,7 +3424,7 @@ fn client_application_type_belongs_to_the_current_session() {
         .unwrap();
     assert_eq!(
         parent.call(&type_probe, "ТипОбъекта", vec![]).unwrap().0,
-        Value::Str("Client application".into())
+        Value::Str("Клиентское приложение".into())
     );
     assert_eq!(
         client_application_type_value(&mut parent),
@@ -3502,7 +3504,7 @@ fn current_infobase_session_exposes_only_the_current_background_job() {
             .call(&foreground_probe, "Контекст", vec![])
             .unwrap()
             .0,
-        Value::Str("Active session|Не определено".into())
+        Value::Str("Активный сеанс|Не определено".into())
     );
 
     let background_factory = SessionFactory::new(
@@ -3538,7 +3540,7 @@ fn current_infobase_session_exposes_only_the_current_background_job() {
             .call(&background_probe, "Контекст", vec![])
             .unwrap()
             .0,
-        Value::Str("Active session|Background job|Обработка.ФоновыйМетод".into())
+        Value::Str("Активный сеанс|Фоновое задание|Обработка.ФоновыйМетод".into())
     );
     let unsupported_probe = background
         .instantiate(
@@ -3642,7 +3644,7 @@ fn event_log_uses_the_current_session_writer_and_measured_enums() {
     assert_eq!(
         session.call(&probe, "Перечисления", vec![]).unwrap().0,
         Value::Str(
-            "EnumEventLogLevel|Note|Information|Warning|Error|EnumEventLogEntryTransactionMode|Independent|Transactional"
+            "ПеречислениеУровеньЖурналаРегистрации|Примечание|Информация|Предупреждение|Ошибка|ПеречислениеРежимТранзакцииЗаписиЖурналаРегистрации|Независимая|Транзакционная"
                 .into()
         )
     );
@@ -3751,11 +3753,11 @@ fn event_log_using_reads_each_session_adapter() {
     let second_probe = second.instantiate(source).unwrap();
     assert_eq!(
         first.call(&first_probe, "Проверить", vec![]).unwrap().0,
-        Value::Str("2|Information|Error".into())
+        Value::Str("2|Информация|Ошибка".into())
     );
     assert_eq!(
         second.call(&second_probe, "Проверить", vec![]).unwrap().0,
-        Value::Str("1|Warning|Warning".into())
+        Value::Str("1|Предупреждение|Предупреждение".into())
     );
 
     let mut missing = factory.open(principal(), resources((), 3)).unwrap();
@@ -3878,7 +3880,7 @@ fn error_processing_uses_the_session_owned_current_user_settings() {
         .unwrap();
     assert_eq!(
         session.call(&probe, "Проверить", vec![]).unwrap().0,
-        Value::Str("Settings of error processing on the client:Auto::Да:Да".into())
+        Value::Str("Настройки обработки ошибок на клиенте:Авто::Да:Да".into())
     );
 
     let mut missing = factory.open(principal(), resources((), 2)).unwrap();
@@ -4098,7 +4100,7 @@ fn special_settings_storages_use_the_adapter_of_the_current_session() {
 
     assert_eq!(
         session.call(&probe, "ПроверитьСписок", vec![]).unwrap().0,
-        Value::Str("Value list|first|second".into())
+        Value::Str("Список значений|first|second".into())
     );
     assert_eq!(
         session.call(&probe, "ПроверитьОписание", vec![]).unwrap().0,
@@ -4318,7 +4320,7 @@ fn client_settings_selection_matches_the_measured_cursor() {
     assert_eq!(
         session.call(&probe, "Типы", vec![]).unwrap().0,
         Value::Str(
-            "Standard settings storage|Standard settings storage Selected data|Home page settings|Home page forms"
+            "Стандартное хранилище настроек|Standard settings storage Selected data|Настройки начальной страницы|Состав форм начальной страницы"
                 .into()
         )
     );

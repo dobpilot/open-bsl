@@ -144,13 +144,15 @@ fn attribute_collection_matches_native_order_names_aliases_and_identity() {
     let mut session = factory
         .open(
             Principal::new("user", "Тест", vec![]),
-            SessionResources::new(Box::new(()), 1).with_system_language("en"),
+            SessionResources::new(Box::new(()), 1)
+                .with_system_language("ru")
+                .with_locale_code("ru"),
         )
         .unwrap();
     let script = include_str!(
         "../../../../tests/conformance/measure/1c/measure-document-attribute-metadata.bsl"
     );
-    let actual = replay(&mut session, script).replace("=Да", "=Yes");
+    let actual = replay(&mut session, script);
     assert_eq!(
         actual,
         include_str!(

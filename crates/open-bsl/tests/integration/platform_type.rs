@@ -21,7 +21,7 @@ fn platform_type_exposes_the_complete_measured_enumeration() {
     Или Строка(ТипПлатформы.WinRT_ARM) <> "WinRT ARM"
     Или Строка(ТипПлатформы.WinRT_x86) <> "WinRT x86"
     Или Строка(ТипПлатформы.WinRT_x86_64) <> "WinRT x86_64"
-    Или Строка(ТипЗнч(ТипПлатформы.Linux_x86_64)) <> "PlatformType"
+    Или Строка(ТипЗнч(ТипПлатформы.Linux_x86_64)) <> "ТипПлатформы"
     Или PlatformType.Linux_x86_64 <> ТипПлатформы.Linux_x86_64 Тогда
     ВызватьИсключение "platform-type";
 КонецЕсли;

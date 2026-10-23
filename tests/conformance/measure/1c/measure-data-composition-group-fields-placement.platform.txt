@@ -1,6 +1,6 @@
-ROOT	EnumDataCompositionGroupFieldsPlacement
-TYPE	DataCompositionGroupFieldsPlacement
-TOGETHER	Together
-SEPARATELY	Separately
-SEPARATELY_TOTALS	Separately and only in totals
+ROOT	ПеречислениеРасположениеПолейГруппировкиКомпоновкиДанных
+TYPE	РасположениеПолейГруппировкиКомпоновкиДанных
+TOGETHER	Вместе
+SEPARATELY	Отдельно
+SEPARATELY_TOTALS	Отдельно и только в итогах
 ALIASES	PASS

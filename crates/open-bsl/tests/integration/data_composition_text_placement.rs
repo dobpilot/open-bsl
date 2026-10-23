@@ -5,16 +5,16 @@ fn text_placement_matches_native_aliases_types_and_presentations() {
     let engine = Engine::builder().build().unwrap();
     let mut state = engine.new_state();
     for (russian, english, presentation) in [
-        ("Выступать", "Overflow", "Overflow"),
-        ("Забивать", "Block", "Conceal"),
-        ("Обрезать", "Cut", "Clip"),
-        ("Переносить", "Wrap", "Wrap"),
+        ("Выступать", "Overflow", "Выступать"),
+        ("Забивать", "Block", "Забивать"),
+        ("Обрезать", "Cut", "Обрезать"),
+        ("Переносить", "Wrap", "Переносить"),
     ] {
         let source = format!(
             "ЗначениеПробы = ТипРазмещенияТекстаКомпоновкиДанных.{russian};
             Возврат ЗначениеПробы = DataCompositionTextPlacementType.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"DataCompositionTextPlacementType\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"ТипРазмещенияТекстаКомпоновкиДанных\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"DataCompositionTextPlacementType\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"ТипРазмещенияТекстаКомпоновкиДанных\");"
         );
@@ -24,9 +24,9 @@ fn text_placement_matches_native_aliases_types_and_presentations() {
         state
             .exec(
                 "Возврат Строка(ТипРазмещенияТекстаКомпоновкиДанных)
-                    = \"EnumDataCompositionTextPlacementType\"
+                    = \"ПеречислениеТипРазмещенияТекстаКомпоновкиДанных\"
                     И Строка(ТипЗнч(DataCompositionTextPlacementType))
-                    = \"EnumDataCompositionTextPlacementType\";",
+                    = \"ПеречислениеТипРазмещенияТекстаКомпоновкиДанных\";",
             )
             .unwrap(),
         Value::Boolean(true)

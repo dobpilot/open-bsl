@@ -39,7 +39,7 @@ fn inside_edge_keeps_the_existing_auto_label_distinct_and_unchanged() {
         .unwrap();
     assert_eq!(
         engine.new_state().run(&module).unwrap(),
-        Value::Str("Edge inside|Edge auto|YES".into())
+        Value::Str("Край внутри|Край авто|YES".into())
     );
 }
 

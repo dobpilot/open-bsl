@@ -5,15 +5,19 @@ fn settings_item_state_matches_native_aliases_types_and_presentations() {
     let engine = Engine::builder().build().unwrap();
     let mut state = engine.new_state();
     for (russian, english, presentation) in [
-        ("Включен", "Enabled", "Enabled"),
-        ("Отключен", "Disabled", "Disabled"),
-        ("УдаленПользователем", "DeletedByUser", "Deleted by user"),
+        ("Включен", "Enabled", "Включена"),
+        ("Отключен", "Disabled", "Отключена"),
+        (
+            "УдаленПользователем",
+            "DeletedByUser",
+            "Удалена пользователем",
+        ),
     ] {
         let source = format!(
             "ЗначениеПробы = СостояниеЭлементаНастройкиКомпоновкиДанных.{russian};
             Возврат ЗначениеПробы = DataCompositionSettingsItemState.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"DataCompositionSettingsItemState\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"СостояниеЭлементаНастройкиКомпоновкиДанных\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"DataCompositionSettingsItemState\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"СостояниеЭлементаНастройкиКомпоновкиДанных\");"
         );
@@ -23,9 +27,9 @@ fn settings_item_state_matches_native_aliases_types_and_presentations() {
         state
             .exec(
                 "Возврат Строка(СостояниеЭлементаНастройкиКомпоновкиДанных)
-                    = \"EnumDataCompositionSettingsItemState\"
+                    = \"ПеречислениеСостояниеЭлементаНастройкиКомпоновкиДанных\"
                     И Строка(ТипЗнч(DataCompositionSettingsItemState))
-                    = \"EnumDataCompositionSettingsItemState\";",
+                    = \"ПеречислениеСостояниеЭлементаНастройкиКомпоновкиДанных\";",
             )
             .unwrap(),
         Value::Boolean(true)

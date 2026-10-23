@@ -154,7 +154,7 @@ fn error_handler_kinds_preserve_the_measured_first_error() {
                         let output = String::from_utf8(output.0.borrow().clone()).unwrap();
                         assert!(
                             output.contains(&format!(
-                                "errorhandler.enter\t{key}|initial=1|type=Error information\n"
+                                "errorhandler.enter\t{key}|initial=1|type=Информация об ошибке\n"
                             )),
                             "{key}: {output}"
                         );

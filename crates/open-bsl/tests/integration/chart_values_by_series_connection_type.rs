@@ -5,14 +5,14 @@ fn chart_values_by_series_connection_type_matches_native_aliases_types_and_prese
     let engine = Engine::builder().build().unwrap();
     let mut state = engine.new_state();
     for (russian, english, presentation) in [
-        ("Нет", "None", "No"),
-        ("СоединениеКраев", "EdgesConnection", "Edge joint"),
+        ("Нет", "None", "Нет"),
+        ("СоединениеКраев", "EdgesConnection", "Соединение краев"),
     ] {
         let source = format!(
             "ЗначениеПробы = ТипСоединенияЗначенийПоСериямДиаграммы.{russian};
             Возврат ЗначениеПробы = ChartValuesBySeriesConnectionType.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"ChartValuesBySeriesConnectionType\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"ТипСоединенияЗначенийПоСериямДиаграммы\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"ChartValuesBySeriesConnectionType\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"ТипСоединенияЗначенийПоСериямДиаграммы\");"
         );
@@ -22,9 +22,9 @@ fn chart_values_by_series_connection_type_matches_native_aliases_types_and_prese
         state
             .exec(
                 "Возврат Строка(ТипСоединенияЗначенийПоСериямДиаграммы)
-                    = \"EnumChartValuesBySeriesConnectionType\"
+                    = \"ПеречислениеТипСоединенияЗначенийПоСериямДиаграммы\"
                     И Строка(ТипЗнч(ChartValuesBySeriesConnectionType))
-                    = \"EnumChartValuesBySeriesConnectionType\";",
+                    = \"ПеречислениеТипСоединенияЗначенийПоСериямДиаграммы\";",
             )
             .unwrap(),
         Value::Boolean(true)

@@ -1,29 +1,29 @@
-ColorDepth.ROOT	EnumColorDepth
-ColorDepth.TYPE	ColorDepth
-ColorDepth.BitPerPixel1	1 bit per pixel
-ColorDepth.BitPerPixel24	24 bits per pixel
-ColorDepth.BitPerPixel32	32 bits per pixel
-ColorDepth.BitPerPixel4	4 bits per pixel
-ColorDepth.BitPerPixel8	8 bits per pixel
+ColorDepth.ROOT	ПеречислениеГлубинаЦвета
+ColorDepth.TYPE	ГлубинаЦвета
+ColorDepth.BitPerPixel1	1 бит на пикель
+ColorDepth.BitPerPixel24	24 бита на пикель
+ColorDepth.BitPerPixel32	32 бита на пикель
+ColorDepth.BitPerPixel4	4 бита на пикель
+ColorDepth.BitPerPixel8	8 бит на пикель
 ColorDepth.ALIASES	PASS
-ToolTipRepresentation.ROOT	EnumToolTipRepresentation
-ToolTipRepresentation.TYPE	ToolTipRepresentation
-ToolTipRepresentation.Auto	Auto
-ToolTipRepresentation.Balloon	Tooltip
-ToolTipRepresentation.Button	Button
-ToolTipRepresentation.None	No
-ToolTipRepresentation.ShowAuto	Display automatically
-ToolTipRepresentation.ShowTop	Display above
-ToolTipRepresentation.ShowLeft	Display to the left
-ToolTipRepresentation.ShowBottom	Display below
-ToolTipRepresentation.ShowRight	Display to the right
+ToolTipRepresentation.ROOT	ПеречислениеОтображениеПодсказки
+ToolTipRepresentation.TYPE	ОтображениеПодсказки
+ToolTipRepresentation.Auto	Авто
+ToolTipRepresentation.Balloon	Всплывающая подсказка
+ToolTipRepresentation.Button	Кнопка
+ToolTipRepresentation.None	Нет
+ToolTipRepresentation.ShowAuto	Отображать авто
+ToolTipRepresentation.ShowTop	Отображать сверху
+ToolTipRepresentation.ShowLeft	Отображать слева
+ToolTipRepresentation.ShowBottom	Отображать снизу
+ToolTipRepresentation.ShowRight	Отображать справа
 ToolTipRepresentation.ALIASES	PASS
-ClientApplicationType.ROOT	EnumClientApplicationType
-ClientApplicationType.TYPE	ClientApplicationType
-ClientApplicationType.WebClient	Web client
-ClientApplicationType.ExternalConnection	External connection
-ClientApplicationType.MobileAppClient	Mobile application client
-ClientApplicationType.MobileClient	Mobile client
-ClientApplicationType.ThickClient	Thick client
-ClientApplicationType.ThinClient	Thin client
+ClientApplicationType.ROOT	ПеречислениеТипКлиентскогоПриложения
+ClientApplicationType.TYPE	ТипКлиентскогоПриложения
+ClientApplicationType.WebClient	Веб клиент
+ClientApplicationType.ExternalConnection	Внешнее соединение
+ClientApplicationType.MobileAppClient	Мобильное приложение клиент
+ClientApplicationType.MobileClient	Мобильный клиент
+ClientApplicationType.ThickClient	Толстый клиент
+ClientApplicationType.ThinClient	Тонкий клиент
 ClientApplicationType.ALIASES	PASS

@@ -1,48 +1,48 @@
-ROOT	EnumChartLabelType
-TYPE	ChartLabelType
-Value	Value
+ROOT	ПеречислениеВидПодписейКДиаграмме
+TYPE	ВидПодписейКДиаграмме
+Value	Значение
 ALIAS_Value	PASS
-ValuePercent	Value + percent
+ValuePercent	Значение + процент
 ALIAS_ValuePercent	PASS
-ValueSize	Value + size
+ValueSize	Значение + размер
 ALIAS_ValueSize	PASS
-None	None
+None	Нет
 ALIAS_None	PASS
-Percent	Percent
+Percent	Процент
 ALIAS_Percent	PASS
-Series	Series
+Series	Серия
 ALIAS_Series	PASS
-SeriesValue	Series + value
+SeriesValue	Серия + значение
 ALIAS_SeriesValue	PASS
-SeriesValuePercent	Series + value + percent
+SeriesValuePercent	Серия + значение + процент
 ALIAS_SeriesValuePercent	PASS
-SeriesValueSize	Series + value + size
+SeriesValueSize	Cерия + значение + размер
 ALIAS_SeriesValueSize	PASS
-SeriesPercent	Series + percent
+SeriesPercent	Серия + процент
 ALIAS_SeriesPercent	PASS
-SeriesSize	Series + size
+SeriesSize	Cерия + размер
 ALIAS_SeriesSize	PASS
-SeriesPoint	Series + point
+SeriesPoint	Серия + точка
 ALIAS_SeriesPoint	PASS
-SeriesPointValue	Series + point + value
+SeriesPointValue	Серия + точка + значение
 ALIAS_SeriesPointValue	PASS
-SeriesPointValuePercent	Series + point + value + percent
+SeriesPointValuePercent	Серия + точка + значение + процент
 ALIAS_SeriesPointValuePercent	PASS
-SeriesPointValueSize	Series + point + value + size
+SeriesPointValueSize	Серия + точка + значение + размер
 ALIAS_SeriesPointValueSize	PASS
-SeriesPointPercent	Series + point + percent
+SeriesPointPercent	Серия + точка + процент
 ALIAS_SeriesPointPercent	PASS
-SeriesPointSize	Series + point + size
+SeriesPointSize	Серия + точка + размер
 ALIAS_SeriesPointSize	PASS
-Point	Point
+Point	Точка
 ALIAS_Point	PASS
-PointValue	Point + value
+PointValue	Точка + значение
 ALIAS_PointValue	PASS
-PointValuePercent	Point + value + percent
+PointValuePercent	Точка + значение + процент
 ALIAS_PointValuePercent	PASS
-PointValueSize	Point + value + size
+PointValueSize	Точка + значение + размер
 ALIAS_PointValueSize	PASS
-PointPercent	Point + percent
+PointPercent	Точка + процент
 ALIAS_PointPercent	PASS
-PointSize	Point + size
+PointSize	Точка + размер
 ALIAS_PointSize	PASS

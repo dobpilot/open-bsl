@@ -1,4 +1,4 @@
-ARITY_1	{DataProcessor.Замеры.Form.Форма.Form(34)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ПолучитьДанныеВыбора)
-ARITY_2	{<Unknown module>(1)}: Error calling context method (GetChoiceData): Metadata object is not found using specified type
-ARITY_3	{DataProcessor.Замеры.Form.Форма.Form(50)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,54)}: Too many actual parameters (ПолучитьДанныеВыбора)
-EN_ALIAS	{<Unknown module>(1)}: Error calling context method (GetChoiceData): Metadata object is not found using specified type
+ARITY_1	{Обработка.Замеры.Форма.Форма.Форма(34)}: Ошибка компиляции при вычислении выражения или выполнении фрагмента кода: {<Неизвестный модуль>(1,1)}: Недостаточно фактических параметров (ПолучитьДанныеВыбора)
+ARITY_2	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПолучитьДанныеВыбора): По указанному типу объект метаданных не найден
+ARITY_3	{Обработка.Замеры.Форма.Форма.Форма(50)}: Ошибка компиляции при вычислении выражения или выполнении фрагмента кода: {<Неизвестный модуль>(1,54)}: Слишком много фактических параметров (ПолучитьДанныеВыбора)
+EN_ALIAS	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПолучитьДанныеВыбора): По указанному типу объект метаданных не найден

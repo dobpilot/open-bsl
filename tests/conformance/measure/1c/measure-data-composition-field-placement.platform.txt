@@ -1,17 +1,17 @@
-Auto
-Vertical
-Combined
-Horizontal
-Separate column
-Auto
-Vertical
-Combined
-Horizontal
-Separate column
-DataCompositionFieldPlacement
-EnumDataCompositionFieldPlacement
-DataCompositionFieldPlacement
-DataCompositionFieldPlacement
+Авто
+Вертикально
+Вместе
+Горизонтально
+В отдельной колонке
+Авто
+Вертикально
+Вместе
+Горизонтально
+В отдельной колонке
+РасположениеПоляКомпоновкиДанных
+ПеречислениеРасположениеПоляКомпоновкиДанных
+РасположениеПоляКомпоновкиДанных
+РасположениеПоляКомпоновкиДанных
 1
 1
 1
@@ -19,4 +19,4 @@ DataCompositionFieldPlacement
 1
 0
 0
-Auto
+Авто

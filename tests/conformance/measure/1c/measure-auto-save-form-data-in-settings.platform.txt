@@ -1,4 +1,4 @@
-USE	Use	AutoSaveFormDataInSettings
-DONT_USE	Do not use	AutoSaveFormDataInSettings
+USE	Использовать	АвтоматическоеСохранениеДанныхФормыВНастройках
+DONT_USE	Не использовать	АвтоматическоеСохранениеДанныхФормыВНастройках
 USE_ALIAS	Yes
 DONT_USE_ALIAS	Yes

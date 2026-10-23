@@ -1,7 +1,7 @@
-ROOT	EnumFoldersAndItems
-TYPE	FoldersAndItems
-AUTO	Auto
-FOLDERS	Folders
-BOTH	FoldersAndItems
-ITEMS	Items
+ROOT	ПеречислениеГруппыИЭлементы
+TYPE	ГруппыИЭлементы
+AUTO	Авто
+FOLDERS	Группы
+BOTH	ГруппыИЭлементы
+ITEMS	Элементы
 ALIASES	PASS

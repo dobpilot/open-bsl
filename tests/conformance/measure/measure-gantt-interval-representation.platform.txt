@@ -1,8 +1,8 @@
-gantt.ROOT	EnumGanttChartIntervalRepresentation
-gantt.TYPE	GanttChartIntervalRepresentation
-gantt.Flat	Flat
-gantt.ThreeDimensional	3D
-gantt.Rhomb	Diamond
-gantt.Gradient	Gradient
+gantt.ROOT	ПеречислениеОтображениеИнтервалаДиаграммыГанта
+gantt.TYPE	ОтображениеИнтервалаДиаграммыГанта
+gantt.Flat	Плоский
+gantt.ThreeDimensional	Объемный
+gantt.Rhomb	Ромб
+gantt.Gradient	Градиент
 gantt.ALIASES	PASS
 gantt.FOLDED	PASS

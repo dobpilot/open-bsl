@@ -1,7 +1,7 @@
-PDF	PDF	PDFDocumentFileType
-PDF_A_1	PDF/A-1	PDFDocumentFileType
-PDF_A_2	PDF/A-2	PDFDocumentFileType
-PDF_A_3	PDF/A-3	PDFDocumentFileType
+PDF	PDF	ТипФайлаДокументаPDF
+PDF_A_1	PDF/A-1	ТипФайлаДокументаPDF
+PDF_A_2	PDF/A-2	ТипФайлаДокументаPDF
+PDF_A_3	PDF/A-3	ТипФайлаДокументаPDF
 PDF_ALIAS	Yes
 PDF_A_1_ALIAS	Yes
 PDF_A_2_ALIAS	Yes

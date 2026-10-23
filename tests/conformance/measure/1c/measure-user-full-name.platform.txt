@@ -1,5 +1,5 @@
 file.begin	user-full-name-1
 USER.FULL_NAME.VALUE	
-USER.FULL_NAME.TYPE	String
-USER.FULL_NAME.ALIAS	Yes
+USER.FULL_NAME.TYPE	Строка
+USER.FULL_NAME.ALIAS	Да
 file.end	user-full-name-1

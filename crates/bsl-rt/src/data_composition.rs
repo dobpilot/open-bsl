@@ -9,21 +9,21 @@ use crate::{
 pub(crate) static DATA_COMPOSITION_FIELD_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПолеКомпоновкиДанных",
-    type_display: "Data composition field",
+    type_display: "Поле компоновки данных",
     type_names: &["DataCompositionField"],
 };
 
 pub(crate) static DATA_COMPOSITION_PARAMETER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПараметрКомпоновкиДанных",
-    type_display: "Data composition parameter",
+    type_display: "Параметр компоновки данных",
     type_names: &["DataCompositionParameter"],
 };
 
 pub(crate) static STANDARD_BEGINNING_DATE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СтандартнаяДатаНачала",
-    type_display: "Standard beginning date",
+    type_display: "Стандартная дата начала",
     type_names: &["StandardBeginningDate"],
 };
 

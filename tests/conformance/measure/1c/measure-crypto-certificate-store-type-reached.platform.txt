@@ -1,4 +1,4 @@
-ROOT	Root certificates	PASS
-PERSONAL	Personal certificates	PASS
-RECIPIENT	Recipient certificates	PASS
-TYPE	CryptoCertificateStoreType
+ROOT	Корневые сертификаты	PASS
+PERSONAL	Персональные сертификаты	PASS
+RECIPIENT	Сертификаты получателей	PASS
+TYPE	ТипХранилищаСертификатовКриптографии

@@ -64,14 +64,14 @@ struct InfoBaseConnectionObject {
 pub(crate) static INFOBASE_SESSION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "СеансИнформационнойБазы",
-    type_display: "Active session",
+    type_display: "Активный сеанс",
     type_names: &["InfoBaseSession"],
 };
 
 pub(crate) static INFOBASE_CONNECTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "СоединениеИнформационнойБазы",
-    type_display: "Active connection",
+    type_display: "Активное соединение",
     type_names: &["InfoBaseConnection"],
 };
 

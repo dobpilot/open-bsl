@@ -5,7 +5,7 @@ use crate::{BslObject, BslValue, CallContext, ObjectProtocol, ObjectRef, RtError
 pub(crate) static FORMATTED_STRING_TYPE: crate::TypeDescriptor = crate::TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФорматированнаяСтрока",
-    type_display: "Formatted string",
+    type_display: "Форматированная строка",
     type_names: &["FormattedString"],
 };
 

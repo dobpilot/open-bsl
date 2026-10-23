@@ -2,7 +2,7 @@ html.initial.root	html
 html.initial.root.children	0
 html.initial.body.undefined	Yes
 html.body.same	Yes
-html.body.type	HTML body element
+html.body.type	Элемент тело HTML
 html.body.name	body
 html.body.replaced	Yes
 html.body.old.parent.undefined	Yes

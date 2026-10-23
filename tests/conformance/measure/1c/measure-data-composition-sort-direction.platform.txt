@@ -1,5 +1,5 @@
-ROOT	EnumDataCompositionSortDirection
-TYPE	DataCompositionSortDirection
-ASC	Ascending
-DESC	Descending
+ROOT	ПеречислениеНаправлениеСортировкиКомпоновкиДанных
+TYPE	НаправлениеСортировкиКомпоновкиДанных
+ASC	По возрастанию
+DESC	По убыванию
 ALIASES	PASS

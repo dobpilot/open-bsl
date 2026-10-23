@@ -22,6 +22,6 @@ fn round_mode_members_match_the_platform_measurement() {
     };
     assert_eq!(
         value.to_string(),
-        "RoundMode|Round 15 to 10|Round 15 to 20|1|2|true"
+        "РежимОкругления|Округлять 15 как 10|Округлять 15 как 20|1|2|true"
     );
 }

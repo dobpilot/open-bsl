@@ -1,4 +1,4 @@
-AUTO	Auto	PASS
-USUAL	Standard	PASS
-COMPACT	Compact	PASS
-TYPE	ButtonGroupRepresentation
+AUTO	Авто	PASS
+USUAL	Обычное	PASS
+COMPACT	Компактное	PASS
+TYPE	ОтображениеГруппыКнопок

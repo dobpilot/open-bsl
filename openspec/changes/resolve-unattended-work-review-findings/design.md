@@ -137,3 +137,14 @@ CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0` and a fresh
 in the target directory and 601 executables in `debug/deps` before, 1.9 GB and
 63 executables after. `cargo test --workspace --no-fail-fast` passed 4110
 tests with 1 ignored both before and after.
+
+## Measurement environment
+
+The canonical measurement environment is Russian (project decision of 2026-10-23): `run-on-1c.sh` adds the `Русский` configuration language when the dumped configuration lacks it, sets `ScriptVariant` to `Russian` and `DefaultLanguage` to `Language.Русский`, and starts `ENTERPRISE` with `/Lru /VLru`. A probe may still override the script variant through its manifest; the three dangling-enumeration probes keep an English variant on purpose, because they compare the two languages. When no display is given, the runner starts its own Xvfb so that platform modals never reach the user's screen.
+
+Every committed oracle was re-measured in this environment, and the runtime tables were rebuilt from the measurement rather than translated: member and metatype presentations in `enums.rs`, type presentations in `types.rs`, and component `type_display` strings. Metadata property enumerations (`РежимСовместимости`, `НазначениеРасширенияКонфигурации`, the common attribute enumerations) present as their Russian identifier in this environment; `measure-extension-purpose-presentations` records the two not covered by an earlier probe. Tests no longer rewrite `Да` to `Yes` or format with `Л=en`; they configure a Russian session instead.
+
+Re-measuring on the shared `/tmp/open-bsl-ib` turned out to carry objects and data between unrelated probes, so the batch was redone with a fresh `ONEC_IB` for every probe. Three results remain open:
+
+- `measure-functional-option-rights` and `measure-functional-option-source-rights` need an authenticated session that only the research runner provided; their English oracles are kept until the runner can log in as a user.
+- In the canonical environment `ЗначениеВСтрокуВнутр(ЗначениеИзСтрокиВнутр(...))` of a reference to a type absent from the configuration no longer round-trips (`VSTR.FORMAT.REF.TRANSIT`, `VSTR.FORMAT.FILE.REF`), while this interpreter keeps the string byte for byte. No test reads these lines; the divergence needs its own probe.

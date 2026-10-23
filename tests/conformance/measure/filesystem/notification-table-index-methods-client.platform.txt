@@ -1,16 +1,16 @@
 file.begin	notification-table-index-methods-client-1
-collection.type	Value table index collection
-collection.identity	Yes
+collection.type	Коллекция индексов таблицы значений
+collection.identity	Да
 collection.empty	0
-add.ru	Value table index|alias=Yes|count=1
-add.en	Value table index|alias=Yes|count=2
-add.none	ok:Value table index|count=1
+add.ru	Индекс таблицы значений|alias=Да|count=1
+add.en	Индекс таблицы значений|alias=Да|count=2
+add.none	ok:Индекс таблицы значений|count=1
 add.extra	error|count=0
 add.bad_column	error|count=0
-add.empty	ok:Value table index|count=1
-add.multiple	ok:Value table index|count=1
-add.duplicate	ok:Value table index|count=1
-delete.ru	1|remaining=Yes
+add.empty	ok:Индекс таблицы значений|count=1
+add.multiple	ok:Индекс таблицы значений|count=1
+add.duplicate	ok:Индекс таблицы значений|count=1
+delete.ru	1|remaining=Да
 delete.en	0
 delete.none	error|count=0
 delete.extra	error|count=1
@@ -19,7 +19,7 @@ clear.ru	0
 clear.en	0
 clear.extra	error|count=0
 clear.expression	error|count=0
-copy.indexes	2|same=No
+copy.indexes	2|same=Нет
 copy.independent	2|copy=1
 copy.selected_column	0
 copy.explicit_columns	0|empty=2

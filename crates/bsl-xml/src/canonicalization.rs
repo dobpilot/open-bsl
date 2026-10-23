@@ -8,7 +8,7 @@ use bsl_rt::{
 pub(crate) static TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПреобразованиеККаноническомуXML",
-    type_display: "Canonicalizing DOM document XML writer",
+    type_display: "Каноническая Запись XML Документа DOM",
     type_names: &["ConversionToCanonicalXML"],
 };
 
@@ -23,7 +23,9 @@ impl ObjectProtocol for Canonicalization {
         METHODS
     }
     fn display(&self) -> String {
-        TYPE.type_display.to_owned()
+        // Значение печатается именем типа, а тип — представлением:
+        // `measure-value-presentations-ru.platform.txt`.
+        TYPE.name.to_owned()
     }
 }
 

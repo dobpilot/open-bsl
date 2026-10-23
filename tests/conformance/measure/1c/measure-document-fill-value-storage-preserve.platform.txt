@@ -1,2 +1,2 @@
-document.storage.preserve.string=String:[existing]
-document.storage.preserve.undefined=Undefined:[]
+document.storage.preserve.string=Строка:[existing]
+document.storage.preserve.undefined=Не определено:[]

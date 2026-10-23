@@ -49,7 +49,7 @@ static GEOGRAPHICAL_SCHEMA_TYPE: TypeDescriptor = TypeDescriptor {
 static CHART_TYPE: TypeDescriptor = TypeDescriptor {
     package: PACKAGE_NAME,
     name: "Диаграмма",
-    type_display: "Chart",
+    type_display: "Диаграмма",
     type_names: &["Chart"],
 };
 

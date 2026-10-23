@@ -10,7 +10,7 @@ use bsl_rt::{
 pub(crate) static TEXT_READER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЧтениеТекста",
-    type_display: "TextReader",
+    type_display: "ЧтениеТекста",
     type_names: &["TextReader"],
 };
 

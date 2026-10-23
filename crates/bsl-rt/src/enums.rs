@@ -100,40 +100,40 @@ system_enums! {
         meta "ПеречислениеРежимСовместимости" global [] {
         // Состав типа и все представления измерены на платформе 8.3.27.2342
         // через `Метаданные.СвойстваОбъектов.РежимСовместимости`.
-        CompatibilityModeVersion8_1("Версия8_1", "Version8_1", "Version8_1"),
-        CompatibilityModeVersion8_2_13("Версия8_2_13", "Version8_2_13", "Version8_2_13"),
-        CompatibilityModeVersion8_2_16("Версия8_2_16", "Version8_2_16", "Version8_2_16"),
-        CompatibilityModeVersion8_3_1("Версия8_3_1", "Version8_3_1", "Version8_3_1"),
-        CompatibilityModeVersion8_3_2("Версия8_3_2", "Version8_3_2", "Version8_3_2"),
-        CompatibilityModeVersion8_3_3("Версия8_3_3", "Version8_3_3", "Version8_3_3"),
-        CompatibilityModeVersion8_3_4("Версия8_3_4", "Version8_3_4", "Version8_3_4"),
-        CompatibilityModeVersion8_3_5("Версия8_3_5", "Version8_3_5", "Version8_3_5"),
-        CompatibilityModeVersion8_3_6("Версия8_3_6", "Version8_3_6", "Version8_3_6"),
-        CompatibilityModeVersion8_3_7("Версия8_3_7", "Version8_3_7", "Version8_3_7"),
-        CompatibilityModeVersion8_3_8("Версия8_3_8", "Version8_3_8", "Version8_3_8"),
-        CompatibilityModeVersion8_3_9("Версия8_3_9", "Version8_3_9", "Version8_3_9"),
-        CompatibilityModeVersion8_3_10("Версия8_3_10", "Version8_3_10", "Version8_3_10"),
-        CompatibilityModeVersion8_3_11("Версия8_3_11", "Version8_3_11", "Version8_3_11"),
-        CompatibilityModeVersion8_3_12("Версия8_3_12", "Version8_3_12", "Version8_3_12"),
-        CompatibilityModeVersion8_3_13("Версия8_3_13", "Version8_3_13", "Version8_3_13"),
-        CompatibilityModeVersion8_3_14("Версия8_3_14", "Version8_3_14", "Version8_3_14"),
-        CompatibilityModeVersion8_3_15("Версия8_3_15", "Version8_3_15", "Version8_3_15"),
-        CompatibilityModeVersion8_3_16("Версия8_3_16", "Version8_3_16", "Version8_3_16"),
-        CompatibilityModeVersion8_3_17("Версия8_3_17", "Version8_3_17", "Version8_3_17"),
-        CompatibilityModeVersion8_3_18("Версия8_3_18", "Version8_3_18", "Version8_3_18"),
-        CompatibilityModeVersion8_3_19("Версия8_3_19", "Version8_3_19", "Version8_3_19"),
-        CompatibilityModeVersion8_3_20("Версия8_3_20", "Version8_3_20", "Version8_3_20"),
-        CompatibilityModeVersion8_3_21("Версия8_3_21", "Version8_3_21", "Version8_3_21"),
-        CompatibilityModeVersion8_3_22("Версия8_3_22", "Version8_3_22", "Version8_3_22"),
-        CompatibilityModeVersion8_3_23("Версия8_3_23", "Version8_3_23", "Version8_3_23"),
-        CompatibilityModeVersion8_3_24("Версия8_3_24", "Version8_3_24", "Version8_3_24"),
-        CompatibilityModeVersion8_3_25("Версия8_3_25", "Version8_3_25", "Version8_3_25"),
-        CompatibilityModeVersion8_3_26("Версия8_3_26", "Version8_3_26", "Version8_3_26"),
-        CompatibilityModeDontUse("НеИспользовать", "DontUse", "DontUse"),
+        CompatibilityModeVersion8_1("Версия8_1", "Version8_1", "Версия8_1"),
+        CompatibilityModeVersion8_2_13("Версия8_2_13", "Version8_2_13", "Версия8_2_13"),
+        CompatibilityModeVersion8_2_16("Версия8_2_16", "Version8_2_16", "Версия8_2_16"),
+        CompatibilityModeVersion8_3_1("Версия8_3_1", "Version8_3_1", "Версия8_3_1"),
+        CompatibilityModeVersion8_3_2("Версия8_3_2", "Version8_3_2", "Версия8_3_2"),
+        CompatibilityModeVersion8_3_3("Версия8_3_3", "Version8_3_3", "Версия8_3_3"),
+        CompatibilityModeVersion8_3_4("Версия8_3_4", "Version8_3_4", "Версия8_3_4"),
+        CompatibilityModeVersion8_3_5("Версия8_3_5", "Version8_3_5", "Версия8_3_5"),
+        CompatibilityModeVersion8_3_6("Версия8_3_6", "Version8_3_6", "Версия8_3_6"),
+        CompatibilityModeVersion8_3_7("Версия8_3_7", "Version8_3_7", "Версия8_3_7"),
+        CompatibilityModeVersion8_3_8("Версия8_3_8", "Version8_3_8", "Версия8_3_8"),
+        CompatibilityModeVersion8_3_9("Версия8_3_9", "Version8_3_9", "Версия8_3_9"),
+        CompatibilityModeVersion8_3_10("Версия8_3_10", "Version8_3_10", "Версия8_3_10"),
+        CompatibilityModeVersion8_3_11("Версия8_3_11", "Version8_3_11", "Версия8_3_11"),
+        CompatibilityModeVersion8_3_12("Версия8_3_12", "Version8_3_12", "Версия8_3_12"),
+        CompatibilityModeVersion8_3_13("Версия8_3_13", "Version8_3_13", "Версия8_3_13"),
+        CompatibilityModeVersion8_3_14("Версия8_3_14", "Version8_3_14", "Версия8_3_14"),
+        CompatibilityModeVersion8_3_15("Версия8_3_15", "Version8_3_15", "Версия8_3_15"),
+        CompatibilityModeVersion8_3_16("Версия8_3_16", "Version8_3_16", "Версия8_3_16"),
+        CompatibilityModeVersion8_3_17("Версия8_3_17", "Version8_3_17", "Версия8_3_17"),
+        CompatibilityModeVersion8_3_18("Версия8_3_18", "Version8_3_18", "Версия8_3_18"),
+        CompatibilityModeVersion8_3_19("Версия8_3_19", "Version8_3_19", "Версия8_3_19"),
+        CompatibilityModeVersion8_3_20("Версия8_3_20", "Version8_3_20", "Версия8_3_20"),
+        CompatibilityModeVersion8_3_21("Версия8_3_21", "Version8_3_21", "Версия8_3_21"),
+        CompatibilityModeVersion8_3_22("Версия8_3_22", "Version8_3_22", "Версия8_3_22"),
+        CompatibilityModeVersion8_3_23("Версия8_3_23", "Version8_3_23", "Версия8_3_23"),
+        CompatibilityModeVersion8_3_24("Версия8_3_24", "Version8_3_24", "Версия8_3_24"),
+        CompatibilityModeVersion8_3_25("Версия8_3_25", "Version8_3_25", "Версия8_3_25"),
+        CompatibilityModeVersion8_3_26("Версия8_3_26", "Version8_3_26", "Версия8_3_26"),
+        CompatibilityModeDontUse("НеИспользовать", "DontUse", "НеИспользовать"),
     }
     /// Режим запуска клиентского приложения.
     // ИЗМЕРЕНО на 8.3.27 вместе с членами перечисления.
-    ClientRunMode("РежимЗапускаКлиентскогоПриложения", "ClientRunMode") meta "EnumClientRunMode" {
+    ClientRunMode("РежимЗапускаКлиентскогоПриложения", "ClientRunMode") meta "ПеречислениеРежимЗапускаКлиентскогоПриложения" {
         ClientRunModeAuto("Авто", "Auto", "Авто"),
         ClientRunModeOrdinaryApplication(
             "ОбычноеПриложение",
@@ -149,14 +149,14 @@ system_enums! {
     /// Режим открытия форм клиентского приложения.
     // Имена типов измерены пробой `measure-client-settings.bsl`.
     ApplicationFormsOpenningMode("РежимОткрытияФормПриложения", "ApplicationFormsOpenningMode")
-        meta "ApplicationFormsOpenningMode" {
+        meta "ПеречислениеРежимОткрытияФормПриложения" {
         // Полный состав, оба написания, представления и типы измерены
         // на платформе 8.3.27.2342 пробой `measure-client-settings.bsl`.
-        ApplicationFormsOpenningModeTabs("Закладки", "Tabs", "Tabs"),
+        ApplicationFormsOpenningModeTabs("Закладки", "Tabs", "Закладки"),
         ApplicationFormsOpenningModeSingleWindows(
             "ОтдельныеОкна",
             "SingleWindows",
-            "Separate windows"
+            "Отдельные окна"
         ),
     }
     /// Вариант интерфейса клиентского приложения.
@@ -164,49 +164,49 @@ system_enums! {
         "ВариантИнтерфейсаКлиентскогоПриложения",
         "ClientApplicationInterfaceVariant"
     )
-        meta "ClientApplicationInterfaceVariant" {
-        ClientApplicationInterfaceVariantVersion8_2("Версия8_2", "Version8_2", "Version 8.2"),
-        ClientApplicationInterfaceVariantTaxi("Такси", "Taxi", "Taxi"),
+        meta "ПеречислениеВариантИнтерфейсаКлиентскогоПриложения" {
+        ClientApplicationInterfaceVariantVersion8_2("Версия8_2", "Version8_2", "Версия 8.2"),
+        ClientApplicationInterfaceVariantTaxi("Такси", "Taxi", "Такси"),
     }
     /// Способ отображения разделов приложения.
     SectionsPanelRepresentation("ОтображениеПанелиРазделов", "SectionsPanelRepresentation")
-        meta "SectionsPanelRepresentation" {
+        meta "ПеречислениеОтображениеПанелиРазделов" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-command-interface-settings.bsl`.
-        SectionsPanelRepresentationPicture("Картинка", "Picture", "Icon"),
+        SectionsPanelRepresentationPicture("Картинка", "Picture", "Картинка"),
         SectionsPanelRepresentationPictureAndText(
             "КартинкаИТекст",
             "PictureAndText",
-            "Icon and text"
+            "Картинка и текст"
         ),
         SectionsPanelRepresentationPictureOnTopAndText(
             "КартинкаСверхуИТекст",
             "PictureOnTopAndText",
-            "Text below icon"
+            "Текст под картинкой"
         ),
         SectionsPanelRepresentationPictureOnLeftAndText(
             "КартинкаСлеваИТекст",
             "PictureOnLeftAndText",
-            "Text to the right of icon"
+            "Текст справа от картинки"
         ),
-        SectionsPanelRepresentationText("Текст", "Text", "Text"),
+        SectionsPanelRepresentationText("Текст", "Text", "Текст"),
     }
     /// Источник списка расширений конфигурации.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-configuration-extension-enums.bsl`.
     ConfigurationExtensionsSource("ИсточникРасширенийКонфигурации", "ConfigurationExtensionsSource")
-        meta "EnumConfigurationExtensionsSource" {
+        meta "ПеречислениеИсточникРасширенийКонфигурации" {
         // Строковые представления и метатипы трёх перечислений расширений
         // измерены на платформе 8.3.27.2342 отдельной воспроизводимой пробой.
-        ConfigurationExtensionsSourceDatabase("БазаДанных", "Database", "Database"),
+        ConfigurationExtensionsSourceDatabase("БазаДанных", "Database", "БазаДанных"),
         ConfigurationExtensionsSourceSessionApplied(
             "СеансАктивные",
             "SessionApplied",
-            "SessionApplied"
+            "СеансАктивные"
         ),
         ConfigurationExtensionsSourceSessionDisabled(
             "СеансОтключенные",
             "SessionDisabled",
-            "SessionDisabled"
+            "СеансОтключенные"
         ),
     }
     /// Область действия расширения конфигурации.
@@ -214,12 +214,12 @@ system_enums! {
         "ОбластьДействияРасширенияКонфигурации",
         "ConfigurationExtensionScope"
     )
-        meta "EnumConfigurationExtensionScope" {
-        ConfigurationExtensionScopeInfoBase("ИнформационнаяБаза", "InfoBase", "Infobase"),
+        meta "ПеречислениеОбластьДействияРасширенияКонфигурации" {
+        ConfigurationExtensionScopeInfoBase("ИнформационнаяБаза", "InfoBase", "Информационная база"),
         ConfigurationExtensionScopeDataSeparation(
             "РазделениеДанных",
             "DataSeparation",
-            "Data separation"
+            "Разделение данных"
         ),
     }
     /// Назначение расширения из пространства свойств метаданных.
@@ -230,41 +230,41 @@ system_enums! {
         meta "MetadataObjectsPropertyEnumed" global [] {
         // Назначение доступно только через свойства метаданных; состав и
         // представления измерены контролем `configuration-extension-purpose`.
-        ConfigurationExtensionPurposePatch("Исправление", "Patch", "Patch"),
-        ConfigurationExtensionPurposeCustomization("Адаптация", "Customization", "Customization"),
-        ConfigurationExtensionPurposeAddOn("Дополнение", "AddOn", "AddOn"),
+        ConfigurationExtensionPurposePatch("Исправление", "Patch", "Исправление"),
+        ConfigurationExtensionPurposeCustomization("Адаптация", "Customization", "Адаптация"),
+        ConfigurationExtensionPurposeAddOn("Дополнение", "AddOn", "Дополнение"),
     }
     /// Важность проблемы применения расширения конфигурации.
     ConfigurationExtensionApplicationIssueSeverity(
         "ВажностьПроблемыПримененияРасширенияКонфигурации",
         "ConfigurationExtensionApplicationIssueSeverity"
     )
-        meta "EnumConfigurationExtensionApplicationIssueSeverity" {
-        ConfigurationExtensionApplicationIssueSeverityCritical("Критичная", "Critical", "Critical"),
-        ConfigurationExtensionApplicationIssueSeverityLow("Низкая", "Low", "Low"),
-        ConfigurationExtensionApplicationIssueSeverityModerate("Обычная", "Moderate", "Moderate"),
+        meta "ПеречислениеВажностьПроблемыПримененияРасширенияКонфигурации" {
+        ConfigurationExtensionApplicationIssueSeverityCritical("Критичная", "Critical", "Критичная"),
+        ConfigurationExtensionApplicationIssueSeverityLow("Низкая", "Low", "Низкая"),
+        ConfigurationExtensionApplicationIssueSeverityModerate("Обычная", "Moderate", "Обычная"),
     }
     /// Уровень важности события журнала регистрации.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-event-log.bsl`.
-    EventLogLevel("УровеньЖурналаРегистрации", "EventLogLevel") meta "EnumEventLogLevel" {
+    EventLogLevel("УровеньЖурналаРегистрации", "EventLogLevel") meta "ПеречислениеУровеньЖурналаРегистрации" {
         // Имена, метатипы и представления измерены на платформе 8.3.27.2342
         // пробой `measure-event-log.bsl`.
-        EventLogLevelNote("Примечание", "Note", "Note"),
-        EventLogLevelInformation("Информация", "Information", "Information"),
-        EventLogLevelWarning("Предупреждение", "Warning", "Warning"),
-        EventLogLevelError("Ошибка", "Error", "Error"),
+        EventLogLevelNote("Примечание", "Note", "Примечание"),
+        EventLogLevelInformation("Информация", "Information", "Информация"),
+        EventLogLevelWarning("Предупреждение", "Warning", "Предупреждение"),
+        EventLogLevelError("Ошибка", "Error", "Ошибка"),
     }
     /// Связь записи журнала регистрации с текущей транзакцией.
     EventLogEntryTransactionMode(
         "РежимТранзакцииЗаписиЖурналаРегистрации",
         "EventLogEntryTransactionMode"
     )
-        meta "EnumEventLogEntryTransactionMode" {
-        EventLogEntryTransactionModeIndependent("Независимая", "Independent", "Independent"),
+        meta "ПеречислениеРежимТранзакцииЗаписиЖурналаРегистрации" {
+        EventLogEntryTransactionModeIndependent("Независимая", "Independent", "Независимая"),
         EventLogEntryTransactionModeTransactional(
             "Транзакционная",
             "Transactional",
-            "Transactional"
+            "Транзакционная"
         ),
     }
     /// Статус транзакции записи журнала регистрации.
@@ -272,80 +272,80 @@ system_enums! {
         "СтатусТранзакцииЗаписиЖурналаРегистрации",
         "EventLogEntryTransactionStatus"
     )
-        meta "EventLogEntryTransactionStatus" {
+        meta "ПеречислениеСтатусТранзакцииЗаписиЖурналаРегистрации" {
         // Полный состав и представления измерены на 8.3.27.2342.
-        EventLogEntryTransactionStatusCommitted("Зафиксирована", "Committed", "Committed"),
-        EventLogEntryTransactionStatusUnfinished("НеЗавершена", "Unfinished", "Not completed"),
+        EventLogEntryTransactionStatusCommitted("Зафиксирована", "Committed", "Зафиксирована"),
+        EventLogEntryTransactionStatusUnfinished("НеЗавершена", "Unfinished", "Не завершена"),
         EventLogEntryTransactionStatusNotApplicable(
             "НетТранзакции",
             "NotApplicable",
-            "No transaction"
+            "Нет транзакции"
         ),
-        EventLogEntryTransactionStatusRolledBack("Отменена", "RolledBack", "Rolled back"),
+        EventLogEntryTransactionStatusRolledBack("Отменена", "RolledBack", "Отменена"),
     }
     /// Способ отправки отчёта об ошибке.
     ErrorReportingMode("РежимОтправкиИнформацииОбОшибке", "ErrorReportingMode")
-        meta "ErrorReportingMode" {
+        meta "ПеречислениеРежимОтправкиИнформацииОбОшибке" {
         // Состав, оба написания и представления измерены на платформе 8.3.27.2342
         // пробой `measure-error-processing.bsl`.
-        ErrorReportingModeAuto("Авто", "Auto", "Auto"),
-        ErrorReportingModeDontSend("НеОтправлять", "DontSend", "Do not send"),
-        ErrorReportingModeAskUser("СпрашиватьПользователя", "AskUser", "Ask user"),
-        ErrorReportingModeSend("Отправлять", "Send", "Send"),
+        ErrorReportingModeAuto("Авто", "Auto", "Авто"),
+        ErrorReportingModeDontSend("НеОтправлять", "DontSend", "Не отправлять"),
+        ErrorReportingModeAskUser("СпрашиватьПользователя", "AskUser", "Спрашивать пользователя"),
+        ErrorReportingModeSend("Отправлять", "Send", "Отправлять"),
     }
     /// Действие над элементом данных при обмене.
-    DataItemSend("ОтправкаЭлементаДанных", "DataItemSend") meta "DataItemSend" {
+    DataItemSend("ОтправкаЭлементаДанных", "DataItemSend") meta "ПеречислениеОтправкаЭлементаДанных" {
         // Состав, оба написания и представления измерены на платформе 8.3.27.2074
         // пробой `measure-data-item-send.bsl`.
-        DataItemSendAuto("Авто", "Auto", "Auto"),
-        DataItemSendDelete("Удалить", "Delete", "Delete"),
-        DataItemSendIgnore("Игнорировать", "Ignore", "Ignore"),
+        DataItemSendAuto("Авто", "Auto", "Авто"),
+        DataItemSendDelete("Удалить", "Delete", "Удалить"),
+        DataItemSendIgnore("Игнорировать", "Ignore", "Игнорировать"),
     }
     /// Действие над полученным элементом данных при обмене.
-    DataItemReceive("ПолучениеЭлементаДанных", "DataItemReceive") meta "DataItemReceive" {
+    DataItemReceive("ПолучениеЭлементаДанных", "DataItemReceive") meta "ПеречислениеПолучениеЭлементаДанных" {
         // Состав, оба написания и представления измерены на платформе 8.3.27.2074
         // пробой `measure-data-item-receive.bsl`.
-        DataItemReceiveAuto("Авто", "Auto", "Auto"),
-        DataItemReceiveAccept("Принять", "Accept", "Accept"),
-        DataItemReceiveIgnore("Игнорировать", "Ignore", "Ignore"),
+        DataItemReceiveAuto("Авто", "Auto", "Авто"),
+        DataItemReceiveAccept("Принять", "Accept", "Принять"),
+        DataItemReceiveIgnore("Игнорировать", "Ignore", "Игнорировать"),
     }
     /// Режим обновления предопределённых данных.
     PredefinedDataUpdate("ОбновлениеПредопределенныхДанных", "PredefinedDataUpdate")
-        meta "PredefinedDataUpdate" {
+        meta "ПеречислениеОбновлениеПредопределенныхДанных" {
         // Состав, оба написания и представления измерены на платформе 8.3.27.2342
         // пробой `measure-infobase-predefined-data-update.bsl`.
-        PredefinedDataUpdateAuto("Авто", "Auto", "Auto"),
-        PredefinedDataUpdateAutoUpdate("ОбновлятьАвтоматически", "AutoUpdate", "Auto update"),
+        PredefinedDataUpdateAuto("Авто", "Auto", "Авто"),
+        PredefinedDataUpdateAutoUpdate("ОбновлятьАвтоматически", "AutoUpdate", "Обновлять автоматически"),
         PredefinedDataUpdateDontAutoUpdate(
             "НеОбновлятьАвтоматически",
             "DontAutoUpdate",
-            "Auto update off"
+            "Не обновлять автоматически"
         ),
     }
     /// Режим проведения документа.
     DocumentPostingMode("РежимПроведенияДокумента", "DocumentPostingMode")
-        meta "DocumentPostingMode" {
-        DocumentPostingModeOperational("Оперативный", "RealTime", "Real-time"),
-        DocumentPostingModeNonOperational("Неоперативный", "Regular", "Regular"),
+        meta "ПеречислениеРежимПроведенияДокумента" {
+        DocumentPostingModeOperational("Оперативный", "RealTime", "Оперативный"),
+        DocumentPostingModeNonOperational("Неоперативный", "Regular", "Неоперативный"),
     }
     /// Режим записи документа.
-    DocumentWriteMode("РежимЗаписиДокумента", "DocumentWriteMode") meta "DocumentWriteMode" {
-        DocumentWriteModeWrite("Запись", "Write", "Record"),
-        DocumentWriteModePosting("Проведение", "Posting", "Posting"),
-        DocumentWriteModeUndoPosting("ОтменаПроведения", "UndoPosting", "Cancel posting"),
+    DocumentWriteMode("РежимЗаписиДокумента", "DocumentWriteMode") meta "ПеречислениеРежимЗаписиДокумента" {
+        DocumentWriteModeWrite("Запись", "Write", "Запись"),
+        DocumentWriteModePosting("Проведение", "Posting", "Проведение"),
+        DocumentWriteModeUndoPosting("ОтменаПроведения", "UndoPosting", "Отмена проведения"),
     }
     /// Способ обхода записей результата запроса.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-query-result-iteration.bsl`.
     QueryResultIteration("ОбходРезультатаЗапроса", "QueryResultIteration")
-        meta "QueryResultIteration" {
+        meta "ПеречислениеОбходРезультатаЗапроса" {
         // Полный состав, оба написания, представления и тип измерены на
         // платформе 8.3.27 пробой `measure-query-result-iteration.bsl`.
-        QueryResultIterationLinear("Прямой", "Linear", "Line"),
-        QueryResultIterationByGroups("ПоГруппировкам", "ByGroups", "By group"),
+        QueryResultIterationLinear("Прямой", "Linear", "Прямой"),
+        QueryResultIterationByGroups("ПоГруппировкам", "ByGroups", "По группировкам"),
         QueryResultIterationByGroupsWithHierarchy(
             "ПоГруппировкамСИерархией",
             "ByGroupsWithHierarchy",
-            "By group with hierarchy"
+            "По группировкам с иерархией"
         ),
     }
     /// Тип связи наборов данных компоновки данных.
@@ -353,22 +353,22 @@ system_enums! {
         "ТипСвязиНаборовДанныхКомпоновкиДанных",
         "DataCompositionDataSetsLinkType"
     )
-        meta "EnumDataCompositionDataSetsLinkType" {
+        meta "ПеречислениеТипСвязиНаборовДанныхКомпоновкиДанных" {
         // Члены, алиасы, типы и представления измерены на 8.3.27.2342.
-        DataCompositionDataSetsLinkTypeOuter("Внешняя", "Outer", "External"),
-        DataCompositionDataSetsLinkTypeInner("Внутренняя", "Inner", "Internal"),
+        DataCompositionDataSetsLinkTypeOuter("Внешняя", "Outer", "Внешняя"),
+        DataCompositionDataSetsLinkTypeInner("Внутренняя", "Inner", "Внутренняя"),
     }
     /// Тип соединения значений по сериям диаграммы.
     ChartValuesBySeriesConnectionType(
         "ТипСоединенияЗначенийПоСериямДиаграммы",
         "ChartValuesBySeriesConnectionType"
     )
-        meta "EnumChartValuesBySeriesConnectionType" {
-        ChartValuesBySeriesConnectionTypeNone("Нет", "None", "No"),
+        meta "ПеречислениеТипСоединенияЗначенийПоСериямДиаграммы" {
+        ChartValuesBySeriesConnectionTypeNone("Нет", "None", "Нет"),
         ChartValuesBySeriesConnectionTypeEdgesConnection(
             "СоединениеКраев",
             "EdgesConnection",
-            "Edge joint"
+            "Соединение краев"
         ),
     }
     /// Расположение легенды диаграммы компоновки данных.
@@ -376,84 +376,84 @@ system_enums! {
         "РасположениеЛегендыДиаграммыКомпоновкиДанных",
         "DataCompositionChartLegendPlacement"
     )
-        meta "EnumDataCompositionChartLegendPlacement" {
-        DataCompositionChartLegendPlacementNone("Нет", "None", "None"),
-        DataCompositionChartLegendPlacementLeft("Лево", "Left", "Left"),
-        DataCompositionChartLegendPlacementRight("Право", "Right", "Right"),
-        DataCompositionChartLegendPlacementTop("Верх", "Top", "Top"),
-        DataCompositionChartLegendPlacementBottom("Низ", "Bottom", "Bottom"),
+        meta "ПеречислениеРасположениеЛегендыДиаграммыКомпоновкиДанных" {
+        DataCompositionChartLegendPlacementNone("Нет", "None", "Нет"),
+        DataCompositionChartLegendPlacementLeft("Лево", "Left", "Лево"),
+        DataCompositionChartLegendPlacementRight("Право", "Right", "Право"),
+        DataCompositionChartLegendPlacementTop("Верх", "Top", "Верх"),
+        DataCompositionChartLegendPlacementBottom("Низ", "Bottom", "Низ"),
     }
     /// Тип записи выборки результата запроса.
-    QueryRecordType("ТипЗаписиЗапроса", "QueryRecordType") meta "EnumQueryRecordType" {
-        QueryRecordTypeDetailRecord("ДетальнаяЗапись", "DetailRecord", "Detailed record"),
-        QueryRecordTypeGroupTotal("ИтогПоГруппировке", "GroupTotal", "Total by group"),
-        QueryRecordTypeTotalByHierarchy("ИтогПоИерархии", "TotalByHierarchy", "Total by hierarchy"),
-        QueryRecordTypeOverall("ОбщийИтог", "Overall", "Grand total"),
+    QueryRecordType("ТипЗаписиЗапроса", "QueryRecordType") meta "ПеречислениеТипЗаписиЗапроса" {
+        QueryRecordTypeDetailRecord("ДетальнаяЗапись", "DetailRecord", "Детальная запись"),
+        QueryRecordTypeGroupTotal("ИтогПоГруппировке", "GroupTotal", "Итог по группировке"),
+        QueryRecordTypeTotalByHierarchy("ИтогПоИерархии", "TotalByHierarchy", "Итог по иерархии"),
+        QueryRecordTypeOverall("ОбщийИтог", "Overall", "Общий итог"),
     }
     /// Режим управляемой блокировки данных.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-data-lock-mode.bsl`.
-    DataLockMode("РежимБлокировкиДанных", "DataLockMode") meta "DataLockMode" {
+    DataLockMode("РежимБлокировкиДанных", "DataLockMode") meta "ПеречислениеРежимБлокировкиДанных" {
         // Полный состав, оба написания, представления и тип измерены на
         // платформе 8.3.27 пробой `measure-data-lock-mode.bsl`.
-        DataLockModeShared("Разделяемый", "Shared", "Shared"),
-        DataLockModeExclusive("Исключительный", "Exclusive", "Exceptional"),
+        DataLockModeShared("Разделяемый", "Shared", "Разделяемый"),
+        DataLockModeExclusive("Исключительный", "Exclusive", "Исключительный"),
     }
     /// Способ округления половины.
-    RoundMode("РежимОкругления", "RoundMode") meta "RoundMode" {
+    RoundMode("РежимОкругления", "RoundMode") meta "ПеречислениеРежимОкругления" {
         // Полный состав и представления измерены пробой `measure-round-mode.bsl`.
-        RoundModeRound15as10("Окр15как10", "Round15as10", "Round 15 to 10"),
-        RoundModeRound15as20("Окр15как20", "Round15as20", "Round 15 to 20"),
+        RoundModeRound15as10("Окр15как10", "Round15as10", "Округлять 15 как 10"),
+        RoundModeRound15as20("Окр15как20", "Round15as20", "Округлять 15 как 20"),
     }
     /// Вид числового значения.
-    NumericValueType("ВидЧисловогоЗначения", "NumericValueType") meta "NumericValueType" {
+    NumericValueType("ВидЧисловогоЗначения", "NumericValueType") meta "ПеречислениеВидЧисловогоЗначения" {
         // Полный состав измерен пробой `measure-numeric-value-type.bsl`.
-        NumericValueTypeCardinal("Количественное", "Cardinal", "Cardinal"),
-        NumericValueTypeOrdinal("Порядковое", "Ordinal", "Ordinal"),
+        NumericValueTypeCardinal("Количественное", "Cardinal", "Количественное"),
+        NumericValueTypeOrdinal("Порядковое", "Ordinal", "Порядковое"),
     }
     /// Способ отображения сообщения об ошибке.
     ErrorMessageDisplayVariant("ВариантОтображенияСообщенияОбОшибке", "ErrorMessageDisplayVariant")
-        meta "ErrorMessageDisplayVariant" {
+        meta "ПеречислениеВариантОтображенияСообщенияОбОшибке" {
         // Полный состав и пробелы представлений измерены на 8.3.27.2342.
-        ErrorMessageDisplayVariantAuto("Авто", "Auto", "Auto"),
+        ErrorMessageDisplayVariantAuto("Авто", "Auto", "Авто"),
         ErrorMessageDisplayVariantErrorMessageForUser(
             "СообщениеОбОшибкеДляПользователя",
             "ErrorMessageForUser",
-            "Message about error for user "
+            "Сообщение об ошибке для пользователя "
         ),
         ErrorMessageDisplayVariantBriefErrorDescription(
             "КраткоеПредставлениеОшибки",
             "BriefErrorDescription",
-            "Short error presentation "
+            "Краткое представление ошибки "
         ),
         ErrorMessageDisplayVariantDetailErrorDescription(
             "ПодробноеПредставлениеОшибки",
             "DetailErrorDescription",
-            "Detailed error presentation "
+            "Подробное представление ошибки "
         ),
     }
     /// Режим использования параметра команды.
     CommandParameterUseMode("РежимИспользованияПараметраКоманды", "CommandParameterUseMode")
-        meta "CommandParameterUseMode" {
+        meta "ПеречислениеРежимИспользованияПараметраКоманды" {
         // Полный состав, представления и английские имена измерены на 8.3.27.2342.
-        CommandParameterUseModeSingle("Одиночный", "Single", "Single"),
-        CommandParameterUseModeMultiple("Множественный", "Multiple", "Multiple"),
+        CommandParameterUseModeSingle("Одиночный", "Single", "Одиночный"),
+        CommandParameterUseModeMultiple("Множественный", "Multiple", "Множественный"),
     }
     /// Способ поиска строки при вводе по строке.
     SearchStringModeOnInputByString(
         "СпособПоискаСтрокиПриВводеПоСтроке",
         "SearchStringModeOnInputByString"
     )
-        meta "SearchStringModeOnInputByString" {
+        meta "ПеречислениеСпособПоискаСтрокиПриВводеПоСтроке" {
         // Полный состав и представления измерены на 8.3.27.2342.
-        SearchStringModeOnInputByStringBegin("Начало", "Begin", "At the beginning of line"),
-        SearchStringModeOnInputByStringAnyPart("ЛюбаяЧасть", "AnyPart", "Anywhere in line"),
+        SearchStringModeOnInputByStringBegin("Начало", "Begin", "Начало"),
+        SearchStringModeOnInputByStringAnyPart("ЛюбаяЧасть", "AnyPart", "Любая часть"),
     }
     /// Тип файла пакета отображаемых документов.
     RepresentableDocumentBatchFileType(
         "ТипФайлаПакетаОтображаемыхДокументов",
         "RepresentableDocumentBatchFileType"
     )
-        meta "RepresentableDocumentBatchFileType" {
+        meta "ПеречислениеТипФайлаПакетаОтображаемыхДокументов" {
         // Полный состав и представления измерены на 8.3.27.2342.
         RepresentableDocumentBatchFileTypeDocx("DOCX", "DOCX", "DOCX"),
         RepresentableDocumentBatchFileTypeHtml4("HTML4", "HTML4", "HTML4"),
@@ -465,43 +465,43 @@ system_enums! {
         RepresentableDocumentBatchFileTypeXlsx("XLSX", "XLSX", "XLSX"),
     }
     /// Вид шрифта.
-    FontType("ВидШрифта", "FontType") meta "FontType" {
+    FontType("ВидШрифта", "FontType") meta "ПеречислениеВидШрифта" {
         // Полный состав и представления измерены на 8.3.27.2342.
-        FontTypeWindowsFont("WindowsШрифт", "WindowsFont", "Windows font"),
-        FontTypeAbsolute("Абсолютный", "Absolute", "Absolute"),
-        FontTypeAutoFont("АвтоШрифт", "AutoFont", "Auto font"),
-        FontTypeStyleItem("ЭлементСтиля", "StyleItem", "Style element"),
+        FontTypeWindowsFont("WindowsШрифт", "WindowsFont", "Windows шрифт"),
+        FontTypeAbsolute("Абсолютный", "Absolute", "Абсолютный"),
+        FontTypeAutoFont("АвтоШрифт", "AutoFont", "Авто шрифт"),
+        FontTypeStyleItem("ЭлементСтиля", "StyleItem", "Элемент стиля"),
     }
     /// Вид картинки.
-    PictureType("ВидКартинки", "PictureType") meta "PictureType" {
+    PictureType("ВидКартинки", "PictureType") meta "ПеречислениеВидКартинки" {
         // Полный состав и представления измерены на 8.3.27.2342.
-        PictureTypeAbsolute("Абсолютная", "Absolute", "Absolute"),
-        PictureTypeFromLib("ИзБиблиотеки", "FromLib", "From library"),
-        PictureTypeEmpty("Пустая", "Empty", "Empty"),
+        PictureTypeAbsolute("Абсолютная", "Absolute", "Абсолютная"),
+        PictureTypeFromLib("ИзБиблиотеки", "FromLib", "Из библиотеки"),
+        PictureTypeEmpty("Пустая", "Empty", "Пустая"),
     }
     /// Использование метаданных при полнотекстовом поиске.
     FullTextSearchMetadataUse(
         "ИспользованиеМетаданныхПолнотекстовогоПоиска",
         "FullTextSearchMetadataUse"
     )
-        meta "FullTextSearchMetadataUse" {
+        meta "ПеречислениеИспользованиеМетаданныхПолнотекстовогоПоиска" {
         // Полный состав и представления измерены на 8.3.27.2342.
-        FullTextSearchMetadataUseUse("Использовать", "Use", "Use"),
-        FullTextSearchMetadataUseDontUse("НеИспользовать", "DontUse", "Do not use"),
+        FullTextSearchMetadataUseUse("Использовать", "Use", "Использовать"),
+        FullTextSearchMetadataUseDontUse("НеИспользовать", "DontUse", "Не использовать"),
     }
     /// Режим изменения связанного значения.
     LinkedValueChangeMode("РежимИзмененияСвязанногоЗначения", "LinkedValueChangeMode")
-        meta "LinkedValueChangeMode" {
+        meta "ПеречислениеРежимИзмененияСвязанногоЗначения" {
         // Полный состав и представления измерены на 8.3.27.2342.
-        LinkedValueChangeModeDontChange("НеИзменять", "DontChange", "Do not change"),
-        LinkedValueChangeModeClear("Очищать", "Clear", "Clear"),
+        LinkedValueChangeModeDontChange("НеИзменять", "DontChange", "Не изменять"),
+        LinkedValueChangeModeClear("Очищать", "Clear", "Очищать"),
     }
     /// Способ кодирования вложения интернет-почты.
     InternetMailAttachmentEncodingMode(
         "СпособКодированияИнтернетПочтовогоВложения",
         "InternetMailAttachmentEncodingMode"
     )
-        meta "InternetMailAttachmentEncodingMode" {
+        meta "ПеречислениеСпособКодированияИнтернетПочтовогоВложения" {
         // Полный состав и представления измерены на 8.3.27.2342.
         InternetMailAttachmentEncodingModeMime("MIME", "MIME", "MIME"),
         InternetMailAttachmentEncodingModeUuEncode("UUEncode", "UUEncode", "UUEncode"),
@@ -511,13 +511,13 @@ system_enums! {
         "АвтоматическоеСохранениеДанныхФормыВНастройках",
         "AutoSaveFormDataInSettings"
     )
-        meta "AutoSaveFormDataInSettings" {
+        meta "ПеречислениеАвтоматическоеСохранениеДанныхФормыВНастройках" {
         // Полный состав и представления измерены на 8.3.27.2342.
-        AutoSaveFormDataInSettingsUse("Использовать", "Use", "Use"),
-        AutoSaveFormDataInSettingsDontUse("НеИспользовать", "DontUse", "Do not use"),
+        AutoSaveFormDataInSettingsUse("Использовать", "Use", "Использовать"),
+        AutoSaveFormDataInSettingsDontUse("НеИспользовать", "DontUse", "Не использовать"),
     }
     /// Формат файла документа PDF.
-    PDFDocumentFileType("ТипФайлаДокументаPDF", "PDFDocumentFileType") meta "PDFDocumentFileType" {
+    PDFDocumentFileType("ТипФайлаДокументаPDF", "PDFDocumentFileType") meta "ПеречислениеТипФайлаДокументаPDF" {
         // Полный состав и представления измерены на 8.3.27.2342.
         PDFDocumentFileTypePdf("PDF", "PDF", "PDF"),
         PDFDocumentFileTypePdfA1("PDF_A_1", "PDF_A_1", "PDF/A-1"),
@@ -525,27 +525,27 @@ system_enums! {
         PDFDocumentFileTypePdfA3("PDF_A_3", "PDF_A_3", "PDF/A-3"),
     }
     /// Допустимый знак числа.
-    AllowedSign("ДопустимыйЗнак", "AllowedSign") meta "AllowedSign" {
+    AllowedSign("ДопустимыйЗнак", "AllowedSign") meta "ПеречислениеДопустимыйЗнак" {
         // Полный состав и представления измерены на платформе 8.3.27.2074
         // пробой `measure-allowed-sign.bsl`.
-        AllowedSignAny("Любой", "Any", "Any"),
-        AllowedSignNonnegative("Неотрицательный", "Nonnegative", "Nonnegative"),
+        AllowedSignAny("Любой", "Any", "Любой"),
+        AllowedSignNonnegative("Неотрицательный", "Nonnegative", "Неотрицательный"),
     }
     /// Режим автоматической регистрации изменений данных.
-    AutoChangeRecord("АвтоРегистрацияИзменений", "AutoChangeRecord") meta "AutoChangeRecord" {
+    AutoChangeRecord("АвтоРегистрацияИзменений", "AutoChangeRecord") meta "ПеречислениеАвтоРегистрацияИзменений" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-auto-change-record.bsl`.
-        AutoChangeRecordDeny("Запретить", "Deny", "Disable"),
-        AutoChangeRecordAllow("Разрешить", "Allow", "Enable"),
+        AutoChangeRecordDeny("Запретить", "Deny", "Запретить"),
+        AutoChangeRecordAllow("Разрешить", "Allow", "Разрешить"),
     }
     /// Способ отображения кнопки формы.
-    ButtonRepresentation("ОтображениеКнопки", "ButtonRepresentation") meta "ButtonRepresentation" {
+    ButtonRepresentation("ОтображениеКнопки", "ButtonRepresentation") meta "ПеречислениеОтображениеКнопки" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-button-representation.bsl`.
-        ButtonRepresentationAuto("Авто", "Auto", "Auto"),
-        ButtonRepresentationPicture("Картинка", "Picture", "Icon"),
-        ButtonRepresentationPictureAndText("КартинкаИТекст", "PictureAndText", "Icon and text"),
-        ButtonRepresentationText("Текст", "Text", "Text"),
+        ButtonRepresentationAuto("Авто", "Auto", "Авто"),
+        ButtonRepresentationPicture("Картинка", "Picture", "Картинка"),
+        ButtonRepresentationPictureAndText("КартинкаИТекст", "PictureAndText", "Картинка и текст"),
+        ButtonRepresentationText("Текст", "Text", "Текст"),
     }
     /// Причина несоответствия пароля политике.
     // ИЗМЕРЕНО на 8.3.27 пробой
@@ -554,188 +554,188 @@ system_enums! {
         "РезультатПроверкиСоответствияПароляПолитике",
         "PasswordPolicyComplianceCheckResult"
     )
-        meta "PasswordPolicyComplianceCheckResult" {
+        meta "ПеречислениеРезультатПроверкиСоответствияПароляПолитике" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой
         // `measure-password-policy-compliance-check-result.bsl`.
         PasswordPolicyComplianceCheckResultMinLength(
             "НеСоответствуетТребованиямМинимальнойДлины",
             "DoesNotSatisfyMinLengthRequirements",
-            "Does not meet the minimum length requirements"
+            "Не соответствует требованиям минимальной длины"
         ),
         PasswordPolicyComplianceCheckResultReuseLimit(
             "НеСоответствуетТребованиямОграниченияПовторенияСредиПоследних",
             "DoesNotSatisfyReuseLimitRequirements",
-            "Does not meet the requirements for reuse limit among recent ones"
+            "Не соответствует требованиям ограничения повторения среди последних"
         ),
         PasswordPolicyComplianceCheckResultCompromiseCheck(
             "НеСоответствуетТребованиямПроверкиРаскрытия",
             "DoesNotSatisfyCompromiseCheckRequirements",
-            "Does not meet compromise check requirements"
+            "Не соответствует требованиям проверки раскрытия"
         ),
         PasswordPolicyComplianceCheckResultComplexity(
             "НеСоответствуетТребованиямСложности",
             "DoesNotSatisfyComplexityRequirements",
-            "Does not meet the complexity requirements"
+            "Не соответствует требованиям сложности"
         ),
     }
     /// Способ отображения данных в таблице формы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-table-representation.bsl`.
-    TableRepresentation("ОтображениеТаблицы", "TableRepresentation") meta "TableRepresentation" {
+    TableRepresentation("ОтображениеТаблицы", "TableRepresentation") meta "ПеречислениеОтображениеТаблицы" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-table-representation.bsl`.
-        TableRepresentationList("Список", "List", "List"),
+        TableRepresentationList("Список", "List", "Список"),
         TableRepresentationHierarchicalList(
             "ИерархическийСписок",
             "HierarchicalList",
-            "Hierarchical list"
+            "Иерархический список"
         ),
-        TableRepresentationTree("Дерево", "Tree", "Tree"),
+        TableRepresentationTree("Дерево", "Tree", "Дерево"),
     }
     /// Вид поля формы клиентского приложения.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-form-field-type.bsl`.
-    FormFieldType("ВидПоляФормы", "FormFieldType") meta "FormFieldType" {
+    FormFieldType("ВидПоляФормы", "FormFieldType") meta "ПеречислениеВидПоляФормы" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-form-field-type.bsl`.
         FormFieldTypeHtmlDocumentField(
             "ПолеHTMLДокумента",
             "HTMLDocumentField",
-            "HTML document field"
+            "Поле HTML документа"
         ),
-        FormFieldTypePdfDocumentField("ПолеPDFДокумента", "PDFDocumentField", "PDF document field"),
-        FormFieldTypeInputField("ПолеВвода", "InputField", "Input field"),
+        FormFieldTypePdfDocumentField("ПолеPDFДокумента", "PDFDocumentField", "Поле PDF документа"),
+        FormFieldTypeInputField("ПолеВвода", "InputField", "Поле ввода"),
         FormFieldTypeGeographicalSchemaField(
             "ПолеГеографическойСхемы",
             "GeographicalSchemaField",
-            "Geographical schema field"
+            "Поле географической схемы"
         ),
         FormFieldTypeGraphicalSchemaField(
             "ПолеГрафическойСхемы",
             "GraphicalSchemaField",
-            "Graphical schema field"
+            "Поле графической схемы"
         ),
-        FormFieldTypeDendrogramField("ПолеДендрограммы", "DendrogramField", "Dendrogram field"),
-        FormFieldTypeChartField("ПолеДиаграммы", "ChartField", "Chart field"),
-        FormFieldTypeGanttChartField("ПолеДиаграммыГанта", "GanttChartField", "Gantt chart field"),
-        FormFieldTypeProgressBarField("ПолеИндикатора", "ProgressBarField", "Progress bar"),
-        FormFieldTypeCalendarField("ПолеКалендаря", "CalendarField", "Calendar field"),
-        FormFieldTypePictureField("ПолеКартинки", "PictureField", "Image field"),
-        FormFieldTypeLabelField("ПолеНадписи", "LabelField", "Text box"),
-        FormFieldTypeRadioButtonField("ПолеПереключателя", "RadioButtonField", "Radio buttons"),
-        FormFieldTypePeriodField("ПолеПериода", "PeriodField", "Period field"),
-        FormFieldTypePlannerField("ПолеПланировщика", "PlannerField", "Planner field"),
-        FormFieldTypeTrackBarField("ПолеПолосыРегулирования", "TrackBarField", "Slider field"),
+        FormFieldTypeDendrogramField("ПолеДендрограммы", "DendrogramField", "Поле дендрограммы"),
+        FormFieldTypeChartField("ПолеДиаграммы", "ChartField", "Поле диаграммы"),
+        FormFieldTypeGanttChartField("ПолеДиаграммыГанта", "GanttChartField", "Поле диаграммы Ганта"),
+        FormFieldTypeProgressBarField("ПолеИндикатора", "ProgressBarField", "Поле индикатора"),
+        FormFieldTypeCalendarField("ПолеКалендаря", "CalendarField", "Поле календаря"),
+        FormFieldTypePictureField("ПолеКартинки", "PictureField", "Поле картинки"),
+        FormFieldTypeLabelField("ПолеНадписи", "LabelField", "Поле надписи"),
+        FormFieldTypeRadioButtonField("ПолеПереключателя", "RadioButtonField", "Поле переключателя"),
+        FormFieldTypePeriodField("ПолеПериода", "PeriodField", "Поле периода"),
+        FormFieldTypePlannerField("ПолеПланировщика", "PlannerField", "Поле данных планировщика"),
+        FormFieldTypeTrackBarField("ПолеПолосыРегулирования", "TrackBarField", "Поле полосы регулирования"),
         FormFieldTypeSpreadsheetDocumentField(
             "ПолеТабличногоДокумента",
             "SpreadsheetDocumentField",
-            "Spreadsheet document field"
+            "Поле табличного документа"
         ),
         FormFieldTypeTextDocumentField(
             "ПолеТекстовогоДокумента",
             "TextDocumentField",
-            "Text document field"
+            "Поле текстового документа"
         ),
-        FormFieldTypeCheckBoxField("ПолеФлажка", "CheckBoxField", "Checkbox"),
+        FormFieldTypeCheckBoxField("ПолеФлажка", "CheckBoxField", "Поле флажка"),
         FormFieldTypeFormattedDocumentField(
             "ПолеФорматированногоДокумента",
             "FormattedDocumentField",
-            "Formatted document field"
+            "Поле форматированного документа"
         ),
     }
     /// Вид группы формы клиентского приложения.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-form-group-type.bsl`.
-    FormGroupType("ВидГруппыФормы", "FormGroupType") meta "FormGroupType" {
+    FormGroupType("ВидГруппыФормы", "FormGroupType") meta "ПеречислениеВидГруппыФормы" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-form-group-type.bsl`.
-        FormGroupTypeButtonGroup("ГруппаКнопок", "ButtonGroup", "Button group"),
-        FormGroupTypeColumnGroup("ГруппаКолонок", "ColumnGroup", "Column group"),
-        FormGroupTypeCommandBar("КоманднаяПанель", "CommandBar", "Command bar"),
-        FormGroupTypeContextMenu("КонтекстноеМеню", "ContextMenu", "Context menu"),
-        FormGroupTypeUsualGroup("ОбычнаяГруппа", "UsualGroup", "Regular group"),
-        FormGroupTypePopup("Подменю", "Popup", "Submenu"),
-        FormGroupTypePage("Страница", "Page", "Page"),
-        FormGroupTypePages("Страницы", "Pages", "Pages"),
+        FormGroupTypeButtonGroup("ГруппаКнопок", "ButtonGroup", "Группа кнопок"),
+        FormGroupTypeColumnGroup("ГруппаКолонок", "ColumnGroup", "Группа колонок"),
+        FormGroupTypeCommandBar("КоманднаяПанель", "CommandBar", "Командная панель"),
+        FormGroupTypeContextMenu("КонтекстноеМеню", "ContextMenu", "Контекстное меню"),
+        FormGroupTypeUsualGroup("ОбычнаяГруппа", "UsualGroup", "Обычная группа"),
+        FormGroupTypePopup("Подменю", "Popup", "Подменю"),
+        FormGroupTypePage("Страница", "Page", "Страница"),
+        FormGroupTypePages("Страницы", "Pages", "Страницы"),
     }
     /// Горизонтальное положение элемента формы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-item-horizontal-location.bsl`.
     ItemHorizontalLocation("ГоризонтальноеПоложениеЭлемента", "ItemHorizontalLocation")
-        meta "ItemHorizontalLocation" {
+        meta "ПеречислениеГоризонтальноеПоложениеЭлемента" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-item-horizontal-location.bsl`.
-        ItemHorizontalLocationAuto("Авто", "Auto", "Auto"),
-        ItemHorizontalLocationLeft("Лево", "Left", "Left"),
-        ItemHorizontalLocationRight("Право", "Right", "Right"),
-        ItemHorizontalLocationCenter("Центр", "Center", "Center"),
+        ItemHorizontalLocationAuto("Авто", "Auto", "Авто"),
+        ItemHorizontalLocationLeft("Лево", "Left", "Лево"),
+        ItemHorizontalLocationRight("Право", "Right", "Право"),
+        ItemHorizontalLocationCenter("Центр", "Center", "Центр"),
     }
     /// Вертикальное положение элемента формы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-form-alignment-spacing-enums.bsl`.
     ItemVerticalAlign("ВертикальноеПоложениеЭлемента", "ItemVerticalAlign")
-        meta "EnumItemVerticalAlign" {
+        meta "ПеречислениеВертикальноеПоложениеЭлемента" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-form-alignment-spacing-enums.bsl`.
-        ItemVerticalAlignAuto("Авто", "Auto", "Auto"),
-        ItemVerticalAlignTop("Верх", "Top", "Top"),
-        ItemVerticalAlignBottom("Низ", "Bottom", "Bottom"),
-        ItemVerticalAlignCenter("Центр", "Center", "Center"),
+        ItemVerticalAlignAuto("Авто", "Auto", "Авто"),
+        ItemVerticalAlignTop("Верх", "Top", "Верх"),
+        ItemVerticalAlignBottom("Низ", "Bottom", "Низ"),
+        ItemVerticalAlignCenter("Центр", "Center", "Центр"),
     }
     /// Интервал между элементами формы.
-    FormItemSpacing("ИнтервалМеждуЭлементамиФормы", "FormItemSpacing") meta "EnumFormItemSpacing" {
-        FormItemSpacingAuto("Авто", "Auto", "Auto"),
-        FormItemSpacingDouble("Двойной", "Double", "Double"),
-        FormItemSpacingNone("Нет", "None", "None"),
-        FormItemSpacingSingle("Одинарный", "Single", "Single"),
-        FormItemSpacingHalf("Половинный", "Half", "Half"),
-        FormItemSpacingOneAndHalf("Полуторный", "OneAndHalf", "One and half"),
+    FormItemSpacing("ИнтервалМеждуЭлементамиФормы", "FormItemSpacing") meta "ПеречислениеИнтервалМеждуЭлементамиФормы" {
+        FormItemSpacingAuto("Авто", "Auto", "Авто"),
+        FormItemSpacingDouble("Двойной", "Double", "Двойной"),
+        FormItemSpacingNone("Нет", "None", "Нет"),
+        FormItemSpacingSingle("Одинарный", "Single", "Одинарный"),
+        FormItemSpacingHalf("Половинный", "Half", "Половинный"),
+        FormItemSpacingOneAndHalf("Полуторный", "OneAndHalf", "Полуторный"),
     }
     /// Отображение фигуры кнопки формы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-button-shape-representation.bsl`.
     ButtonShapeRepresentation("ОтображениеФигурыКнопки", "ButtonShapeRepresentation")
-        meta "ButtonShapeRepresentation" {
+        meta "ПеречислениеОтображениеФигурыКнопки" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-button-shape-representation.bsl`.
-        ButtonShapeRepresentationAuto("Авто", "Auto", "Auto"),
-        ButtonShapeRepresentationAlways("Всегда", "Always", "Always"),
-        ButtonShapeRepresentationNone("Нет", "None", "None"),
-        ButtonShapeRepresentationWhenActive("ПриАктивности", "WhenActive", "When active"),
+        ButtonShapeRepresentationAuto("Авто", "Auto", "Авто"),
+        ButtonShapeRepresentationAlways("Всегда", "Always", "Всегда"),
+        ButtonShapeRepresentationNone("Нет", "None", "Нет"),
+        ButtonShapeRepresentationWhenActive("ПриАктивности", "WhenActive", "При активности"),
     }
     /// Отображение обычной группы формы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-usual-group-representation.bsl`.
     UsualGroupRepresentation("ОтображениеОбычнойГруппы", "UsualGroupRepresentation")
-        meta "UsualGroupRepresentation" {
+        meta "ПеречислениеОтображениеОбычнойГруппы" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-usual-group-representation.bsl`.
-        UsualGroupRepresentationNone("Нет", "None", "None"),
+        UsualGroupRepresentationNone("Нет", "None", "Нет"),
         UsualGroupRepresentationNormalSeparation(
             "ОбычноеВыделение",
             "NormalSeparation",
-            "Normal marking"
+            "Обычное выделение"
         ),
         UsualGroupRepresentationStrongSeparation(
             "СильноеВыделение",
             "StrongSeparation",
-            "Strong marking"
+            "Сильное выделение"
         ),
         UsualGroupRepresentationWeakSeparation(
             "СлабоеВыделение",
             "WeakSeparation",
-            "Light marking"
+            "Слабое выделение"
         ),
     }
     /// Важность элемента формы при отображении.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-display-importance.bsl`.
-    DisplayImportance("ВажностьПриОтображении", "DisplayImportance") meta "DisplayImportance" {
+    DisplayImportance("ВажностьПриОтображении", "DisplayImportance") meta "ПеречислениеВажностьПриОтображении" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-display-importance.bsl`.
-        DisplayImportanceAuto("Авто", "Auto", "Auto"),
-        DisplayImportanceHigh("Высокая", "High", "High"),
-        DisplayImportanceLow("Низкая", "Low", "Low"),
-        DisplayImportanceUsual("Обычная", "Usual", "Normal"),
-        DisplayImportanceVeryHigh("ОченьВысокая", "VeryHigh", "Very high"),
-        DisplayImportanceVeryLow("ОченьНизкая", "VeryLow", "Very low"),
+        DisplayImportanceAuto("Авто", "Auto", "Авто"),
+        DisplayImportanceHigh("Высокая", "High", "Высокая"),
+        DisplayImportanceLow("Низкая", "Low", "Низкая"),
+        DisplayImportanceUsual("Обычная", "Usual", "Обычная"),
+        DisplayImportanceVeryHigh("ОченьВысокая", "VeryHigh", "Очень высокая"),
+        DisplayImportanceVeryLow("ОченьНизкая", "VeryLow", "Очень низкая"),
     }
     /// Формат хранения картинки.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-picture-format.bsl`.
-    PictureFormat("ФорматКартинки", "PictureFormat") meta "PictureFormat" {
+    PictureFormat("ФорматКартинки", "PictureFormat") meta "ПеречислениеФорматКартинки" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-picture-format.bsl`.
         PictureFormatBmp("BMP", "BMP", "BMP"),
@@ -747,18 +747,18 @@ system_enums! {
         PictureFormatSvg("SVG", "SVG", "SVG"),
         PictureFormatTiff("TIFF", "TIFF", "TIFF"),
         PictureFormatWmf("WMF", "WMF", "WMF"),
-        PictureFormatUnknown("НеизвестныйФормат", "UnknownFormat", "Unknown format"),
+        PictureFormatUnknown("НеизвестныйФормат", "UnknownFormat", "Неизвестный формат"),
     }
     /// Тип текста почтового сообщения.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-internet-mail-text-type.bsl`.
     InternetMailTextType("ТипТекстаПочтовогоСообщения", "InternetMailTextType")
-        meta "InternetMailTextType" {
+        meta "ПеречислениеТипТекстаПочтовогоСообщения" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-internet-mail-text-type.bsl`.
         InternetMailTextTypeHtml("HTML", "HTML", "HTML"),
-        InternetMailTextTypeCustomText("ПроизвольныйТекст", "CustomText", "CustomText"),
-        InternetMailTextTypePlainText("ПростойТекст", "PlainText", "PlainText"),
-        InternetMailTextTypeRichText("РазмеченныйТекст", "RichText", "RichText"),
+        InternetMailTextTypeCustomText("ПроизвольныйТекст", "CustomText", "ПроизвольныйТекст"),
+        InternetMailTextTypePlainText("ПростойТекст", "PlainText", "ПростойТекст"),
+        InternetMailTextTypeRichText("РазмеченныйТекст", "RichText", "РазмеченныйТекст"),
     }
     /// Способ кодирования не-ASCII символов почтового сообщения.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-mail-non-ascii-encoding-mode.bsl`.
@@ -766,7 +766,7 @@ system_enums! {
         "СпособКодированияНеASCIIСимволовИнтернетПочтовогоСообщения",
         "InternetMailMessageNonASCIISymbolsEncodingMode"
     )
-        meta "InternetMailMessageNonASCIISymbolsEncodingMode" {
+        meta "ПеречислениеСпособКодированияНеASCIIСимволовИнтернетПочтовогоСообщения" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-mail-non-ascii-encoding-mode.bsl`.
         InternetMailNonAsciiMime("MIME", "MIME", "MIME"),
@@ -775,7 +775,7 @@ system_enums! {
             "QuotedPrintable",
             "QuotedPrintable"
         ),
-        InternetMailNonAsciiNone("БезКодирования", "None", "None"),
+        InternetMailNonAsciiNone("БезКодирования", "None", "БезКодирования"),
     }
     /// Важность интернет-почтового сообщения.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-mail-message-importance.bsl`.
@@ -783,23 +783,23 @@ system_enums! {
         "ВажностьИнтернетПочтовогоСообщения",
         "InternetMailMessageImportance"
     )
-        meta "InternetMailMessageImportance" {
+        meta "ПеречислениеВажностьИнтернетПочтовогоСообщения" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-mail-message-importance.bsl`.
-        InternetMailMessageImportanceHigh("Высокая", "High", "High"),
-        InternetMailMessageImportanceHighest("Наивысшая", "Highest", "Highest"),
-        InternetMailMessageImportanceLowest("Наименьшая", "Lowest", "Lowest"),
-        InternetMailMessageImportanceLow("Низкая", "Low", "Low"),
-        InternetMailMessageImportanceNormal("Обычная", "Normal", "Normal"),
+        InternetMailMessageImportanceHigh("Высокая", "High", "Высокая"),
+        InternetMailMessageImportanceHighest("Наивысшая", "Highest", "Наивысшая"),
+        InternetMailMessageImportanceLowest("Наименьшая", "Lowest", "Наименьшая"),
+        InternetMailMessageImportanceLow("Низкая", "Low", "Низкая"),
+        InternetMailMessageImportanceNormal("Обычная", "Normal", "Обычная"),
     }
     /// Дополнительный способ отображения состояния.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-additional-show-mode.bsl`.
     AdditionalShowMode("ДополнительныйРежимОтображения", "AdditionalShowMode")
-        meta "AdditionalShowMode" {
+        meta "ПеречислениеДополнительныйРежимОтображения" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-additional-show-mode.bsl`.
-        AdditionalShowModeDontUse("НеИспользовать", "DontUse", "Do not use"),
-        AdditionalShowModeIrrelevance("Неактуальность", "Irrelevance", "Irrelevance"),
+        AdditionalShowModeDontUse("НеИспользовать", "DontUse", "Не использовать"),
+        AdditionalShowModeIrrelevance("Неактуальность", "Irrelevance", "Неактуальность"),
     }
     /// Режим проверки отзыва TLS-сертификата сервера.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-tls-revocation-mode.bsl`.
@@ -807,24 +807,24 @@ system_enums! {
         "РежимПроверкиОтзываTLSСертификатаСервера",
         "ServerTLSCertificateRevocationCheckMode"
     )
-        meta "ServerTLSCertificateRevocationCheckMode" {
+        meta "ПеречислениеРежимПроверкиОтзываTLSСертификатаСервера" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой `measure-tls-revocation-mode.bsl`.
-        ServerTlsCertificateRevocationCheckModeAuto("Авто", "Auto", "Auto"),
+        ServerTlsCertificateRevocationCheckModeAuto("Авто", "Auto", "Авто"),
         ServerTlsCertificateRevocationCheckModeDontCheck(
             "НеПроверять",
             "DontCheck",
-            "Certificate revocation check is disabled"
+            "Проверка отзыва сертификатов выключена"
         ),
         ServerTlsCertificateRevocationCheckModeSoftFail(
             "Нестрогий",
             "SoftFail",
-            "Soft certificate revocation check"
+            "Мягкая проверка отзыва сертификатов"
         ),
         ServerTlsCertificateRevocationCheckModeStrict(
             "Строгий",
             "Strict",
-            "Strict certificate revocation check"
+            "Строгая проверка отзыва сертификатов"
         ),
     }
     /// Область применения отбора к записям результа компоновки.
@@ -834,16 +834,16 @@ system_enums! {
         "ТипПримененияОтбораКомпоновкиДанных",
         "DataCompositionFilterApplicationType"
     )
-        meta "DataCompositionFilterApplicationType" {
+        meta "ПеречислениеТипПримененияОтбораКомпоновкиДанных" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой
         // `measure-data-composition-filter-application-type.bsl`.
-        DataCompositionFilterApplicationTypeItems("Элементы", "Items", "No hierarchy"),
-        DataCompositionFilterApplicationTypeHierarchy("Иерархия", "Hierarchy", "Hierarchy"),
+        DataCompositionFilterApplicationTypeItems("Элементы", "Items", "Обычное"),
+        DataCompositionFilterApplicationTypeHierarchy("Иерархия", "Hierarchy", "После группировки или для иерархии"),
         DataCompositionFilterApplicationTypeHierarchyOnly(
             "ТолькоИерархия",
             "HierarchyOnly",
-            "Hierarchy only"
+            "Только иерархия"
         ),
     }
     /// Состояние элемента настройки компоновки данных.
@@ -853,14 +853,14 @@ system_enums! {
         "СостояниеЭлементаНастройкиКомпоновкиДанных",
         "DataCompositionSettingsItemState"
     )
-        meta "EnumDataCompositionSettingsItemState" {
+        meta "ПеречислениеСостояниеЭлементаНастройкиКомпоновкиДанных" {
         // Полный состав, алиасы и представления измерены на 8.3.27.2342.
-        DataCompositionSettingsItemStateEnabled("Включен", "Enabled", "Enabled"),
-        DataCompositionSettingsItemStateDisabled("Отключен", "Disabled", "Disabled"),
+        DataCompositionSettingsItemStateEnabled("Включен", "Enabled", "Включена"),
+        DataCompositionSettingsItemStateDisabled("Отключен", "Disabled", "Отключена"),
         DataCompositionSettingsItemStateDeletedByUser(
             "УдаленПользователем",
             "DeletedByUser",
-            "Deleted by user"
+            "Удалена пользователем"
         ),
     }
     /// Режим отображения элемента настройки компоновки.
@@ -868,18 +868,18 @@ system_enums! {
         "РежимОтображенияЭлементаНастройкиКомпоновкиДанных",
         "DataCompositionSettingsItemViewMode"
     )
-        meta "DataCompositionSettingsItemViewMode" {
+        meta "ПеречислениеРежимОтображенияЭлементаНастройкиКомпоновкиДанных" {
         // Полный состав, оба написания, представления и тип измерены
         // на платформе 8.3.27.2342 пробой
         // `measure-data-composition-settings-item-view-mode.bsl`.
-        DataCompositionSettingsItemViewModeAuto("Авто", "Auto", "Auto"),
-        DataCompositionSettingsItemViewModeNormal("Обычный", "Normal", "Normal"),
+        DataCompositionSettingsItemViewModeAuto("Авто", "Auto", "Авто"),
+        DataCompositionSettingsItemViewModeNormal("Обычный", "Normal", "Обычный"),
         DataCompositionSettingsItemViewModeQuickAccess(
             "БыстрыйДоступ",
             "QuickAccess",
-            "Quick access"
+            "Быстрый доступ"
         ),
-        DataCompositionSettingsItemViewModeInaccessible("Недоступный", "Inaccessible", "Disabled"),
+        DataCompositionSettingsItemViewModeInaccessible("Недоступный", "Inaccessible", "Недоступный"),
     }
     /// Способ восстановления настроек компоновки данных.
     // ИЗМЕРЕНО на 8.3.27 пробой
@@ -888,14 +888,14 @@ system_enums! {
         "СпособВосстановленияНастроекКомпоновкиДанных",
         "DataCompositionSettingsRefreshMethod"
     )
-        meta "EnumDataCompositionSettingsRefreshMethod" {
+        meta "ПеречислениеСпособВосстановленияНастроекКомпоновкиДанных" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-data-composition-settings-refresh-method.bsl`.
-        DataCompositionSettingsRefreshMethodFull("Полное", "Full", "Full"),
+        DataCompositionSettingsRefreshMethodFull("Полное", "Full", "Полное"),
         DataCompositionSettingsRefreshMethodCheckAvailability(
             "ПроверятьДоступность",
             "CheckAvailability",
-            "Check accessibility"
+            "Проверять доступность"
         ),
     }
     /// Направление сортировки компоновки данных.
@@ -903,44 +903,44 @@ system_enums! {
         "НаправлениеСортировкиКомпоновкиДанных",
         "DataCompositionSortDirection"
     )
-        meta "EnumDataCompositionSortDirection" {
+        meta "ПеречислениеНаправлениеСортировкиКомпоновкиДанных" {
         // Представления и оба написания измерены на 8.3.27.
-        DataCompositionSortDirectionAsc("Возр", "Asc", "Ascending"),
-        DataCompositionSortDirectionDesc("Убыв", "Desc", "Descending"),
+        DataCompositionSortDirectionAsc("Возр", "Asc", "По возрастанию"),
+        DataCompositionSortDirectionDesc("Убыв", "Desc", "По убыванию"),
     }
     /// Тип группировки компоновки данных.
     DataCompositionGroupType("ТипГруппировкиКомпоновкиДанных", "DataCompositionGroupType")
-        meta "EnumDataCompositionGroupType" {
+        meta "ПеречислениеТипГруппировкиКомпоновкиДанных" {
         // Представления и оба написания измерены на 8.3.27.
-        DataCompositionGroupTypeHierarchy("Иерархия", "Hierarchy", "Hierarchy"),
-        DataCompositionGroupTypeHierarchyOnly("ТолькоИерархия", "HierarchyOnly", "Hierarchy only"),
-        DataCompositionGroupTypeItems("Элементы", "Items", "Elements"),
+        DataCompositionGroupTypeHierarchy("Иерархия", "Hierarchy", "Иерархия"),
+        DataCompositionGroupTypeHierarchyOnly("ТолькоИерархия", "HierarchyOnly", "Только иерархия"),
+        DataCompositionGroupTypeItems("Элементы", "Items", "Без иерархии"),
     }
     /// Расположение группировки компоновки данных.
     DataCompositionGroupPlacement(
         "РасположениеГруппировкиКомпоновкиДанных",
         "DataCompositionGroupPlacement"
     )
-        meta "EnumDataCompositionGroupPlacement" {
-        DataCompositionGroupPlacementEnd("Конец", "End", "End"),
-        DataCompositionGroupPlacementBegin("Начало", "Begin", "Begin"),
-        DataCompositionGroupPlacementBeginAndEnd("НачалоИКонец", "BeginAndEnd", "Begin and end"),
+        meta "ПеречислениеРасположениеГруппировкиКомпоновкиДанных" {
+        DataCompositionGroupPlacementEnd("Конец", "End", "Конец"),
+        DataCompositionGroupPlacementBegin("Начало", "Begin", "Начало"),
+        DataCompositionGroupPlacementBeginAndEnd("НачалоИКонец", "BeginAndEnd", "Начало и конец"),
         // Члены, представления и метатип измерены на 8.3.27.2342.
-        DataCompositionGroupPlacementNone("Нет", "None", "None"),
+        DataCompositionGroupPlacementNone("Нет", "None", "Нет"),
     }
     /// Расположение полей группировки компоновки данных.
     DataCompositionGroupFieldsPlacement(
         "РасположениеПолейГруппировкиКомпоновкиДанных",
         "DataCompositionGroupFieldsPlacement"
     )
-        meta "EnumDataCompositionGroupFieldsPlacement" {
+        meta "ПеречислениеРасположениеПолейГруппировкиКомпоновкиДанных" {
         // Представления и оба написания измерены на 8.3.27.
-        DataCompositionGroupFieldsPlacementTogether("Вместе", "Together", "Together"),
-        DataCompositionGroupFieldsPlacementSeparately("Отдельно", "Separately", "Separately"),
+        DataCompositionGroupFieldsPlacementTogether("Вместе", "Together", "Вместе"),
+        DataCompositionGroupFieldsPlacementSeparately("Отдельно", "Separately", "Отдельно"),
         DataCompositionGroupFieldsPlacementSeparatelyAndInTotalsOnly(
             "ОтдельноИТолькоВИтогах",
             "SeparatelyAndInTotalsOnly",
-            "Separately and only in totals"
+            "Отдельно и только в итогах"
         ),
     }
     /// Расположение реквизитов компоновки данных.
@@ -948,73 +948,73 @@ system_enums! {
         "РасположениеРеквизитовКомпоновкиДанных",
         "DataCompositionAttributesPlacement"
     )
-        meta "EnumDataCompositionAttributesPlacement" {
+        meta "ПеречислениеРасположениеРеквизитовКомпоновкиДанных" {
         // Представления и оба написания измерены на 8.3.27.
-        DataCompositionAttributesPlacementTogether("Вместе", "Together", "Together"),
+        DataCompositionAttributesPlacementTogether("Вместе", "Together", "Вместе"),
         DataCompositionAttributesPlacementWithOwnerField(
             "ВместеСВладельцем",
             "WithOwnerField",
-            "With owner"
+            "Вместе с владельцем"
         ),
         DataCompositionAttributesPlacementSpecialPosition(
             "ВСпециальнойПозиции",
             "SpecialPosition",
-            "In special position"
+            "В специальной позиции"
         ),
-        DataCompositionAttributesPlacementSeparately("Отдельно", "Separately", "Separately"),
+        DataCompositionAttributesPlacementSeparately("Отдельно", "Separately", "Отдельно"),
     }
     /// ВидДекорацииФормы.
-    FormDecorationType("ВидДекорацииФормы", "FormDecorationType") meta "EnumFormDecorationType" {
+    FormDecorationType("ВидДекорацииФормы", "FormDecorationType") meta "ПеречислениеВидДекорацииФормы" {
         // Имена и представления измерены на 8.3.27 в `measure-session-enum-batch.bsl`.
-        FormDecorationTypePicture("Картинка", "Picture", "Picture"),
-        FormDecorationTypeLabel("Надпись", "Label", "Label"),
+        FormDecorationTypePicture("Картинка", "Picture", "Картинка"),
+        FormDecorationTypeLabel("Надпись", "Label", "Надпись"),
     }
     /// ВидПереключателя.
-    RadioButtonType("ВидПереключателя", "RadioButtonType") meta "EnumRadioButtonType" {
-        RadioButtonTypeAuto("Авто", "Auto", "Auto"),
-        RadioButtonTypeRadioButton("Переключатель", "RadioButton", "Radio button"),
-        RadioButtonTypeTumbler("Тумблер", "Tumbler", "Tumbler"),
+    RadioButtonType("ВидПереключателя", "RadioButtonType") meta "ПеречислениеВидПереключателя" {
+        RadioButtonTypeAuto("Авто", "Auto", "Авто"),
+        RadioButtonTypeRadioButton("Переключатель", "RadioButton", "Переключатель"),
+        RadioButtonTypeTumbler("Тумблер", "Tumbler", "Тумблер"),
     }
     /// ГруппировкаПодчиненныхЭлементовФормы.
     ChildFormItemsGroup("ГруппировкаПодчиненныхЭлементовФормы", "ChildFormItemsGroup")
-        meta "EnumChildFormItemsGroup" {
-        ChildFormItemsGroupVertical("Вертикальная", "Vertical", "Vertical"),
-        ChildFormItemsGroupHorizontal("Горизонтальная", "Horizontal", "Horizontal"),
+        meta "ПеречислениеГруппировкаПодчиненныхЭлементовФормы" {
+        ChildFormItemsGroupVertical("Вертикальная", "Vertical", "Вертикальная"),
+        ChildFormItemsGroupHorizontal("Горизонтальная", "Horizontal", "Горизонтальная"),
         ChildFormItemsGroupAlwaysHorizontal(
             "ГоризонтальнаяВсегда",
             "AlwaysHorizontal",
-            "Always horizontal"
+            "Горизонтальная всегда"
         ),
         ChildFormItemsGroupHorizontalIfPossible(
             "ГоризонтальнаяЕслиВозможно",
             "HorizontalIfPossible",
-            "Horizontal if possible"
+            "Горизонтальная если возможно"
         ),
     }
     /// ИсторияВыбораПриВводе.
     ChoiceHistoryOnInput("ИсторияВыбораПриВводе", "ChoiceHistoryOnInput")
-        meta "EnumChoiceHistoryOnInput" {
-        ChoiceHistoryOnInputAuto("Авто", "Auto", "Auto"),
-        ChoiceHistoryOnInputDontUse("НеИспользовать", "DontUse", "No"),
+        meta "ПеречислениеИсторияВыбораПриВводе" {
+        ChoiceHistoryOnInputAuto("Авто", "Auto", "Авто"),
+        ChoiceHistoryOnInputDontUse("НеИспользовать", "DontUse", "Не использовать"),
     }
     /// ОтображениеКнопкиВыбора.
     ChoiceButtonRepresentation("ОтображениеКнопкиВыбора", "ChoiceButtonRepresentation")
-        meta "EnumChoiceButtonRepresentation" {
-        ChoiceButtonRepresentationAuto("Авто", "Auto", "Auto"),
+        meta "ПеречислениеОтображениеКнопкиВыбора" {
+        ChoiceButtonRepresentationAuto("Авто", "Auto", "Авто"),
         ChoiceButtonRepresentationShowInDropList(
             "ОтображатьВВыпадающемСписке",
             "ShowInDropList",
-            "Show in drop-down list"
+            "Отображать в выпадающем списке"
         ),
         ChoiceButtonRepresentationShowInDropListAndInInputField(
             "ОтображатьВВыпадающемСпискеИВПолеВвода",
             "ShowInDropListAndInInputField",
-            "Show in drop-down list and input field"
+            "Отображать в выпадающем списке и в поле ввода"
         ),
         ChoiceButtonRepresentationShowInInputField(
             "ОтображатьВПолеВвода",
             "ShowInInputField",
-            "Show in input field"
+            "Отображать в поле ввода"
         ),
     }
     /// ОтображениеУправленияОбычнойГруппы.
@@ -1022,50 +1022,50 @@ system_enums! {
         "ОтображениеУправленияОбычнойГруппы",
         "UsualGroupControlRepresentation"
     )
-        meta "EnumUsualGroupControlRepresentation" {
+        meta "ПеречислениеОтображениеУправленияОбычнойГруппы" {
         UsualGroupControlRepresentationTitleHyperlink(
             "ГиперссылкаЗаголовка",
             "TitleHyperlink",
-            "Hyperlink link"
+            "Гиперссылка заголовка"
         ),
-        UsualGroupControlRepresentationPicture("Картинка", "Picture", "Picture"),
+        UsualGroupControlRepresentationPicture("Картинка", "Picture", "Картинка"),
     }
     /// ПоведениеОбычнойГруппы.
     UsualGroupBehavior("ПоведениеОбычнойГруппы", "UsualGroupBehavior")
-        meta "EnumUsualGroupBehavior" {
-        UsualGroupBehaviorAuto("Авто", "Auto", "Auto"),
-        UsualGroupBehaviorPopUp("Всплывающая", "PopUp", "Pop-up"),
-        UsualGroupBehaviorUsual("Обычное", "Usual", "Regular"),
-        UsualGroupBehaviorCollapsible("Свертываемая", "Collapsible", "Collapsible"),
+        meta "ПеречислениеПоведениеОбычнойГруппы" {
+        UsualGroupBehaviorAuto("Авто", "Auto", "Авто"),
+        UsualGroupBehaviorPopUp("Всплывающая", "PopUp", "Всплывающая"),
+        UsualGroupBehaviorUsual("Обычное", "Usual", "Обычное"),
+        UsualGroupBehaviorCollapsible("Свертываемая", "Collapsible", "Свертываемая"),
     }
     /// ПоложениеЗаголовкаЭлементаФормы.
     FormItemTitleLocation("ПоложениеЗаголовкаЭлементаФормы", "FormItemTitleLocation")
-        meta "EnumFormItemTitleLocation" {
-        FormItemTitleLocationAuto("Авто", "Auto", "Auto"),
-        FormItemTitleLocationTop("Верх", "Top", "Top"),
-        FormItemTitleLocationLeft("Лево", "Left", "Left"),
-        FormItemTitleLocationNone("Нет", "None", "None"),
-        FormItemTitleLocationBottom("Низ", "Bottom", "Bottom"),
-        FormItemTitleLocationRight("Право", "Right", "Right"),
+        meta "ПеречислениеПоложениеЗаголовкаЭлементаФормы" {
+        FormItemTitleLocationAuto("Авто", "Auto", "Авто"),
+        FormItemTitleLocationTop("Верх", "Top", "Верх"),
+        FormItemTitleLocationLeft("Лево", "Left", "Лево"),
+        FormItemTitleLocationNone("Нет", "None", "Нет"),
+        FormItemTitleLocationBottom("Низ", "Bottom", "Низ"),
+        FormItemTitleLocationRight("Право", "Right", "Право"),
     }
     /// ПоложениеКнопкиВКоманднойПанели.
     ButtonLocationInCommandBar("ПоложениеКнопкиВКоманднойПанели", "ButtonLocationInCommandBar")
-        meta "EnumButtonLocationInCommandBar" {
-        ButtonLocationInCommandBarAuto("Авто", "Auto", "Auto"),
+        meta "ПеречислениеПоложениеКнопкиВКоманднойПанели" {
+        ButtonLocationInCommandBarAuto("Авто", "Auto", "Авто"),
         ButtonLocationInCommandBarInAdditionalSubmenu(
             "ВДополнительномПодменю",
             "InAdditionalSubmenu",
-            "In additional submenu"
+            "В дополнительном подменю"
         ),
         ButtonLocationInCommandBarInCommandBar(
             "ВКоманднойПанели",
             "InCommandBar",
-            "In command bar"
+            "В командной панели"
         ),
         ButtonLocationInCommandBarInCommandBarAndInAdditionalSubmenu(
             "ВКоманднойПанелиИВДополнительномПодменю",
             "InCommandBarAndInAdditionalSubmenu",
-            "In the command bar and additional submenu"
+            "В командной панели и дополнительном подменю"
         ),
     }
     /// РасположениеРесурсовКомпоновкиДанных.
@@ -1073,12 +1073,12 @@ system_enums! {
         "РасположениеРесурсовКомпоновкиДанных",
         "DataCompositionResourcesPlacement"
     )
-        meta "EnumDataCompositionResourcesPlacement" {
-        DataCompositionResourcesPlacementVertically("Вертикально", "Vertically", "Vertical"),
+        meta "ПеречислениеРасположениеРесурсовКомпоновкиДанных" {
+        DataCompositionResourcesPlacementVertically("Вертикально", "Vertically", "Вертикально"),
         DataCompositionResourcesPlacementHorizontally(
             "Горизонтально",
             "Horizontally",
-            "Horizontal"
+            "Горизонтально"
         ),
     }
     /// ИспользованиеУсловногоОформленияКомпоновкиДанных.
@@ -1086,28 +1086,28 @@ system_enums! {
         "ИспользованиеУсловногоОформленияКомпоновкиДанных",
         "DataCompositionConditionalAppearanceUse"
     )
-        meta "EnumDataCompositionConditionalAppearanceUse" {
+        meta "ПеречислениеИспользованиеУсловногоОформленияКомпоновкиДанных" {
         // Представления подтверждены нативным контролем 8.3.27.2342. Замеры:
         // `tests/conformance/measure/1c/measure-data-composition-*.platform.txt`
         // для `conditional-appearance-use`, `field-placement`,
         // `accounting-balance-type`, `balance-type` и `period-type`.
-        DataCompositionConditionalAppearanceUseUse("Использовать", "Use", "Use"),
-        DataCompositionConditionalAppearanceUseDontUse("НеИспользовать", "DontUse", "Do not use"),
+        DataCompositionConditionalAppearanceUseUse("Использовать", "Use", "Использовать"),
+        DataCompositionConditionalAppearanceUseDontUse("НеИспользовать", "DontUse", "Не использовать"),
     }
     /// РасположениеПоляКомпоновкиДанных.
     DataCompositionFieldPlacement(
         "РасположениеПоляКомпоновкиДанных",
         "DataCompositionFieldPlacement"
     )
-        meta "EnumDataCompositionFieldPlacement" {
-        DataCompositionFieldPlacementAuto("Авто", "Auto", "Auto"),
-        DataCompositionFieldPlacementVertically("Вертикально", "Vertically", "Vertical"),
-        DataCompositionFieldPlacementTogether("Вместе", "Together", "Combined"),
-        DataCompositionFieldPlacementHorizontally("Горизонтально", "Horizontally", "Horizontal"),
+        meta "ПеречислениеРасположениеПоляКомпоновкиДанных" {
+        DataCompositionFieldPlacementAuto("Авто", "Auto", "Авто"),
+        DataCompositionFieldPlacementVertically("Вертикально", "Vertically", "Вертикально"),
+        DataCompositionFieldPlacementTogether("Вместе", "Together", "Вместе"),
+        DataCompositionFieldPlacementHorizontally("Горизонтально", "Horizontally", "Горизонтально"),
         DataCompositionFieldPlacementSpecialColumn(
             "ОтдельнаяКолонка",
             "SpecialColumn",
-            "Separate column"
+            "В отдельной колонке"
         ),
     }
     /// ТипБухгалтерскогоОстаткаКомпоновкиДанных.
@@ -1115,161 +1115,161 @@ system_enums! {
         "ТипБухгалтерскогоОстаткаКомпоновкиДанных",
         "DataCompositionAccountingBalanceType"
     )
-        meta "EnumDataCompositionAccountingBalanceType" {
-        DataCompositionAccountingBalanceTypeDebit("Дебет", "Debit", "Debit"),
-        DataCompositionAccountingBalanceTypeCredit("Кредит", "Credit", "Credit"),
-        DataCompositionAccountingBalanceTypeNone("Нет", "None", "None"),
+        meta "ПеречислениеТипБухгалтерскогоОстаткаКомпоновкиДанных" {
+        DataCompositionAccountingBalanceTypeDebit("Дебет", "Debit", "Дебет"),
+        DataCompositionAccountingBalanceTypeCredit("Кредит", "Credit", "Кредит"),
+        DataCompositionAccountingBalanceTypeNone("Нет", "None", "Нет"),
     }
     /// ТипОстаткаКомпоновкиДанных.
     DataCompositionBalanceType("ТипОстаткаКомпоновкиДанных", "DataCompositionBalanceType")
-        meta "EnumDataCompositionBalanceType" {
+        meta "ПеречислениеТипОстаткаКомпоновкиДанных" {
         DataCompositionBalanceTypeOpeningBalance(
             "НачальныйОстаток",
             "OpeningBalance",
-            "Opening balance"
+            "Начальный остаток"
         ),
         DataCompositionBalanceTypeClosingBalance(
             "КонечныйОстаток",
             "ClosingBalance",
-            "Closing balance"
+            "Конечный остаток"
         ),
-        DataCompositionBalanceTypeNone("Нет", "None", "None"),
+        DataCompositionBalanceTypeNone("Нет", "None", "Нет"),
     }
     /// ТипПериодаКомпоновкиДанных.
     DataCompositionPeriodType("ТипПериодаКомпоновкиДанных", "DataCompositionPeriodType")
-        meta "EnumDataCompositionPeriodType" {
-        DataCompositionPeriodTypeMain("Основной", "Main", "Default"),
-        DataCompositionPeriodTypeAdditional("Дополнительный", "Additional", "Additional"),
+        meta "ПеречислениеТипПериодаКомпоновкиДанных" {
+        DataCompositionPeriodTypeMain("Основной", "Main", "Основной"),
+        DataCompositionPeriodTypeAdditional("Дополнительный", "Additional", "Дополнительный"),
     }
     /// ТипДополненияПериодаКомпоновкиДанных.
     DataCompositionPeriodAdditionType(
         "ТипДополненияПериодаКомпоновкиДанных",
         "DataCompositionPeriodAdditionType"
     )
-        meta "EnumDataCompositionPeriodAdditionType" {
-        DataCompositionPeriodAdditionTypeNone("БезДополнения", "None", "No addition"),
-        DataCompositionPeriodAdditionTypeYear("Год", "Year", "Year"),
+        meta "ПеречислениеТипДополненияПериодаКомпоновкиДанных" {
+        DataCompositionPeriodAdditionTypeNone("БезДополнения", "None", "Без дополнения"),
+        DataCompositionPeriodAdditionTypeYear("Год", "Year", "Год"),
         DataCompositionPeriodAdditionTypeYearSinceBeginOfPeriod(
             "ГодОтНачалаПериода",
             "YearSinceBeginOfPeriod",
-            "Year from the beginning of the period"
+            "Год с начала периода"
         ),
         DataCompositionPeriodAdditionTypeYearSinceBeginOfPeriod445(
             "ГодОтНачалаПериода445",
             "YearSinceBeginOfPeriod445",
-            "Year from the beginning of the period (445)"
+            "Год с начала периода (445)"
         ),
-        DataCompositionPeriodAdditionTypeTenDays("Декада", "TenDays", "Ten-day period"),
-        DataCompositionPeriodAdditionTypeDay("День", "Day", "Day"),
+        DataCompositionPeriodAdditionTypeTenDays("Декада", "TenDays", "Декада"),
+        DataCompositionPeriodAdditionTypeDay("День", "Day", "День"),
         DataCompositionPeriodAdditionTypeDaySinceBeginOfPeriod(
             "ДеньОтНачалаПериода",
             "DaySinceBeginOfPeriod",
-            "Day from the beginning of the period"
+            "День с начала периода"
         ),
-        DataCompositionPeriodAdditionTypeQuarter("Квартал", "Quarter", "Quarter"),
+        DataCompositionPeriodAdditionTypeQuarter("Квартал", "Quarter", "Квартал"),
         DataCompositionPeriodAdditionTypeQuarterSinceBeginOfPeriod(
             "КварталОтНачалаПериода",
             "QuarterSinceBeginOfPeriod",
-            "Quarter from the beginning of the period"
+            "Квартал с начала периода"
         ),
         DataCompositionPeriodAdditionTypeQuarterSinceBeginOfPeriod445(
             "КварталОтНачалаПериода445",
             "QuarterSinceBeginOfPeriod445",
-            "Quarter from the beginning of the period (445)"
+            "Квартал с начала периода (445)"
         ),
-        DataCompositionPeriodAdditionTypeMonth("Месяц", "Month", "Month"),
+        DataCompositionPeriodAdditionTypeMonth("Месяц", "Month", "Месяц"),
         DataCompositionPeriodAdditionTypeMonthSinceBeginOfPeriod(
             "МесяцОтНачалаПериода",
             "MonthSinceBeginOfPeriod",
-            "Month from the beginning of the period"
+            "Месяц с начала периода"
         ),
         DataCompositionPeriodAdditionTypeMonthSinceBeginOfPeriod445(
             "МесяцОтНачалаПериода445",
             "MonthSinceBeginOfPeriod445",
-            "Month from the beginning of the period (445)"
+            "Месяц с начала периода (445)"
         ),
-        DataCompositionPeriodAdditionTypeMinute("Минута", "Minute", "Minute"),
+        DataCompositionPeriodAdditionTypeMinute("Минута", "Minute", "Минута"),
         DataCompositionPeriodAdditionTypeMinuteSinceBeginOfPeriod(
             "МинутаОтНачалаПериода",
             "MinuteSinceBeginOfPeriod",
-            "Minute from the beginning of the period"
+            "Минута с начала периода"
         ),
-        DataCompositionPeriodAdditionTypeWeek("Неделя", "Week", "Week"),
+        DataCompositionPeriodAdditionTypeWeek("Неделя", "Week", "Неделя"),
         DataCompositionPeriodAdditionTypeWeekSinceBeginOfPeriod(
             "НеделяОтНачалаПериода",
             "WeekSinceBeginOfPeriod",
-            "Week from the beginning of the period"
+            "Неделя с начала периода"
         ),
-        DataCompositionPeriodAdditionTypeHalfYear("Полугодие", "HalfYear", "Half year"),
+        DataCompositionPeriodAdditionTypeHalfYear("Полугодие", "HalfYear", "Полугодие"),
         DataCompositionPeriodAdditionTypeHalfYearSinceBeginOfPeriod(
             "ПолугодиеОтНачалаПериода",
             "HalfYearSinceBeginOfPeriod",
-            "Six months from the beginning of the period"
+            "Полугодие с начала периода"
         ),
         DataCompositionPeriodAdditionTypeHalfYearSinceBeginOfPeriod445(
             "ПолугодиеОтНачалаПериода445",
             "HalfYearSinceBeginOfPeriod445",
-            "Six months from the beginning of the period (445)"
+            "Полугодие с начала периода (445)"
         ),
-        DataCompositionPeriodAdditionTypeSecond("Секунда", "Second", "Second"),
-        DataCompositionPeriodAdditionTypeHour("Час", "Hour", "Hour"),
+        DataCompositionPeriodAdditionTypeSecond("Секунда", "Second", "Секунда"),
+        DataCompositionPeriodAdditionTypeHour("Час", "Hour", "Час"),
         DataCompositionPeriodAdditionTypeHourSinceBeginOfPeriod(
             "ЧасОтНачалаПериода",
             "HourSinceBeginOfPeriod",
-            "Hour from the beginning of the period"
+            "Час с начала периода"
         ),
     }
     /// ГлубинаЦвета.
-    ColorDepth("ГлубинаЦвета", "ColorDepth") meta "EnumColorDepth" {
+    ColorDepth("ГлубинаЦвета", "ColorDepth") meta "ПеречислениеГлубинаЦвета" {
         // Имена и представления измерены на 8.3.27 в `measure-next-session-enums.bsl`.
-        ColorDepthBitPerPixel1("БитНаПиксел1", "BitPerPixel1", "1 bit per pixel"),
-        ColorDepthBitPerPixel24("БитНаПиксел24", "BitPerPixel24", "24 bits per pixel"),
-        ColorDepthBitPerPixel32("БитНаПиксел32", "BitPerPixel32", "32 bits per pixel"),
-        ColorDepthBitPerPixel4("БитНаПиксел4", "BitPerPixel4", "4 bits per pixel"),
-        ColorDepthBitPerPixel8("БитНаПиксел8", "BitPerPixel8", "8 bits per pixel"),
+        ColorDepthBitPerPixel1("БитНаПиксел1", "BitPerPixel1", "1 бит на пикель"),
+        ColorDepthBitPerPixel24("БитНаПиксел24", "BitPerPixel24", "24 бита на пикель"),
+        ColorDepthBitPerPixel32("БитНаПиксел32", "BitPerPixel32", "32 бита на пикель"),
+        ColorDepthBitPerPixel4("БитНаПиксел4", "BitPerPixel4", "4 бита на пикель"),
+        ColorDepthBitPerPixel8("БитНаПиксел8", "BitPerPixel8", "8 бит на пикель"),
     }
     /// ОтображениеПодсказки.
     ToolTipRepresentation("ОтображениеПодсказки", "ToolTipRepresentation")
-        meta "EnumToolTipRepresentation" {
-        ToolTipRepresentationAuto("Авто", "Auto", "Auto"),
-        ToolTipRepresentationBalloon("Всплывающая", "Balloon", "Tooltip"),
-        ToolTipRepresentationButton("Кнопка", "Button", "Button"),
-        ToolTipRepresentationNone("Нет", "None", "No"),
-        ToolTipRepresentationShowAuto("ОтображатьАвто", "ShowAuto", "Display automatically"),
-        ToolTipRepresentationShowTop("ОтображатьСверху", "ShowTop", "Display above"),
-        ToolTipRepresentationShowLeft("ОтображатьСлева", "ShowLeft", "Display to the left"),
-        ToolTipRepresentationShowBottom("ОтображатьСнизу", "ShowBottom", "Display below"),
-        ToolTipRepresentationShowRight("ОтображатьСправа", "ShowRight", "Display to the right"),
+        meta "ПеречислениеОтображениеПодсказки" {
+        ToolTipRepresentationAuto("Авто", "Auto", "Авто"),
+        ToolTipRepresentationBalloon("Всплывающая", "Balloon", "Всплывающая подсказка"),
+        ToolTipRepresentationButton("Кнопка", "Button", "Кнопка"),
+        ToolTipRepresentationNone("Нет", "None", "Нет"),
+        ToolTipRepresentationShowAuto("ОтображатьАвто", "ShowAuto", "Отображать авто"),
+        ToolTipRepresentationShowTop("ОтображатьСверху", "ShowTop", "Отображать сверху"),
+        ToolTipRepresentationShowLeft("ОтображатьСлева", "ShowLeft", "Отображать слева"),
+        ToolTipRepresentationShowBottom("ОтображатьСнизу", "ShowBottom", "Отображать снизу"),
+        ToolTipRepresentationShowRight("ОтображатьСправа", "ShowRight", "Отображать справа"),
     }
     /// ТипКлиентскогоПриложения.
     ClientApplicationType("ТипКлиентскогоПриложения", "ClientApplicationType")
-        meta "EnumClientApplicationType" {
-        ClientApplicationTypeWebClient("ВебКлиент", "WebClient", "Web client"),
+        meta "ПеречислениеТипКлиентскогоПриложения" {
+        ClientApplicationTypeWebClient("ВебКлиент", "WebClient", "Веб клиент"),
         ClientApplicationTypeExternalConnection(
             "ВнешнееСоединение",
             "ExternalConnection",
-            "External connection"
+            "Внешнее соединение"
         ),
         ClientApplicationTypeMobileAppClient(
             "МобильноеПриложениеКлиент",
             "MobileAppClient",
-            "Mobile application client"
+            "Мобильное приложение клиент"
         ),
-        ClientApplicationTypeMobileClient("МобильныйКлиент", "MobileClient", "Mobile client"),
-        ClientApplicationTypeThickClient("ТолстыйКлиент", "ThickClient", "Thick client"),
-        ClientApplicationTypeThinClient("ТонкийКлиент", "ThinClient", "Thin client"),
+        ClientApplicationTypeMobileClient("МобильныйКлиент", "MobileClient", "Мобильный клиент"),
+        ClientApplicationTypeThickClient("ТолстыйКлиент", "ThickClient", "Толстый клиент"),
+        ClientApplicationTypeThinClient("ТонкийКлиент", "ThinClient", "Тонкий клиент"),
     }
     /// Тип вывода текста компоновки данных.
     DataCompositionTextOutputType(
         "ТипВыводаТекстаКомпоновкиДанных",
         "DataCompositionTextOutputType"
     )
-        meta "EnumDataCompositionTextOutputType" {
+        meta "ПеречислениеТипВыводаТекстаКомпоновкиДанных" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-data-composition-text-output-type.bsl`.
-        DataCompositionTextOutputTypeAuto("Авто", "Auto", "Auto"),
-        DataCompositionTextOutputTypeOutput("Выводить", "Output", "Output"),
-        DataCompositionTextOutputTypeDontOutput("НеВыводить", "DontOutput", "Do not output"),
+        DataCompositionTextOutputTypeAuto("Авто", "Auto", "Авто"),
+        DataCompositionTextOutputTypeOutput("Выводить", "Output", "Выводить"),
+        DataCompositionTextOutputTypeDontOutput("НеВыводить", "DontOutput", "Не выводить"),
     }
     /// Тип размещения текста компоновки данных.
     // ИЗМЕРЕНО на 8.3.27 пробой
@@ -1278,21 +1278,21 @@ system_enums! {
         "ТипРазмещенияТекстаКомпоновкиДанных",
         "DataCompositionTextPlacementType"
     )
-        meta "EnumDataCompositionTextPlacementType" {
-        DataCompositionTextPlacementTypeOverflow("Выступать", "Overflow", "Overflow"),
+        meta "ПеречислениеТипРазмещенияТекстаКомпоновкиДанных" {
+        DataCompositionTextPlacementTypeOverflow("Выступать", "Overflow", "Выступать"),
         // Типы, члены, алиасы и представления измерены на 8.3.27.2342.
-        DataCompositionTextPlacementTypeBlock("Забивать", "Block", "Conceal"),
-        DataCompositionTextPlacementTypeCut("Обрезать", "Cut", "Clip"),
-        DataCompositionTextPlacementTypeWrap("Переносить", "Wrap", "Wrap"),
+        DataCompositionTextPlacementTypeBlock("Забивать", "Block", "Забивать"),
+        DataCompositionTextPlacementTypeCut("Обрезать", "Cut", "Обрезать"),
+        DataCompositionTextPlacementTypeWrap("Переносить", "Wrap", "Переносить"),
     }
     /// Режим масштабирования просмотра документа.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-view-scaling-mode.bsl`.
-    ViewScalingMode("РежимМасштабированияПросмотра", "ViewScalingMode") meta "EnumViewScalingMode" {
+    ViewScalingMode("РежимМасштабированияПросмотра", "ViewScalingMode") meta "ПеречислениеРежимМасштабированияПросмотра" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-view-scaling-mode.bsl`.
-        ViewScalingModeAuto("Авто", "Auto", "Auto"),
-        ViewScalingModeLarge("Крупный", "Large", "Large"),
-        ViewScalingModeNormal("Обычный", "Normal", "Normal"),
+        ViewScalingModeAuto("Авто", "Auto", "Авто"),
+        ViewScalingModeLarge("Крупный", "Large", "Крупный"),
+        ViewScalingModeNormal("Обычный", "Normal", "Обычный"),
     }
     /// Расположение итогов компоновки данных.
     // ИЗМЕРЕНО на 8.3.27 пробой
@@ -1301,279 +1301,279 @@ system_enums! {
         "РасположениеИтоговКомпоновкиДанных",
         "DataCompositionTotalPlacement"
     )
-        meta "EnumDataCompositionTotalPlacement" {
+        meta "ПеречислениеРасположениеИтоговКомпоновкиДанных" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-data-composition-total-placement.bsl`.
-        DataCompositionTotalPlacementAuto("Авто", "Auto", "Auto"),
-        DataCompositionTotalPlacementEnd("Конец", "End", "End"),
-        DataCompositionTotalPlacementBegin("Начало", "Begin", "Begin"),
-        DataCompositionTotalPlacementBeginAndEnd("НачалоИКонец", "BeginAndEnd", "Begin and end"),
-        DataCompositionTotalPlacementNone("Нет", "None", "None"),
+        DataCompositionTotalPlacementAuto("Авто", "Auto", "Авто"),
+        DataCompositionTotalPlacementEnd("Конец", "End", "Конец"),
+        DataCompositionTotalPlacementBegin("Начало", "Begin", "Начало"),
+        DataCompositionTotalPlacementBeginAndEnd("НачалоИКонец", "BeginAndEnd", "Начало и конец"),
+        DataCompositionTotalPlacementNone("Нет", "None", "Нет"),
     }
     /// Размер картинки в области отображения.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-picture-size.bsl`.
-    PictureSize("РазмерКартинки", "PictureSize") meta "EnumPictureSize" {
+    PictureSize("РазмерКартинки", "PictureSize") meta "ПеречислениеРазмерКартинки" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-picture-size.bsl`.
-        PictureSizeAutoSize("АвтоРазмер", "AutoSize", "Automatic size"),
+        PictureSizeAutoSize("АвтоРазмер", "AutoSize", "Автоматический размер"),
         PictureSizeAutoSizeIgnoreScale(
             "АвтоРазмерБезУчетаМасштаба",
             "AutoSizeIgnoreScale",
-            "Automatic size without scale"
+            "Автоматический размер без учета масштаба"
         ),
-        PictureSizeByFontSize("ПоРазмеруШрифта", "ByFontSize", "By font size"),
-        PictureSizeProportionally("Пропорционально", "Proportionally", "Proportional"),
-        PictureSizeStretch("Растянуть", "Stretch", "Stretch"),
-        PictureSizeRealSize("РеальныйРазмер", "RealSize", "Actual size"),
+        PictureSizeByFontSize("ПоРазмеруШрифта", "ByFontSize", "По размеру шрифта"),
+        PictureSizeProportionally("Пропорционально", "Proportionally", "Пропорционально"),
+        PictureSizeStretch("Растянуть", "Stretch", "Растянуть"),
+        PictureSizeRealSize("РеальныйРазмер", "RealSize", "Реальный размер"),
         PictureSizeRealSizeIgnoreScale(
             "РеальныйРазмерБезУчетаМасштаба",
             "RealSizeIgnoreScale",
-            "Actual size (no scaling)"
+            "Реальный размер без учета масштаба"
         ),
-        PictureSizeTile("Черепица", "Tile", "Tile"),
+        PictureSizeTile("Черепица", "Tile", "Черепица"),
     }
     /// Тип смещения ячеек табличного документа.
     // ИЗМЕРЕНО на 8.3.27 пробой
     // `measure-spreadsheet-document-shift-type.bsl`.
     SpreadsheetDocumentShiftType("ТипСмещенияТабличногоДокумента", "SpreadsheetDocumentShiftType")
-        meta "EnumSpreadsheetDocumentShiftType" {
+        meta "ПеречислениеТипСмещенияТабличногоДокумента" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-spreadsheet-document-shift-type.bsl`.
-        SpreadsheetDocumentShiftTypeWithoutShift("БезСмещения", "WithoutShift", "No shift"),
-        SpreadsheetDocumentShiftTypeVertical("ПоВертикали", "Vertical", "Vertically"),
-        SpreadsheetDocumentShiftTypeHorizontal("ПоГоризонтали", "Horizontal", "Horizontally"),
+        SpreadsheetDocumentShiftTypeWithoutShift("БезСмещения", "WithoutShift", "Без смещения"),
+        SpreadsheetDocumentShiftTypeVertical("ПоВертикали", "Vertical", "По вертикали"),
+        SpreadsheetDocumentShiftTypeHorizontal("ПоГоризонтали", "Horizontal", "По горизонтали"),
     }
     /// Тип диаграммы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-chart-type.bsl`.
-    ChartType("ТипДиаграммы", "ChartType") meta "EnumChartType" {
+    ChartType("ТипДиаграммы", "ChartType") meta "ПеречислениеТипДиаграммы" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-chart-type.bsl`.
-        ChartTypeStock("Биржевая", "Stock", "Stock"),
-        ChartTypeOpenHighLowClose("БиржеваяСвеча", "OpenHighLowClose", "Open-High\"-Low-Close\""),
-        ChartTypeConcaveSurface("ВогнутаяПоверхность", "ConcaveSurface", "Concave surface"),
-        ChartTypeWaterfall("Водопад", "Waterfall", "Waterfall"),
-        ChartTypeFunnel("Воронка", "Funnel", "Cone"),
-        ChartTypeNormalizedFunnel("ВоронкаНормированная", "NormalizedFunnel", "Standardized cone"),
+        ChartTypeStock("Биржевая", "Stock", "Биржевая"),
+        ChartTypeOpenHighLowClose("БиржеваяСвеча", "OpenHighLowClose", "Биржевая \"свеча\""),
+        ChartTypeConcaveSurface("ВогнутаяПоверхность", "ConcaveSurface", "Вогнутая поверхность"),
+        ChartTypeWaterfall("Водопад", "Waterfall", "Водопад"),
+        ChartTypeFunnel("Воронка", "Funnel", "Воронка"),
+        ChartTypeNormalizedFunnel("ВоронкаНормированная", "NormalizedFunnel", "Воронка нормированная"),
         ChartTypeNormalizedFunnel3D(
             "ВоронкаНормированнаяОбъемная",
             "NormalizedFunnel3D",
-            "Standardized volumetric cone"
+            "Воронка нормированная объемная"
         ),
-        ChartTypeFunnel3D("ВоронкаОбъемная", "Funnel3D", "Volumetric cone"),
-        ChartTypeConvexSurface("ВыпуклаяПоверхность", "ConvexSurface", "Convex surface"),
-        ChartTypeColumn("Гистограмма", "Column", "Column"),
-        ChartTypeBar("ГистограммаГоризонтальная", "Bar", "Bar"),
-        ChartTypeBar3D("ГистограммаГоризонтальнаяОбъемная", "Bar3D", "Bar 3D"),
+        ChartTypeFunnel3D("ВоронкаОбъемная", "Funnel3D", "Воронка объемная"),
+        ChartTypeConvexSurface("ВыпуклаяПоверхность", "ConvexSurface", "Выпуклая поверхность"),
+        ChartTypeColumn("Гистограмма", "Column", "Гистограмма"),
+        ChartTypeBar("ГистограммаГоризонтальная", "Bar", "Гистограмма горизонтальная"),
+        ChartTypeBar3D("ГистограммаГоризонтальнаяОбъемная", "Bar3D", "Гистограмма горизонтальная объемная"),
         ChartTypeNormalizedColumn(
             "ГистограммаНормированная",
             "NormalizedColumn",
-            "Normalized bar chart"
+            "Гистограмма нормированная"
         ),
         ChartTypeNormalizedBar(
             "ГистограммаНормированнаяГоризонтальная",
             "NormalizedBar",
-            "Normalized horizontal bar"
+            "Гистограмма нормированная горизонтальная"
         ),
         ChartTypeNormalizedBar3D(
             "ГистограммаНормированнаяГоризонтальнаяОбъемная",
             "NormalizedBar3D",
-            "Normalized horizontal 3D column"
+            "Гистограмма нормированная горизонтальная объемная"
         ),
         ChartTypeNormalizedColumn3D(
             "ГистограммаНормированнаяОбъемная",
             "NormalizedColumn3D",
-            "Normalized 3D column"
+            "Гистограмма нормированная объемная"
         ),
-        ChartTypeColumn3D("ГистограммаОбъемная", "Column3D", "3D column"),
-        ChartTypeStackedColumn("ГистограммаСНакоплением", "StackedColumn", "Stacked column"),
-        ChartTypeStackedBar("ГистограммаСНакоплениемГоризонтальная", "StackedBar", "Stacked Bar"),
+        ChartTypeColumn3D("ГистограммаОбъемная", "Column3D", "Гистограмма объемная"),
+        ChartTypeStackedColumn("ГистограммаСНакоплением", "StackedColumn", "Гистограмма с накоплением"),
+        ChartTypeStackedBar("ГистограммаСНакоплениемГоризонтальная", "StackedBar", "Гистограмма с накоплением горизонтальная"),
         ChartTypeStackedBar3D(
             "ГистограммаСНакоплениемГоризонтальнаяОбъемная",
             "StackedBar3D",
-            "Stacked bar 3D "
+            "Гистограмма с накоплением горизонтальная объемная "
         ),
         ChartTypeStackedColumn3D(
             "ГистограммаСНакоплениемОбъемная",
             "StackedColumn3D",
-            "Stacked column 3D"
+            "Гистограмма с накоплением объемная"
         ),
-        ChartTypeLine("График", "Line", "Line"),
-        ChartTypeStep("ГрафикПоШагам", "Step", "Step"),
-        ChartTypeStackedLine("ГрафикСНакоплением", "StackedLine", "Stacked graph"),
-        ChartTypeArea("ГрафикСОбластями", "Area", "Area"),
-        ChartTypeStackedArea("ГрафикСОбластямиИНакоплением", "StackedArea", "Stacked Area"),
+        ChartTypeLine("График", "Line", "График"),
+        ChartTypeStep("ГрафикПоШагам", "Step", "График по шагам"),
+        ChartTypeStackedLine("ГрафикСНакоплением", "StackedLine", "График с накоплением"),
+        ChartTypeArea("ГрафикСОбластями", "Area", "График с областями"),
+        ChartTypeStackedArea("ГрафикСОбластямиИНакоплением", "StackedArea", "График с областями и накоплением"),
         ChartTypeNormalizedArea(
             "ГрафикСОбластямиНормированный",
             "NormalizedArea",
-            "Normalized area graph"
+            "График с областями нормированный"
         ),
-        ChartTypeShadedSurface("ЗатененнаяПоверхность", "ShadedSurface", "Shaded surface"),
-        ChartTypeGauge("Измерительная", "Gauge", "Gauge"),
-        ChartTypeBarGraph("Изометрическая", "BarGraph", "Bar graph"),
-        ChartTypeTapeGraph("ИзометрическаяЛента", "TapeGraph", "Tape Graph"),
-        ChartTypeCeilGraph("ИзометрическаяНепрерывная", "CeilGraph", "Ceil Graph"),
-        ChartTypePyramidGraph("ИзометрическаяПирамида", "PyramidGraph", "Pyramid Graph"),
-        ChartTypeWireframeSurface("КаркаснаяПоверхность", "WireframeSurface", "Wire-frame surface"),
-        ChartTypeDonut("Кольцевая", "Donut", "Doughnut"),
-        ChartTypeDonut3D("КольцеваяОбъемная", "Donut3D", "3D doughnut"),
-        ChartTypePie("Круговая", "Pie", "Pie"),
-        ChartTypePie3D("КруговаяОбъемная", "Pie3D", "Pie 3D"),
-        ChartTypeSurface("Поверхность", "Surface", "Surface"),
-        ChartTypeBubble("Пузырьковая", "Bubble", "Bubble"),
-        ChartTypeRadarLine("РадарныйГрафик", "RadarLine", "Radar chart"),
+        ChartTypeShadedSurface("ЗатененнаяПоверхность", "ShadedSurface", "Затененная поверхность"),
+        ChartTypeGauge("Измерительная", "Gauge", "Измерительная"),
+        ChartTypeBarGraph("Изометрическая", "BarGraph", "Изометрическая обычная"),
+        ChartTypeTapeGraph("ИзометрическаяЛента", "TapeGraph", "Изометрическая лента"),
+        ChartTypeCeilGraph("ИзометрическаяНепрерывная", "CeilGraph", "Изометрическая непрерывная"),
+        ChartTypePyramidGraph("ИзометрическаяПирамида", "PyramidGraph", "Изометрическая пирамида"),
+        ChartTypeWireframeSurface("КаркаснаяПоверхность", "WireframeSurface", "Каркасная поверхность"),
+        ChartTypeDonut("Кольцевая", "Donut", "Кольцевая"),
+        ChartTypeDonut3D("КольцеваяОбъемная", "Donut3D", "Кольцевая объемная"),
+        ChartTypePie("Круговая", "Pie", "Круговая"),
+        ChartTypePie3D("КруговаяОбъемная", "Pie3D", "Круговая объемная"),
+        ChartTypeSurface("Поверхность", "Surface", "Поверхность"),
+        ChartTypeBubble("Пузырьковая", "Bubble", "Пузырьковая"),
+        ChartTypeRadarLine("РадарныйГрафик", "RadarLine", "Радарный график"),
         ChartTypeRadarStackedLine(
             "РадарныйГрафикСНакоплением",
             "RadarStackedLine",
-            "Stacked radar chart"
+            "Радарный график с накоплением"
         ),
-        ChartTypeRadarArea("РадарныйГрафикСОбластями", "RadarArea", "Radar area chart"),
+        ChartTypeRadarArea("РадарныйГрафикСОбластями", "RadarArea", "Радарный график с областями"),
         ChartTypeRadarStackedArea(
             "РадарныйГрафикСОбластямиИНакоплением",
             "RadarStackedArea",
-            "Stacked radar area chart"
+            "Радарный график с областями и накоплением"
         ),
         ChartTypeRadarNormalizedArea(
             "РадарныйГрафикСОбластямиНормированный",
             "RadarNormalizedArea",
-            "Normalized radar area chart"
+            "Радарный график с областями нормированный"
         ),
-        ChartTypeHoneycomb("Сотовая", "Honeycomb", "Honeycomb"),
-        ChartTypeScatter("Точечная", "Scatter", "Scatter"),
+        ChartTypeHoneycomb("Сотовая", "Honeycomb", "Сотовая"),
+        ChartTypeScatter("Точечная", "Scatter", "Точечная"),
     }
     /// Ориентация подписей диаграммы.
     // ИЗМЕРЕНО на 8.3.27 пробой
     // `measure-chart-label-orientation-name.bsl`.
     ChartLabelsOrientation("ОриентацияПодписейДиаграммы", "ChartLabelsOrientation")
-        meta "EnumChartLabelsOrientation"
+        meta "ПеречислениеОриентацияПодписейДиаграммы"
         global ["ОриентацияПодписейДиаграммы", "ОриентацияМетокДиаграммы", "ChartLabelsOrientation"] {
         // Оба русских имени и представления измерены на платформе 8.3.27.2342
         // пробой `measure-chart-label-orientation-name.bsl`.
-        ChartLabelsOrientationAuto("Авто", "Auto", "Auto"),
-        ChartLabelsOrientationVertical("Вертикально", "Vertical", "Vertical"),
-        ChartLabelsOrientationHorizontal("Горизонтально", "Horizontal", "Horizontal"),
-        ChartLabelsOrientationCustomAngle("ПроизвольныйУголНаклона", "CustomAngle", "Custom angle"),
+        ChartLabelsOrientationAuto("Авто", "Auto", "Авто"),
+        ChartLabelsOrientationVertical("Вертикально", "Vertical", "Вертикально"),
+        ChartLabelsOrientationHorizontal("Горизонтально", "Horizontal", "Горизонтально"),
+        ChartLabelsOrientationCustomAngle("ПроизвольныйУголНаклона", "CustomAngle", "Произвольный угол"),
     }
     /// Вид включения граничного значения.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-boundary-type.bsl`.
-    BoundaryType("ВидГраницы", "BoundaryType") meta "EnumBoundaryType" {
+    BoundaryType("ВидГраницы", "BoundaryType") meta "ПеречислениеВидГраницы" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-boundary-type.bsl`.
-        BoundaryTypeIncluding("Включая", "Including", "Including"),
-        BoundaryTypeExcluding("Исключая", "Excluding", "Excluding"),
+        BoundaryTypeIncluding("Включая", "Including", "Включая"),
+        BoundaryTypeExcluding("Исключая", "Excluding", "Исключая"),
     }
     /// Режим ограничения количества серий диаграммы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-max-series.bsl`.
-    MaxSeries("МаксимумСерий", "MaxSeries") meta "EnumMaxSeries" {
+    MaxSeries("МаксимумСерий", "MaxSeries") meta "ПеречислениеМаксимумСерий" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-max-series.bsl`.
-        MaxSeriesNotDefined("НеЗадано", "NotDefined", "Not set"),
-        MaxSeriesLimited("Ограничено", "Limited", "Limited"),
-        MaxSeriesPercent("Процент", "Percent", "Percent"),
+        MaxSeriesNotDefined("НеЗадано", "NotDefined", "Не задано"),
+        MaxSeriesLimited("Ограничено", "Limited", "Ограничено"),
+        MaxSeriesPercent("Процент", "Percent", "Процент"),
     }
     /// Вид подписи к области диаграммы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-chart-label-type.bsl`.
-    ChartLabelType("ВидПодписейКДиаграмме", "ChartLabelType") meta "EnumChartLabelType" {
+    ChartLabelType("ВидПодписейКДиаграмме", "ChartLabelType") meta "ПеречислениеВидПодписейКДиаграмме" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-chart-label-type.bsl`.
-        ChartLabelTypeValue("Значение", "Value", "Value"),
-        ChartLabelTypeValuePercent("ЗначениеПроцент", "ValuePercent", "Value + percent"),
-        ChartLabelTypeValueSize("ЗначениеРазмер", "ValueSize", "Value + size"),
-        ChartLabelTypeNone("Нет", "None", "None"),
-        ChartLabelTypePercent("Процент", "Percent", "Percent"),
-        ChartLabelTypeSeries("Серия", "Series", "Series"),
-        ChartLabelTypeSeriesValue("СерияЗначение", "SeriesValue", "Series + value"),
+        ChartLabelTypeValue("Значение", "Value", "Значение"),
+        ChartLabelTypeValuePercent("ЗначениеПроцент", "ValuePercent", "Значение + процент"),
+        ChartLabelTypeValueSize("ЗначениеРазмер", "ValueSize", "Значение + размер"),
+        ChartLabelTypeNone("Нет", "None", "Нет"),
+        ChartLabelTypePercent("Процент", "Percent", "Процент"),
+        ChartLabelTypeSeries("Серия", "Series", "Серия"),
+        ChartLabelTypeSeriesValue("СерияЗначение", "SeriesValue", "Серия + значение"),
         ChartLabelTypeSeriesValuePercent(
             "СерияЗначениеПроцент",
             "SeriesValuePercent",
-            "Series + value + percent"
+            "Серия + значение + процент"
         ),
         ChartLabelTypeSeriesValueSize(
             "СерияЗначениеРазмер",
             "SeriesValueSize",
-            "Series + value + size"
+            "Cерия + значение + размер"
         ),
-        ChartLabelTypeSeriesPercent("СерияПроцент", "SeriesPercent", "Series + percent"),
-        ChartLabelTypeSeriesSize("СерияРазмер", "SeriesSize", "Series + size"),
-        ChartLabelTypeSeriesPoint("СерияТочка", "SeriesPoint", "Series + point"),
+        ChartLabelTypeSeriesPercent("СерияПроцент", "SeriesPercent", "Серия + процент"),
+        ChartLabelTypeSeriesSize("СерияРазмер", "SeriesSize", "Cерия + размер"),
+        ChartLabelTypeSeriesPoint("СерияТочка", "SeriesPoint", "Серия + точка"),
         ChartLabelTypeSeriesPointValue(
             "СерияТочкаЗначение",
             "SeriesPointValue",
-            "Series + point + value"
+            "Серия + точка + значение"
         ),
         ChartLabelTypeSeriesPointValuePercent(
             "СерияТочкаЗначениеПроцент",
             "SeriesPointValuePercent",
-            "Series + point + value + percent"
+            "Серия + точка + значение + процент"
         ),
         ChartLabelTypeSeriesPointValueSize(
             "СерияТочкаЗначениеРазмер",
             "SeriesPointValueSize",
-            "Series + point + value + size"
+            "Серия + точка + значение + размер"
         ),
         ChartLabelTypeSeriesPointPercent(
             "СерияТочкаПроцент",
             "SeriesPointPercent",
-            "Series + point + percent"
+            "Серия + точка + процент"
         ),
         ChartLabelTypeSeriesPointSize(
             "СерияТочкаРазмер",
             "SeriesPointSize",
-            "Series + point + size"
+            "Серия + точка + размер"
         ),
-        ChartLabelTypePoint("Точка", "Point", "Point"),
-        ChartLabelTypePointValue("ТочкаЗначение", "PointValue", "Point + value"),
+        ChartLabelTypePoint("Точка", "Point", "Точка"),
+        ChartLabelTypePointValue("ТочкаЗначение", "PointValue", "Точка + значение"),
         ChartLabelTypePointValuePercent(
             "ТочкаЗначениеПроцент",
             "PointValuePercent",
-            "Point + value + percent"
+            "Точка + значение + процент"
         ),
         ChartLabelTypePointValueSize(
             "ТочкаЗначениеРазмер",
             "PointValueSize",
-            "Point + value + size"
+            "Точка + значение + размер"
         ),
-        ChartLabelTypePointPercent("ТочкаПроцент", "PointPercent", "Point + percent"),
-        ChartLabelTypePointSize("ТочкаРазмер", "PointSize", "Point + size"),
+        ChartLabelTypePointPercent("ТочкаПроцент", "PointPercent", "Точка + процент"),
+        ChartLabelTypePointSize("ТочкаРазмер", "PointSize", "Точка + размер"),
     }
     /// Стиль линии диаграммы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-chart-line-type.bsl`.
-    ChartLineType("ТипЛинииДиаграммы", "ChartLineType") meta "EnumChartLineType" {
+    ChartLineType("ТипЛинииДиаграммы", "ChartLineType") meta "ПеречислениеТипЛинииДиаграммы" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-chart-line-type.bsl`.
-        ChartLineTypeNone("НетЛинии", "None", "None"),
-        ChartLineTypeDashed("Пунктир", "Dashed", "Dashed"),
-        ChartLineTypeDashDotted("ПунктирТочка", "DashDotted", "DashDotted"),
-        ChartLineTypeDashDottedDotted("ПунктирТочкаТочка", "DashDottedDotted", "DotDashDotted"),
-        ChartLineTypeSolid("Сплошная", "Solid", "Solid"),
-        ChartLineTypeDotted("Точечная", "Dotted", "Dotted"),
+        ChartLineTypeNone("НетЛинии", "None", "Нет линии"),
+        ChartLineTypeDashed("Пунктир", "Dashed", "Пунктирная"),
+        ChartLineTypeDashDotted("ПунктирТочка", "DashDotted", "Пунктирно-точечная"),
+        ChartLineTypeDashDottedDotted("ПунктирТочкаТочка", "DashDottedDotted", "Точечно-пунктирно-точечная"),
+        ChartLineTypeSolid("Сплошная", "Solid", "Сплошная"),
+        ChartLineTypeDotted("Точечная", "Dotted", "Точечная"),
     }
     /// Вид кнопки формы.
     // ИЗМЕРЕНО на 8.3.27 пробой `measure-form-button-type.bsl`.
-    FormButtonType("ВидКнопкиФормы", "FormButtonType") meta "EnumFormButtonType" {
+    FormButtonType("ВидКнопкиФормы", "FormButtonType") meta "ПеречислениеВидКнопкиФормы" {
         // Полный состав и представления измерены на платформе 8.3.27.2342
         // пробой `measure-form-button-type.bsl`.
-        FormButtonTypeHyperlink("Гиперссылка", "Hyperlink", "Hyperlink"),
+        FormButtonTypeHyperlink("Гиперссылка", "Hyperlink", "Гиперссылка"),
         FormButtonTypeCommandBarHyperlink(
             "ГиперссылкаКоманднойПанели",
             "CommandBarHyperlink",
-            "Command bar hyperlink"
+            "Гиперссылка командной панели"
         ),
         FormButtonTypeCommandBarButton(
             "КнопкаКоманднойПанели",
             "CommandBarButton",
-            "Command bar button"
+            "Кнопка командной панели"
         ),
-        FormButtonTypeUsualButton("ОбычнаяКнопка", "UsualButton", "Common button"),
+        FormButtonTypeUsualButton("ОбычнаяКнопка", "UsualButton", "Обычная кнопка"),
     }
     /// Способ назначения типа при записи значения в XML.
-    XmlTypeAssignment("НазначениеТипаXML", "XMLTypeAssignment") meta "XMLTypeAssignment" {
+    XmlTypeAssignment("НазначениеТипаXML", "XMLTypeAssignment") meta "ПеречислениеНазначениеТипаXML" {
         // Полный состав и представления измерены на платформе 8.3.27.2074
         // пробой `measure-xml-type-assignment.bsl`.
-        XmlTypeAssignmentImplicit("Неявное", "Implicit", "Implicit"),
-        XmlTypeAssignmentExplicit("Явное", "Explicit", "Explicit"),
+        XmlTypeAssignmentImplicit("Неявное", "Implicit", "Неявное"),
+        XmlTypeAssignmentExplicit("Явное", "Explicit", "Явное"),
     }
     /// Тип операционной системы и архитектуры платформы.
-    PlatformType("ТипПлатформы", "PlatformType") meta "PlatformType" {
+    PlatformType("ТипПлатформы", "PlatformType") meta "ПеречислениеТипПлатформы" {
         // Полный состав и представления измерены на платформе 8.3.27.2074
         // пробой `measure-platform-type.bsl`.
         PlatformTypeAndroidArm("Android_ARM", "Android_ARM", "Android ARM"),
@@ -1596,200 +1596,200 @@ system_enums! {
     }
     /// Операция сравнения в настройках системы компоновки данных.
     DataCompositionComparisonType("ВидСравненияКомпоновкиДанных", "DataCompositionComparisonType")
-        meta "DataCompositionComparisonType" {
+        meta "ПеречислениеВидСравненияКомпоновкиДанных" {
         // Состав, оба написания и представления измерены на платформе 8.3.27.2074
         // пробой `measure-data-composition-comparison-type.bsl`.
-        DataCompositionComparisonBeginsWith("НачинаетсяС", "BeginsWith", "Begins with"),
-        DataCompositionComparisonContains("Содержит", "Contains", "Contains"),
-        DataCompositionComparisonEqual("Равно", "Equal", "Equal to"),
-        DataCompositionComparisonFilled("Заполнено", "Filled", "Filled"),
-        DataCompositionComparisonGreater("Больше", "Greater", "Greater than"),
+        DataCompositionComparisonBeginsWith("НачинаетсяС", "BeginsWith", "Начинается с"),
+        DataCompositionComparisonContains("Содержит", "Contains", "Содержит"),
+        DataCompositionComparisonEqual("Равно", "Equal", "Равно"),
+        DataCompositionComparisonFilled("Заполнено", "Filled", "Заполнено"),
+        DataCompositionComparisonGreater("Больше", "Greater", "Больше"),
         DataCompositionComparisonGreaterOrEqual(
             "БольшеИлиРавно",
             "GreaterOrEqual",
-            "Greater than or equal to"
+            "Больше или равно"
         ),
-        DataCompositionComparisonInHierarchy("ВИерархии", "InHierarchy", "In group"),
-        DataCompositionComparisonInList("ВСписке", "InList", "In list"),
+        DataCompositionComparisonInHierarchy("ВИерархии", "InHierarchy", "В группе"),
+        DataCompositionComparisonInList("ВСписке", "InList", "В списке"),
         DataCompositionComparisonInListByHierarchy(
             "ВСпискеПоИерархии",
             "InListByHierarchy",
-            "In list group"
+            "В группе из списка"
         ),
-        DataCompositionComparisonLess("Меньше", "Less", "Less than"),
+        DataCompositionComparisonLess("Меньше", "Less", "Меньше"),
         DataCompositionComparisonLessOrEqual(
             "МеньшеИлиРавно",
             "LessOrEqual",
-            "Less than or equal to"
+            "Меньше или равно"
         ),
-        DataCompositionComparisonLike("Подобно", "Like", "Like"),
+        DataCompositionComparisonLike("Подобно", "Like", "Соответствует шаблону"),
         DataCompositionComparisonNotBeginsWith(
             "НеНачинаетсяС",
             "NotBeginsWith",
-            "Does not begin with"
+            "Не начинается с"
         ),
-        DataCompositionComparisonNotContains("НеСодержит", "NotContains", "Does not contain"),
-        DataCompositionComparisonNotEqual("НеРавно", "NotEqual", "Not equal"),
-        DataCompositionComparisonNotFilled("НеЗаполнено", "NotFilled", "Empty"),
-        DataCompositionComparisonNotInHierarchy("НеВИерархии", "NotInHierarchy", "Not in group"),
-        DataCompositionComparisonNotInList("НеВСписке", "NotInList", "Not in list"),
+        DataCompositionComparisonNotContains("НеСодержит", "NotContains", "Не содержит"),
+        DataCompositionComparisonNotEqual("НеРавно", "NotEqual", "Не равно"),
+        DataCompositionComparisonNotFilled("НеЗаполнено", "NotFilled", "Не заполнено"),
+        DataCompositionComparisonNotInHierarchy("НеВИерархии", "NotInHierarchy", "Не в группе"),
+        DataCompositionComparisonNotInList("НеВСписке", "NotInList", "Не в списке"),
         DataCompositionComparisonNotInListByHierarchy(
             "НеВСпискеПоИерархии",
             "NotInListByHierarchy",
-            "Not in list group"
+            "Не в группе из списка"
         ),
-        DataCompositionComparisonNotLike("НеПодобно", "NotLike", "Not like"),
+        DataCompositionComparisonNotLike("НеПодобно", "NotLike", "Не соответствует шаблону"),
     }
     /// Операция сравнения в обычном отборе.
-    ComparisonType("ВидСравнения", "ComparisonType") meta "EnumComparisonType" {
+    ComparisonType("ВидСравнения", "ComparisonType") meta "ПеречислениеВидСравнения" {
         // Состав, оба написания и представления измерены на платформе 8.3.27
         // пробой `measure-comparison-type.bsl`.
-        ComparisonGreater("Больше", "Greater", "Greater than"),
-        ComparisonGreaterOrEqual("БольшеИлиРавно", "GreaterOrEqual", "Greater than or equal to"),
-        ComparisonInHierarchy("ВИерархии", "InHierarchy", "In group"),
-        ComparisonInList("ВСписке", "InList", "In list"),
-        ComparisonInListByHierarchy("ВСпискеПоИерархии", "InListByHierarchy", "In list group"),
-        ComparisonInterval("Интервал", "Interval", "Range (>, <)"),
+        ComparisonGreater("Больше", "Greater", "Больше"),
+        ComparisonGreaterOrEqual("БольшеИлиРавно", "GreaterOrEqual", "Больше или равно"),
+        ComparisonInHierarchy("ВИерархии", "InHierarchy", "В группе"),
+        ComparisonInList("ВСписке", "InList", "В списке"),
+        ComparisonInListByHierarchy("ВСпискеПоИерархии", "InListByHierarchy", "В группе из списка"),
+        ComparisonInterval("Интервал", "Interval", "Интервал (>, <)"),
         ComparisonIntervalIncludingBounds(
             "ИнтервалВключаяГраницы",
             "IntervalIncludingBounds",
-            "Range (>=, <=)"
+            "Интервал (>=, <=)"
         ),
         ComparisonIntervalIncludingLowerBound(
             "ИнтервалВключаяНачало",
             "IntervalIncludingLowerBound",
-            "Range (>=, <)"
+            "Интервал (>=, <)"
         ),
         ComparisonIntervalIncludingUpperBound(
             "ИнтервалВключаяОкончание",
             "IntervalIncludingUpperBound",
-            "Range (>, <=)"
+            "Интервал (>, <=)"
         ),
-        ComparisonLess("Меньше", "Less", "Less than"),
-        ComparisonLessOrEqual("МеньшеИлиРавно", "LessOrEqual", "Less than or equal to"),
-        ComparisonNotInHierarchy("НеВИерархии", "NotInHierarchy", "Not in group"),
-        ComparisonNotInList("НеВСписке", "NotInList", "Not in list"),
+        ComparisonLess("Меньше", "Less", "Меньше"),
+        ComparisonLessOrEqual("МеньшеИлиРавно", "LessOrEqual", "Меньше или равно"),
+        ComparisonNotInHierarchy("НеВИерархии", "NotInHierarchy", "Не в группе"),
+        ComparisonNotInList("НеВСписке", "NotInList", "Не в списке"),
         ComparisonNotInListByHierarchy(
             "НеВСпискеПоИерархии",
             "NotInListByHierarchy",
-            "Not in list group"
+            "Не в группе из списка"
         ),
-        ComparisonNotEqual("НеРавно", "NotEqual", "Not equal to"),
-        ComparisonNotContains("НеСодержит", "NotContains", "Does not contain"),
-        ComparisonEqual("Равно", "Equal", "Equal to"),
-        ComparisonContains("Содержит", "Contains", "Contains"),
+        ComparisonNotEqual("НеРавно", "NotEqual", "Не равно"),
+        ComparisonNotContains("НеСодержит", "NotContains", "Не содержит"),
+        ComparisonEqual("Равно", "Equal", "Равно"),
+        ComparisonContains("Содержит", "Contains", "Содержит"),
     }
     /// Относительный период либо произвольная стандартная дата начала.
     StandardBeginningDateVariant("ВариантСтандартнойДатыНачала", "StandardBeginningDateVariant")
-        meta "StandardBeginningDateVariant" {
+        meta "ПеречислениеВариантСтандартнойДатыНачала" {
         // Состав, оба написания и представления измерены на платформе 8.3.27.2074
         // пробой `measure-standard-beginning-date.bsl`.
         StandardBeginningDateThisDay(
             "НачалоЭтогоДня",
             "BeginningOfThisDay",
-            "Beginning of this day"
+            "Начало этого дня"
         ),
         StandardBeginningDateThisWeek(
             "НачалоЭтойНедели",
             "BeginningOfThisWeek",
-            "Beginning of this week"
+            "Начало этой недели"
         ),
         StandardBeginningDateThisTenDays(
             "НачалоЭтойДекады",
             "BeginningOfThisTenDays",
-            "Beginning of this ten-day period"
+            "Начало этой декады"
         ),
         StandardBeginningDateThisMonth(
             "НачалоЭтогоМесяца",
             "BeginningOfThisMonth",
-            "Beginning of this month"
+            "Начало этого месяца"
         ),
         StandardBeginningDateThisQuarter(
             "НачалоЭтогоКвартала",
             "BeginningOfThisQuarter",
-            "Beginning of this quarter"
+            "Начало этого квартала"
         ),
         StandardBeginningDateThisHalfYear(
             "НачалоЭтогоПолугодия",
             "BeginningOfThisHalfYear",
-            "Beginning of this half year"
+            "Начало этого полугодия"
         ),
         StandardBeginningDateThisYear(
             "НачалоЭтогоГода",
             "BeginningOfThisYear",
-            "Beginning of this year"
+            "Начало этого года"
         ),
         StandardBeginningDateLastDay(
             "НачалоПрошлогоДня",
             "BeginningOfLastDay",
-            "Beginning of yesterday"
+            "Начало вчерашнего дня"
         ),
         StandardBeginningDateLastWeek(
             "НачалоПрошлойНедели",
             "BeginningOfLastWeek",
-            "Beginning of last week"
+            "Начало прошлой недели"
         ),
         StandardBeginningDateLastTenDays(
             "НачалоПрошлойДекады",
             "BeginningOfLastTenDays",
-            "Beginning of last ten-day period"
+            "Начало прошлой декады"
         ),
         StandardBeginningDateLastMonth(
             "НачалоПрошлогоМесяца",
             "BeginningOfLastMonth",
-            "Beginning of last month"
+            "Начало прошлого месяца"
         ),
         StandardBeginningDateLastQuarter(
             "НачалоПрошлогоКвартала",
             "BeginningOfLastQuarter",
-            "Beginning of last quarter"
+            "Начало прошлого квартала"
         ),
         StandardBeginningDateLastHalfYear(
             "НачалоПрошлогоПолугодия",
             "BeginningOfLastHalfYear",
-            "Beginning of last half year"
+            "Начало прошлого полугодия"
         ),
         StandardBeginningDateLastYear(
             "НачалоПрошлогоГода",
             "BeginningOfLastYear",
-            "Beginning of last year"
+            "Начало прошлого года"
         ),
         StandardBeginningDateNextDay(
             "НачалоСледующегоДня",
             "BeginningOfNextDay",
-            "Beginning of tomorrow"
+            "Начало завтрашнего дня"
         ),
         StandardBeginningDateNextWeek(
             "НачалоСледующейНедели",
             "BeginningOfNextWeek",
-            "Beginning of next week"
+            "Начало следующей недели"
         ),
         StandardBeginningDateNextTenDays(
             "НачалоСледующейДекады",
             "BeginningOfNextTenDays",
-            "Beginning of next ten-day period"
+            "Начало следующей декады"
         ),
         StandardBeginningDateNextMonth(
             "НачалоСледующегоМесяца",
             "BeginningOfNextMonth",
-            "Beginning of next month"
+            "Начало следующего месяца"
         ),
         StandardBeginningDateNextQuarter(
             "НачалоСледующегоКвартала",
             "BeginningOfNextQuarter",
-            "Beginning of next quarter"
+            "Начало следующего квартала"
         ),
         StandardBeginningDateNextHalfYear(
             "НачалоСледующегоПолугодия",
             "BeginningOfNextHalfYear",
-            "Beginning of next half year"
+            "Начало следующего полугодия"
         ),
         StandardBeginningDateNextYear(
             "НачалоСледующегоГода",
             "BeginningOfNextYear",
-            "Beginning of next year"
+            "Начало следующего года"
         ),
-        StandardBeginningDateCustom("ПроизвольнаяДата", "Custom", "Custom date"),
+        StandardBeginningDateCustom("ПроизвольнаяДата", "Custom", "Произвольная дата"),
     }
     JsonValueType("ТипЗначенияJSON", "JSONValueType") meta "ПеречислениеТипЗначенияJSON" {
         JsonString("Строка", "String", "Строка"),
@@ -1816,7 +1816,7 @@ system_enums! {
     JsonEscapeCharacters("ЭкранированиеСимволовJSON", "JSONCharactersEscapeMode")
         meta "ПеречислениеЭкранированиеСимволовJSON" {
         JsonEscapeNone("Нет", "None", "Нет"),
-        JsonEscapeNonAscii("СимволыВнеASCII", "CharactersOutsideASCII", "Символы вне ASCII"),
+        JsonEscapeNonAscii("СимволыВнеASCII", "CharactersOutsideASCII", "СимволыВнеASCII"),
         JsonEscapeNonBmp("СимволыВнеBMP", "CharactersOutsideBMP", "Символы вне BMP"),
     }
     JsonDateFormat("ФорматДатыJSON", "JSONDateFormat") meta "ПеречислениеФорматДатыJSON" {
@@ -1855,145 +1855,145 @@ system_enums! {
     /// `JOB.API.SURFACE` реестра плана фоновых заданий.
     BackgroundJobState("СостояниеФоновогоЗадания", "BackgroundJobState")
         meta "ПеречислениеСостояниеФоновогоЗадания" {
-        BackgroundJobActive("Активно", "Active", "Активно"),
-        BackgroundJobCompleted("Завершено", "Completed", "Завершено"),
-        BackgroundJobFailed("ЗавершеноАварийно", "Failed", "ЗавершеноАварийно"),
-        BackgroundJobCanceled("Отменено", "Canceled", "Отменено"),
+        BackgroundJobActive("Активно", "Active", "Задание выполняется"),
+        BackgroundJobCompleted("Завершено", "Completed", "Задание выполнено"),
+        BackgroundJobFailed("ЗавершеноАварийно", "Failed", "Задание завершено с ошибками"),
+        BackgroundJobCanceled("Отменено", "Canceled", "Задание отменено пользователем"),
     }
     /// `СтатусСообщения` — статусы `Сообщить`; состав членов — по выписке
     /// синтакс-помощника 8.3.27. В управляемом режиме статус игнорируется,
     /// перечисление нужно компиляции вызовов.
     MessageStatus("СтатусСообщения", "MessageStatus") meta "ПеречислениеСтатусСообщения" {
-        MessageStatusWithoutStatus("БезСтатуса", "WithoutStatus", "БезСтатуса"),
+        MessageStatusWithoutStatus("БезСтатуса", "WithoutStatus", "Без cтатуса"),
         MessageStatusImportant("Важное", "Important", "Важное"),
         MessageStatusAttention("Внимание", "Attention", "Внимание"),
         MessageStatusInformation("Информация", "Information", "Информация"),
         MessageStatusOrdinary("Обычное", "Ordinary", "Обычное"),
-        MessageStatusVeryImportant("ОченьВажное", "VeryImportant", "ОченьВажное"),
+        MessageStatusVeryImportant("ОченьВажное", "VeryImportant", "Очень важное"),
     }
     /// `КатегорияОшибки` — категории `ЯвляетсяОшибкойКатегории`; состав —
     /// по выписке синтакс-помощника 8.3.27.
     ErrorCategory("КатегорияОшибки", "ErrorCategory") meta "ПеречислениеКатегорияОшибки" {
-        ErrorCategoryAllErrors("ВсеОшибки", "AllErrors", "ВсеОшибки"),
+        ErrorCategoryAllErrors("ВсеОшибки", "AllErrors", "Все ошибки"),
         ErrorCategoryExceptionRaisedFromScript(
             "ИсключениеВызванноеИзВстроенногоЯзыка",
             "ExceptionRaisedFromScript",
-            "ИсключениеВызванноеИзВстроенногоЯзыка"
+            "Исключение, вызванное из встроенного языка"
         ),
         ErrorCategoryAccessViolation(
             "НарушениеПравДоступа",
             "AccessViolation",
-            "НарушениеПравДоступа"
+            "Нарушение прав доступа"
         ),
         ErrorCategoryUnsupportedFormat(
             "НеподдерживаемыйФормат",
             "UnsupportedFormat",
-            "НеподдерживаемыйФормат"
+            "Неподдерживаемый формат"
         ),
-        ErrorCategoryInvalidPassword("НеправильныйПароль", "InvalidPassword", "НеправильныйПароль"),
+        ErrorCategoryInvalidPassword("НеправильныйПароль", "InvalidPassword", "Неправильный пароль"),
         ErrorCategoryNoPermissionToUseFunctionality(
             "ОтсутствиеРазрешенияДляИспользованияФункциональности",
             "NoPermissionToUseFunctionality",
-            "ОтсутствиеРазрешенияДляИспользованияФункциональности"
+            "Отсутствие разрешения для использования функциональности"
         ),
         ErrorCategoryExternalDataSourceError(
             "ОшибкаВнешнегоИсточникаДанных",
             "ExternalDataSourceError",
-            "ОшибкаВнешнегоИсточникаДанных"
+            "Ошибка внешнего источника данных"
         ),
         ErrorCategoryScriptRuntimeError(
             "ОшибкаВоВремяВыполненияВстроенногоЯзыка",
             "ScriptRuntimeError",
-            "ОшибкаВоВремяВыполненияВстроенногоЯзыка"
+            "Ошибка во время выполнения встроенного языка"
         ),
         ErrorCategoryLocalFileAccessError(
             "ОшибкаДоступаКЛокальномуФайлу",
             "LocalFileAccessError",
-            "ОшибкаДоступаКЛокальномуФайлу"
+            "Ошибка доступа к локальному файлу"
         ),
         ErrorCategoryScriptUseError(
             "ОшибкаИспользованияВстроенногоЯзыка",
             "ScriptUseError",
-            "ОшибкаИспользованияВстроенногоЯзыка"
+            "Ошибка использования встроенного языка"
         ),
         ErrorCategoryScriptCompileError(
             "ОшибкаКомпиляцииВстроенногоЯзыка",
             "ScriptCompileError",
-            "ОшибкаКомпиляцииВстроенногоЯзыка"
+            "Ошибка компиляции встроенного языка"
         ),
         ErrorCategoryConfigurationError(
             "ОшибкаКонфигурации",
             "ConfigurationError",
-            "ОшибкаКонфигурации"
+            "Ошибка конфигурации"
         ),
         ErrorCategoryDatabaseCopyError(
             "ОшибкаКопииБазыДанных",
             "DatabaseCopyError",
-            "ОшибкаКопииБазыДанных"
+            "Ошибка копии базы данных"
         ),
         ErrorCategoryDataCompositionSettingsError(
             "ОшибкаНастроекКомпоновкиДанных",
             "DataCompositionSettingsError",
-            "ОшибкаНастроекКомпоновкиДанных"
+            "Ошибка настроек компоновки данных"
         ),
         ErrorCategoryGotoURLError(
             "ОшибкаПереходаПоНавигационнойСсылке",
             "GotoURLError",
-            "ОшибкаПереходаПоНавигационнойСсылке"
+            "Ошибка перехода по навигационной ссылке"
         ),
         ErrorCategoryFullTextSearchError(
             "ОшибкаПолнотекстовогоПоиска",
             "FullTextSearchError",
-            "ОшибкаПолнотекстовогоПоиска"
+            "Ошибка полнотекстового поиска"
         ),
         ErrorCategoryDocumentConversionError(
             "ОшибкаПреобразованияДокумента",
             "DocumentConversionError",
-            "ОшибкаПреобразованияДокумента"
+            "Ошибка преобразования документа"
         ),
         ErrorCategorySignatureVerificationError(
             "ОшибкаПроверкиПодписи",
             "SignatureVerificationError",
-            "ОшибкаПроверкиПодписи"
+            "Ошибка проверки подписи"
         ),
         ErrorCategoryPrinterError(
             "ОшибкаРаботыСПринтером",
             "PrinterError",
-            "ОшибкаРаботыСПринтером"
+            "Ошибка работы с принтером"
         ),
         ErrorCategorySpeechProcessingError(
             "ОшибкаРаботыСРечью",
             "SpeechProcessingError",
-            "ОшибкаРаботыСРечью"
+            "Ошибка системы работы с речью"
         ),
-        ErrorCategorySessionError("ОшибкаСеанса", "SessionError", "ОшибкаСеанса"),
-        ErrorCategoryNetworkError("ОшибкаСети", "NetworkError", "ОшибкаСети"),
+        ErrorCategorySessionError("ОшибкаСеанса", "SessionError", "Ошибка сеанса"),
+        ErrorCategoryNetworkError("ОшибкаСети", "NetworkError", "Ошибка сети"),
         ErrorCategoryCollaborationSystemError(
             "ОшибкаСистемыВзаимодействия",
             "CollaborationSystemError",
-            "ОшибкаСистемыВзаимодействия"
+            "Ошибка системы взаимодействия"
         ),
         ErrorCategoryMultimediaToolsError(
             "ОшибкаСредствМультимедиа",
             "MultimediaToolsError",
-            "ОшибкаСредствМультимедиа"
+            "Ошибка cредств мультимедиа"
         ),
         ErrorCategoryDatabaseTablespaceError(
             "ОшибкаТабличногоПространстваБазыДанных",
             "DatabaseTablespaceError",
-            "ОшибкаТабличногоПространстваБазыДанных"
+            "Ошибка табличного пространства базы данных"
         ),
         ErrorCategoryStoredDataError(
             "ОшибкаХранимыхДанных",
             "StoredDataError",
-            "ОшибкаХранимыхДанных"
+            "Ошибка хранимых данных"
         ),
         ErrorCategoryForcedShutdown(
             "ПринудительноеЗавершениеРаботы",
             "ForcedShutdown",
-            "ПринудительноеЗавершениеРаботы"
+            "Принудительное завершение работы"
         ),
-        ErrorCategoryOtherError("ПрочаяОшибка", "OtherError", "ПрочаяОшибка"),
+        ErrorCategoryOtherError("ПрочаяОшибка", "OtherError", "Прочая ошибка"),
     }
     XmlNodeType("ТипУзлаXML", "XMLNodeType") meta "ПеречислениеТипУзлаXML" {
         // Состав ВЫЯСНЕН перебором на 8.3.27, а не взят из документации:
@@ -2084,20 +2084,20 @@ system_enums! {
         DrawingGeographicalSchema(
             "ГеографическаяСхема",
             "GeographicalSchema",
-            "Geographical schema"
+            "Географическая схема"
         ),
-        DrawingGroup("Группа", "Group", "Folder"),
-        DrawingDendrogram("Дендрограмма", "Dendrogram", "Dendrogram"),
-        DrawingChart("Диаграмма", "Chart", "Chart"),
-        DrawingGanttChart("ДиаграммаГанта", "GanttChart", "Gantt chart"),
-        DrawingPicture("Картинка", "Picture", "Picture"),
-        DrawingObject("Объект", "Object", "Object"),
-        DrawingComment("Примечание", "Comment", "Comment"),
-        DrawingLine("Прямая", "Line", "Line"),
-        DrawingRectangle("Прямоугольник", "Rectangle", "Rectangle"),
-        DrawingPivotChart("СводнаяДиаграмма", "PivotChart", "Pivot chart"),
-        DrawingText("Текст", "Text", "Text"),
-        DrawingEllipse("Эллипс", "Ellipse", "Ellipse"),
+        DrawingGroup("Группа", "Group", "Группа"),
+        DrawingDendrogram("Дендрограмма", "Dendrogram", "Дендрограмма"),
+        DrawingChart("Диаграмма", "Chart", "Диаграмма"),
+        DrawingGanttChart("ДиаграммаГанта", "GanttChart", "Диаграмма Ганта"),
+        DrawingPicture("Картинка", "Picture", "Картинка"),
+        DrawingObject("Объект", "Object", "Объект"),
+        DrawingComment("Примечание", "Comment", "Примечание"),
+        DrawingLine("Прямая", "Line", "Прямая"),
+        DrawingRectangle("Прямоугольник", "Rectangle", "Прямоугольник"),
+        DrawingPivotChart("СводнаяДиаграмма", "PivotChart", "Сводная диаграмма"),
+        DrawingText("Текст", "Text", "Текст"),
+        DrawingEllipse("Эллипс", "Ellipse", "Эллипс"),
     }
     /// Способ отображения интервала диаграммы Ганта.
     // Представление корня измерено на платформе 8.3.27.2342.
@@ -2105,79 +2105,79 @@ system_enums! {
         "ОтображениеИнтервалаДиаграммыГанта",
         "GanttChartIntervalRepresentation"
     )
-        meta "EnumGanttChartIntervalRepresentation" {
+        meta "ПеречислениеОтображениеИнтервалаДиаграммыГанта" {
         // Состав и представления измерены в `measure-gantt-interval-representation.bsl`.
         // Платформа печатает `3D` и `Diamond`, а не имена членов.
-        GanttChartIntervalRepresentationFlat("Плоский", "Flat", "Flat"),
-        GanttChartIntervalRepresentationThreeDimensional("Объемный", "ThreeDimensional", "3D"),
-        GanttChartIntervalRepresentationRhomb("Ромб", "Rhomb", "Diamond"),
-        GanttChartIntervalRepresentationGradient("Градиент", "Gradient", "Gradient"),
+        GanttChartIntervalRepresentationFlat("Плоский", "Flat", "Плоский"),
+        GanttChartIntervalRepresentationThreeDimensional("Объемный", "ThreeDimensional", "Объемный"),
+        GanttChartIntervalRepresentationRhomb("Ромб", "Rhomb", "Ромб"),
+        GanttChartIntervalRepresentationGradient("Градиент", "Gradient", "Градиент"),
     }
     /// Способ вертикального растягивания диаграммы Ганта.
     // Представление корня измерено на платформе 8.3.27.2342.
     GanttChartVerticalStretch("РастягиваниеПоВертикалиДиаграммыГанта", "GanttChartVerticalStretch")
-        meta "EnumGanttChartVerticalStretch" {
+        meta "ПеречислениеРастягиваниеПоВертикалиДиаграммыГанта" {
         // Представления измерены в `measure-gantt-vertical-stretch.bsl`.
         // `НеРастягивать` печатается как `No`; строка взята из нативного замера
         // (`tests/conformance/measure/measure-gantt-vertical-stretch.platform.txt`).
-        GanttChartVerticalStretchNone("НеРастягивать", "None", "No"),
-        GanttChartVerticalStretchStretchRows("РастягиватьСтроки", "StretchRows", "Stretch rows"),
+        GanttChartVerticalStretchNone("НеРастягивать", "None", "Не растягивать"),
+        GanttChartVerticalStretchStretchRows("РастягиватьСтроки", "StretchRows", "Растягивать строки"),
         GanttChartVerticalStretchStretchRowsAndData(
             "РастягиватьСтрокиИДанные",
             "StretchRowsAndData",
-            "Stretch rows and data"
+            "Растягивать строки и данные"
         ),
     }
     /// Расположение легенды диаграммы.
     // Представление корня измерено на платформе 8.3.27.2342.
     ChartLegendPlacement("РасположениеЛегендыДиаграммы", "ChartLegendPlacement")
-        meta "EnumChartLegendPlacement" {
+        meta "ПеречислениеРасположениеЛегендыДиаграммы" {
         // Состав и представления измерены в `measure-chart-legend-placement.bsl`.
         // Представление `Use coordinates` измерено, а не построено из имени.
-        ChartLegendPlacementAuto("Авто", "Auto", "Auto"),
-        ChartLegendPlacementBottom("Низ", "Bottom", "Bottom"),
-        ChartLegendPlacementTop("Верх", "Top", "Top"),
-        ChartLegendPlacementLeft("Лево", "Left", "Left"),
-        ChartLegendPlacementRight("Право", "Right", "Right"),
-        ChartLegendPlacementNone("Нет", "None", "None"),
+        ChartLegendPlacementAuto("Авто", "Auto", "Авто"),
+        ChartLegendPlacementBottom("Низ", "Bottom", "Низ"),
+        ChartLegendPlacementTop("Верх", "Top", "Верх"),
+        ChartLegendPlacementLeft("Лево", "Left", "Лево"),
+        ChartLegendPlacementRight("Право", "Right", "Право"),
+        ChartLegendPlacementNone("Нет", "None", "Нет"),
         ChartLegendPlacementUseCoordinates(
             "УказываетсяРасположение",
             "UseCoordinates",
-            "Use coordinates"
+            "Указываются координаты"
         ),
     }
     /// Единица шкалы времени.
     // Представление корня измерено на платформе 8.3.27.2342.
-    TimeScaleUnitType("ТипЕдиницыШкалыВремени", "TimeScaleUnitType") meta "EnumTimeScaleUnitType" {
+    TimeScaleUnitType("ТипЕдиницыШкалыВремени", "TimeScaleUnitType") meta "ПеречислениеТипЕдиницыШкалыВремени" {
         // Состав и представления измерены в `measure-time-scale-unit-type.bsl`.
         // Все восемь представлений измерены на платформе 8.3.27.2342.
-        TimeScaleUnitTypeSecond("Секунда", "Second", "Second"),
-        TimeScaleUnitTypeMinute("Минута", "Minute", "Minute"),
-        TimeScaleUnitTypeHour("Час", "Hour", "Hour"),
-        TimeScaleUnitTypeDay("День", "Day", "Day"),
-        TimeScaleUnitTypeWeek("Неделя", "Week", "Week"),
-        TimeScaleUnitTypeMonth("Месяц", "Month", "Month"),
-        TimeScaleUnitTypeQuarter("Квартал", "Quarter", "Quarter"),
-        TimeScaleUnitTypeYear("Год", "Year", "Year"),
+        TimeScaleUnitTypeSecond("Секунда", "Second", "Секунда"),
+        TimeScaleUnitTypeMinute("Минута", "Minute", "Минута"),
+        TimeScaleUnitTypeHour("Час", "Hour", "Час"),
+        TimeScaleUnitTypeDay("День", "Day", "День"),
+        TimeScaleUnitTypeWeek("Неделя", "Week", "Неделя"),
+        TimeScaleUnitTypeMonth("Месяц", "Month", "Месяц"),
+        TimeScaleUnitTypeQuarter("Квартал", "Quarter", "Квартал"),
+        TimeScaleUnitTypeYear("Год", "Year", "Год"),
     }
     /// Формат дня шкалы времени.
     // Представление корня измерено на платформе 8.3.27.2342.
     TimeScaleDayFormat("ФорматДняШкалыВремени", "TimeScaleDayFormat")
-        meta "EnumTimeScaleDayFormat" {
+        meta "ПеречислениеФорматДняШкалыВремени" {
         // Представления измерены в `measure-time-scale-day-format.bsl`.
         // Представления, включая порядок частей, взяты из нативного замера
         // (`tests/conformance/measure/measure-time-scale-day-format.platform.txt`).
-        TimeScaleDayFormatMonthDay("ДеньМесяца", "MonthDay", "Day of month"),
-        TimeScaleDayFormatWeekDay("ДеньНедели", "WeekDay", "Day of week"),
+        TimeScaleDayFormatMonthDay("ДеньМесяца", "MonthDay", "День месяца"),
+        TimeScaleDayFormatWeekDay("ДеньНедели", "WeekDay", "День недели"),
         TimeScaleDayFormatMonthDayWeekDay(
             "ДеньМесяцаДеньНедели",
             "MonthDayWeekDay",
-            "Day of month + day of week"
+            "День месяца + день недели"
         ),
         TimeScaleDayFormatWeekDayMonthDay(
             "ДеньНеделиДеньМесяца",
             "WeekDayMonthDay",
-            "Day of week + day of month"
+            "День недели + день месяца"
         ),
     }
     /// `ОриентацияСтраницы` — свойство `ТабличныйДокумент.ОриентацияСтраницы`
@@ -2204,75 +2204,75 @@ system_enums! {
     /// Два режима percent-кодирования строки для query и полного URL.
     StringEncodingMethod("СпособКодированияСтроки", "СпособКодированияСтроки")
         meta "ПеречислениеСпособКодированияСтроки" {
-        StringEncodingUrl("КодировкаURL", "КодировкаURL", "String URL-encoding"),
-        StringEncodingUrlInUrl("URLВКодировкеURL", "URLВКодировкеURL", "URL URL-encoding"),
+        StringEncodingUrl("КодировкаURL", "КодировкаURL", "URL-кодировка строки"),
+        StringEncodingUrlInUrl("URLВКодировкеURL", "URLВКодировкеURL", "URL-кодировка URL"),
     }
     /// Направление сортировки коллекций; Connector использует возрастание.
     SortDirection("НаправлениеСортировки", "SortDirection")
         meta "ПеречислениеНаправлениеСортировки" {
-        SortDirectionAscending("Возр", "Asc", "Ascending"),
-        SortDirectionDescending("Убыв", "Desc", "Descending"),
+        SortDirectionAscending("Возр", "Asc", "По возрастанию"),
+        SortDirectionDescending("Убыв", "Desc", "По убыванию"),
     }
     /// Управление выводом поля формы.
-    UseOutput("ИспользованиеВывода", "UseOutput") meta "UseOutput" {
+    UseOutput("ИспользованиеВывода", "UseOutput") meta "ПеречислениеИспользованиеВывода" {
         // Представления и псевдонимы измерены на 8.3.27.2342.
-        UseOutputAuto("Авто", "Auto", "Auto"),
-        UseOutputEnable("Разрешить", "Enable", "Enable"),
-        UseOutputDisable("Запретить", "Disable", "Disable"),
+        UseOutputAuto("Авто", "Auto", "Авто"),
+        UseOutputEnable("Разрешить", "Enable", "Разрешить"),
+        UseOutputDisable("Запретить", "Disable", "Запретить"),
     }
     /// Размещение страниц в группе формы.
     FormPagesRepresentation("ОтображениеСтраницФормы", "FormPagesRepresentation")
-        meta "FormPagesRepresentation" {
+        meta "ПеречислениеОтображениеСтраницФормы" {
         // Все члены и представления измерены на 8.3.27.2342.
-        FormPagesRepresentationAuto("Авто", "Auto", "Auto"),
-        FormPagesRepresentationNone("Нет", "None", "None"),
-        FormPagesRepresentationSwipe("Пролистывание", "Swipe", "Swipe (touchscreen)"),
-        FormPagesRepresentationTabsOnTop("ЗакладкиСверху", "TabsOnTop", "Tabs above"),
-        FormPagesRepresentationTabsOnBottom("ЗакладкиСнизу", "TabsOnBottom", "Tabs below"),
+        FormPagesRepresentationAuto("Авто", "Auto", "Авто"),
+        FormPagesRepresentationNone("Нет", "None", "Нет"),
+        FormPagesRepresentationSwipe("Пролистывание", "Swipe", "Пролистывание (сенсорный экран)"),
+        FormPagesRepresentationTabsOnTop("ЗакладкиСверху", "TabsOnTop", "Закладки сверху"),
+        FormPagesRepresentationTabsOnBottom("ЗакладкиСнизу", "TabsOnBottom", "Закладки снизу"),
         FormPagesRepresentationTabsOnLeftHorizontal(
             "ЗакладкиСлеваГоризонтально",
             "TabsOnLeftHorizontal",
-            "Tabs on the left (horizontally)"
+            "Закладки слева (горизонтально)"
         ),
         FormPagesRepresentationTabsOnRightHorizontal(
             "ЗакладкиСправаГоризонтально",
             "TabsOnRightHorizontal",
-            "Tabs on the right (horizontally)"
+            "Закладки справа (горизонтально)"
         ),
     }
     /// Расположение картинки на кнопке формы.
     FormButtonPictureLocation("ПоложениеКартинкиКнопкиФормы", "FormButtonPictureLocation")
-        meta "FormButtonPictureLocation" {
+        meta "ПеречислениеПоложениеКартинкиКнопкиФормы" {
         // Все члены и представления измерены на 8.3.27.2342.
-        FormButtonPictureLocationAuto("Авто", "Auto", "Auto"),
-        FormButtonPictureLocationLeft("Лево", "Left", "Left"),
-        FormButtonPictureLocationRight("Право", "Right", "Right"),
+        FormButtonPictureLocationAuto("Авто", "Auto", "Авто"),
+        FormButtonPictureLocationLeft("Лево", "Left", "Лево"),
+        FormButtonPictureLocationRight("Право", "Right", "Право"),
     }
     /// Тип линии рисунка табличного документа.
     SpreadsheetDocumentDrawingLineType(
         "ТипЛинииРисункаТабличногоДокумента",
         "SpreadsheetDocumentDrawingLineType"
     )
-        meta "SpreadsheetDocumentDrawingLineType" {
+        meta "ПеречислениеТипЛинииРисункаТабличногоДокумента" {
         // Все члены и представления измерены на 8.3.27.2342.
-        SpreadsheetDocumentDrawingLineTypeNone("НетЛинии", "None", "None"),
-        SpreadsheetDocumentDrawingLineTypeSolid("Сплошная", "Solid", "Solid"),
-        SpreadsheetDocumentDrawingLineTypeDashed("Пунктир", "Dashed", "Dashed"),
-        SpreadsheetDocumentDrawingLineTypeDotted("Точечная", "Dotted", "Dotted"),
-        SpreadsheetDocumentDrawingLineTypeDashDotted("ПунктирТочка", "DashDotted", "DashDotted"),
+        SpreadsheetDocumentDrawingLineTypeNone("НетЛинии", "None", "Нет линии"),
+        SpreadsheetDocumentDrawingLineTypeSolid("Сплошная", "Solid", "Сплошная"),
+        SpreadsheetDocumentDrawingLineTypeDashed("Пунктир", "Dashed", "Пунктирная"),
+        SpreadsheetDocumentDrawingLineTypeDotted("Точечная", "Dotted", "Точечная"),
+        SpreadsheetDocumentDrawingLineTypeDashDotted("ПунктирТочка", "DashDotted", "Пунктирно-точечная"),
         SpreadsheetDocumentDrawingLineTypeDashDottedDotted(
             "ПунктирТочкаТочка",
             "DashDottedDotted",
-            "DotDashDotted"
+            "Точечно-пунктирно-точечная"
         ),
     }
     /// Представление поля-флажка в форме.
-    CheckBoxType("ВидФлажка", "CheckBoxType") meta "CheckBoxType" {
+    CheckBoxType("ВидФлажка", "CheckBoxType") meta "ПеречислениеВидФлажка" {
         // Все члены и представления измерены на 8.3.27.2342.
-        CheckBoxTypeAuto("Авто", "Auto", "Auto"),
-        CheckBoxTypeCheckBox("Флажок", "CheckBox", "Checkbox"),
-        CheckBoxTypeSwitch("Выключатель", "Switch", "Switch"),
-        CheckBoxTypeTumbler("Тумблер", "Tumbler", "Tumblers"),
+        CheckBoxTypeAuto("Авто", "Auto", "Авто"),
+        CheckBoxTypeCheckBox("Флажок", "CheckBox", "Флажок"),
+        CheckBoxTypeSwitch("Выключатель", "Switch", "Выключатель"),
+        CheckBoxTypeTumbler("Тумблер", "Tumbler", "Тумблер"),
     }
     /// Звук доставляемого уведомления.
     // Голое имя и его тип измерены отдельно от типа члена перечисления.
@@ -2280,44 +2280,44 @@ system_enums! {
         "ТипПодписчикаДоставляемыхУведомлений",
         "DeliverableNotificationSubscriberType"
     )
-        meta "EnumDeliverableNotificationSubscriberType" {
+        meta "ПеречислениеТипПодписчикаДоставляемыхУведомлений" {
         // Представления и псевдонимы измерены на 8.3.27.2342; `APNS` печатается как `APNs`.
         DeliverableNotificationSubscriberTypeGCM("GCM", "GCM", "GCM"),
-        DeliverableNotificationSubscriberTypeAPNS("APNS", "APNS", "APNs"),
+        DeliverableNotificationSubscriberTypeAPNS("APNS", "APNS", "APNS"),
         DeliverableNotificationSubscriberTypeFCM("FCM", "FCM", "FCM"),
     }
-    SoundAlert("ЗвуковоеОповещение", "SoundAlert") meta "SoundAlert" {
+    SoundAlert("ЗвуковоеОповещение", "SoundAlert") meta "ПеречислениеЗвуковоеОповещение" {
         // Оба члена и представления измерены на 8.3.27.2342.
-        SoundAlertNone("Нет", "None", "None"),
-        SoundAlertDefault("ПоУмолчанию", "Default", "Default"),
+        SoundAlertNone("Нет", "None", "Нет"),
+        SoundAlertDefault("ПоУмолчанию", "Default", "По умолчанию"),
     }
     /// Сквозное выравнивание элементов формы.
-    ThroughAlign("СквозноеВыравнивание", "ThroughAlign") meta "ThroughAlign" {
+    ThroughAlign("СквозноеВыравнивание", "ThroughAlign") meta "ПеречислениеСквозноеВыравнивание" {
         // Все члены и представления измерены на 8.3.27.2342.
-        ThroughAlignAuto("Авто", "Auto", "Auto"),
-        ThroughAlignUse("Использовать", "Use", "Use"),
-        ThroughAlignDontUse("НеИспользовать", "DontUse", "Do not use"),
+        ThroughAlignAuto("Авто", "Auto", "Авто"),
+        ThroughAlignUse("Использовать", "Use", "Использовать"),
+        ThroughAlignDontUse("НеИспользовать", "DontUse", "Не использовать"),
     }
     /// Фигура кнопки формы.
-    ButtonShape("ФигураКнопки", "ButtonShape") meta "ButtonShape" {
+    ButtonShape("ФигураКнопки", "ButtonShape") meta "ПеречислениеФигураКнопки" {
         // Все члены и представления измерены на 8.3.27.2342.
-        ButtonShapeAuto("Авто", "Auto", "Auto"),
-        ButtonShapeUsual("Обычная", "Usual", "Standard"),
-        ButtonShapeOval("Овал", "Oval", "Rounded"),
+        ButtonShapeAuto("Авто", "Auto", "Авто"),
+        ButtonShapeUsual("Обычная", "Usual", "Обычная"),
+        ButtonShapeOval("Овал", "Oval", "Овальная"),
     }
     /// Тип группы элементов отбора компоновки данных.
     DataCompositionFilterItemsGroupType(
         "ТипГруппыЭлементовОтбораКомпоновкиДанных",
         "DataCompositionFilterItemsGroupType"
     )
-        meta "DataCompositionFilterItemsGroupType" {
+        meta "ПеречислениеТипГруппыЭлементовОтбораКомпоновкиДанных" {
         // Все члены и представления измерены на 8.3.27.2342.
-        DataCompositionFilterItemsGroupTypeAndGroup("ГруппаИ", "AndGroup", "AND group"),
-        DataCompositionFilterItemsGroupTypeOrGroup("ГруппаИли", "OrGroup", "OR group"),
-        DataCompositionFilterItemsGroupTypeNotGroup("ГруппаНе", "NotGroup", "NOT group"),
+        DataCompositionFilterItemsGroupTypeAndGroup("ГруппаИ", "AndGroup", "Группа И"),
+        DataCompositionFilterItemsGroupTypeOrGroup("ГруппаИли", "OrGroup", "Группа Или"),
+        DataCompositionFilterItemsGroupTypeNotGroup("ГруппаНе", "NotGroup", "Группа Не"),
     }
     /// Клавиши для сочетаний клавиш.
-    Key("Клавиша", "Key") meta "Key" {
+    Key("Клавиша", "Key") meta "ПеречислениеКлавиша" {
         // Достигнутые УНФ члены и представления измерены на 8.3.27.2342.
         KeyDigit1("_1", "_1", "_1"),
         KeyDigit2("_2", "_2", "_2"),
@@ -2348,53 +2348,53 @@ system_enums! {
         KeyV("V", "V", "V"),
     }
     /// Тип рамки элемента управления.
-    ControlBorderType("ТипРамкиЭлементаУправления", "ControlBorderType") meta "ControlBorderType" {
+    ControlBorderType("ТипРамкиЭлементаУправления", "ControlBorderType") meta "ПеречислениеТипРамкиЭлементаУправления" {
         // Достигнутые члены и представления измерены на 8.3.27.2342.
-        ControlBorderTypeWithoutBorder("БезРамки", "WithoutBorder", "No border"),
-        ControlBorderTypeSingle("Одинарная", "Single", "Single"),
-        ControlBorderTypeUnderline("Подчеркивание", "Underline", "Underline"),
+        ControlBorderTypeWithoutBorder("БезРамки", "WithoutBorder", "Без рамки"),
+        ControlBorderTypeSingle("Одинарная", "Single", "Одинарная"),
+        ControlBorderTypeUnderline("Подчеркивание", "Underline", "Подчеркивание"),
     }
     /// Вид цвета объекта `Цвет`.
-    ColorType("ВидЦвета", "ColorType") meta "ColorType" {
+    ColorType("ВидЦвета", "ColorType") meta "ПеречислениеВидЦвета" {
         // Представления и псевдонимы измерены на 1С 8.3.27.2342.
-        ColorTypeAbsolute("Абсолютный", "Absolute", "Absolute"),
-        ColorTypeStyleItem("ЭлементСтиля", "StyleItem", "Style element"),
-        ColorTypeWebColor("WebЦвет", "WebColor", "Web color"),
-        ColorTypeWindowsColor("WindowsЦвет", "WindowsColor", "Windows color"),
-        ColorTypeAutoColor("АвтоЦвет", "AutoColor", "Auto color"),
+        ColorTypeAbsolute("Абсолютный", "Absolute", "Абсолютный"),
+        ColorTypeStyleItem("ЭлементСтиля", "StyleItem", "Элемент стиля"),
+        ColorTypeWebColor("WebЦвет", "WebColor", "Web цвет"),
+        ColorTypeWindowsColor("WindowsЦвет", "WindowsColor", "Windows цвет"),
+        ColorTypeAutoColor("АвтоЦвет", "AutoColor", "Авто цвет"),
     }
     /// Вид линии границы ячейки табличного документа.
     SpreadsheetDocumentCellLineType(
         "ТипЛинииЯчейкиТабличногоДокумента",
         "SpreadsheetDocumentCellLineType"
     )
-        meta "SpreadsheetDocumentCellLineType" {
+        meta "ПеречислениеТипЛинииЯчейкиТабличногоДокумента" {
         // Представления и оба написания измерены на 1С 8.3.27.2342.
-        SpreadsheetDocumentCellLineTypeLargeDashed("БольшойПунктир", "LargeDashed", "LargeDashed"),
-        SpreadsheetDocumentCellLineTypeDouble("Двойная", "Double", "Double"),
-        SpreadsheetDocumentCellLineTypeNone("НетЛинии", "None", "None"),
-        SpreadsheetDocumentCellLineTypeThinDashed("РедкийПунктир", "ThinDashed", "ThinDashed"),
-        SpreadsheetDocumentCellLineTypeSolid("Сплошная", "Solid", "Solid"),
-        SpreadsheetDocumentCellLineTypeDotted("Точечная", "Dotted", "Dotted"),
+        SpreadsheetDocumentCellLineTypeLargeDashed("БольшойПунктир", "LargeDashed", "Большой пунктир"),
+        SpreadsheetDocumentCellLineTypeDouble("Двойная", "Double", "Двойная"),
+        SpreadsheetDocumentCellLineTypeNone("НетЛинии", "None", "Нет линии"),
+        SpreadsheetDocumentCellLineTypeThinDashed("РедкийПунктир", "ThinDashed", "Редкий пунктир"),
+        SpreadsheetDocumentCellLineTypeSolid("Сплошная", "Solid", "Сплошная"),
+        SpreadsheetDocumentCellLineTypeDotted("Точечная", "Dotted", "Точечная"),
     }
     /// Тип хранилища сертификатов криптографии.
     CryptoCertificateStoreType("ТипХранилищаСертификатовКриптографии", "CryptoCertificateStoreType")
-        meta "CryptoCertificateStoreType" {
+        meta "ПеречислениеТипХранилищаСертификатовКриптографии" {
         // Представления и оба написания измерены на 1С 8.3.27.2342.
         CryptoCertificateStoreTypeRootCertificates(
             "КорневыеСертификаты",
             "RootCertificates",
-            "Root certificates"
+            "Корневые сертификаты"
         ),
         CryptoCertificateStoreTypePersonalCertificates(
             "ПерсональныеСертификаты",
             "PersonalCertificates",
-            "Personal certificates"
+            "Персональные сертификаты"
         ),
         CryptoCertificateStoreTypeRecipientCertificates(
             "СертификатыПолучателей",
             "RecipientCertificates",
-            "Recipient certificates"
+            "Сертификаты получателей"
         ),
     }
     /// Обработка текстов интернет-почтового сообщения.
@@ -2402,22 +2402,22 @@ system_enums! {
         "ОбработкаТекстаИнтернетПочтовогоСообщения",
         "InternetMailTextProcessing"
     )
-        meta "InternetMailTextProcessing" {
+        meta "ПеречислениеОбработкаТекстаИнтернетПочтовогоСообщения" {
         // Представления и псевдонимы измерены на 1С 8.3.27.2342.
-        InternetMailTextProcessingDontProcess("НеОбрабатывать", "DontProcess", "DontProcess"),
-        InternetMailTextProcessingProcess("Обрабатывать", "Process", "Process"),
+        InternetMailTextProcessingDontProcess("НеОбрабатывать", "DontProcess", "НеОбрабатывать"),
+        InternetMailTextProcessingProcess("Обрабатывать", "Process", "Обрабатывать"),
     }
     /// Тип двусторонней печати.
-    DuplexPrintingType("ТипДвустороннейПечати", "DuplexPrintingType") meta "DuplexPrintingType" {
+    DuplexPrintingType("ТипДвустороннейПечати", "DuplexPrintingType") meta "ПеречислениеТипДвустороннейПечати" {
         // Достигнутое представление измерено на 1С 8.3.27.2342.
-        DuplexPrintingTypeNone("Нет", "None", "None"),
+        DuplexPrintingTypeNone("Нет", "None", "Нет"),
     }
     /// Порядок обработки настроек второго фактора аутентификации.
     SecondAuthenticationFactorSettingsProcessingType(
         "ТипОбработкиНастроекВторогоФактораАутентификации",
         "SecondAuthenticationFactorSettingsProcessingType"
     )
-        meta "SecondAuthenticationFactorSettingsProcessingType" {
+        meta "ПеречислениеТипОбработкиНастроекВторогоФактораАутентификации" {
         // Оба значения и представления измерены на 1С 8.3.27.2342.
         SecondAuthenticationFactorSettingsProcessingDontUse(
             "НеИспользовать",
@@ -2431,520 +2431,520 @@ system_enums! {
         ),
     }
     /// Способ перетаскивания файлов в элемент формы.
-    FileDragMode("СпособПеретаскиванияФайлов", "FileDragMode") meta "FileDragMode" {
+    FileDragMode("СпособПеретаскиванияФайлов", "FileDragMode") meta "ПеречислениеСпособПеретаскиванияФайлов" {
         // Полный состав и представления измерены на 1С 8.3.27.2342.
-        FileDragModeAsFileRef("КакСсылкаНаФайл", "AsFileRef", "As file reference"),
-        FileDragModeAsFile("КакФайл", "AsFile", "As file"),
+        FileDragModeAsFileRef("КакСсылкаНаФайл", "AsFileRef", "Как ссылка на файл"),
+        FileDragModeAsFile("КакФайл", "AsFile", "Как файл"),
     }
     /// Отображение группы кнопок командной панели.
     ButtonGroupRepresentation("ОтображениеГруппыКнопок", "ButtonGroupRepresentation")
-        meta "ButtonGroupRepresentation" {
+        meta "ПеречислениеОтображениеГруппыКнопок" {
         // Полный состав и представления измерены на 1С 8.3.27.2342.
-        ButtonGroupRepresentationAuto("Авто", "Auto", "Auto"),
-        ButtonGroupRepresentationUsual("Обычное", "Usual", "Standard"),
-        ButtonGroupRepresentationCompact("Компактное", "Compact", "Compact"),
+        ButtonGroupRepresentationAuto("Авто", "Auto", "Авто"),
+        ButtonGroupRepresentationUsual("Обычное", "Usual", "Обычное"),
+        ButtonGroupRepresentationCompact("Компактное", "Compact", "Компактное"),
     }
     /// Тип члена перечисления `ВариантСтандартногоПериода`, достигнутого в УНФ.
     StandardPeriodVariant("ВариантСтандартногоПериода", "StandardPeriodVariant")
-        meta "StandardPeriodVariant" {
+        meta "ПеречислениеВариантСтандартногоПериода" {
         // Достигнутые члены измерены на платформе 1С 8.3.27.2342.
-        StandardPeriodVariantYesterday("Вчера", "Yesterday", "Yesterday"),
+        StandardPeriodVariantYesterday("Вчера", "Yesterday", "Вчера"),
         StandardPeriodVariantTillEndOfThisYear(
             "ДоКонцаЭтогоГода",
             "TillEndOfThisYear",
-            "Till the end of this year"
+            "До конца этого года"
         ),
         StandardPeriodVariantTillEndOfThisQuarter(
             "ДоКонцаЭтогоКвартала",
             "TillEndOfThisQuarter",
-            "Till the end of this quarter"
+            "До конца этого квартала"
         ),
         StandardPeriodVariantTillEndOfThisMonth(
             "ДоКонцаЭтогоМесяца",
             "TillEndOfThisMonth",
-            "Till the end of this month"
+            "До конца этого месяца"
         ),
         StandardPeriodVariantTillEndOfThisHalfYear(
             "ДоКонцаЭтогоПолугодия",
             "TillEndOfThisHalfYear",
-            "Till the end of this half year"
+            "До конца этого полугодия"
         ),
         StandardPeriodVariantTillEndOfThisTenDays(
             "ДоКонцаЭтойДекады",
             "TillEndOfThisTenDays",
-            "Till the end of this ten-day period"
+            "До конца этой декады"
         ),
         StandardPeriodVariantTillEndOfThisWeek(
             "ДоКонцаЭтойНедели",
             "TillEndOfThisWeek",
-            "Till the end of this week"
+            "До конца этой недели"
         ),
-        StandardPeriodVariantTomorrow("Завтра", "Tomorrow", "Tomorrow"),
-        StandardPeriodVariantMonth("Месяц", "Month", "Month"),
-        StandardPeriodVariantLast7Days("Последние7Дней", "Last7Days", "Last 7 days"),
-        StandardPeriodVariantCustom("ПроизвольныйПериод", "Custom", "Custom period"),
-        StandardPeriodVariantLastTenDays("ПрошлаяДекада", "LastTenDays", "Last ten-day period"),
+        StandardPeriodVariantTomorrow("Завтра", "Tomorrow", "Завтра"),
+        StandardPeriodVariantMonth("Месяц", "Month", "Месяц"),
+        StandardPeriodVariantLast7Days("Последние7Дней", "Last7Days", "Последние 7 дней"),
+        StandardPeriodVariantCustom("ПроизвольныйПериод", "Custom", "Произвольный период"),
+        StandardPeriodVariantLastTenDays("ПрошлаяДекада", "LastTenDays", "Прошлая декада"),
         StandardPeriodVariantLastTenDaysTillSameDayNumber(
             "ПрошлаяДекадаДоТакогоЖеНомераДня",
             "LastTenDaysTillSameDayNumber",
-            "Last ten-day period till the same day number"
+            "Прошлая декада, до такого же номера дня"
         ),
-        StandardPeriodVariantLastWeek("ПрошлаяНеделя", "LastWeek", "Last week"),
+        StandardPeriodVariantLastWeek("ПрошлаяНеделя", "LastWeek", "Прошлая неделя"),
         StandardPeriodVariantLastWeekTillSameWeekDay(
             "ПрошлаяНеделяДоТакогоЖеДняНедели",
             "LastWeekTillSameWeekDay",
-            "Last week till the same day of the week"
+            "Прошлая неделя, до такого же дня недели"
         ),
-        StandardPeriodVariantLastHalfYear("ПрошлоеПолугодие", "LastHalfYear", "Last half year"),
+        StandardPeriodVariantLastHalfYear("ПрошлоеПолугодие", "LastHalfYear", "Прошлое полугодие"),
         StandardPeriodVariantLastHalfYearTillSameDate(
             "ПрошлоеПолугодиеДоТакойЖеДаты",
             "LastHalfYearTillSameDate",
-            "Last half year till the same date"
+            "Прошлое полугодие, до такой же даты"
         ),
-        StandardPeriodVariantLastYear("ПрошлыйГод", "LastYear", "Last year"),
+        StandardPeriodVariantLastYear("ПрошлыйГод", "LastYear", "Прошлый год"),
         StandardPeriodVariantLastYearTillSameDate(
             "ПрошлыйГодДоТакойЖеДаты",
             "LastYearTillSameDate",
-            "Last year till the same date"
+            "Прошлый год, до такой же даты"
         ),
-        StandardPeriodVariantLastQuarter("ПрошлыйКвартал", "LastQuarter", "Last quarter"),
+        StandardPeriodVariantLastQuarter("ПрошлыйКвартал", "LastQuarter", "Прошлый квартал"),
         StandardPeriodVariantLastQuarterTillSameDate(
             "ПрошлыйКварталДоТакойЖеДаты",
             "LastQuarterTillSameDate",
-            "Last quarter till the same date"
+            "Прошлый квартал, до такой же даты"
         ),
-        StandardPeriodVariantLastMonth("ПрошлыйМесяц", "LastMonth", "Last month"),
+        StandardPeriodVariantLastMonth("ПрошлыйМесяц", "LastMonth", "Прошлый месяц"),
         StandardPeriodVariantLastMonthTillSameDate(
             "ПрошлыйМесяцДоТакойЖеДаты",
             "LastMonthTillSameDate",
-            "Last month till the same date"
+            "Прошлый месяц, до такой же даты"
         ),
         StandardPeriodVariantFromBeginningOfThisYear(
             "СНачалаЭтогоГода",
             "FromBeginningOfThisYear",
-            "From the beginning of this year"
+            "С начала этого года"
         ),
         StandardPeriodVariantFromBeginningOfThisQuarter(
             "СНачалаЭтогоКвартала",
             "FromBeginningOfThisQuarter",
-            "From the beginning of this quarter"
+            "С начала этого квартала"
         ),
         StandardPeriodVariantFromBeginningOfThisMonth(
             "СНачалаЭтогоМесяца",
             "FromBeginningOfThisMonth",
-            "From the beginning of this month"
+            "С начала этого месяца"
         ),
         StandardPeriodVariantFromBeginningOfThisHalfYear(
             "СНачалаЭтогоПолугодия",
             "FromBeginningOfThisHalfYear",
-            "From the beginning of this half year"
+            "С начала этого полугодия"
         ),
         StandardPeriodVariantFromBeginningOfThisTenDays(
             "СНачалаЭтойДекады",
             "FromBeginningOfThisTenDays",
-            "From the beginning of this ten-day period"
+            "С начала этой декады"
         ),
         StandardPeriodVariantFromBeginningOfThisWeek(
             "СНачалаЭтойНедели",
             "FromBeginningOfThisWeek",
-            "From the beginning of this week"
+            "С начала этой недели"
         ),
-        StandardPeriodVariantToday("Сегодня", "Today", "Today"),
-        StandardPeriodVariantNextTenDays("СледующаяДекада", "NextTenDays", "Next ten-day period"),
+        StandardPeriodVariantToday("Сегодня", "Today", "Сегодня"),
+        StandardPeriodVariantNextTenDays("СледующаяДекада", "NextTenDays", "Следующая декада"),
         StandardPeriodVariantNextTenDaysTillSameDayNumber(
             "СледующаяДекадаДоТакогоЖеНомераДня",
             "NextTenDaysTillSameDayNumber",
-            "Next ten-day period till the same day number"
+            "Следующая декада, до такого же номера дня"
         ),
-        StandardPeriodVariantNextWeek("СледующаяНеделя", "NextWeek", "Next week"),
+        StandardPeriodVariantNextWeek("СледующаяНеделя", "NextWeek", "Следующая неделя"),
         StandardPeriodVariantNextWeekTillSameWeekDay(
             "СледующаяНеделяДоТакогоЖеДняНедели",
             "NextWeekTillSameWeekDay",
-            "Next week till the same day of the week"
+            "Следующая неделя, до такого же дня недели"
         ),
-        StandardPeriodVariantNextHalfYear("СледующееПолугодие", "NextHalfYear", "Next half year"),
+        StandardPeriodVariantNextHalfYear("СледующееПолугодие", "NextHalfYear", "Следующее полугодие"),
         StandardPeriodVariantNextHalfYearTillSameDate(
             "СледующееПолугодиеДоТакойЖеДаты",
             "NextHalfYearTillSameDate",
-            "Next half year till the same date"
+            "Следующее полугодие, до такой же даты"
         ),
-        StandardPeriodVariantNext7Days("Следующие7Дней", "Next7Days", "Next 7 days"),
-        StandardPeriodVariantNextYear("СледующийГод", "NextYear", "Next year"),
+        StandardPeriodVariantNext7Days("Следующие7Дней", "Next7Days", "Следующие 7 дней"),
+        StandardPeriodVariantNextYear("СледующийГод", "NextYear", "Следующий год"),
         StandardPeriodVariantNextYearTillSameDate(
             "СледующийГодДоТакойЖеДаты",
             "NextYearTillSameDate",
-            "Next year till the same date"
+            "Следующий год, до такой же даты"
         ),
-        StandardPeriodVariantNextQuarter("СледующийКвартал", "NextQuarter", "Next quarter"),
+        StandardPeriodVariantNextQuarter("СледующийКвартал", "NextQuarter", "Следующий квартал"),
         StandardPeriodVariantNextQuarterTillSameDate(
             "СледующийКварталДоТакойЖеДаты",
             "NextQuarterTillSameDate",
-            "Next quarter till the same date"
+            "Следующий квартал, до такой же даты"
         ),
-        StandardPeriodVariantNextMonth("СледующийМесяц", "NextMonth", "Next month"),
+        StandardPeriodVariantNextMonth("СледующийМесяц", "NextMonth", "Следующий месяц"),
         StandardPeriodVariantNextMonthTillSameDate(
             "СледующийМесяцДоТакойЖеДаты",
             "NextMonthTillSameDate",
-            "Next month till the same date"
+            "Следующий месяц, до такой же даты"
         ),
-        StandardPeriodVariantThisTenDays("ЭтаДекада", "ThisTenDays", "This ten-day period"),
-        StandardPeriodVariantThisWeek("ЭтаНеделя", "ThisWeek", "This week"),
-        StandardPeriodVariantThisHalfYear("ЭтоПолугодие", "ThisHalfYear", "This half year"),
-        StandardPeriodVariantThisYear("ЭтотГод", "ThisYear", "This year"),
-        StandardPeriodVariantThisQuarter("ЭтотКвартал", "ThisQuarter", "This quarter"),
-        StandardPeriodVariantThisMonth("ЭтотМесяц", "ThisMonth", "This month"),
+        StandardPeriodVariantThisTenDays("ЭтаДекада", "ThisTenDays", "Эта декада"),
+        StandardPeriodVariantThisWeek("ЭтаНеделя", "ThisWeek", "Эта неделя"),
+        StandardPeriodVariantThisHalfYear("ЭтоПолугодие", "ThisHalfYear", "Это полугодие"),
+        StandardPeriodVariantThisYear("ЭтотГод", "ThisYear", "Этот год"),
+        StandardPeriodVariantThisQuarter("ЭтотКвартал", "ThisQuarter", "Этот квартал"),
+        StandardPeriodVariantThisMonth("ЭтотМесяц", "ThisMonth", "Этот месяц"),
     }
     /// Тип члена перечисления `ВариантУправленияВысотойТаблицы`, достигнутого в УНФ.
     TableHeightControlVariant("ВариантУправленияВысотойТаблицы", "TableHeightControlVariant")
-        meta "TableHeightControlVariant" {
+        meta "ПеречислениеВариантУправленияВысотойТаблицы" {
         TableHeightControlVariantUseHeightInFormRows(
             "ВСтрокахФормы",
             "UseHeightInFormRows",
-            "Use form row height"
+            "В строках формы"
         ),
     }
     /// Тип члена перечисления `ВерсияПолнотекстовогоПоиска`, достигнутого в УНФ.
     FullTextSearchVersion("ВерсияПолнотекстовогоПоиска", "FullTextSearchVersion")
-        meta "FullTextSearchVersion" {
-        FullTextSearchVersionVersion1("Версия1", "Version1", "Version1"),
+        meta "ПеречислениеВерсияПолнотекстовогоПоиска" {
+        FullTextSearchVersionVersion1("Версия1", "Version1", "Версия1"),
     }
     /// Тип члена перечисления `ВертикальнаяПрокруткаФормы`, достигнутого в УНФ.
     VerticalFormScroll("ВертикальнаяПрокруткаФормы", "VerticalFormScroll")
-        meta "VerticalFormScroll" {
+        meta "ПеречислениеВертикальнаяПрокруткаФормы" {
         VerticalFormScrollUseIfNecessary(
             "ИспользоватьПриНеобходимости",
             "UseIfNecessary",
-            "Use if necessary"
+            "Использовать при необходимости"
         ),
     }
     /// Тип члена перечисления `ВертикальноеПоложение`, достигнутого в УНФ.
-    VerticalAlign("ВертикальноеПоложение", "VerticalAlign") meta "VerticalAlign" {
-        VerticalAlignTop("Верх", "Top", "Align top"),
-        VerticalAlignBottom("Низ", "Bottom", "Align bottom"),
-        VerticalAlignCenter("Центр", "Center", "Align center"),
+    VerticalAlign("ВертикальноеПоложение", "VerticalAlign") meta "ПеречислениеВертикальноеПоложение" {
+        VerticalAlignTop("Верх", "Top", "Прижать вверх"),
+        VerticalAlignBottom("Низ", "Bottom", "Прижать вниз"),
+        VerticalAlignCenter("Центр", "Center", "Центрировать"),
     }
     /// Тип члена перечисления `ВидДвиженияНакопления`, достигнутого в УНФ.
     AccumulationRecordType("ВидДвиженияНакопления", "AccumulationRecordType")
-        meta "AccumulationRecordType" {
-        AccumulationRecordTypeReceipt("Приход", "Receipt", "Receipt"),
-        AccumulationRecordTypeExpense("Расход", "Expense", "Expense"),
+        meta "ПеречислениеВидДвиженияНакопления" {
+        AccumulationRecordTypeReceipt("Приход", "Receipt", "Приход"),
+        AccumulationRecordTypeExpense("Расход", "Expense", "Расход"),
     }
     /// Тип члена перечисления `ВидДвиженияБухгалтерии`, измеренный на 1С.
     // Нативная проба подтверждает тип самого перечисления
     // (`docs/research/fixtures/accounting-record-type/measure.platform.txt`).
     AccountingRecordType("ВидДвиженияБухгалтерии", "AccountingRecordType")
-        meta "EnumAccountingRecordType" {
-        AccountingRecordTypeDebit("Дебет", "Debit", "Debit"),
-        AccountingRecordTypeCredit("Кредит", "Credit", "Credit"),
+        meta "ПеречислениеВидДвиженияБухгалтерии" {
+        AccountingRecordTypeDebit("Дебет", "Debit", "Дебет"),
+        AccountingRecordTypeCredit("Кредит", "Credit", "Кредит"),
     }
     /// Положение текста относительно картинки; состав и представления измерены на 1С.
     TextPositionRelativeToPicture(
         "ПоложениеТекстаОтносительноКартинки",
         "TextPositionRelativeToPicture"
     )
-        meta "EnumTextPositionRelativeToPicture" {
-        TextPositionRelativeToPictureAuto("Авто", "Auto", "Auto"),
-        TextPositionRelativeToPictureOnTop("Поверх", "OnTop", "On top"),
-        TextPositionRelativeToPictureTop("Сверху", "Top", "Top"),
-        TextPositionRelativeToPictureLeft("Слева", "Left", "Left"),
-        TextPositionRelativeToPictureBottom("Снизу", "Bottom", "Bottom"),
-        TextPositionRelativeToPictureRight("Справа", "Right", "Right"),
+        meta "ПеречислениеПоложениеТекстаОтносительноКартинки" {
+        TextPositionRelativeToPictureAuto("Авто", "Auto", "Авто"),
+        TextPositionRelativeToPictureOnTop("Поверх", "OnTop", "Поверх"),
+        TextPositionRelativeToPictureTop("Сверху", "Top", "Сверху"),
+        TextPositionRelativeToPictureLeft("Слева", "Left", "Слева"),
+        TextPositionRelativeToPictureBottom("Снизу", "Bottom", "Снизу"),
+        TextPositionRelativeToPictureRight("Справа", "Right", "Справа"),
     }
     /// Тип члена перечисления `ГоризонтальноеПоложение`, достигнутого в УНФ.
-    HorizontalAlign("ГоризонтальноеПоложение", "HorizontalAlign") meta "HorizontalAlign" {
-        HorizontalAlignAuto("Авто", "Auto", "Auto"),
-        HorizontalAlignLeft("Лево", "Left", "Align left"),
-        HorizontalAlignJustify("ПоШирине", "Justify", "Justify"),
-        HorizontalAlignRight("Право", "Right", "Align right"),
-        HorizontalAlignCenter("Центр", "Center", "Align center"),
+    HorizontalAlign("ГоризонтальноеПоложение", "HorizontalAlign") meta "ПеречислениеГоризонтальноеПоложение" {
+        HorizontalAlignAuto("Авто", "Auto", "Автоматически"),
+        HorizontalAlignLeft("Лево", "Left", "Прижать влево"),
+        HorizontalAlignJustify("ПоШирине", "Justify", "По ширине"),
+        HorizontalAlignRight("Право", "Right", "Прижать вправо"),
+        HorizontalAlignCenter("Центр", "Center", "Центрировать"),
     }
     /// Тип члена перечисления `ГруппировкаКолонок`, достигнутого в УНФ.
-    ColumnsGroup("ГруппировкаКолонок", "ColumnsGroup") meta "ColumnsGroup" {
-        ColumnsGroupInCell("ВЯчейке", "InCell", "In cell"),
-        ColumnsGroupVertical("Вертикальная", "Vertical", "Vertical"),
-        ColumnsGroupHorizontal("Горизонтальная", "Horizontal", "Horizontal"),
+    ColumnsGroup("ГруппировкаКолонок", "ColumnsGroup") meta "ПеречислениеГруппировкаКолонок" {
+        ColumnsGroupInCell("ВЯчейке", "InCell", "В ячейке"),
+        ColumnsGroupVertical("Вертикальная", "Vertical", "Вертикальная"),
+        ColumnsGroupHorizontal("Горизонтальная", "Horizontal", "Горизонтальная"),
     }
     /// Тип члена перечисления `ДопустимыйНомерСообщения`, достигнутого в УНФ.
-    AllowedMessageNo("ДопустимыйНомерСообщения", "AllowedMessageNo") meta "AllowedMessageNo" {
-        AllowedMessageNoGreater("Больший", "Greater", "Greater"),
+    AllowedMessageNo("ДопустимыйНомерСообщения", "AllowedMessageNo") meta "ПеречислениеДопустимыйНомерСообщения" {
+        AllowedMessageNoGreater("Больший", "Greater", "Больший"),
     }
     /// Тип члена перечисления `ИспользованиеГруппИЭлементов`, достигнутого в УНФ.
     FoldersAndItemsUse("ИспользованиеГруппИЭлементов", "FoldersAndItemsUse")
-        meta "FoldersAndItemsUse" {
-        FoldersAndItemsUseFolders("Группы", "Folders", "Groups"),
-        FoldersAndItemsUseFoldersAndItems("ГруппыИЭлементы", "FoldersAndItems", "Groups and items"),
-        FoldersAndItemsUseItems("Элементы", "Items", "Items"),
+        meta "ПеречислениеИспользованиеГруппИЭлементов" {
+        FoldersAndItemsUseFolders("Группы", "Folders", "Группы"),
+        FoldersAndItemsUseFoldersAndItems("ГруппыИЭлементы", "FoldersAndItems", "Группы и элементы"),
+        FoldersAndItemsUseItems("Элементы", "Items", "Элементы"),
     }
     /// Тип члена перечисления `ИспользованиеПараметраКомпоновкиДанных`, достигнутого в УНФ.
     DataCompositionParameterUse(
         "ИспользованиеПараметраКомпоновкиДанных",
         "DataCompositionParameterUse"
     )
-        meta "DataCompositionParameterUse" {
-        DataCompositionParameterUseAuto("Авто", "Auto", "Auto"),
-        DataCompositionParameterUseAlways("Всегда", "Always", "Always"),
+        meta "ПеречислениеИспользованиеПараметраКомпоновкиДанных" {
+        DataCompositionParameterUseAuto("Авто", "Auto", "Авто"),
+        DataCompositionParameterUseAlways("Всегда", "Always", "Всегда"),
     }
     /// Тип члена перечисления `ИспользованиеПолосыПрокрутки`, достигнутого в УНФ.
-    ScrollBarUse("ИспользованиеПолосыПрокрутки", "ScrollBarUse") meta "ScrollBarUse" {
-        ScrollBarUseAutoUse("ИспользоватьАвтоматически", "AutoUse", "Use automatically"),
-        ScrollBarUseDontUse("НеИспользовать", "DontUse", "None"),
+    ScrollBarUse("ИспользованиеПолосыПрокрутки", "ScrollBarUse") meta "ПеречислениеИспользованиеПолосыПрокрутки" {
+        ScrollBarUseAutoUse("ИспользоватьАвтоматически", "AutoUse", "Использовать автоматически"),
+        ScrollBarUseDontUse("НеИспользовать", "DontUse", "Не использовать"),
     }
     /// Тип члена перечисления `ИспользованиеТекущейСтроки`, достигнутого в УНФ.
-    CurrentRowUse("ИспользованиеТекущейСтроки", "CurrentRowUse") meta "CurrentRowUse" {
-        CurrentRowUseAuto("Авто", "Auto", "Auto"),
+    CurrentRowUse("ИспользованиеТекущейСтроки", "CurrentRowUse") meta "ПеречислениеИспользованиеТекущейСтроки" {
+        CurrentRowUseAuto("Авто", "Auto", "Авто"),
     }
     /// Тип члена перечисления `НаправлениеПорядкаСхемыЗапроса`, достигнутого в УНФ.
     QuerySchemaOrderDirection("НаправлениеПорядкаСхемыЗапроса", "QuerySchemaOrderDirection")
-        meta "QuerySchemaOrderDirection" {
+        meta "ПеречислениеНаправлениеПорядкаСхемыЗапроса" {
         /// Порядок по возрастанию значений, измеренный на платформе 1С.
-        QuerySchemaOrderDirectionAscending("ПоВозрастанию", "Ascending", "Ascending"),
-        QuerySchemaOrderDirectionDescending("ПоУбыванию", "Descending", "Descending"),
+        QuerySchemaOrderDirectionAscending("ПоВозрастанию", "Ascending", "По возрастанию"),
+        QuerySchemaOrderDirectionDescending("ПоУбыванию", "Descending", "По убыванию"),
     }
     /// Тип члена перечисления `НачальноеОтображениеДерева`, достигнутого в УНФ.
-    InitialTreeView("НачальноеОтображениеДерева", "InitialTreeView") meta "InitialTreeView" {
-        InitialTreeViewNoExpand("НеРаскрывать", "NoExpand", "Do not expand"),
+    InitialTreeView("НачальноеОтображениеДерева", "InitialTreeView") meta "ПеречислениеНачальноеОтображениеДерева" {
+        InitialTreeViewNoExpand("НеРаскрывать", "NoExpand", "Не раскрывать"),
         InitialTreeViewExpandAllLevels(
             "РаскрыватьВсеУровни",
             "ExpandAllLevels",
-            "Expand all levels"
+            "Раскрывать все уровни"
         ),
     }
     /// Тип члена перечисления `ОбновлениеПриИзмененииДанных`, достигнутого в УНФ.
     UpdateOnDataChange("ОбновлениеПриИзмененииДанных", "UpdateOnDataChange")
-        meta "UpdateOnDataChange" {
-        UpdateOnDataChangeAuto("Авто", "Auto", "Auto"),
+        meta "ПеречислениеОбновлениеПриИзмененииДанных" {
+        UpdateOnDataChangeAuto("Авто", "Auto", "Авто"),
     }
     /// Тип члена перечисления `ОбновлениеТекстаРедактирования`, достигнутого в УНФ.
-    EditTextUpdate("ОбновлениеТекстаРедактирования", "EditTextUpdate") meta "EditTextUpdate" {
-        EditTextUpdateDontUse("НеИспользовать", "DontUse", "Do not use"),
-        EditTextUpdateOnValueChange("ПриИзмененииЗначения", "OnValueChange", "Upon value change"),
+    EditTextUpdate("ОбновлениеТекстаРедактирования", "EditTextUpdate") meta "ПеречислениеОбновлениеТекстаРедактирования" {
+        EditTextUpdateDontUse("НеИспользовать", "DontUse", "Не использовать"),
+        EditTextUpdateOnValueChange("ПриИзмененииЗначения", "OnValueChange", "При изменении значения"),
     }
     /// Тип члена перечисления `ОтображениеПредупрежденияПриРедактировании`, достигнутого в УНФ.
     WarningOnEditRepresentation(
         "ОтображениеПредупрежденияПриРедактировании",
         "WarningOnEditRepresentation"
     )
-        meta "WarningOnEditRepresentation" {
-        WarningOnEditRepresentationDontShow("НеОтображать", "DontShow", "Do not show"),
-        WarningOnEditRepresentationShow("Отображать", "Show", "Show"),
+        meta "ПеречислениеОтображениеПредупрежденияПриРедактировании" {
+        WarningOnEditRepresentationDontShow("НеОтображать", "DontShow", "Не отображать"),
+        WarningOnEditRepresentationShow("Отображать", "Show", "Отображать"),
     }
     /// Тип члена перечисления `ПоискВТаблицеПриВводе`, достигнутого в УНФ.
     SearchInTableOnInput("ПоискВТаблицеПриВводе", "SearchInTableOnInput")
-        meta "SearchInTableOnInput" {
-        SearchInTableOnInputDontUse("НеИспользовать", "DontUse", "Do not use"),
+        meta "ПеречислениеПоискВТаблицеПриВводе" {
+        SearchInTableOnInputDontUse("НеИспользовать", "DontUse", "Не использовать"),
     }
     /// Тип члена перечисления `ПоложениеКоманднойПанелиФормы`, достигнутого в УНФ.
     FormCommandBarLabelLocation("ПоложениеКоманднойПанелиФормы", "FormCommandBarLabelLocation")
-        meta "FormCommandBarLabelLocation" {
-        FormCommandBarLabelLocationAuto("Авто", "Auto", "Auto"),
-        FormCommandBarLabelLocationNone("Нет", "None", "None"),
-        FormCommandBarLabelLocationBottom("Низ", "Bottom", "Bottom"),
+        meta "ПеречислениеПоложениеКоманднойПанелиФормы" {
+        FormCommandBarLabelLocationAuto("Авто", "Auto", "Авто"),
+        FormCommandBarLabelLocationNone("Нет", "None", "Нет"),
+        FormCommandBarLabelLocationBottom("Низ", "Bottom", "Низ"),
     }
     /// Тип члена перечисления `ПоложениеКоманднойПанелиЭлементаФормы`, достигнутого в УНФ.
     FormItemCommandBarLabelLocation(
         "ПоложениеКоманднойПанелиЭлементаФормы",
         "FormItemCommandBarLabelLocation"
     )
-        meta "FormItemCommandBarLabelLocation" {
-        FormItemCommandBarLabelLocationAuto("Авто", "Auto", "Auto"),
-        FormItemCommandBarLabelLocationTop("Верх", "Top", "Top"),
-        FormItemCommandBarLabelLocationNone("Нет", "None", "None"),
+        meta "ПеречислениеПоложениеКоманднойПанелиЭлементаФормы" {
+        FormItemCommandBarLabelLocationAuto("Авто", "Auto", "Авто"),
+        FormItemCommandBarLabelLocationTop("Верх", "Top", "Верх"),
+        FormItemCommandBarLabelLocationNone("Нет", "None", "Нет"),
     }
     /// Тип члена перечисления `ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы`, достигнутого в УНФ.
     GaugeChartValuesScaleLabelsLocation(
         "ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы",
         "GaugeChartValuesScaleLabelsLocation"
     )
-        meta "GaugeChartValuesScaleLabelsLocation" {
-        GaugeChartValuesScaleLabelsLocationAtScale("НаШкале", "AtScale", "On scale"),
+        meta "ПеречислениеПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы" {
+        GaugeChartValuesScaleLabelsLocationAtScale("НаШкале", "AtScale", "На шкале"),
     }
     /// Тип положения подписи, достигнутого в модуле менеджера отчёта БУХ.
     ChartLabelLocation("ПоложениеПодписейКДиаграмме", "ChartLabelLocation")
-        meta "ChartLabelLocation" {
+        meta "ПеречислениеПоложениеПодписейКДиаграмме" {
         /// Автоматическое положение подписи относительно края диаграммы.
-        ChartLabelLocationEdgeAuto("КрайАвто", "EdgeAuto", "Edge auto"),
+        ChartLabelLocationEdgeAuto("КрайАвто", "EdgeAuto", "Край авто"),
         /// Подпись с края внутри значения диаграммы.
-        ChartLabelLocationEdgeInside("КрайВнутри", "EdgeInside", "Edge inside"),
+        ChartLabelLocationEdgeInside("КрайВнутри", "EdgeInside", "Край внутри"),
     }
     /// Тип положения подписей шкалы, достигнутого в отчёте БУХ.
     ChartScaleLabelLocation("ПоложениеПодписейШкалыДиаграммы", "ChartScaleLabelLocation")
-        meta "ChartScaleLabelLocation" {
+        meta "ПеречислениеПоложениеПодписейШкалыДиаграммы" {
         /// Отсутствие подписей шкалы диаграммы.
-        ChartScaleLabelLocationNone("Нет", "None", "Do not show"),
+        ChartScaleLabelLocationNone("Нет", "None", "Не отображать"),
     }
     /// Отображение в легенде диаграммы.
     ShowInChartLegend("ОтображениеВЛегендеДиаграммы", "ShowInChartLegend")
-        meta "ShowInChartLegend" {
+        meta "ПеречислениеОтображениеВЛегендеДиаграммы" {
         /// Автоматическое отображение в легенде диаграммы.
-        ShowInChartLegendAuto("Авто", "Auto", "Auto"),
+        ShowInChartLegendAuto("Авто", "Auto", "Авто"),
         /// Отображение в легенде диаграммы.
-        ShowInChartLegendShow("Отображать", "Show", "Show"),
+        ShowInChartLegendShow("Отображать", "Show", "Отображать"),
         /// Отсутствие отображения в легенде диаграммы.
-        ShowInChartLegendDontShow("НеОтображать", "DontShow", "Do not show"),
+        ShowInChartLegendDontShow("НеОтображать", "DontShow", "Не отображать"),
     }
     /// Использование расшифровки табличного документа.
     SpreadsheetDocumentDetailUse(
         "ИспользованиеРасшифровкиТабличногоДокумента",
         "SpreadsheetDocumentDetailUse"
     )
-        meta "SpreadsheetDocumentDetailUse" {
+        meta "ПеречислениеИспользованиеРасшифровкиТабличногоДокумента" {
         /// Расшифровка табличного документа без обработки.
         SpreadsheetDocumentDetailUseWithoutProcessing(
             "БезОбработки",
             "WithoutProcessing",
-            "No processing"
+            "Без обработки"
         ),
         /// Расшифровка отдельной ячейки табличного документа.
-        SpreadsheetDocumentDetailUseCell("Ячейка", "Cell", "Cell"),
+        SpreadsheetDocumentDetailUseCell("Ячейка", "Cell", "Ячейка"),
     }
     /// Тип члена перечисления `ПоложениеСостоянияПросмотра`, достигнутого в УНФ.
     ViewStatusLocation("ПоложениеСостоянияПросмотра", "ViewStatusLocation")
-        meta "ViewStatusLocation" {
-        ViewStatusLocationTop("Верх", "Top", "Top"),
+        meta "ПеречислениеПоложениеСостоянияПросмотра" {
+        ViewStatusLocationTop("Верх", "Top", "Верх"),
     }
     /// Тип члена перечисления `ПоложениеСтрокиПоиска`, достигнутого в УНФ.
     SearchStringLocation("ПоложениеСтрокиПоиска", "SearchStringLocation")
-        meta "SearchStringLocation" {
-        SearchStringLocationAuto("Авто", "Auto", "Auto"),
-        SearchStringLocationNone("Нет", "None", "None"),
+        meta "ПеречислениеПоложениеСтрокиПоиска" {
+        SearchStringLocationAuto("Авто", "Auto", "Авто"),
+        SearchStringLocationNone("Нет", "None", "Нет"),
     }
     /// Тип члена перечисления `ПоложениеУправленияПоиском`, достигнутого в УНФ.
     SearchControlLocation("ПоложениеУправленияПоиском", "SearchControlLocation")
-        meta "SearchControlLocation" {
-        SearchControlLocationNone("Нет", "None", "None"),
+        meta "ПеречислениеПоложениеУправленияПоиском" {
+        SearchControlLocationNone("Нет", "None", "Нет"),
     }
     /// Тип члена перечисления `РежимАвтоВремя`, достигнутого в УНФ.
-    AutoTimeMode("РежимАвтоВремя", "AutoTimeMode") meta "AutoTimeMode" {
-        AutoTimeModeLast("Последним", "Last", "Last"),
-        AutoTimeModeCurrentOrLast("ТекущееИлиПоследним", "CurrentOrLast", "Current or last"),
+    AutoTimeMode("РежимАвтоВремя", "AutoTimeMode") meta "ПеречислениеРежимАвтоВремя" {
+        AutoTimeModeLast("Последним", "Last", "Последним"),
+        AutoTimeModeCurrentOrLast("ТекущееИлиПоследним", "CurrentOrLast", "Текущее или последним"),
     }
     /// Тип члена перечисления `РежимВводаСтрокТаблицы`, достигнутого в УНФ.
-    TableRowInputMode("РежимВводаСтрокТаблицы", "TableRowInputMode") meta "TableRowInputMode" {
-        TableRowInputModeEndOfList("ВКонецСписка", "EndOfList", "End of list"),
+    TableRowInputMode("РежимВводаСтрокТаблицы", "TableRowInputMode") meta "ПеречислениеРежимВводаСтрокТаблицы" {
+        TableRowInputModeEndOfList("ВКонецСписка", "EndOfList", "В конце списка"),
     }
     /// Тип члена перечисления `РежимВключенияСертификатовКриптографии`, достигнутого в УНФ.
     CryptoCertificateIncludeMode(
         "РежимВключенияСертификатовКриптографии",
         "CryptoCertificateIncludeMode"
     )
-        meta "CryptoCertificateIncludeMode" {
+        meta "ПеречислениеРежимВключенияСертификатовКриптографии" {
         CryptoCertificateIncludeModeIncludeWholeChain(
             "ВключатьПолнуюЦепочку",
             "IncludeWholeChain",
-            "Include full chain"
+            "Включать полную цепочку"
         ),
         CryptoCertificateIncludeModeIncludeSubjectCertificate(
             "ВключатьСертификатСубъекта",
             "IncludeSubjectCertificate",
-            "Include subject certificate"
+            "Включать сертификат субъекта"
         ),
-        CryptoCertificateIncludeModeDontInclude("НеВключать", "DontInclude", "Do not include"),
+        CryptoCertificateIncludeModeDontInclude("НеВключать", "DontInclude", "Не включать"),
     }
     /// Тип члена перечисления `РежимВыделенияСтрокиТаблицы`, достигнутого в УНФ.
     TableRowSelectionMode("РежимВыделенияСтрокиТаблицы", "TableRowSelectionMode")
-        meta "TableRowSelectionMode" {
-        TableRowSelectionModeRow("Строка", "Row", "String"),
-        TableRowSelectionModeCell("Ячейка", "Cell", "Cell"),
+        meta "ПеречислениеРежимВыделенияСтрокиТаблицы" {
+        TableRowSelectionModeRow("Строка", "Row", "Строка"),
+        TableRowSelectionModeCell("Ячейка", "Cell", "Ячейка"),
     }
     /// Тип члена перечисления `РежимВыделенияТаблицы`, достигнутого в УНФ.
-    TableSelectionMode("РежимВыделенияТаблицы", "TableSelectionMode") meta "TableSelectionMode" {
-        TableSelectionModeSingleRow("Одиночный", "SingleRow", "Single"),
+    TableSelectionMode("РежимВыделенияТаблицы", "TableSelectionMode") meta "ПеречислениеРежимВыделенияТаблицы" {
+        TableSelectionModeSingleRow("Одиночный", "SingleRow", "Одиночный"),
     }
     /// Тип члена перечисления `РежимЗамещения`, достигнутого в УНФ.
-    ReplacementMode("РежимЗамещения", "ReplacementMode") meta "ReplacementMode" {
-        ReplacementModeAppend("Добавление", "Append", "Add"),
-        ReplacementModeReplace("Замещение", "Replace", "Replace"),
-        ReplacementModeUpdate("Обновление", "Update", "Update"),
-        ReplacementModeMerge("Слияние", "Merge", "Merge"),
-        ReplacementModeDelete("Удаление", "Delete", "Delete"),
+    ReplacementMode("РежимЗамещения", "ReplacementMode") meta "ПеречислениеРежимЗамещения" {
+        ReplacementModeAppend("Добавление", "Append", "Добавление"),
+        ReplacementModeReplace("Замещение", "Replace", "Замещение"),
+        ReplacementModeUpdate("Обновление", "Update", "Обновление"),
+        ReplacementModeMerge("Слияние", "Merge", "Слияние"),
+        ReplacementModeDelete("Удаление", "Delete", "Удаление"),
     }
     /// Тип члена перечисления `РежимИзмененияРазмера`, достигнутого в УНФ.
-    SizeChangeMode("РежимИзмененияРазмера", "SizeChangeMode") meta "SizeChangeMode" {
-        SizeChangeModeQuickChange("БыстроеИзменение", "QuickChange", "Quick change"),
-        SizeChangeModeNormal("Обычный", "Normal", "Normal"),
+    SizeChangeMode("РежимИзмененияРазмера", "SizeChangeMode") meta "ПеречислениеРежимИзмененияРазмера" {
+        SizeChangeModeQuickChange("БыстроеИзменение", "QuickChange", "Быстрое изменение"),
+        SizeChangeModeNormal("Обычный", "Normal", "Обычный"),
     }
     /// Тип члена перечисления `РежимОткрытияОкнаФормы`, достигнутого в УНФ.
     FormWindowOpeningMode("РежимОткрытияОкнаФормы", "FormWindowOpeningMode")
-        meta "FormWindowOpeningMode" {
+        meta "ПеречислениеРежимОткрытияОкнаФормы" {
         FormWindowOpeningModeLockWholeInterface(
             "БлокироватьВесьИнтерфейс",
             "LockWholeInterface",
-            "Block the entire interface"
+            "Блокировать весь интерфейс"
         ),
         FormWindowOpeningModeLockOwnerWindow(
             "БлокироватьОкноВладельца",
             "LockOwnerWindow",
-            "Lock parent window"
+            "Блокировать окно владельца"
         ),
-        FormWindowOpeningModeIndependent("Независимый", "Independent", "Independent"),
+        FormWindowOpeningModeIndependent("Независимый", "Independent", "Независимый"),
     }
     /// Тип члена перечисления `РежимОтображенияНастроекКомпоновкиДанных`, достигнутого в УНФ.
     DataCompositionSettingsViewMode(
         "РежимОтображенияНастроекКомпоновкиДанных",
         "DataCompositionSettingsViewMode"
     )
-        meta "DataCompositionSettingsViewMode" {
-        DataCompositionSettingsViewModeQuickAccess("БыстрыйДоступ", "QuickAccess", "Quick access"),
-        DataCompositionSettingsViewModeAll("Все", "All", "All"),
+        meta "ПеречислениеРежимОтображенияНастроекКомпоновкиДанных" {
+        DataCompositionSettingsViewModeQuickAccess("БыстрыйДоступ", "QuickAccess", "Быстрый доступ"),
+        DataCompositionSettingsViewModeAll("Все", "All", "Все"),
     }
     /// Тип члена перечисления `РежимОтображенияРезультатаОтчета`, достигнутого в УНФ.
     ReportResultViewMode("РежимОтображенияРезультатаОтчета", "ReportResultViewMode")
-        meta "ReportResultViewMode" {
-        ReportResultViewModeAuto("Авто", "Auto", "Auto"),
-        ReportResultViewModeCompact("Компактный", "Compact", "Compact"),
-        ReportResultViewModeDefault("Обычный", "Default", "Default"),
+        meta "ПеречислениеРежимОтображенияРезультатаОтчета" {
+        ReportResultViewModeAuto("Авто", "Auto", "Авто"),
+        ReportResultViewModeCompact("Компактный", "Compact", "Компактный"),
+        ReportResultViewModeDefault("Обычный", "Default", "Обычный"),
     }
     /// Тип члена перечисления `РежимПолнотекстовогоПоиска`, достигнутого в УНФ.
     FullTextSearchMode("РежимПолнотекстовогоПоиска", "FullTextSearchMode")
-        meta "FullTextSearchMode" {
-        FullTextSearchModeDisable("Запретить", "Disable", "Disable"),
-        FullTextSearchModeEnable("Разрешить", "Enable", "Enable"),
+        meta "ПеречислениеРежимПолнотекстовогоПоиска" {
+        FullTextSearchModeDisable("Запретить", "Disable", "Запретить"),
+        FullTextSearchModeEnable("Разрешить", "Enable", "Разрешить"),
     }
     /// Тип члена перечисления `РежимПроверкиСертификатаКриптографии`, достигнутого в УНФ.
     CryptoCertificateCheckMode("РежимПроверкиСертификатаКриптографии", "CryptoCertificateCheckMode")
-        meta "CryptoCertificateCheckMode" {
+        meta "ПеречислениеРежимПроверкиСертификатаКриптографии" {
         CryptoCertificateCheckModeIgnoreTimeValidity(
             "ИгнорироватьВремяДействия",
             "IgnoreTimeValidity",
-            "Ignore action time"
+            "Игнорировать время действия"
         ),
         CryptoCertificateCheckModeIgnoreSignatureValidity(
             "ИгнорироватьДействительностьПодписи",
             "IgnoreSignatureValidity",
-            "Ignore signature validity"
+            "Игнорировать действительность подписи"
         ),
         CryptoCertificateCheckModeIgnoreCertificateRevocationStatus(
             "ИгнорироватьПроверкуВСпискеОтозванныхСертификатов",
             "IgnoreCertificateRevocationStatus",
-            "Ignore check in revoked certificates list"
+            "Игнорировать проверку в списке отозванных сертификатов"
         ),
         CryptoCertificateCheckModeAllowTestCertificates(
             "РазрешитьТестовыеСертификаты",
             "AllowTestCertificates",
-            "Enable test"
+            "Разрешить тестовые"
         ),
     }
     /// Тип члена перечисления `РежимРедактированияКолонки`, достигнутого в УНФ.
-    ColumnEditMode("РежимРедактированияКолонки", "ColumnEditMode") meta "ColumnEditMode" {
-        ColumnEditModeEnter("Вход", "Enter", "Enter"),
-        ColumnEditModeEnterOnInput("ВходПриВводе", "EnterOnInput", "Enter on input"),
-        ColumnEditModeDirectly("Непосредственно", "Directly", "Directly"),
+    ColumnEditMode("РежимРедактированияКолонки", "ColumnEditMode") meta "ПеречислениеРежимРедактированияКолонки" {
+        ColumnEditModeEnter("Вход", "Enter", "Вход"),
+        ColumnEditModeEnterOnInput("ВходПриВводе", "EnterOnInput", "Вход при вводе"),
+        ColumnEditModeDirectly("Непосредственно", "Directly", "Непосредственно"),
     }
     /// Тип члена перечисления `СпособВосстановленияПароляПользователяИнформационнойБазы`, достигнутого в УНФ.
     InfoBaseUserPasswordRecoveryMethod(
         "СпособВосстановленияПароляПользователяИнформационнойБазы",
         "InfoBaseUserPasswordRecoveryMethod"
     )
-        meta "InfoBaseUserPasswordRecoveryMethod" {
+        meta "ПеречислениеСпособВосстановленияПароляПользователяИнформационнойБазы" {
         InfoBaseUserPasswordRecoveryMethodSendVerificationCodeBySetParameters(
             "ОтправкаКодаПодтвержденияПоЗаданнымПараметрам",
             "SendVerificationCodeBySetParameters",
-            "Send confirmation code with the specified parameters"
+            "Отправка кода подтверждения по заданным параметрам"
         ),
         InfoBaseUserPasswordRecoveryMethodSendVerificationCodeByStandardService(
             "ОтправкаКодаПодтвержденияЧерезСтандартныйСервис",
             "SendVerificationCodeByStandardService",
-            "Send confirmation code using standard service"
+            "Отправка кода подтверждения через стандартный сервис"
         ),
     }
     /// Тип члена перечисления `ТипЗаполненияОбластиТабличногоДокумента`, достигнутого в УНФ.
@@ -2952,20 +2952,20 @@ system_enums! {
         "ТипЗаполненияОбластиТабличногоДокумента",
         "SpreadsheetDocumentAreaFillType"
     )
-        meta "SpreadsheetDocumentAreaFillType" {
-        SpreadsheetDocumentAreaFillTypeParameter("Параметр", "Parameter", "Parameter"),
-        SpreadsheetDocumentAreaFillTypeText("Текст", "Text", "Text"),
-        SpreadsheetDocumentAreaFillTypeTemplate("Шаблон", "Template", "Template"),
+        meta "ПеречислениеТипЗаполненияОбластиТабличногоДокумента" {
+        SpreadsheetDocumentAreaFillTypeParameter("Параметр", "Parameter", "Параметр"),
+        SpreadsheetDocumentAreaFillTypeText("Текст", "Text", "Текст"),
+        SpreadsheetDocumentAreaFillTypeTemplate("Шаблон", "Template", "Шаблон"),
     }
     /// Тип члена перечисления `ТипОбъединенияСхемыЗапроса`, достигнутого в УНФ.
     QuerySchemaUnionType("ТипОбъединенияСхемыЗапроса", "QuerySchemaUnionType")
-        meta "QuerySchemaUnionType" {
-        QuerySchemaUnionTypeUnion("Объединить", "Union", "Union"),
-        QuerySchemaUnionTypeUnionAll("ОбъединитьВсе", "UnionAll", "Union all"),
+        meta "ПеречислениеТипОбъединенияСхемыЗапроса" {
+        QuerySchemaUnionTypeUnion("Объединить", "Union", "Объединить"),
+        QuerySchemaUnionTypeUnionAll("ОбъединитьВсе", "UnionAll", "Объединить все"),
     }
     /// Тип члена перечисления `ТипПодписиКриптографии`, достигнутого в УНФ.
     CryptoSignatureType("ТипПодписиКриптографии", "CryptoSignatureType")
-        meta "CryptoSignatureType" {
+        meta "ПеречислениеТипПодписиКриптографии" {
         CryptoSignatureTypeCAdESAv2("CAdESAv2", "CAdESAv2", "CAdES-A v2"),
         CryptoSignatureTypeCAdESAv3("CAdESAv3", "CAdESAv3", "CAdES-A v3"),
         CryptoSignatureTypeCAdESBES("CAdESBES", "CAdESBES", "CAdES-BES"),
@@ -2991,128 +2991,128 @@ system_enums! {
         "ТипРазмещенияТекстаТабличногоДокумента",
         "SpreadsheetDocumentTextPlacementType"
     )
-        meta "SpreadsheetDocumentTextPlacementType" {
-        SpreadsheetDocumentTextPlacementTypeCut("Обрезать", "Cut", "Clip"),
-        SpreadsheetDocumentTextPlacementTypeWrap("Переносить", "Wrap", "Wrap"),
+        meta "ПеречислениеТипРазмещенияТекстаТабличногоДокумента" {
+        SpreadsheetDocumentTextPlacementTypeCut("Обрезать", "Cut", "Обрезать"),
+        SpreadsheetDocumentTextPlacementTypeWrap("Переносить", "Wrap", "Переносить"),
     }
     /// Тип члена перечисления `ТипСоединенияСхемыЗапроса`, достигнутого в УНФ.
     QuerySchemaJoinType("ТипСоединенияСхемыЗапроса", "QuerySchemaJoinType")
-        meta "QuerySchemaJoinType" {
-        QuerySchemaJoinTypeInner("Внутреннее", "Inner", "Inner"),
-        QuerySchemaJoinTypeLeftOuter("ЛевоеВнешнее", "LeftOuter", "Left outer"),
-        QuerySchemaJoinTypeRightOuter("ПравоеВнешнее", "RightOuter", "Right outer"),
+        meta "ПеречислениеТипСоединенияСхемыЗапроса" {
+        QuerySchemaJoinTypeInner("Внутреннее", "Inner", "Внутреннее"),
+        QuerySchemaJoinTypeLeftOuter("ЛевоеВнешнее", "LeftOuter", "Левое внешнее"),
+        QuerySchemaJoinTypeRightOuter("ПравоеВнешнее", "RightOuter", "Правое внешнее"),
     }
     /// Тип члена перечисления `ТипФормыОтчета`, достигнутого в УНФ.
-    ReportFormType("ТипФормыОтчета", "ReportFormType") meta "ReportFormType" {
-        ReportFormTypeSettings("Настройка", "Settings", "Settings"),
-        ReportFormTypeMain("Основная", "Main", "Default"),
+    ReportFormType("ТипФормыОтчета", "ReportFormType") meta "ПеречислениеТипФормыОтчета" {
+        ReportFormTypeSettings("Настройка", "Settings", "Настройка"),
+        ReportFormTypeMain("Основная", "Main", "Основная"),
     }
     /// Тип члена перечисления `ТипЭлементаФорматированногоДокумента`, достигнутого в УНФ.
     FormattedDocumentItemType("ТипЭлементаФорматированногоДокумента", "FormattedDocumentItemType")
-        meta "FormattedDocumentItemType" {
-        FormattedDocumentItemTypeText("Текст", "Text", "Text"),
-        FormattedDocumentItemTypeLineFeed("ПереводСтроки", "LineFeed", "LineFeed"),
-        FormattedDocumentItemTypePicture("Картинка", "Picture", "Picture"),
+        meta "ПеречислениеТипЭлементаФорматированногоДокумента" {
+        FormattedDocumentItemTypeText("Текст", "Text", "Текст"),
+        FormattedDocumentItemTypeLineFeed("ПереводСтроки", "LineFeed", "ПереводСтроки"),
+        FormattedDocumentItemTypePicture("Картинка", "Picture", "Картинка"),
     }
     /// Тип члена перечисления `ФиксацияВТаблице`, достигнутого в УНФ.
-    FixingInTable("ФиксацияВТаблице", "FixingInTable") meta "FixingInTable" {
-        FixingInTableLeft("Лево", "Left", "Left"),
-        FixingInTableNone("Нет", "None", "No"),
-        FixingInTableRight("Право", "Right", "Right"),
+    FixingInTable("ФиксацияВТаблице", "FixingInTable") meta "ПеречислениеФиксацияВТаблице" {
+        FixingInTableLeft("Лево", "Left", "Лево"),
+        FixingInTableNone("Нет", "None", "Нет"),
+        FixingInTableRight("Право", "Right", "Право"),
     }
     /// Скорость соединения текущего клиента.
     ClientConnectionSpeed("СкоростьКлиентскогоСоединения", "ClientConnectionSpeed")
-        meta "EnumClientConnectionSpeed" {
+        meta "ПеречислениеСкоростьКлиентскогоСоединения" {
         // Имена и представления измерены на 8.3.27 пробой
         // `measure-client-connection-speed.bsl`.
-        ClientConnectionSpeedLow("Низкая", "Low", "Low"),
-        ClientConnectionSpeedNormal("Обычная", "Normal", "Normal"),
+        ClientConnectionSpeedLow("Низкая", "Low", "Низкая"),
+        ClientConnectionSpeedNormal("Обычная", "Normal", "Обычная"),
     }
     /// Тип области ячеек табличного документа.
     SpreadsheetDocumentCellAreaType(
         "ТипОбластиЯчеекТабличногоДокумента",
         "SpreadsheetDocumentCellAreaType"
     )
-        meta "EnumSpreadsheetDocumentCellAreaType" {
+        meta "ПеречислениеТипОбластиЯчеекТабличногоДокумента" {
         // Все четыре имени и представления измерены пробой
         // `measure-spreadsheet-cell-area-type.bsl` на 8.3.27.
-        SpreadsheetDocumentCellAreaTypeTable("Таблица", "Table", "Table"),
-        SpreadsheetDocumentCellAreaTypeRows("Строки", "Rows", "Rows"),
-        SpreadsheetDocumentCellAreaTypeColumns("Колонки", "Columns", "Columns"),
-        SpreadsheetDocumentCellAreaTypeRectangle("Прямоугольник", "Rectangle", "Rectangle"),
+        SpreadsheetDocumentCellAreaTypeTable("Таблица", "Table", "Таблица"),
+        SpreadsheetDocumentCellAreaTypeRows("Строки", "Rows", "Строки"),
+        SpreadsheetDocumentCellAreaTypeColumns("Колонки", "Columns", "Колонки"),
+        SpreadsheetDocumentCellAreaTypeRectangle("Прямоугольник", "Rectangle", "Прямоугольник"),
     }
     /// Тип подключения внешней компоненты.
     // НЕ ИЗМЕРЕНО(ENUM.ADDIN_CONNECTION_TYPE.PRESENTATION):
     // перечисление доступно только в толстом клиенте.
     AddInConnectionType("ТипПодключенияВнешнейКомпоненты", "AddInConnectionType")
-        meta "EnumAddInConnectionType" {
-        AddInConnectionTypeIsolated("Изолированно", "Isolated", "Isolated"),
-        AddInConnectionTypeNotIsolated("НеИзолированно", "NotIsolated", "NotIsolated"),
+        meta "ПеречислениеТипПодключенияВнешнейКомпоненты" {
+        AddInConnectionTypeIsolated("Изолированно", "Isolated", "Изолированно"),
+        AddInConnectionTypeNotIsolated("НеИзолированно", "NotIsolated", "НеИзолированно"),
     }
     /// Проверка заполнения реквизита.
-    FillChecking("ПроверкаЗаполнения", "FillChecking") meta "EnumFillChecking" {
+    FillChecking("ПроверкаЗаполнения", "FillChecking") meta "ПеречислениеПроверкаЗаполнения" {
         // Представления `Yes` и `No` измерены пробой `measure-fill-checking.bsl`.
-        FillCheckingShowError("ВыдаватьОшибку", "ShowError", "Yes"),
-        FillCheckingDontCheck("НеПроверять", "DontCheck", "No"),
+        FillCheckingShowError("ВыдаватьОшибку", "ShowError", "Выдавать ошибку"),
+        FillCheckingDontCheck("НеПроверять", "DontCheck", "Не проверять"),
     }
     /// Выбор групп и элементов иерархических данных.
-    FoldersAndItems("ГруппыИЭлементы", "FoldersAndItems") meta "EnumFoldersAndItems" {
+    FoldersAndItems("ГруппыИЭлементы", "FoldersAndItems") meta "ПеречислениеГруппыИЭлементы" {
         // Имена и представления измерены пробой `measure-folders-and-items.bsl`.
-        FoldersAndItemsAuto("Авто", "Auto", "Auto"),
-        FoldersAndItemsFolders("Группы", "Folders", "Folders"),
-        FoldersAndItemsBoth("ГруппыИЭлементы", "FoldersAndItems", "FoldersAndItems"),
-        FoldersAndItemsItems("Элементы", "Items", "Items"),
+        FoldersAndItemsAuto("Авто", "Auto", "Авто"),
+        FoldersAndItemsFolders("Группы", "Folders", "Группы"),
+        FoldersAndItemsBoth("ГруппыИЭлементы", "FoldersAndItems", "ГруппыИЭлементы"),
+        FoldersAndItemsItems("Элементы", "Items", "Элементы"),
     }
     /// Протокол интернет-почты.
     /// Устаревшие способы аутентификации, используемые исходниками 1С.
     XmlCanonicalizationType("ТипКаноническогоXML", "XMLCanonicalizationType")
-        meta "EnumXMLCanonicalizationType" {
+        meta "ПеречислениеТипКаноническогоXML" {
         // Состав и представления измерены пробой `xml-canonicalization-type/measure.bsl`.
         // Все значения, aliases и представления измерены контролем `mail-authentication`.
         // Нативный эталон: `xml-canonicalization-type/measure.platform.txt`.
-        XmlCanonicalizationTypeCanonical("КаноническийXML", "XMLCanonicalization", "Canonical XML"),
+        XmlCanonicalizationTypeCanonical("КаноническийXML", "XMLCanonicalization", "Канонический XML"),
         XmlCanonicalizationTypeCanonicalWithComments(
             "КаноническийXMLСКомментариями",
             "XMLCanonicalizationWithComments",
-            "Canonical XML with comments"
+            "Канонический XML с комментариями"
         ),
         XmlCanonicalizationTypeExclusive(
             "ИсключающийКаноническийXML",
             "XMLExclusiveCanonicalization",
-            "Exclusive canonical XML"
+            "Исключающий канонический XML"
         ),
         XmlCanonicalizationTypeExclusiveWithComments(
             "ИсключающийКаноническийXMLСКомментариями",
             "XMLExclusiveCanonicalizationWithComments",
-            "Exclusive canonical XML with comments"
+            "Исключающий канонический XML с комментариями"
         ),
         XmlCanonicalizationTypeCanonical11(
             "КаноническийXML1_1",
             "XMLCanonicalization1_1",
-            "Canonical XML 1.1"
+            "Канонический XML 1.1"
         ),
         XmlCanonicalizationTypeCanonical11WithComments(
             "КаноническийXML1_1СКомментариями",
             "XMLCanonicalization1_1WithComments",
-            "Canonical XML 1.1 with comments"
+            "Канонический XML 1.1 с комментариями"
         ),
     }
     Pop3AuthenticationMode("СпособPOP3Аутентификации", "POP3AuthenticationMode")
-        meta "EnumPOP3AuthenticationMode" {
+        meta "ПеречислениеСпособPOP3Аутентификации" {
         Pop3AuthenticationModeApop("APOP", "APOP", "APOP"),
         Pop3AuthenticationModeCramMd5("CramMD5", "CramMD5", "CramMD5"),
-        Pop3AuthenticationModeGeneral("Обычная", "General", "General"),
+        Pop3AuthenticationModeGeneral("Обычная", "General", "Обычная"),
     }
     SmtpAuthenticationMode("СпособSMTPАутентификации", "SMTPAuthenticationMode")
-        meta "EnumSMTPAuthenticationMode" {
+        meta "ПеречислениеСпособSMTPАутентификации" {
         SmtpAuthenticationModeCramMd5("CramMD5", "CramMD5", "CramMD5"),
         SmtpAuthenticationModeLogin("Login", "Login", "Login"),
         SmtpAuthenticationModePlain("Plain", "Plain", "Plain"),
-        SmtpAuthenticationModeNone("БезАутентификации", "None", "None"),
-        SmtpAuthenticationModeDefault("ПоУмолчанию", "Default", "Default"),
+        SmtpAuthenticationModeNone("БезАутентификации", "None", "БезАутентификации"),
+        SmtpAuthenticationModeDefault("ПоУмолчанию", "Default", "ПоУмолчанию"),
     }
     InternetMailProtocol("ПротоколИнтернетПочты", "InternetMailProtocol")
-        meta "EnumInternetMailProtocol" {
+        meta "ПеречислениеПротоколИнтернетПочты" {
         // Состав и представления измерены пробой `measure-internet-mail-protocol.bsl`.
         InternetMailProtocolImap("IMAP", "IMAP", "IMAP"),
         InternetMailProtocolPop3("POP3", "POP3", "POP3"),
@@ -3123,43 +3123,43 @@ system_enums! {
         "ДействиеОбработкиРасшифровкиКомпоновкиДанных",
         "DataCompositionDetailsProcessingAction"
     )
-        meta "EnumDataCompositionDetailsProcessingAction" {
+        meta "ПеречислениеДействиеОбработкиРасшифровкиКомпоновкиДанных" {
         // Представления, включая пробел после `Open value `, измерены на 1С.
-        DataCompositionDetailsProcessingActionNone("Нет", "None", "None"),
+        DataCompositionDetailsProcessingActionNone("Нет", "None", "Нет"),
         DataCompositionDetailsProcessingActionOpenValue(
             "ОткрытьЗначение",
             "OpenValue",
-            "Open value "
+            "Открыть значение "
         ),
-        DataCompositionDetailsProcessingActionFilter("Отфильтровать", "Filter", "Filter"),
+        DataCompositionDetailsProcessingActionFilter("Отфильтровать", "Filter", "Отфильтровать"),
         DataCompositionDetailsProcessingActionApplyAppearance(
             "Оформить",
             "ApplyAppearance",
-            "Apply appearance"
+            "Оформить"
         ),
-        DataCompositionDetailsProcessingActionDrillDown("Расшифровать", "DrillDown", "Drill down"),
-        DataCompositionDetailsProcessingActionGroup("Сгруппировать", "Group", "Group"),
-        DataCompositionDetailsProcessingActionOrder("Упорядочить", "Order", "Order"),
+        DataCompositionDetailsProcessingActionDrillDown("Расшифровать", "DrillDown", "Расшифровать"),
+        DataCompositionDetailsProcessingActionGroup("Сгруппировать", "Group", "Сгруппировать"),
+        DataCompositionDetailsProcessingActionOrder("Упорядочить", "Order", "Упорядочить"),
     }
     /// Какие части даты сохраняет `КвалификаторыДаты`.
     DateFractions("ЧастиДаты", "DateFractions") meta "ПеречислениеЧастиДаты" {
-        DateFractionsTime("Время", "Time", "Time"),
-        DateFractionsDate("Дата", "Date", "Date"),
-        DateFractionsDateTime("ДатаВремя", "DateTime", "Date and time"),
+        DateFractionsTime("Время", "Time", "Время"),
+        DateFractionsDate("Дата", "Date", "Дата"),
+        DateFractionsDateTime("ДатаВремя", "DateTime", "Дата и время"),
     }
     /// Ограничение длины для `КвалификаторыСтроки`.
-    AllowedLength("ДопустимаяДлина", "AllowedLength") meta "AllowedLength" {
-        AllowedLengthVariable("Переменная", "Variable", "Variable-length"),
-        AllowedLengthFixed("Фиксированная", "Fixed", "Fixed-length"),
+    AllowedLength("ДопустимаяДлина", "AllowedLength") meta "ПеречислениеДопустимаяДлина" {
+        AllowedLengthVariable("Переменная", "Variable", "Переменная"),
+        AllowedLengthFixed("Фиксированная", "Fixed", "Фиксированная"),
     }
     /// Алгоритм объекта `ХешированиеДанных`.
     HashFunction("ХешФункция", "HashFunction") meta "ПеречислениеХешФункция" {
-        HashCrc32("CRC32", "CRC32", "CRC32 hash function"),
-        HashMd5("MD5", "MD5", "MD5 hash function"),
-        HashPbkdf2Sha256("PBKDF2SHA256", "PBKDF2SHA256", "PBKDF2 SHA-256 hash function"),
-        HashSha1("SHA1", "SHA1", "SHA-1 hash function"),
-        HashSha256("SHA256", "SHA256", "SHA-256 hash function"),
-        HashSha512("SHA512", "SHA512", "SHA-512 hash function"),
+        HashCrc32("CRC32", "CRC32", "Хеш функция CRC32"),
+        HashMd5("MD5", "MD5", "Хеш функция MD5"),
+        HashPbkdf2Sha256("PBKDF2SHA256", "PBKDF2SHA256", "Хеш функция PBKDF2 SHA-256"),
+        HashSha1("SHA1", "SHA1", "Хеш функция SHA1"),
+        HashSha256("SHA256", "SHA256", "Хеш функция SHA256"),
+        HashSha512("SHA512", "SHA512", "Хеш функция SHA512"),
     }
     /// `ПорядокБайтов` — порядок байтов многобайтового целого в
     /// `БуферДвоичныхДанных`. Английское написание `ByteOrder` ИЗМЕРЕНО
@@ -3505,7 +3505,7 @@ system_enums! {
         "РежимВосстановленияПутейФайлаАрхива",
         "ArchiveFileRestoreFilePathsMode"
     )
-        meta "EnumArchiveFileRestoreFilePathsMode" {
+        meta "ПеречислениеРежимВосстановленияПутейФайлаАрхива" {
         // Новый тип архива не равен ZIP-перечислению; измерено на 8.3.27.
         ArchiveRestorePaths("Восстанавливать", "Restore", "Восстанавливать пути"),
         ArchiveDontRestorePaths("НеВосстанавливать", "DontRestore", "Не восстанавливать пути"),
@@ -3623,12 +3623,12 @@ system_enums! {
         ZipNamesOsWithUtf8(
             "КодировкаОСДополнительноUTF8",
             "OSEncodingWithUTF8",
-            "OS encoding with UTF8"
+            "Кодировка ОС дополнительно UTF8"
         ),
     }
     /// Формат сохранения форматированного документа.
     FormattedDocumentFileType("ТипФайлаФорматированногоДокумента", "FormattedDocumentFileType")
-        meta "EnumFormattedDocumentFileType" {
+        meta "ПеречислениеТипФайлаФорматированногоДокумента" {
         /// Форматы файла форматированного документа, измеренные на 1С.
         FormattedDocumentAnsiTxt("ANSITXT", "ANSITXT", "ANSITXT"),
         FormattedDocumentHtml("HTML", "HTML", "HTML"),
@@ -3643,12 +3643,12 @@ system_enums! {
     }
     /// Вид бухгалтерского счёта.
     // Представление типа измерено пробой `measure-account-type.bsl`.
-    AccountType("ВидСчета", "AccountType") meta "AccountType" {
+    AccountType("ВидСчета", "AccountType") meta "ПеречислениеВидСчета" {
         // Полный состав, псевдонимы и представления измерены на 8.3.27.2342
         // пробой `measure-account-type.bsl`; текст не выводится из имени члена.
-        AccountTypeActive("Активный", "Active", "Assets"),
-        AccountTypePassive("Пассивный", "Passive", "Liabilities"),
-        AccountTypeActivePassive("АктивноПассивный", "ActivePassive", "Assets/Liabilities"),
+        AccountTypeActive("Активный", "Active", "Активный"),
+        AccountTypePassive("Пассивный", "Passive", "Пассивный"),
+        AccountTypeActivePassive("АктивноПассивный", "ActivePassive", "Активный/Пассивный"),
     }
     /// Положение картинки внутри элемента графической схемы.
     GraphicalSchemaItemPictureLocation(
@@ -3728,42 +3728,43 @@ system_enums! {
         "CommonAttributeDataSeparation"
     )
         meta "EnumCommonAttributeDataSeparation" global [] {
-        // Значения подтверждены measure-common-attribute-property-enums на 8.3.27.2342.
-        CommonAttributeDataSeparationDontUse("НеИспользовать", "DontUse", "DontUse"),
-        CommonAttributeDataSeparationSeparate("Разделять", "Separate", "Separate"),
+        // Значения подтверждены measure-common-attribute-property-enums на 8.3.27.2342:
+        // представление совпадает с русским идентификатором.
+        CommonAttributeDataSeparationDontUse("НеИспользовать", "DontUse", "НеИспользовать"),
+        CommonAttributeDataSeparationSeparate("Разделять", "Separate", "Разделять"),
     }
     /// АвтоИспользованиеОбщегоРеквизита.
     CommonAttributeAutoUse("АвтоИспользованиеОбщегоРеквизита", "CommonAttributeAutoUse")
         meta "EnumCommonAttributeAutoUse" global [] {
-        CommonAttributeAutoUseDontUse("НеИспользовать", "DontUse", "DontUse"),
-        CommonAttributeAutoUseUse("Использовать", "Use", "Use"),
+        CommonAttributeAutoUseDontUse("НеИспользовать", "DontUse", "НеИспользовать"),
+        CommonAttributeAutoUseUse("Использовать", "Use", "Использовать"),
     }
     /// ИспользованиеОбщегоРеквизита.
     CommonAttributeUse("ИспользованиеОбщегоРеквизита", "CommonAttributeUse")
         meta "EnumCommonAttributeUse" global [] {
-        CommonAttributeUseAuto("Авто", "Auto", "Auto"),
-        CommonAttributeUseDontUse("НеИспользовать", "DontUse", "DontUse"),
-        CommonAttributeUseUse("Использовать", "Use", "Use"),
+        CommonAttributeUseAuto("Авто", "Auto", "Авто"),
+        CommonAttributeUseDontUse("НеИспользовать", "DontUse", "НеИспользовать"),
+        CommonAttributeUseUse("Использовать", "Use", "Использовать"),
     }
     /// Тип узора табличного документа.
     SpreadsheetDocumentPatternType("ТипУзораТабличногоДокумента", "SpreadsheetDocumentPatternType")
-        meta "EnumSpreadsheetDocumentPatternType" {
+        meta "ПеречислениеТипУзораТабличногоДокумента" {
         /// Отсутствие узора табличного документа.
-        SpreadsheetDocumentPatternTypeWithoutPattern("БезУзора", "WithoutPattern", "No pattern"),
+        SpreadsheetDocumentPatternTypeWithoutPattern("БезУзора", "WithoutPattern", "Без узора"),
     }
     /// Тип расположения области построения диаграммы.
     ChartPlotAreaPlacement("РасположениеОбластиПостроенияДиаграммы", "ChartPlotAreaPlacement")
-        meta "EnumChartPlotAreaPlacement" {
+        meta "ПеречислениеРасположениеОбластиПостроенияДиаграммы" {
         /// Расположение области построения по координатам.
         ChartPlotAreaPlacementUseCoordinates(
             "УказываетсяРасположение",
             "UseCoordinates",
-            "Use coordinates"
+            "Указываются координаты"
         ),
     }
     /// Алгоритм подписи токена доступа.
     AccessTokenSignAlgorithm("АлгоритмПодписиТокенаДоступа", "AccessTokenSignAlgorithm")
-        meta "EnumAccessTokenSignAlgorithm" {
+        meta "ПеречислениеАлгоритмПодписиТокенаДоступа" {
         /// Измеренный алгоритм подписи токена доступа HS256.
         AccessTokenSignAlgorithmHs256("HS256", "HS256", "HS256"),
     }
@@ -3954,7 +3955,10 @@ mod tests {
             EnumValue::ClientRunModeManagedApplication.display_text(),
             "Управляемое приложение"
         );
-        assert_eq!(EnumKind::ClientRunMode.meta_ru_name(), "EnumClientRunMode");
+        assert_eq!(
+            EnumKind::ClientRunMode.meta_ru_name(),
+            "ПеречислениеРежимЗапускаКлиентскогоПриложения"
+        );
     }
 
     #[test]
@@ -3965,23 +3969,23 @@ mod tests {
         );
         assert_eq!(
             EnumValue::ConfigurationExtensionScopeDataSeparation.display_text(),
-            "Data separation"
+            "Разделение данных"
         );
         assert_eq!(
             EnumValue::ConfigurationExtensionApplicationIssueSeverityModerate.display_text(),
-            "Moderate"
+            "Обычная"
         );
         assert_eq!(
             EnumKind::ConfigurationExtensionsSource.meta_ru_name(),
-            "EnumConfigurationExtensionsSource"
+            "ПеречислениеИсточникРасширенийКонфигурации"
         );
         assert_eq!(
             EnumKind::ConfigurationExtensionScope.meta_ru_name(),
-            "EnumConfigurationExtensionScope"
+            "ПеречислениеОбластьДействияРасширенияКонфигурации"
         );
         assert_eq!(
             EnumKind::ConfigurationExtensionApplicationIssueSeverity.meta_ru_name(),
-            "EnumConfigurationExtensionApplicationIssueSeverity"
+            "ПеречислениеВажностьПроблемыПримененияРасширенияКонфигурации"
         );
     }
 
@@ -3999,11 +4003,11 @@ mod tests {
             lookup_member(EnumKind::DateFractions, "DateTime"),
             Some(EnumValue::DateFractionsDateTime)
         );
-        assert_eq!(EnumValue::DateFractionsTime.display_text(), "Time");
-        assert_eq!(EnumValue::DateFractionsDate.display_text(), "Date");
+        assert_eq!(EnumValue::DateFractionsTime.display_text(), "Время");
+        assert_eq!(EnumValue::DateFractionsDate.display_text(), "Дата");
         assert_eq!(
             EnumValue::DateFractionsDateTime.display_text(),
-            "Date and time"
+            "Дата и время"
         );
     }
 
@@ -4017,11 +4021,11 @@ mod tests {
             lookup_member(EnumKind::AutoChangeRecord, "Разрешить"),
             Some(EnumValue::AutoChangeRecordAllow)
         );
-        assert_eq!(EnumValue::AutoChangeRecordDeny.display_text(), "Disable");
-        assert_eq!(EnumValue::AutoChangeRecordAllow.display_text(), "Enable");
+        assert_eq!(EnumValue::AutoChangeRecordDeny.display_text(), "Запретить");
+        assert_eq!(EnumValue::AutoChangeRecordAllow.display_text(), "Разрешить");
         assert_eq!(
             EnumKind::AutoChangeRecord.meta_ru_name(),
-            "AutoChangeRecord"
+            "ПеречислениеАвтоРегистрацияИзменений"
         );
     }
 
@@ -4035,12 +4039,15 @@ mod tests {
             lookup_member(EnumKind::DataLockMode, "Исключительный"),
             Some(EnumValue::DataLockModeExclusive)
         );
-        assert_eq!(EnumValue::DataLockModeShared.display_text(), "Shared");
+        assert_eq!(EnumValue::DataLockModeShared.display_text(), "Разделяемый");
         assert_eq!(
             EnumValue::DataLockModeExclusive.display_text(),
-            "Exceptional"
+            "Исключительный"
         );
-        assert_eq!(EnumKind::DataLockMode.meta_ru_name(), "DataLockMode");
+        assert_eq!(
+            EnumKind::DataLockMode.meta_ru_name(),
+            "ПеречислениеРежимБлокировкиДанных"
+        );
     }
 
     /// Составные члены потоковых перечислений печатаются раздельно и со

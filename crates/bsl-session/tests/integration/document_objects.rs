@@ -52,10 +52,13 @@ fn factory_attributes(
 }
 
 fn session(factory: &SessionFactory) -> Session {
+    // Окружение эталонов: русский интерфейс и локаль сеанса.
     factory
         .open(
             Principal::new("user", "Тест", vec![]),
-            SessionResources::new(Box::new(()), 1),
+            SessionResources::new(Box::new(()), 1)
+                .with_system_language("ru")
+                .with_locale_code("ru"),
         )
         .unwrap()
 }
@@ -79,17 +82,6 @@ fn replay(session: &mut Session, source: &str) -> String {
         .map(|value| format_value(value, None).unwrap())
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-fn normalized_native_text(text: &str) -> String {
-    // Эталон снят с английской локалью; сравниваются значения свойств.
-    text.replace('\u{a0}', "")
-        .replace("Да", "Yes")
-        .replace("Нет", "No")
-        .replace("Строка", "String")
-        .replace("Число", "Number")
-        .replace("Неопределено", "Undefined")
-        .replace("Не определено", "Undefined")
 }
 
 #[test]
@@ -155,14 +147,8 @@ fn measured_document_body_and_assignment_match_native_oracles() {
             )),
         );
         let mut session = session(&factory);
-        assert_eq!(
-            normalized_native_text(&replay(&mut session, body)),
-            body_oracle.trim()
-        );
-        assert_eq!(
-            normalized_native_text(&replay(&mut session, assignment)),
-            assignment_oracle.trim()
-        );
+        assert_eq!(replay(&mut session, body), body_oracle.trim());
+        assert_eq!(replay(&mut session, assignment), assignment_oracle.trim());
     }
 }
 
@@ -256,7 +242,7 @@ fn additional_number_and_date_conversions_match_native() {
         ),
     );
     assert_eq!(
-        normalized_native_text(&actual),
+        actual,
         include_str!(
             "../../../../tests/conformance/measure/1c/measure-document-conversion-number.platform.txt"
         )
@@ -369,10 +355,7 @@ fn boolean_and_datetime_attributes_match_native_filling_and_conversion() {
             ),
         ),
     ] {
-        assert_eq!(
-            normalized_native_text(&replay(&mut session(&factory), script)),
-            oracle.trim()
-        );
+        assert_eq!(replay(&mut session(&factory), script), oracle.trim());
     }
 }
 
@@ -463,10 +446,7 @@ fn catalog_reference_and_string_union_attributes_match_native() {
     let oracle = include_str!(
         "../../../../tests/conformance/measure/1c/measure-document-fill-references.platform.txt"
     );
-    assert_eq!(
-        normalized_native_text(&replay(&mut session(&factory), script)),
-        oracle.trim()
-    );
+    assert_eq!(replay(&mut session(&factory), script), oracle.trim());
 }
 
 #[test]
@@ -618,14 +598,8 @@ fn document_exchange_and_additional_properties_match_native() {
         "../../../../tests/conformance/measure/1c/measure-document-object-context.platform.txt"
     );
     let mut first = session(&factory);
-    assert_eq!(
-        normalized_native_text(&replay(&mut first, script)),
-        oracle.trim()
-    );
-    assert_eq!(
-        normalized_native_text(&replay(&mut session(&factory), script)),
-        oracle.trim()
-    );
+    assert_eq!(replay(&mut first, script), oracle.trim());
+    assert_eq!(replay(&mut session(&factory), script), oracle.trim());
 }
 
 #[test]
@@ -656,13 +630,7 @@ fn filling_event_data_and_text_match_native() {
             Some(source),
         );
         let actual = replay(&mut session(&factory), script);
-        assert_eq!(
-            normalized_native_text(&actual)
-                .replace("Не определено", "Undefined")
-                .replace("Неопределено", "Undefined")
-                .replace("Структура", "Structure"),
-            oracle.trim()
-        );
+        assert_eq!(actual, oracle.trim());
     }
 }
 
@@ -724,9 +692,13 @@ fn enumeration_document_factory(configured_default: bool) -> SessionFactory {
             number_length: 9,
         });
     let members = vec![
-        bsl_orm::ConfigurationEnumValue::new("enum", "low", "Низкая"),
-        bsl_orm::ConfigurationEnumValue::new("enum", "normal", "Обычная"),
-        bsl_orm::ConfigurationEnumValue::new("enum", "high", "Высокая"),
+        bsl_orm::ConfigurationEnumValue::new("enum", "low", "Низкая")
+            .with_synonym("ru", "Первое значение"),
+        // Синоним из XML пробы `document-attribute-enum.xml`.
+        bsl_orm::ConfigurationEnumValue::new("enum", "normal", "Обычная")
+            .with_synonym("ru", "Второе значение"),
+        bsl_orm::ConfigurationEnumValue::new("enum", "high", "Высокая")
+            .with_synonym("ru", "Третье значение"),
     ];
     let declarations = Arc::new(
         MetadataCatalog::new("document-enum-test", vec![target.clone(), document.clone()])
@@ -783,10 +755,25 @@ fn enumeration_document_factory(configured_default: bool) -> SessionFactory {
     let catalog = Arc::new(
         MetadataCatalog::new(
             "document-enum-test",
-            vec![target, document.with_document_attributes(attributes)],
+            vec![
+                target,
+                document.with_document_attributes(attributes),
+                MetadataObject::new("language-ru", "Русский", MetadataKind::Language)
+                    .with_string_property("КодЯзыка", "ru"),
+            ],
         )
         .unwrap()
         .with_enumeration_values(members)
+        .unwrap()
+        .with_configuration(
+            "Проба",
+            "1.0",
+            bsl_orm::ScriptVariant::Russian,
+            bsl_orm::CompatibilityMode::DontUse,
+            Vec::<String>::new(),
+        )
+        .unwrap()
+        .with_primary_language("language-ru")
         .unwrap(),
     );
     let code = ConfigurationCodeSnapshot::new("document-enum-test", vec![ConfigurationModule::new(
@@ -824,10 +811,7 @@ fn enumeration_and_string_union_document_attributes_match_native() {
             ),
         ),
     ] {
-        assert_eq!(
-            normalized_native_text(&replay(&mut session(&factory), script)),
-            oracle.trim()
-        );
+        assert_eq!(replay(&mut session(&factory), script), oracle.trim());
     }
 }
 
@@ -840,14 +824,8 @@ fn configured_enumeration_filling_value_matches_native_through_the_graph() {
     let oracle = include_str!(
         "../../../../tests/conformance/measure/1c/measure-document-fill-enumerations-default.platform.txt"
     );
-    assert_eq!(
-        normalized_native_text(&replay(&mut session(&factory), script)),
-        oracle.trim()
-    );
-    assert_eq!(
-        normalized_native_text(&replay(&mut session(&factory), script)),
-        oracle.trim()
-    );
+    assert_eq!(replay(&mut session(&factory), script), oracle.trim());
+    assert_eq!(replay(&mut session(&factory), script), oracle.trim());
 }
 
 #[test]
@@ -933,10 +911,7 @@ fn document_reference_and_string_union_attributes_match_native() {
             ),
         ),
     ] {
-        assert_eq!(
-            normalized_native_text(&replay(&mut session(&factory), script)),
-            oracle.trim()
-        );
+        assert_eq!(replay(&mut session(&factory), script), oracle.trim());
     }
 }
 
@@ -1035,10 +1010,7 @@ fn mixed_document_and_catalog_reference_attributes_match_native() {
         ),
     ] {
         let factory = mixed_document_factory(reversed);
-        assert_eq!(
-            normalized_native_text(&replay(&mut session(&factory), script)),
-            oracle.trim()
-        );
+        assert_eq!(replay(&mut session(&factory), script), oracle.trim());
     }
 }
 
@@ -1054,12 +1026,13 @@ fn all_unf_event_basis_reference_members_match_native() {
         .map(|part| {
             let value = part.split_once("</v8:Type>").unwrap().0;
             let (kind, name) = value.strip_prefix("cfg:").unwrap().split_once('.').unwrap();
-            let kind = match kind {
-                "DocumentRef" => MetadataKind::Document,
-                "CatalogRef" => MetadataKind::Catalog,
+            // Синонимы шаблонов, из которых проба собирает объекты.
+            let (kind, synonym) = match kind {
+                "DocumentRef" => (MetadataKind::Document, "Проба документа"),
+                "CatalogRef" => (MetadataKind::Catalog, "Замер временных таблиц"),
                 other => panic!("неожиданный тип эталона: {other}"),
             };
-            MetadataObject::new(name, name, kind)
+            MetadataObject::new(name, name, kind).with_reference_type_presentation(synonym)
         })
         .collect();
     assert_eq!(targets.len(), 56);
@@ -1160,10 +1133,7 @@ fn value_storage_document_attribute_matches_native() {
             ),
         ),
     ] {
-        assert_eq!(
-            normalized_native_text(&replay(&mut session(&factory), script)),
-            oracle.trim()
-        );
+        assert_eq!(replay(&mut session(&factory), script), oracle.trim());
     }
 }
 

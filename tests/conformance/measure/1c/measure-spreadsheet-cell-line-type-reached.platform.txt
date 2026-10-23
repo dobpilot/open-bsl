@@ -1,7 +1,7 @@
-LARGE	LargeDashed	PASS
-DOUBLE	Double	PASS
-NONE	None	PASS
-THIN	ThinDashed	PASS
-SOLID	Solid	PASS
-DOTTED	Dotted	PASS
-TYPE	SpreadsheetDocumentCellLineType
+LARGE	Большой пунктир	PASS
+DOUBLE	Двойная	PASS
+NONE	Нет линии	PASS
+THIN	Редкий пунктир	PASS
+SOLID	Сплошная	PASS
+DOTTED	Точечная	PASS
+TYPE	ТипЛинииЯчейкиТабличногоДокумента

@@ -1,7 +1,7 @@
-ROOT	EnumFormButtonType
-TYPE	FormButtonType
-HYPERLINK	Hyperlink
-COMMAND_HYPERLINK	Command bar hyperlink
-COMMAND_BUTTON	Command bar button
-USUAL	Common button
+ROOT	ПеречислениеВидКнопкиФормы
+TYPE	ВидКнопкиФормы
+HYPERLINK	Гиперссылка
+COMMAND_HYPERLINK	Гиперссылка командной панели
+COMMAND_BUTTON	Кнопка командной панели
+USUAL	Обычная кнопка
 ALIASES	PASS

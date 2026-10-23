@@ -1,5 +1,5 @@
 SUBSCRIBER.BARE.BEGIN	1
-SUBSCRIBER.BARE.TEXT	EnumDeliverableNotificationSubscriberType
-SUBSCRIBER.BARE.TYPE	EnumDeliverableNotificationSubscriberType
-SUBSCRIBER.BARE.ALIAS	Yes
+SUBSCRIBER.BARE.TEXT	ПеречислениеТипПодписчикаДоставляемыхУведомлений
+SUBSCRIBER.BARE.TYPE	ПеречислениеТипПодписчикаДоставляемыхУведомлений
+SUBSCRIBER.BARE.ALIAS	Да
 SUBSCRIBER.BARE.END	1

@@ -1,5 +1,5 @@
-document.fill.three.undefined=Undefined:Undefined:[]:Yes:[handler]:No:No:No
-document.fill.three.null=Null:Undefined:[]:Yes:[handler]:No:No:No
-document.fill.three.number=Number:Undefined:[]:Yes:[handler]:No:No:No
-document.fill.three.structure=Structure:Undefined:[]:Yes:[handler]:No:No:No
-document.fill.three.disabled=Structure:Undefined:[]:Yes:[handler]:No:No:No
+document.fill.three.undefined=Не определено:Не определено:[]:Да:[handler]:Нет:Нет:Нет
+document.fill.three.null=Null:Не определено:[]:Да:[handler]:Нет:Нет:Нет
+document.fill.three.number=Число:Не определено:[]:Да:[handler]:Нет:Нет:Нет
+document.fill.three.structure=Структура:Не определено:[]:Да:[handler]:Нет:Нет:Нет
+document.fill.three.disabled=Структура:Не определено:[]:Да:[handler]:Нет:Нет:Нет

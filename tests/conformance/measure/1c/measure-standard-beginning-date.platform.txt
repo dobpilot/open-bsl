@@ -1,38 +1,38 @@
 file.begin	standard-beginning-date-1
-SBDV.THIS_DAY	Beginning of this day
-SBDV.THIS_WEEK	Beginning of this week
-SBDV.THIS_TEN_DAYS	Beginning of this ten-day period
-SBDV.THIS_MONTH	Beginning of this month
-SBDV.THIS_QUARTER	Beginning of this quarter
-SBDV.THIS_HALF_YEAR	Beginning of this half year
-SBDV.THIS_YEAR	Beginning of this year
-SBDV.LAST_DAY	Beginning of yesterday
-SBDV.LAST_WEEK	Beginning of last week
-SBDV.LAST_TEN_DAYS	Beginning of last ten-day period
-SBDV.LAST_MONTH	Beginning of last month
-SBDV.LAST_QUARTER	Beginning of last quarter
-SBDV.LAST_HALF_YEAR	Beginning of last half year
-SBDV.LAST_YEAR	Beginning of last year
-SBDV.NEXT_DAY	Beginning of tomorrow
-SBDV.NEXT_WEEK	Beginning of next week
-SBDV.NEXT_TEN_DAYS	Beginning of next ten-day period
-SBDV.NEXT_MONTH	Beginning of next month
-SBDV.NEXT_QUARTER	Beginning of next quarter
-SBDV.NEXT_HALF_YEAR	Beginning of next half year
-SBDV.NEXT_YEAR	Beginning of next year
-SBDV.CUSTOM	Custom date
-SBDV.TYPE	StandardBeginningDateVariant
-SBDV.ENGLISH_ALIAS	Custom date
-SBD.DEFAULT.VARIANT	Custom date
+SBDV.THIS_DAY	Начало этого дня
+SBDV.THIS_WEEK	Начало этой недели
+SBDV.THIS_TEN_DAYS	Начало этой декады
+SBDV.THIS_MONTH	Начало этого месяца
+SBDV.THIS_QUARTER	Начало этого квартала
+SBDV.THIS_HALF_YEAR	Начало этого полугодия
+SBDV.THIS_YEAR	Начало этого года
+SBDV.LAST_DAY	Начало вчерашнего дня
+SBDV.LAST_WEEK	Начало прошлой недели
+SBDV.LAST_TEN_DAYS	Начало прошлой декады
+SBDV.LAST_MONTH	Начало прошлого месяца
+SBDV.LAST_QUARTER	Начало прошлого квартала
+SBDV.LAST_HALF_YEAR	Начало прошлого полугодия
+SBDV.LAST_YEAR	Начало прошлого года
+SBDV.NEXT_DAY	Начало завтрашнего дня
+SBDV.NEXT_WEEK	Начало следующей недели
+SBDV.NEXT_TEN_DAYS	Начало следующей декады
+SBDV.NEXT_MONTH	Начало следующего месяца
+SBDV.NEXT_QUARTER	Начало следующего квартала
+SBDV.NEXT_HALF_YEAR	Начало следующего полугодия
+SBDV.NEXT_YEAR	Начало следующего года
+SBDV.CUSTOM	Произвольная дата
+SBDV.TYPE	ВариантСтандартнойДатыНачала
+SBDV.ENGLISH_ALIAS	Произвольная дата
+SBD.DEFAULT.VARIANT	Произвольная дата
 SBD.DEFAULT.DATE	
-SBD.DEFAULT.STRING	1/1/0001 12:00:00 AM
-SBD.DEFAULT.TYPE	Standard beginning date
-SBD.DATE.VARIANT	Custom date
+SBD.DEFAULT.STRING	01.01.0001 0:00:00
+SBD.DEFAULT.TYPE	Стандартная дата начала
+SBD.DATE.VARIANT	Произвольная дата
 SBD.DATE.VALUE	20240203040506
-SBD.VARIANT.VALUE	Beginning of this day
-SBD.VARIANT.DATE	Yes
-SBD.SET_DATE.VARIANT	Custom date
+SBD.VARIANT.VALUE	Начало этого дня
+SBD.VARIANT.DATE	Да
+SBD.SET_DATE.VARIANT	Произвольная дата
 SBD.SET_DATE.VALUE	20240203040506
-SBD.SET_VARIANT.VALUE	Beginning of this month
-SBD.SET_VARIANT.DATE	Yes
+SBD.SET_VARIANT.VALUE	Начало этого месяца
+SBD.SET_VARIANT.DATE	Да
 file.end	standard-beginning-date-1

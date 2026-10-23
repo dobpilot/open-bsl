@@ -1,16 +1,16 @@
-Opening balance
-Closing balance
-None
-Opening balance
-Closing balance
-None
-DataCompositionBalanceType
-EnumDataCompositionBalanceType
-DataCompositionBalanceType
-DataCompositionBalanceType
+Начальный остаток
+Конечный остаток
+Нет
+Начальный остаток
+Конечный остаток
+Нет
+ТипОстаткаКомпоновкиДанных
+ПеречислениеТипОстаткаКомпоновкиДанных
+ТипОстаткаКомпоновкиДанных
+ТипОстаткаКомпоновкиДанных
 1
 1
 1
 0
 0
-Opening balance
+Начальный остаток

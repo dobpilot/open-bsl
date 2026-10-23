@@ -1,9 +1,9 @@
-accounting.debit.presentation	Debit
-accounting.credit.presentation	Credit
-accounting.debit.type	AccountingRecordType
-accounting.credit.type	AccountingRecordType
+accounting.debit.presentation	Дебет
+accounting.credit.presentation	Кредит
+accounting.debit.type	ВидДвиженияБухгалтерии
+accounting.credit.type	ВидДвиженияБухгалтерии
 accounting.debit.alias	1
 accounting.credit.alias	1
 accounting.distinct	1
-accounting.bare.type	EnumAccountingRecordType
+accounting.bare.type	ПеречислениеВидДвиженияБухгалтерии
 accounting.lookup.alias	1

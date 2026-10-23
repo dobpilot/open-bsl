@@ -5,17 +5,17 @@ fn data_composition_chart_legend_placement_matches_native_aliases_types_and_pres
     let engine = Engine::builder().build().unwrap();
     let mut state = engine.new_state();
     for (russian, english, presentation) in [
-        ("Нет", "None", "None"),
-        ("Лево", "Left", "Left"),
-        ("Право", "Right", "Right"),
-        ("Верх", "Top", "Top"),
-        ("Низ", "Bottom", "Bottom"),
+        ("Нет", "None", "Нет"),
+        ("Лево", "Left", "Лево"),
+        ("Право", "Right", "Право"),
+        ("Верх", "Top", "Верх"),
+        ("Низ", "Bottom", "Низ"),
     ] {
         let source = format!(
             "ЗначениеПробы = РасположениеЛегендыДиаграммыКомпоновкиДанных.{russian};
             Возврат ЗначениеПробы = DataCompositionChartLegendPlacement.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"DataCompositionChartLegendPlacement\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"РасположениеЛегендыДиаграммыКомпоновкиДанных\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"DataCompositionChartLegendPlacement\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"РасположениеЛегендыДиаграммыКомпоновкиДанных\");"
         );
@@ -25,9 +25,9 @@ fn data_composition_chart_legend_placement_matches_native_aliases_types_and_pres
         state
             .exec(
                 "Возврат Строка(РасположениеЛегендыДиаграммыКомпоновкиДанных)
-                    = \"EnumDataCompositionChartLegendPlacement\"
+                    = \"ПеречислениеРасположениеЛегендыДиаграммыКомпоновкиДанных\"
                     И Строка(ТипЗнч(DataCompositionChartLegendPlacement))
-                    = \"EnumDataCompositionChartLegendPlacement\";",
+                    = \"ПеречислениеРасположениеЛегендыДиаграммыКомпоновкиДанных\";",
             )
             .unwrap(),
         Value::Boolean(true)

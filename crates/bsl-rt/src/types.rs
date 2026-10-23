@@ -1596,307 +1596,241 @@ const NAMES: &[(TypeId, &str, &str)] = &[
 
 /// Типы, чьё ПРЕДСТАВЛЕНИЕ не совпадает с именем, по которому тип ищется.
 ///
-/// У перечислений режима запуска и расширений платформа печатает английское
-/// имя типа даже в русском интерфейсе. Значения измерены на 8.3.27.2342.
+/// Представления сняты в закреплённом окружении замеров (русский интерфейс и
+/// вариант языка): `tests/conformance/measure/1c/measure-presentations-ru.platform.txt`.
+/// Строки без пробы в ней оставлены прежними измерениями.
 const DISPLAY: &[(TypeId, &str)] = &[
-    (TypeId::AccessTokenSignAlgorithm, "AccessTokenSignAlgorithm"),
+    // Измерен в `measure-extension-purpose-presentations`.
+    (TypeId::CompatibilityMode, "Режим совместимости"),
+    // Измерены в `measure-common-attribute-property-enums`.
     (
-        TypeId::DataCompositionChartLegendPlacement,
-        "DataCompositionChartLegendPlacement",
+        TypeId::CommonAttributeDataSeparation,
+        "Разделение данных общего реквизита",
     ),
     (
-        TypeId::ChartValuesBySeriesConnectionType,
-        "ChartValuesBySeriesConnectionType",
+        TypeId::CommonAttributeAutoUse,
+        "Автоматическое использование общего реквизита",
     ),
-    (
-        TypeId::DataCompositionDataSetsLinkType,
-        "DataCompositionDataSetsLinkType",
-    ),
-    (
-        TypeId::FormattedDocumentItemType,
-        "FormattedDocumentItemType",
-    ),
-    // Представление подтверждено нативной пробой бухгалтерского движения
-    // (`docs/research/fixtures/accounting-record-type/measure.platform.txt`).
-    (TypeId::AccountingRecordType, "AccountingRecordType"),
-    (
-        TypeId::TextPositionRelativeToPicture,
-        "TextPositionRelativeToPicture",
-    ),
-    // Английское представление подтверждено нативным контролем форматов
-    // (`docs/research/fixtures/formatted-document-file-type/measure.platform.txt`).
-    (
-        TypeId::FormattedDocumentFileType,
-        "FormattedDocumentFileType",
-    ),
-    // ИЗМЕРЕНО на 8.3.27 для `Картинка` и `Прямоугольник`.
-    (TypeId::DrawingKind, "SpreadsheetDocumentDrawingType"),
-    // Представление измерено в `measure-time-scale-day-format.bsl`.
-    (TypeId::TimeScaleDayFormat, "TimeScaleDayFormat"),
-    // Представление измерено в `measure-time-scale-unit-type.bsl`.
-    (TypeId::TimeScaleUnitType, "TimeScaleUnitType"),
-    // Представление измерено в `measure-gantt-vertical-stretch.bsl`.
-    (
-        TypeId::GanttChartVerticalStretch,
-        "GanttChartVerticalStretch",
-    ),
-    // Представление измерено в `measure-chart-legend-placement.bsl`.
-    (TypeId::ChartLegendPlacement, "ChartLegendPlacement"),
-    // Представление измерено в `measure-gantt-interval-representation.bsl`.
-    (
-        TypeId::GanttChartIntervalRepresentation,
-        "GanttChartIntervalRepresentation",
-    ),
-    (TypeId::CompatibilityMode, "Compatibility mode"),
-    (TypeId::ClientRunMode, "ClientRunMode"),
-    (
-        TypeId::ApplicationFormsOpenningMode,
-        "ApplicationFormsOpenningMode",
-    ),
-    (
-        TypeId::ClientApplicationInterfaceVariant,
-        "ClientApplicationInterfaceVariant",
-    ),
-    (
-        TypeId::SectionsPanelRepresentation,
-        "SectionsPanelRepresentation",
-    ),
-    (
-        TypeId::ConfigurationExtensionsSource,
-        "ConfigurationExtensionsSource",
-    ),
-    (
-        TypeId::ConfigurationExtensionScope,
-        "ConfigurationExtensionScope",
-    ),
-    // Двухстрочное представление измерено в `configuration-extension-purpose`.
+    (TypeId::CommonAttributeUse, "Использование общего реквизита"),
+    // Двухстрочное представление измерено в `measure-extension-purpose-presentations`.
     (
         TypeId::ConfigurationExtensionPurpose,
-        "Configuration extension purpose\nConfiguration extension purpose",
+        "Назначение расширения конфигурации\nНазначение расширения конфигурации",
     ),
-    (
-        TypeId::ConfigurationExtensionApplicationIssueSeverity,
-        "ConfigurationExtensionApplicationIssueSeverity",
-    ),
-    (TypeId::EventLogLevel, "EventLogLevel"),
-    (
-        TypeId::EventLogEntryTransactionMode,
-        "EventLogEntryTransactionMode",
-    ),
-    (
-        TypeId::EventLogEntryTransactionStatus,
-        "EventLogEntryTransactionStatus",
-    ),
-    (TypeId::ErrorReportingMode, "ErrorReportingMode"),
-    (TypeId::DataItemSend, "DataItemSend"),
-    (TypeId::DataItemReceive, "DataItemReceive"),
-    (TypeId::PredefinedDataUpdate, "PredefinedDataUpdate"),
-    (TypeId::DocumentPostingMode, "DocumentPostingMode"),
-    (TypeId::DocumentWriteMode, "DocumentWriteMode"),
-    (TypeId::QueryResultIteration, "QueryResultIteration"),
-    (TypeId::QueryRecordType, "QueryRecordType"),
-    (TypeId::DataLockMode, "DataLockMode"),
-    // Представление измерено пробой `measure-account-type.bsl`.
-    (TypeId::AccountType, "AccountType"),
-    (TypeId::RoundMode, "RoundMode"),
-    (TypeId::NumericValueType, "NumericValueType"),
-    (
-        TypeId::ErrorMessageDisplayVariant,
-        "ErrorMessageDisplayVariant",
-    ),
-    (TypeId::CommandParameterUseMode, "CommandParameterUseMode"),
-    (
-        TypeId::SearchStringModeOnInputByString,
-        "SearchStringModeOnInputByString",
-    ),
-    (
-        TypeId::RepresentableDocumentBatchFileType,
-        "RepresentableDocumentBatchFileType",
-    ),
-    (TypeId::FontType, "FontType"),
-    (TypeId::PictureType, "PictureType"),
-    (
-        TypeId::FullTextSearchMetadataUse,
-        "FullTextSearchMetadataUse",
-    ),
-    (TypeId::LinkedValueChangeMode, "LinkedValueChangeMode"),
-    (
-        TypeId::InternetMailAttachmentEncodingMode,
-        "InternetMailAttachmentEncodingMode",
-    ),
-    (
-        TypeId::AutoSaveFormDataInSettings,
-        "AutoSaveFormDataInSettings",
-    ),
-    (TypeId::PDFDocumentFileType, "PDFDocumentFileType"),
-    (TypeId::AllowedSign, "AllowedSign"),
-    (TypeId::AutoChangeRecord, "AutoChangeRecord"),
-    (TypeId::ButtonRepresentation, "ButtonRepresentation"),
-    (
-        TypeId::PasswordPolicyComplianceCheckResult,
-        "PasswordPolicyComplianceCheckResult",
-    ),
-    (TypeId::TableRepresentation, "TableRepresentation"),
-    (TypeId::FormFieldType, "FormFieldType"),
-    (TypeId::FormGroupType, "FormGroupType"),
-    (TypeId::ItemHorizontalLocation, "ItemHorizontalLocation"),
-    (TypeId::ItemVerticalAlign, "ItemVerticalAlign"),
-    (TypeId::FormItemSpacing, "FormItemSpacing"),
-    (
-        TypeId::ButtonShapeRepresentation,
-        "ButtonShapeRepresentation",
-    ),
-    (TypeId::UsualGroupRepresentation, "UsualGroupRepresentation"),
-    (TypeId::DisplayImportance, "DisplayImportance"),
-    (TypeId::PictureFormat, "PictureFormat"),
-    (TypeId::InternetMailTextType, "InternetMailTextType"),
-    (
-        TypeId::InternetMailNonAsciiEncodingMode,
-        "InternetMailMessageNonASCIISymbolsEncodingMode",
-    ),
-    (
-        TypeId::InternetMailMessageImportance,
-        "InternetMailMessageImportance",
-    ),
-    (TypeId::AdditionalShowMode, "AdditionalShowMode"),
     (
         TypeId::DataCompositionSortDirection,
-        "DataCompositionSortDirection",
+        "НаправлениеСортировкиКомпоновкиДанных",
     ),
-    (TypeId::ColorDepth, "ColorDepth"),
-    (TypeId::ToolTipRepresentation, "ToolTipRepresentation"),
-    (TypeId::ClientApplicationType, "ClientApplicationType"),
-    (TypeId::DataCompositionGroupType, "DataCompositionGroupType"),
+    (TypeId::ColorDepth, "ГлубинаЦвета"),
+    (TypeId::ToolTipRepresentation, "ОтображениеПодсказки"),
+    (TypeId::ClientApplicationType, "ТипКлиентскогоПриложения"),
     (
-        TypeId::DataCompositionGroupPlacement,
-        "DataCompositionGroupPlacement",
+        TypeId::DataCompositionGroupType,
+        "ТипГруппировкиКомпоновкиДанных",
     ),
-    (TypeId::FormDecorationType, "FormDecorationType"),
-    (TypeId::RadioButtonType, "RadioButtonType"),
-    (TypeId::ChildFormItemsGroup, "ChildFormItemsGroup"),
-    (TypeId::ChoiceHistoryOnInput, "ChoiceHistoryOnInput"),
+    (TypeId::FormDecorationType, "ВидДекорацииФормы"),
+    (TypeId::RadioButtonType, "ВидПереключателя"),
+    (
+        TypeId::ChildFormItemsGroup,
+        "ГруппировкаПодчиненныхЭлементовФормы",
+    ),
+    (TypeId::ChoiceHistoryOnInput, "ИсторияВыбораПриВводе"),
     (
         TypeId::ChoiceButtonRepresentation,
-        "ChoiceButtonRepresentation",
+        "ОтображениеКнопкиВыбора",
     ),
     (
         TypeId::UsualGroupControlRepresentation,
-        "UsualGroupControlRepresentation",
+        "ОтображениеУправленияОбычнойГруппы",
     ),
-    (TypeId::UsualGroupBehavior, "UsualGroupBehavior"),
-    (TypeId::FormItemTitleLocation, "FormItemTitleLocation"),
+    (TypeId::UsualGroupBehavior, "ПоведениеОбычнойГруппы"),
+    (
+        TypeId::FormItemTitleLocation,
+        "ПоложениеЗаголовкаЭлементаФормы",
+    ),
     (
         TypeId::ButtonLocationInCommandBar,
-        "ButtonLocationInCommandBar",
+        "ПоложениеКнопкиВКоманднойПанели",
     ),
     (
         TypeId::DataCompositionResourcesPlacement,
-        "DataCompositionResourcesPlacement",
+        "РасположениеРесурсовКомпоновкиДанных",
     ),
     (
         TypeId::DataCompositionPeriodType,
-        "DataCompositionPeriodType",
+        "ТипПериодаКомпоновкиДанных",
     ),
     (
         TypeId::DataCompositionPeriodAdditionType,
-        "DataCompositionPeriodAdditionType",
+        "ТипДополненияПериодаКомпоновкиДанных",
     ),
     (
         TypeId::DataCompositionGroupFieldsPlacement,
-        "DataCompositionGroupFieldsPlacement",
+        "РасположениеПолейГруппировкиКомпоновкиДанных",
     ),
     (
         TypeId::DataCompositionAttributesPlacement,
-        "DataCompositionAttributesPlacement",
+        "РасположениеРеквизитовКомпоновкиДанных",
+    ),
+    (TypeId::ValueTable, "Таблица значений"),
+    (
+        TypeId::ValueTableColumns,
+        "Коллекция колонок таблицы значений",
+    ),
+    (TypeId::ValueTableColumn, "Колонка таблицы значений"),
+    (TypeId::ValueTableRow, "Строка таблицы значений"),
+    (TypeId::TypeDescription, "Описание типов"),
+    (TypeId::KeyAndValue, "Ключ и значение"),
+    (TypeId::StringEncodingMethod, "СпособКодированияСтроки"),
+    (TypeId::SortDirection, "НаправлениеСортировки"),
+    (TypeId::UseOutput, "ИспользованиеВывода"),
+    (TypeId::FormPagesRepresentation, "ОтображениеСтраницФормы"),
+    (
+        TypeId::FormButtonPictureLocation,
+        "ПоложениеКартинкиКнопкиФормы",
     ),
     (
-        TypeId::ServerTlsCertificateRevocationCheckMode,
-        "ServerTLSCertificateRevocationCheckMode",
+        TypeId::SpreadsheetDocumentDrawingLineType,
+        "ТипЛинииРисункаТабличногоДокумента",
+    ),
+    (TypeId::CheckBoxType, "ВидФлажка"),
+    (
+        TypeId::DeliverableNotificationSubscriberType,
+        "ТипПодписчикаДоставляемыхУведомлений",
+    ),
+    (TypeId::SoundAlert, "ЗвуковоеОповещение"),
+    (TypeId::ThroughAlign, "СквозноеВыравнивание"),
+    (TypeId::ButtonShape, "ФигураКнопки"),
+    (
+        TypeId::DataCompositionFilterItemsGroupType,
+        "ТипГруппыЭлементовОтбораКомпоновкиДанных",
+    ),
+    (TypeId::Key, "Клавиша"),
+    (TypeId::ControlBorderType, "ТипРамкиЭлементаУправления"),
+    (TypeId::ColorType, "ВидЦвета"),
+    (
+        TypeId::SpreadsheetDocumentCellLineType,
+        "ТипЛинииЯчейкиТабличногоДокумента",
     ),
     (
-        TypeId::DataCompositionFilterApplicationType,
-        "DataCompositionFilterApplicationType",
+        TypeId::CryptoCertificateStoreType,
+        "ТипХранилищаСертификатовКриптографии",
     ),
     (
-        TypeId::DataCompositionSettingsItemState,
-        "DataCompositionSettingsItemState",
+        TypeId::InternetMailTextProcessing,
+        "ОбработкаТекстаИнтернетПочтовогоСообщения",
+    ),
+    (TypeId::DuplexPrintingType, "ТипДвустороннейПечати"),
+    (TypeId::FileDragMode, "СпособПеретаскиванияФайлов"),
+    (TypeId::ButtonGroupRepresentation, "ОтображениеГруппыКнопок"),
+    (TypeId::StandardPeriodVariant, "ВариантСтандартногоПериода"),
+    (
+        TypeId::TableHeightControlVariant,
+        "ВариантУправленияВысотойТаблицы",
+    ),
+    (TypeId::FullTextSearchVersion, "ВерсияПолнотекстовогоПоиска"),
+    (TypeId::VerticalFormScroll, "ВертикальнаяПрокруткаФормы"),
+    (TypeId::VerticalAlign, "ВертикальноеПоложение"),
+    (TypeId::AccumulationRecordType, "ВидДвиженияНакопления"),
+    (TypeId::HorizontalAlign, "ГоризонтальноеПоложение"),
+    (TypeId::ColumnsGroup, "ГруппировкаКолонок"),
+    (TypeId::AllowedMessageNo, "ДопустимыйНомерСообщения"),
+    (TypeId::FoldersAndItemsUse, "ИспользованиеГруппИЭлементов"),
+    (
+        TypeId::DataCompositionParameterUse,
+        "ИспользованиеПараметраКомпоновкиДанных",
+    ),
+    (TypeId::ScrollBarUse, "ИспользованиеПолосыПрокрутки"),
+    (TypeId::CurrentRowUse, "ИспользованиеТекущейСтроки"),
+    (TypeId::InitialTreeView, "НачальноеОтображениеДерева"),
+    (TypeId::UpdateOnDataChange, "ОбновлениеПриИзмененииДанных"),
+    (TypeId::EditTextUpdate, "ОбновлениеТекстаРедактирования"),
+    (
+        TypeId::WarningOnEditRepresentation,
+        "ОтображениеПредупрежденияПриРедактировании",
+    ),
+    (TypeId::SearchInTableOnInput, "ПоискВТаблицеПриВводе"),
+    (
+        TypeId::FormCommandBarLabelLocation,
+        "ПоложениеКоманднойПанелиФормы",
     ),
     (
-        TypeId::DataCompositionSettingsItemViewMode,
-        "DataCompositionSettingsItemViewMode",
+        TypeId::FormItemCommandBarLabelLocation,
+        "ПоложениеКоманднойПанелиЭлементаФормы",
     ),
     (
-        TypeId::DataCompositionSettingsRefreshMethod,
-        "DataCompositionSettingsRefreshMethod",
+        TypeId::GaugeChartValuesScaleLabelsLocation,
+        "ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы",
+    ),
+    (TypeId::ViewStatusLocation, "ПоложениеСостоянияПросмотра"),
+    (TypeId::SearchStringLocation, "ПоложениеСтрокиПоиска"),
+    (TypeId::SearchControlLocation, "ПоложениеУправленияПоиском"),
+    (TypeId::AutoTimeMode, "РежимАвтоВремя"),
+    (TypeId::TableRowInputMode, "РежимВводаСтрокТаблицы"),
+    (
+        TypeId::CryptoCertificateIncludeMode,
+        "РежимВключенияСертификатовКриптографии",
+    ),
+    (TypeId::TableRowSelectionMode, "РежимВыделенияСтрокиТаблицы"),
+    (TypeId::TableSelectionMode, "РежимВыделенияТаблицы"),
+    (TypeId::ReplacementMode, "РежимЗамещения"),
+    (TypeId::SizeChangeMode, "РежимИзмененияРазмера"),
+    (TypeId::FormWindowOpeningMode, "РежимОткрытияОкнаФормы"),
+    (
+        TypeId::DataCompositionSettingsViewMode,
+        "РежимОтображенияНастроекКомпоновкиДанных",
     ),
     (
-        TypeId::DataCompositionTextPlacementType,
-        "DataCompositionTextPlacementType",
+        TypeId::ReportResultViewMode,
+        "РежимОтображенияРезультатаОтчета",
+    ),
+    (TypeId::FullTextSearchMode, "РежимПолнотекстовогоПоиска"),
+    (
+        TypeId::CryptoCertificateCheckMode,
+        "РежимПроверкиСертификатаКриптографии",
+    ),
+    (TypeId::ColumnEditMode, "РежимРедактированияКолонки"),
+    (
+        TypeId::InfoBaseUserPasswordRecoveryMethod,
+        "СпособВосстановленияПароляПользователяИнформационнойБазы",
     ),
     (
-        TypeId::DataCompositionTextOutputType,
-        "DataCompositionTextOutputType",
+        TypeId::SpreadsheetDocumentAreaFillType,
+        "ТипЗаполненияОбластиТабличногоДокумента",
     ),
-    (TypeId::ViewScalingMode, "ViewScalingMode"),
+    (TypeId::QuerySchemaUnionType, "ТипОбъединенияСхемыЗапроса"),
+    (TypeId::CryptoSignatureType, "ТипПодписиКриптографии"),
     (
-        TypeId::DataCompositionTotalPlacement,
-        "DataCompositionTotalPlacement",
+        TypeId::SpreadsheetDocumentTextPlacementType,
+        "ТипРазмещенияТекстаТабличногоДокумента",
     ),
-    (TypeId::PictureSize, "PictureSize"),
+    (TypeId::QuerySchemaJoinType, "ТипСоединенияСхемыЗапроса"),
+    (TypeId::ReportFormType, "ТипФормыОтчета"),
+    (TypeId::FixingInTable, "ФиксацияВТаблице"),
     (
-        TypeId::SpreadsheetDocumentShiftType,
-        "SpreadsheetDocumentShiftType",
-    ),
-    (TypeId::ChartType, "ChartType"),
-    (TypeId::ChartLabelsOrientation, "ChartLabelsOrientation"),
-    (TypeId::ChartLabelLocation, "ChartLabelLocation"),
-    (TypeId::ShowInChartLegend, "ShowInChartLegend"),
-    (TypeId::ChartPlotAreaPlacement, "ChartPlotAreaPlacement"),
-    (
-        TypeId::SpreadsheetDocumentPatternType,
-        "SpreadsheetDocumentPatternType",
-    ),
-    (TypeId::ChartScaleLabelLocation, "ChartScaleLabelLocation"),
-    (
-        TypeId::SpreadsheetDocumentDetailUse,
-        "SpreadsheetDocumentDetailUse",
+        TypeId::DataCompositionConditionalAppearanceUse,
+        "ИспользованиеУсловногоОформленияКомпоновкиДанных",
     ),
     (
-        TypeId::QuerySchemaOrderDirection,
-        "QuerySchemaOrderDirection",
-    ),
-    (TypeId::BoundaryType, "BoundaryType"),
-    (TypeId::MaxSeries, "MaxSeries"),
-    (TypeId::ChartLabelType, "ChartLabelType"),
-    (TypeId::ChartLineType, "ChartLineType"),
-    (TypeId::FormButtonType, "FormButtonType"),
-    (TypeId::XmlTypeAssignment, "XMLTypeAssignment"),
-    (TypeId::PlatformType, "PlatformType"),
-    (
-        TypeId::DataCompositionComparisonType,
-        "DataCompositionComparisonType",
-    ),
-    (TypeId::ComparisonType, "ComparisonType"),
-    (TypeId::ClientConnectionSpeed, "ClientConnectionSpeed"),
-    (
-        TypeId::SpreadsheetDocumentCellAreaType,
-        "SpreadsheetDocumentCellAreaType",
-    ),
-    (TypeId::AddInConnectionType, "AddInConnectionType"),
-    (TypeId::FillChecking, "FillChecking"),
-    (TypeId::FoldersAndItems, "FoldersAndItems"),
-    (TypeId::XmlCanonicalizationType, "XMLCanonicalizationType"),
-    (TypeId::Pop3AuthenticationMode, "POP3AuthenticationMode"),
-    (TypeId::SmtpAuthenticationMode, "SMTPAuthenticationMode"),
-    (TypeId::InternetMailProtocol, "InternetMailProtocol"),
-    (
-        TypeId::DataCompositionDetailsProcessingAction,
-        "DataCompositionDetailsProcessingAction",
+        TypeId::DataCompositionFieldPlacement,
+        "РасположениеПоляКомпоновкиДанных",
     ),
     (
-        TypeId::StandardBeginningDateVariant,
-        "StandardBeginningDateVariant",
+        TypeId::DataCompositionAccountingBalanceType,
+        "ТипБухгалтерскогоОстаткаКомпоновкиДанных",
     ),
+    (
+        TypeId::DataCompositionBalanceType,
+        "ТипОстаткаКомпоновкиДанных",
+    ),
+    (TypeId::DateFractions, "ЧастиДаты"),
+    (TypeId::AllowedLength, "ДопустимаяДлина"),
+    (TypeId::HashFunction, "ХешФункция"),
+    (
+        TypeId::ArchiveFileRestorePathsMode,
+        "РежимВосстановленияПутейФайлаАрхива",
+    ),
+    (TypeId::ByteOrderMarkUse, "ИспользованиеByteOrderMark"),
 ];
 
 /// Второе русское написание — ИДЕНТИФИКАТОР — для типов, у которых

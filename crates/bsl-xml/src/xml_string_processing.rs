@@ -8,7 +8,7 @@ use bsl_rt::{
 pub(crate) static TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "МенеджерОбработкиСтрокиXML",
-    type_display: "XML string processing manager",
+    type_display: "Менеджер обработки строки XML",
     type_names: &["XMLStringProcessingManager"],
 };
 
@@ -25,7 +25,7 @@ impl ObjectProtocol for XmlStringProcessingManager {
     }
 
     fn display(&self) -> String {
-        "XMLStringProcessingManager".to_owned()
+        "МенеджерОбработкиСтрокиXML".to_owned()
     }
 }
 

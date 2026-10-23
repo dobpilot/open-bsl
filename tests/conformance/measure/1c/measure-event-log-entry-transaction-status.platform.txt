@@ -1,5 +1,5 @@
-COMMITTED	Committed	EventLogEntryTransactionStatus
-UNFINISHED	Not completed	EventLogEntryTransactionStatus
-NONE	No transaction	EventLogEntryTransactionStatus
-ROLLED	Rolled back	EventLogEntryTransactionStatus
+COMMITTED	Зафиксирована	СтатусТранзакцииЗаписиЖурналаРегистрации
+UNFINISHED	Не завершена	СтатусТранзакцииЗаписиЖурналаРегистрации
+NONE	Нет транзакции	СтатусТранзакцииЗаписиЖурналаРегистрации
+ROLLED	Отменена	СтатусТранзакцииЗаписиЖурналаРегистрации
 ALIAS	Yes

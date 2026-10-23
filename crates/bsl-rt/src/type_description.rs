@@ -9,21 +9,21 @@ use crate::{
 pub(crate) static DATE_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КвалификаторыДаты",
-    type_display: "Date qualifiers",
+    type_display: "Квалификаторы даты",
     type_names: &["DateQualifiers"],
 };
 
 pub(crate) static STRING_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КвалификаторыСтроки",
-    type_display: "String qualifiers",
+    type_display: "Квалификаторы строки",
     type_names: &["StringQualifiers"],
 };
 
 pub(crate) static NUMBER_QUALIFIERS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КвалификаторыЧисла",
-    type_display: "Number qualifiers",
+    type_display: "Квалификаторы числа",
     type_names: &["NumberQualifiers"],
 };
 

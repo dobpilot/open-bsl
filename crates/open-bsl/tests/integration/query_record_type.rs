@@ -5,16 +5,16 @@ fn query_record_type_matches_native_aliases_types_and_presentations() {
     let engine = Engine::builder().build().unwrap();
     let mut state = engine.new_state();
     for (russian, english, presentation) in [
-        ("ДетальнаяЗапись", "DetailRecord", "Detailed record"),
-        ("ИтогПоГруппировке", "GroupTotal", "Total by group"),
-        ("ИтогПоИерархии", "TotalByHierarchy", "Total by hierarchy"),
-        ("ОбщийИтог", "Overall", "Grand total"),
+        ("ДетальнаяЗапись", "DetailRecord", "Детальная запись"),
+        ("ИтогПоГруппировке", "GroupTotal", "Итог по группировке"),
+        ("ИтогПоИерархии", "TotalByHierarchy", "Итог по иерархии"),
+        ("ОбщийИтог", "Overall", "Общий итог"),
     ] {
         let source = format!(
             "ЗначениеПробы = ТипЗаписиЗапроса.{russian};
             Возврат ЗначениеПробы = QueryRecordType.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"QueryRecordType\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"ТипЗаписиЗапроса\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"QueryRecordType\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"ТипЗаписиЗапроса\");"
         );
@@ -24,9 +24,9 @@ fn query_record_type_matches_native_aliases_types_and_presentations() {
         state
             .exec(
                 "Возврат Строка(ТипЗаписиЗапроса)
-                    = \"EnumQueryRecordType\"
+                    = \"ПеречислениеТипЗаписиЗапроса\"
                     И Строка(ТипЗнч(QueryRecordType))
-                    = \"EnumQueryRecordType\";",
+                    = \"ПеречислениеТипЗаписиЗапроса\";",
             )
             .unwrap(),
         Value::Boolean(true)

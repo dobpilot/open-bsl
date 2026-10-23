@@ -1,5 +1,5 @@
-WINDOWS	Windows font	FontType
-ABSOLUTE	Absolute	FontType
-AUTO	Auto font	FontType
-STYLE	Style element	FontType
+WINDOWS	Windows шрифт	ВидШрифта
+ABSOLUTE	Абсолютный	ВидШрифта
+AUTO	Авто шрифт	ВидШрифта
+STYLE	Элемент стиля	ВидШрифта
 ALIAS	Yes

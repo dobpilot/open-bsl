@@ -1,9 +1,9 @@
-DOCX	DOCX	RepresentableDocumentBatchFileType
-HTML4	HTML4	RepresentableDocumentBatchFileType
-HTML5	HTML5	RepresentableDocumentBatchFileType
-ODS	ODS	RepresentableDocumentBatchFileType
-PDF	PDF	RepresentableDocumentBatchFileType
-TXT	TXT	RepresentableDocumentBatchFileType
-XLS	XLS	RepresentableDocumentBatchFileType
-XLSX	XLSX	RepresentableDocumentBatchFileType
+DOCX	DOCX	ТипФайлаПакетаОтображаемыхДокументов
+HTML4	HTML4	ТипФайлаПакетаОтображаемыхДокументов
+HTML5	HTML5	ТипФайлаПакетаОтображаемыхДокументов
+ODS	ODS	ТипФайлаПакетаОтображаемыхДокументов
+PDF	PDF	ТипФайлаПакетаОтображаемыхДокументов
+TXT	TXT	ТипФайлаПакетаОтображаемыхДокументов
+XLS	XLS	ТипФайлаПакетаОтображаемыхДокументов
+XLSX	XLSX	ТипФайлаПакетаОтображаемыхДокументов
 ALIAS	Yes

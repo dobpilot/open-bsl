@@ -13,9 +13,7 @@ fn mail_message_importance_matches_the_platform_oracle() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let actual = String::from_utf8(output.stdout)
-        .unwrap()
-        .replace("\tДа\n", "\tYes\n");
+    let actual = String::from_utf8(output.stdout).unwrap();
     assert_eq!(
         actual,
         include_str!(

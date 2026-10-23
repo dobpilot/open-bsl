@@ -1,13 +1,13 @@
 file.begin	error-processing-1
-ERROR.SETTINGS.TYPE	Settings of error processing on the client
-ERROR.SETTINGS.SEND	Auto
-ERROR.SETTINGS.SEND.TYPE	ErrorReportingMode
+ERROR.SETTINGS.TYPE	Настройки обработки ошибок на клиенте
+ERROR.SETTINGS.SEND	Авто
+ERROR.SETTINGS.SEND.TYPE	РежимОтправкиИнформацииОбОшибке
 ERROR.SETTINGS.ADDRESS	
-ERROR.MODE.AUTO	Auto
-ERROR.MODE.DONT	Do not send
-ERROR.MODE.ASK	Ask user
-ERROR.MODE.SEND	Send
-ERROR.MODE.ALIAS	Yes
-ERROR.BRIEF.MATCH	Yes
-ERROR.DETAIL.MATCH	Yes
+ERROR.MODE.AUTO	Авто
+ERROR.MODE.DONT	Не отправлять
+ERROR.MODE.ASK	Спрашивать пользователя
+ERROR.MODE.SEND	Отправлять
+ERROR.MODE.ALIAS	Да
+ERROR.BRIEF.MATCH	Да
+ERROR.DETAIL.MATCH	Да
 file.end	error-processing-1

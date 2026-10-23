@@ -1,45 +1,45 @@
 file.begin	1
-path.name	String:имя.tar.gz
-path.basename	String:имя.tar
-path.extension	String:.gz
-path.parent	String:каталог/
-path.full	String:каталог/имя.tar.gz
-path.empty	String:
-path.dotfile	String:|.hidden
-path.trailing	String:каталог|
-path.dots	String:имя.txt
-path.backslash	String:имя.txt|каталог/
-constructor.en	File:directory/name.txt
-path.name.en	String:имя.tar.gz
-path.basename.en	String:имя.tar
-path.extension.en	String:.gz
-path.parent.en	String:каталог/
-path.full.en	String:каталог/имя.tar.gz
-file.scratch	/tmp/v8_SHyFYH_5.files
-directory.exists	Boolean:Yes
-directory.isfile	Boolean:No
-directory.isdir	Boolean:Yes
-directory.size	error:Error calling context method (Размер)
-directory.trailing.isdir	Boolean:Yes
-refresh.before	No
-refresh.created	Yes
+path.name	Строка:имя.tar.gz
+path.basename	Строка:имя.tar
+path.extension	Строка:.gz
+path.parent	Строка:каталог/
+path.full	Строка:каталог/имя.tar.gz
+path.empty	Строка:
+path.dotfile	Строка:|.hidden
+path.trailing	Строка:каталог|
+path.dots	Строка:имя.txt
+path.backslash	Строка:имя.txt|каталог/
+constructor.en	Файл:directory/name.txt
+path.name.en	Строка:имя.tar.gz
+path.basename.en	Строка:имя.tar
+path.extension.en	Строка:.gz
+path.parent.en	Строка:каталог/
+path.full.en	Строка:каталог/имя.tar.gz
+file.scratch	/tmp/v8_KGIPDC_6.files
+directory.exists	Булево:Да
+directory.isfile	Булево:Нет
+directory.isdir	Булево:Да
+directory.size	error:Ошибка при вызове метода контекста (Размер)
+directory.trailing.isdir	Булево:Да
+refresh.before	Нет
+refresh.created	Да
 refresh.size.before	1
 refresh.size.after	5
-refresh.deleted	No
-missing.exists	Boolean:No
-missing.isfile	error:Error calling context method (ЭтоФайл)
-missing.isdir	error:Error calling context method (ЭтоКаталог)
-missing.size	error:Error calling context method (Размер)
-existing.exists	Boolean:Yes
-existing.isfile	Boolean:Yes
-existing.isdir	Boolean:No
-existing.size	Number:3
-existing.hidden	Boolean:No
-existing.readonly	Boolean:No
-time.local	Boolean:Yes
-time.utc	Boolean:Yes
-attribute.hidden	Boolean:No
-attribute.readonly.set	Boolean:Yes
-attribute.readonly.clear	Boolean:No
+refresh.deleted	Нет
+missing.exists	Булево:Нет
+missing.isfile	error:Ошибка при вызове метода контекста (ЭтоФайл)
+missing.isdir	error:Ошибка при вызове метода контекста (ЭтоКаталог)
+missing.size	error:Ошибка при вызове метода контекста (Размер)
+existing.exists	Булево:Да
+existing.isfile	Булево:Да
+existing.isdir	Булево:Нет
+existing.size	Число:3
+existing.hidden	Булево:Нет
+existing.readonly	Булево:Нет
+time.local	Булево:Да
+time.utc	Булево:Да
+attribute.hidden	Булево:Нет
+attribute.readonly.set	Булево:Да
+attribute.readonly.clear	Булево:Нет
 file.cleanup	ok
 file.end	1

@@ -5,7 +5,7 @@ fn reached_plot_area_matches_native_aliases_and_type() {
     assert_eq!(Some(kind), lookup_enum("chartplotareaplacement"));
     let value = lookup_member(kind, "уКаЗыВаЕтСяРаСпОлОжЕнИе").unwrap();
     assert_eq!(Some(value), lookup_member(kind, "UseCoordinates"));
-    assert_eq!(value.display_text(), "Use coordinates");
+    assert_eq!(value.display_text(), "Указываются координаты");
     let BslValue::Type(ty) = BslValue::Enum(value).type_of().unwrap() else {
         panic!("ожидался тип перечисления");
     };
@@ -15,9 +15,12 @@ fn reached_plot_area_matches_native_aliases_and_type() {
     ] {
         assert_eq!(TypeId::lookup(name), ty.native());
     }
-    assert_eq!(ty.name(), "ChartPlotAreaPlacement");
+    assert_eq!(ty.name(), "РасположениеОбластиПостроенияДиаграммы");
     let BslValue::Type(meta) = BslValue::EnumType(kind).type_of().unwrap() else {
         panic!("ожидался метатип перечисления");
     };
-    assert_eq!(meta.name(), "EnumChartPlotAreaPlacement");
+    assert_eq!(
+        meta.name(),
+        "ПеречислениеРасположениеОбластиПостроенияДиаграммы"
+    );
 }

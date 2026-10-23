@@ -36,49 +36,49 @@ struct RandomPasswordGenerator;
 pub(crate) static INFO_BASE_USERS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "МенеджерПользователейИнформационнойБазы",
-    type_display: "InfoBase users manager",
+    type_display: "Менеджер пользователей",
     type_names: &["InfoBaseUsersManager"],
 };
 
 pub(crate) static INFO_BASE_USER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ПользовательИнформационнойБазы",
-    type_display: "InfoBase user",
+    type_display: "Пользователь информационной базы",
     type_names: &["InfoBaseUser"],
 };
 
 pub(crate) static USER_PASSWORD_POLICIES_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "МенеджерПолитикПаролейПользователей",
-    type_display: "User password policy manager",
+    type_display: "Менеджер политик паролей пользователей",
     type_names: &["UserPasswordPolicyManager"],
 };
 
 pub(crate) static USER_PASSWORD_POLICY_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ПолитикаПаролейПользователей",
-    type_display: "User password policy",
+    type_display: "Политика паролей пользователей",
     type_names: &["UserPasswordPolicy"],
 };
 
 pub(crate) static AUTHENTICATION_LOCK_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "МенеджерБлокировкиАутентификацииПользователейИнформационнойБазы",
-    type_display: "Manager of infobase users authentication lock",
+    type_display: "Менеджер блокировки аутентификации пользователей информационной базы",
     type_names: &["InfoBaseUserAuthenticationLockManager"],
 };
 
 pub(crate) static AUTHENTICATION_LOCK_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "НастройкиБлокировкиАутентификацииПользователейИнформационнойБазы",
-    type_display: "Settings for infobase users authentication lock",
+    type_display: "Настройки блокировки аутентификации пользователей информационной базы",
     type_names: &["InfoBaseUserAuthenticationLockSettings"],
 };
 
 pub(crate) static RANDOM_PASSWORD_GENERATOR_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ГенераторСлучайныхПаролей",
-    type_display: "Random password generator",
+    type_display: "ГенераторСлучайныхПаролей",
     type_names: &["RandomPasswordGenerator"],
 };
 

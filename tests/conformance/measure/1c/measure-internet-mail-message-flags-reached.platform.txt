@@ -1,6 +1,6 @@
 START	OK
 TYPE	OK
-TYPE_DISPLAY	InternetMailMessageFlags
+TYPE_DISPLAY	ФлагиИнтернетПочтовогоСообщения
 DEFAULT	UUUUUUU
 SET	UTTTTTT
 NEW_READ_ONLY	ERROR

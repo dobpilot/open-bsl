@@ -1,5 +1,5 @@
-ROOT	EnumFillChecking
-TYPE	FillChecking
-ERROR	Yes
-DONT	No
+ROOT	ПеречислениеПроверкаЗаполнения
+TYPE	ПроверкаЗаполнения
+ERROR	Выдавать ошибку
+DONT	Не проверять
 ALIASES	PASS

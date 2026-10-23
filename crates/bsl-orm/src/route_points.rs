@@ -241,7 +241,7 @@ pub(super) fn manager_property(
 pub(super) static COLLECTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ТочкиМаршрутаБизнесПроцесса",
-    type_display: "Business process route points",
+    type_display: "Точки маршрута бизнес-процесса",
     type_names: &["BusinessProcessRoutePoints"],
 };
 pub(super) static REFERENCE_TYPE: TypeDescriptor = TypeDescriptor {

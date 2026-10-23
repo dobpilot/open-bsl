@@ -1,10 +1,10 @@
 file.begin	data-composition-parameter-1
 DCP.ZERO	REJECTED
-DCP.NAMED.TYPE	Data composition parameter
+DCP.NAMED.TYPE	Параметр компоновки данных
 DCP.NAMED.STRING	[Период]
-DCP.NAMED.FILLED	Yes
-DCP.EQUAL.SAME	Yes
-DCP.EQUAL.CASE	Yes
-DCP.EQUAL.OTHER	No
+DCP.NAMED.FILLED	Да
+DCP.EQUAL.SAME	Да
+DCP.EQUAL.CASE	Да
+DCP.EQUAL.OTHER	Нет
 DCP.ENGLISH	OK
 file.end	data-composition-parameter-1

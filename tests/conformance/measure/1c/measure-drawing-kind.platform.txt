@@ -1,16 +1,16 @@
-GEOGRAPHICAL_SCHEMA	Geographical schema
-GROUP	Folder
-DENDROGRAM	Dendrogram
-CHART	Chart
-GANTT_CHART	Gantt chart
-PICTURE	Picture
-OBJECT	Object
-COMMENT	Comment
-LINE	Line
-RECTANGLE	Rectangle
-PIVOT_CHART	Pivot chart
-TEXT	Text
-ELLIPSE	Ellipse
-TYPE	SpreadsheetDocumentDrawingType
-RECTANGLE_TYPE	SpreadsheetDocumentDrawingType
+GEOGRAPHICAL_SCHEMA	Географическая схема
+GROUP	Группа
+DENDROGRAM	Дендрограмма
+CHART	Диаграмма
+GANTT_CHART	Диаграмма Ганта
+PICTURE	Картинка
+OBJECT	Объект
+COMMENT	Примечание
+LINE	Прямая
+RECTANGLE	Прямоугольник
+PIVOT_CHART	Сводная диаграмма
+TEXT	Текст
+ELLIPSE	Эллипс
+TYPE	ТипРисункаТабличногоДокумента
+RECTANGLE_TYPE	ТипРисункаТабличногоДокумента
 ALIAS	PASS

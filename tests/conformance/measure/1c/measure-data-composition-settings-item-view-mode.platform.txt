@@ -1,8 +1,8 @@
 file.begin	data-composition-settings-item-view-mode-1
-DCS.SETTINGS.VIEW.AUTO	Auto
-DCS.SETTINGS.VIEW.NORMAL	Normal
-DCS.SETTINGS.VIEW.QUICK_ACCESS	Quick access
-DCS.SETTINGS.VIEW.INACCESSIBLE	Disabled
-DCS.SETTINGS.VIEW.TYPE	DataCompositionSettingsItemViewMode
+DCS.SETTINGS.VIEW.AUTO	Авто
+DCS.SETTINGS.VIEW.NORMAL	Обычный
+DCS.SETTINGS.VIEW.QUICK_ACCESS	Быстрый доступ
+DCS.SETTINGS.VIEW.INACCESSIBLE	Недоступный
+DCS.SETTINGS.VIEW.TYPE	РежимОтображенияЭлементаНастройкиКомпоновкиДанных
 DCS.SETTINGS.VIEW.ENGLISH	OK
 file.end	data-composition-settings-item-view-mode-1

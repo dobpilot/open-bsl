@@ -1,6 +1,6 @@
 file.begin	notification-object-constructor-1
 canary	ok
-type	Notification description
+type	Описание оповещения
 display	ОписаниеОповещения
 zero.names	ok
 zero.values	ok

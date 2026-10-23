@@ -1,7 +1,7 @@
-ROOT	EnumChartLabelsOrientation
-TYPE	ChartLabelsOrientation
-AUTO	Auto
-VERTICAL	Vertical
-HORIZONTAL	Horizontal
-ANGLE	Custom angle
+ROOT	ПеречислениеОриентацияПодписейДиаграммы
+TYPE	ОриентацияПодписейДиаграммы
+AUTO	Авто
+VERTICAL	Вертикально
+HORIZONTAL	Горизонтально
+ANGLE	Произвольный угол
 ALIASES	PASS

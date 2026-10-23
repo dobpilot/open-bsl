@@ -1,15 +1,15 @@
-xml.canonical.КаноническийXML	Canonical XML	1
-xml.canonical.XMLCanonicalization	Canonical XML	1
-xml.canonical.КаноническийXMLСКомментариями	Canonical XML with comments	1
-xml.canonical.XMLCanonicalizationWithComments	Canonical XML with comments	1
-xml.canonical.ИсключающийКаноническийXML	Exclusive canonical XML	1
-xml.canonical.XMLExclusiveCanonicalization	Exclusive canonical XML	1
-xml.canonical.ИсключающийКаноническийXMLСКомментариями	Exclusive canonical XML with comments	1
-xml.canonical.XMLExclusiveCanonicalizationWithComments	Exclusive canonical XML with comments	1
-xml.canonical.КаноническийXML1_1	Canonical XML 1.1	1
-xml.canonical.XMLCanonicalization1_1	Canonical XML 1.1	1
-xml.canonical.КаноническийXML1_1СКомментариями	Canonical XML 1.1 with comments	1
-xml.canonical.XMLCanonicalization1_1WithComments	Canonical XML 1.1 with comments	1
-xml.canonical.root	EnumXMLCanonicalizationType
-xml.canonical.type	XMLCanonicalizationType
+xml.canonical.КаноническийXML	Канонический XML	1
+xml.canonical.XMLCanonicalization	Канонический XML	1
+xml.canonical.КаноническийXMLСКомментариями	Канонический XML с комментариями	1
+xml.canonical.XMLCanonicalizationWithComments	Канонический XML с комментариями	1
+xml.canonical.ИсключающийКаноническийXML	Исключающий канонический XML	1
+xml.canonical.XMLExclusiveCanonicalization	Исключающий канонический XML	1
+xml.canonical.ИсключающийКаноническийXMLСКомментариями	Исключающий канонический XML с комментариями	1
+xml.canonical.XMLExclusiveCanonicalizationWithComments	Исключающий канонический XML с комментариями	1
+xml.canonical.КаноническийXML1_1	Канонический XML 1.1	1
+xml.canonical.XMLCanonicalization1_1	Канонический XML 1.1	1
+xml.canonical.КаноническийXML1_1СКомментариями	Канонический XML 1.1 с комментариями	1
+xml.canonical.XMLCanonicalization1_1WithComments	Канонический XML 1.1 с комментариями	1
+xml.canonical.root	ПеречислениеТипКаноническогоXML
+xml.canonical.type	ТипКаноническогоXML
 xml.canonical.type.alias	1

@@ -1,4 +1,4 @@
-BEGIN	At the beginning of line	SearchStringModeOnInputByString
-ANY_PART	Anywhere in line	SearchStringModeOnInputByString
+BEGIN	Начало	СпособПоискаСтрокиПриВводеПоСтроке
+ANY_PART	Любая часть	СпособПоискаСтрокиПриВводеПоСтроке
 BEGIN_ALIAS	Yes
 ANY_PART_ALIAS	Yes

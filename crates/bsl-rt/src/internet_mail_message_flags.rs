@@ -10,7 +10,7 @@ use crate::{
 pub(crate) static TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФлагиИнтернетПочтовогоСообщения",
-    type_display: "InternetMailMessageFlags",
+    type_display: "ФлагиИнтернетПочтовогоСообщения",
     type_names: &["InternetMailMessageFlags"],
 };
 

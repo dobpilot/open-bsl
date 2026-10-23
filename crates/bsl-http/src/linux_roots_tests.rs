@@ -9,7 +9,7 @@ fn linux_authorities_keep_native_identity_and_verified_transport() {
     let roots = new_linux_roots().unwrap();
     assert_eq!(
         roots.object_ref().unwrap().type_descriptor().type_display,
-        "LinuxCertificationAuthorityCertificates"
+        "СертификатыУдостоверяющихЦентровLinux"
     );
     assert!(
         roots

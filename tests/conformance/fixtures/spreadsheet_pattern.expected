@@ -1,10 +1,10 @@
 alias=YES
 mixed=YES
-presentation=No pattern
-value.type=SpreadsheetDocumentPatternType
-lookup.ru=SpreadsheetDocumentPatternType
-lookup.en=SpreadsheetDocumentPatternType
-enum.type=EnumSpreadsheetDocumentPatternType
-enum.presentation=EnumSpreadsheetDocumentPatternType
+presentation=Без узора
+value.type=ТипУзораТабличногоДокумента
+lookup.ru=ТипУзораТабличногоДокумента
+lookup.en=ТипУзораТабличногоДокумента
+enum.type=ПеречислениеТипУзораТабличногоДокумента
+enum.presentation=ПеречислениеТипУзораТабличногоДокумента
 self.equal=YES
 completed=YES

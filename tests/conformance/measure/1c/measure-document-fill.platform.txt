@@ -1,5 +1,5 @@
-document.fill.undefined=Undefined:Yes:[handler]:No:No:No
-document.fill.null=Null:Yes:[handler]:No:No:No
-document.fill.number=Number:Yes:[handler]:No:No:No
-document.fill.structure=Structure:Yes:[handler]:No:No:No
-document.fill.disabled=Structure:Yes:[handler]:No:No:No
+document.fill.undefined=Не определено:Да:[handler]:Нет:Нет:Нет
+document.fill.null=Null:Да:[handler]:Нет:Нет:Нет
+document.fill.number=Число:Да:[handler]:Нет:Нет:Нет
+document.fill.structure=Структура:Да:[handler]:Нет:Нет:Нет
+document.fill.disabled=Структура:Да:[handler]:Нет:Нет:Нет

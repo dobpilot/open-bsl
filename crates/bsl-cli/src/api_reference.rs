@@ -408,7 +408,7 @@ mod tests {
         static TYPE: bsl_rt::TypeDescriptor = bsl_rt::TypeDescriptor {
             package: "test",
             name: "Тип",
-            type_display: "Тип с пробелом",
+            type_display: "Тип",
             type_names: &["Type", "Тип"],
         };
         assert_eq!(type_aliases(&TYPE), ["Type"]);

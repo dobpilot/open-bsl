@@ -36,7 +36,7 @@ fn chart_type_aliases_preserve_the_native_presentation() {
             .unwrap();
         assert_eq!(
             engine.new_state().run(&module).unwrap(),
-            Value::Str("Chart".into())
+            Value::Str("Диаграмма".into())
         );
     }
 }

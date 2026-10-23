@@ -24,7 +24,7 @@ struct JobScheduleObject {
 pub(crate) static JOB_SCHEDULE_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "РасписаниеРегламентногоЗадания",
-    type_display: "Job schedule",
+    type_display: "Расписание задания",
     type_names: &["JobSchedule"],
 };
 

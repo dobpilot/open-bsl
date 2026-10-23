@@ -1,7 +1,7 @@
-catalog.numeric.new=Yes
-catalog.numeric.reference.empty=Yes
-catalog.numeric.code.type=Yes
-catalog.numeric.code.zero=Yes
+catalog.numeric.new=Да
+catalog.numeric.reference.empty=Да
+catalog.numeric.code.type=Да
+catalog.numeric.code.zero=Да
 catalog.numeric.presentation=[0]
 catalog.numeric.code.string=7
 catalog.numeric.description=present

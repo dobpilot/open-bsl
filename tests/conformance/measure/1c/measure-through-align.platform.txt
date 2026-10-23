@@ -1,4 +1,4 @@
-AUTO	Auto	PASS
-USE	Use	PASS
-DONT_USE	Do not use	PASS
-TYPE	ThroughAlign
+AUTO	Авто	PASS
+USE	Использовать	PASS
+DONT_USE	Не использовать	PASS
+TYPE	СквозноеВыравнивание

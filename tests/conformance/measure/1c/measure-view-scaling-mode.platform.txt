@@ -1,6 +1,6 @@
-ROOT	EnumViewScalingMode
-TYPE	ViewScalingMode
-AUTO	Auto
-LARGE	Large
-NORMAL	Normal
+ROOT	ПеречислениеРежимМасштабированияПросмотра
+TYPE	РежимМасштабированияПросмотра
+AUTO	Авто
+LARGE	Крупный
+NORMAL	Обычный
 ALIASES	PASS

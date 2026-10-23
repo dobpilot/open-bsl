@@ -1,9 +1,9 @@
-document.conversion.date.invalid=accepted:Yes:No
-document.conversion.date.number=accepted:Yes:No
-document.conversion.date.boolean=accepted:Yes:No
-document.conversion.date.short=accepted:Yes:No
-document.conversion.date.full=accepted:No:Yes
-document.conversion.date.array=accepted:Yes:No
+document.conversion.date.invalid=accepted:Да:Нет
+document.conversion.date.number=accepted:Да:Нет
+document.conversion.date.boolean=accepted:Да:Нет
+document.conversion.date.short=accepted:Да:Нет
+document.conversion.date.full=accepted:Нет:Да
+document.conversion.date.array=accepted:Да:Нет
 document.conversion.number.negative=accepted:[0]
 document.conversion.number.fraction=accepted:[18]
 document.conversion.number.invalid=accepted:[0]

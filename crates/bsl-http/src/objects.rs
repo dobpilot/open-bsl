@@ -63,14 +63,14 @@ pub static SECURE_CONNECTION_TYPE: TypeDescriptor = TypeDescriptor {
 pub static FILE_ROOTS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СертификатыУдостоверяющихЦентровФайл",
-    type_display: "FileCertificationAuthorityCertificates",
+    type_display: "СертификатыУдостоверяющихЦентровФайл",
     type_names: &["FileCertificationAuthorityCertificates"],
 };
 
 pub static FILE_CLIENT_CERTIFICATE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СертификатКлиентаФайл",
-    type_display: "FileClientCertificate",
+    type_display: "СертификатКлиентаФайл",
     type_names: &["FileClientCertificate"],
 };
 
@@ -82,7 +82,7 @@ pub static FILE_CLIENT_CERTIFICATE_TYPE: TypeDescriptor = TypeDescriptor {
 pub static WINDOWS_CLIENT_CERTIFICATE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СертификатКлиентаWindows",
-    type_display: "WindowsClientCertificate",
+    type_display: "СертификатКлиентаWindows",
     type_names: &["WindowsClientCertificate"],
 };
 
@@ -93,7 +93,7 @@ pub static WINDOWS_CLIENT_CERTIFICATE_TYPE: TypeDescriptor = TypeDescriptor {
 pub static WINDOWS_ROOTS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СертификатыУдостоверяющихЦентровWindows",
-    type_display: "WindowsCertificationAuthorityCertificates",
+    type_display: "СертификатыУдостоверяющихЦентровWindows",
     type_names: &["WindowsCertificationAuthorityCertificates"],
 };
 
@@ -332,7 +332,7 @@ pub struct SystemRootsObject;
 pub static LINUX_ROOTS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СертификатыУдостоверяющихЦентровLinux",
-    type_display: "LinuxCertificationAuthorityCertificates",
+    type_display: "СертификатыУдостоверяющихЦентровLinux",
     type_names: &["LinuxCertificationAuthorityCertificates"],
 };
 

@@ -130,14 +130,14 @@ pub struct JobWaitOutcome {
 pub(crate) static BACKGROUND_JOBS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "МенеджерФоновыхЗаданий",
-    type_display: "Background jobs manager",
+    type_display: "Менеджер фоновых заданий",
     type_names: &["BackgroundJobsManager"],
 };
 
 pub(crate) static BACKGROUND_JOB_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФоновоеЗадание",
-    type_display: "Background job",
+    type_display: "Фоновое задание",
     type_names: &["BackgroundJob"],
 };
 

@@ -1,7 +1,7 @@
-NONE	None	PASS
-SOLID	Solid	PASS
-DASHED	Dashed	PASS
-DOTTED	Dotted	PASS
-DASH_DOT	DashDotted	PASS
-DASH_DOT_DOT	DotDashDotted	PASS
-TYPE	SpreadsheetDocumentDrawingLineType
+NONE	Нет линии	PASS
+SOLID	Сплошная	PASS
+DASHED	Пунктирная	PASS
+DOTTED	Точечная	PASS
+DASH_DOT	Пунктирно-точечная	PASS
+DASH_DOT_DOT	Точечно-пунктирно-точечная	PASS
+TYPE	ТипЛинииРисункаТабличногоДокумента

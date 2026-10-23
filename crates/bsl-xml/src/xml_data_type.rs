@@ -10,7 +10,7 @@ use bsl_rt::{
 pub(crate) static XML_DATA_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ТипДанныхXML",
-    type_display: "XML data type",
+    type_display: "Тип данных XML",
     type_names: &["XMLDataType"],
 };
 

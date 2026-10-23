@@ -11,7 +11,7 @@ struct UnsafeOperationProtectionDescriptionObject {
 pub(crate) static UNSAFE_OPERATION_PROTECTION_DESCRIPTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "ОписаниеЗащитыОтОпасныхДействий",
-    type_display: "Unsafe operation protection description",
+    type_display: "Описание защиты от опасных действий",
     type_names: &["UnsafeOperationProtectionDescription"],
 };
 

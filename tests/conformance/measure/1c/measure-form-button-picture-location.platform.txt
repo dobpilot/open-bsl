@@ -1,4 +1,4 @@
-AUTO	Auto	PASS
-LEFT	Left	PASS
-RIGHT	Right	PASS
-TYPE	FormButtonPictureLocation
+AUTO	Авто	PASS
+LEFT	Лево	PASS
+RIGHT	Право	PASS
+TYPE	ПоложениеКартинкиКнопкиФормы

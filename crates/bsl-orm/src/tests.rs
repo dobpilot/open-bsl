@@ -877,7 +877,7 @@ fn predefined_value_resolves_configuration_and_system_enumerations() {
             )
             .unwrap(),
         Value::Str(
-            "Активен:Да:Auto:Перечисление.Статусы.Активен:ОтправкаЭлементаДанных.Авто".into()
+            "Активен:Да:Авто:Перечисление.Статусы.Активен:ОтправкаЭлементаДанных.Авто".into()
         )
     );
     assert!(
@@ -1697,7 +1697,7 @@ fn data_lock_delegates_named_spaces_to_the_current_session_adapter() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Data lock:Data lock item:Да:Да".into())
+        Value::Str("Блокировка данных:Элемент блокировки данных:Да:Да".into())
     );
     assert_eq!(
         *access.requests.borrow(),
@@ -2292,7 +2292,7 @@ fn data_composition_template_composer_has_the_measured_reached_surface() {
             )
             .unwrap(),
         Value::Str(
-            "Composer of data composition template|Composer of data composition template".into()
+            "Компоновщик макета компоновки данных|Компоновщик макета компоновки данных".into()
         )
     );
     for source in [
@@ -2329,7 +2329,7 @@ fn data_composition_processor_has_the_measured_complete_surface() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Data composition processor|Data composition processor".into())
+        Value::Str("Процессор компоновки данных|Процессор компоновки данных".into())
     );
     for source in [
         "Процессор = Новый ПроцессорКомпоновкиДанных; Процессор.Инициализировать(1);",
@@ -2366,7 +2366,7 @@ fn data_composition_value_output_processor_has_the_measured_surface() {
             )
             .unwrap(),
         Value::Str(
-            "Processor of output of data composition result in values collection|Нет|Да|Processor of output of data composition result in values collection".into()
+            "Процессор вывода результата компоновки данных в коллекцию значений|Нет|Да|Процессор вывода результата компоновки данных в коллекцию значений".into()
         )
     );
     for source in [
@@ -2519,7 +2519,7 @@ fn predefined_data_update_delegates_to_the_current_session_adapter() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Auto:Auto update:Auto update off".into())
+        Value::Str("Авто:Обновлять автоматически:Не обновлять автоматически".into())
     );
     assert_eq!(
         *access.predefined_data_updates.borrow(),
@@ -2580,7 +2580,7 @@ fn picture_library_returns_measured_opaque_picture_values() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Picture:Picture:Да:Да:Нет".into())
+        Value::Str("Картинка:Picture:Да:Да:Нет".into())
     );
     assert!(
         state
@@ -2628,7 +2628,7 @@ fn query_uses_the_session_adapter_and_exposes_a_measured_linear_result() {
             .exec(
                 r#"
                 ЗапросПробы = Новый Запрос;
-                Если Строка(ТипЗнч(ЗапросПробы)) <> "Query"
+                Если Строка(ТипЗнч(ЗапросПробы)) <> "Запрос"
                     ИЛИ ЗапросПробы.Текст <> "" Тогда
                     Возврат Ложь;
                 КонецЕсли;
@@ -2636,12 +2636,12 @@ fn query_uses_the_session_adapter_and_exposes_a_measured_linear_result() {
                 ЗапросПробы.УстановитьПараметр("Значение", 1);
                 ЗапросПробы.УстановитьПараметр("зНаЧеНиЕ", 42);
                 Результат = ЗапросПробы.Выполнить();
-                Если Строка(ТипЗнч(Результат)) <> "Query result"
+                Если Строка(ТипЗнч(Результат)) <> "Результат запроса"
                     ИЛИ Результат.Пустой() Тогда
                     Возврат Ложь;
                 КонецЕсли;
                 Выборка = Результат.Выбрать();
-                Если Строка(ТипЗнч(Выборка)) <> "Selected data from query result"
+                Если Строка(ТипЗнч(Выборка)) <> "Выборка из результата запроса"
                     ИЛИ Выборка.Значение <> Неопределено
                     ИЛИ НЕ Выборка.Следующий()
                     ИЛИ Выборка.Значение <> 42
@@ -2652,7 +2652,7 @@ fn query_uses_the_session_adapter_and_exposes_a_measured_linear_result() {
                     Возврат Ложь;
                 КонецЕсли;
                 Таблица = Результат.Выгрузить();
-                Возврат Строка(ТипЗнч(Таблица)) = "ТаблицаЗначений"
+                Возврат Строка(ТипЗнч(Таблица)) = "Таблица значений"
                     И Таблица.Количество() = 1
                     И Таблица[0].Значение = 42;
                 "#,
@@ -2886,8 +2886,8 @@ fn value_storage_snapshots_and_detaches_mutable_values() {
                     САлиасом, Новый Deflation(6)).Get();
                 Извлеченный[0][0] = 5;
 
-                Возврат Строка(ТипЗнч(Сжатие)) = "Compress Data"
-                    И Строка(ТипЗнч(Хранилище)) = "Value storage"
+                Возврат Строка(ТипЗнч(Сжатие)) = "Сжатие данных"
+                    И Строка(ТипЗнч(Хранилище)) = "Хранилище значения"
                     И Второе[0] = 1
                     И Извлеченный[1][0] = 4;
                 "#,
@@ -3308,10 +3308,10 @@ fn configuration_metadata_exposes_the_measured_compatibility_mode() {
                 r#"
                 Режим = Метаданные.РежимСовместимости;
                 Варианты = Метаданные.СвойстваОбъектов.РежимСовместимости;
-                Возврат Строка(ТипЗнч(Режим)) = "Compatibility mode"
-                    И Строка(Режим) = "Version8_3_24"
-                    И Строка(ТипЗнч(Варианты)) = "Metadata object enumerated property"
-                    И Строка(Варианты) = "MetadataObjectsPropertyEnumed"
+                Возврат Строка(ТипЗнч(Режим)) = "Режим совместимости"
+                    И Строка(Режим) = "Версия8_3_24"
+                    И Строка(ТипЗнч(Варианты)) = "Перечислимое свойство объектов метаданных"
+                    И Строка(Варианты) = "ПеречислимоеСвойствоОбъектовМетаданных"
                     И Режим = Варианты["версия8_3_24"]
                     И Режим = Метаданные.ObjectProperties.CompatibilityMode["VERSION8_3_24"];
                 "#,
@@ -3686,7 +3686,9 @@ fn configuration_extensions_filter_each_complete_source() {
                 "#,
             )
             .unwrap(),
-        Value::Str("Исправление:1.2:55K0byUrioB3aHqMgHSxrIug2Ls=:Да:Нет:Да:Infobase:1".into())
+        Value::Str(
+            "Исправление:1.2:55K0byUrioB3aHqMgHSxrIug2Ls=:Да:Нет:Да:Информационная база:1".into()
+        )
     );
 
     assert_eq!(

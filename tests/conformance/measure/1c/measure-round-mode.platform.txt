@@ -1,5 +1,5 @@
-VALUE	Round 15 to 10	RoundMode
-VALUE	Round 15 to 20	RoundMode
+VALUE	Округлять 15 как 10	РежимОкругления
+VALUE	Округлять 15 как 20	РежимОкругления
 DOWN	1
 UP	2
-ALIASES	Yes
+ALIASES	Да

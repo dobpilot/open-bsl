@@ -8,14 +8,14 @@ use crate::{
 pub(crate) static FIXED_STRUCTURE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФиксированнаяСтруктура",
-    type_display: "Fixed structure",
+    type_display: "Фиксированная структура",
     type_names: &["FixedStructure"],
 };
 
 pub(crate) static FIXED_MAP_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФиксированноеСоответствие",
-    type_display: "Fixed map",
+    type_display: "Фиксированное соответствие",
     type_names: &["FixedMap"],
 };
 

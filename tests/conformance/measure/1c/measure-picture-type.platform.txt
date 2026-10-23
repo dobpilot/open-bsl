@@ -1,4 +1,4 @@
-ABSOLUTE	Absolute	PictureType
-LIBRARY	From library	PictureType
-EMPTY	Empty	PictureType
+ABSOLUTE	Абсолютная	ВидКартинки
+LIBRARY	Из библиотеки	ВидКартинки
+EMPTY	Пустая	ВидКартинки
 ALIAS	Yes

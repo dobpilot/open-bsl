@@ -1,6 +1,6 @@
-ROOT	EnumMaxSeries
-TYPE	MaxSeries
-UNDEFINED	Not set
-LIMITED	Limited
-PERCENT	Percent
+ROOT	ПеречислениеМаксимумСерий
+TYPE	МаксимумСерий
+UNDEFINED	Не задано
+LIMITED	Ограничено
+PERCENT	Процент
 ALIASES	PASS

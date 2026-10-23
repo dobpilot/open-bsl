@@ -1,11 +1,11 @@
-legend.root	EnumChartLegendPlacement
-legend.type	ChartLegendPlacement
-legend.Auto	Auto
-legend.Bottom	Bottom
-legend.Top	Top
-legend.Left	Left
-legend.Right	Right
-legend.None	None
-legend.UseCoordinates	Use coordinates
+legend.root	ПеречислениеРасположениеЛегендыДиаграммы
+legend.type	РасположениеЛегендыДиаграммы
+legend.Auto	Авто
+legend.Bottom	Низ
+legend.Top	Верх
+legend.Left	Лево
+legend.Right	Право
+legend.None	Нет
+legend.UseCoordinates	Указываются координаты
 legend.aliases	PASS
 legend.folded	PASS

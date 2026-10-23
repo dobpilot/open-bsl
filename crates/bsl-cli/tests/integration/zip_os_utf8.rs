@@ -12,11 +12,7 @@ fn zip_os_utf8_encoding_matches_the_native_enum_control() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    // Тип имеет одно имя в двух языках интерфейса; остальные строки
-    // сравниваются с нативным результатом без преобразования.
-    let actual = String::from_utf8(output.stdout)
-        .unwrap()
-        .replace("КодировкаИменФайловВZipФайле", "FileNamesEncodingInZipFile");
+    let actual = String::from_utf8(output.stdout).unwrap();
     assert_eq!(
         actual.as_bytes(),
         include_bytes!(

@@ -24,14 +24,14 @@ pub(crate) static INTEGRATION_SERVICES_MANAGER_TYPE: TypeDescriptor = TypeDescri
 pub(crate) static DATA_LOCK_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "БлокировкаДанных",
-    type_display: "Data lock",
+    type_display: "Блокировка данных",
     type_names: &["DataLock"],
 };
 
 pub(crate) static DATA_LOCK_ITEM_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ЭлементБлокировкиДанных",
-    type_display: "Data lock item",
+    type_display: "Элемент блокировки данных",
     type_names: &["DataLockItem"],
 };
 

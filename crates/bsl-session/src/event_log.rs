@@ -201,14 +201,14 @@ struct EventLogAccessEventUseDescriptionObject {
 pub(crate) static EVENT_LOG_EVENT_USE_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "ИспользованиеСобытияЖурналаРегистрации",
-    type_display: "Event log event use",
+    type_display: "Использование события журнала регистрации",
     type_names: &["EventLogEventUse"],
 };
 
 pub(crate) static EVENT_LOG_ACCESS_EVENT_USE_DESCRIPTION_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "ОписаниеИспользованияСобытияДоступЖурналаРегистрации",
-    type_display: "Description of event log access event use",
+    type_display: "Описание использования события доступ журнала регистрации",
     type_names: &["EventLogAccessEventUseDescription"],
 };
 

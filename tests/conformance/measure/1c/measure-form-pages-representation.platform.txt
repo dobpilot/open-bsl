@@ -1,8 +1,8 @@
-AUTO	Auto	PASS
-NONE	None	PASS
-SWIPE	Swipe (touchscreen)	PASS
-TOP	Tabs above	PASS
-BOTTOM	Tabs below	PASS
-LEFT	Tabs on the left (horizontally)	PASS
-RIGHT	Tabs on the right (horizontally)	PASS
-TYPE	FormPagesRepresentation
+AUTO	Авто	PASS
+NONE	Нет	PASS
+SWIPE	Пролистывание (сенсорный экран)	PASS
+TOP	Закладки сверху	PASS
+BOTTOM	Закладки снизу	PASS
+LEFT	Закладки слева (горизонтально)	PASS
+RIGHT	Закладки справа (горизонтально)	PASS
+TYPE	ОтображениеСтраницФормы

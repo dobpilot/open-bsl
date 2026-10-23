@@ -18,6 +18,6 @@ fn button_representation_has_the_complete_measured_surface() {
         .unwrap();
     assert_eq!(
         value,
-        Value::Str("ButtonRepresentation:Auto:Icon:Icon and text:Text:Да".into())
+        Value::Str("ОтображениеКнопки:Авто:Картинка:Картинка и текст:Текст:Да".into())
     );
 }

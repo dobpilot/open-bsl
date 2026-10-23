@@ -7,15 +7,15 @@ fn password_policy_compliance_check_result_has_the_complete_measured_surface() {
         .compile(
             r#"
 Если Строка(РезультатПроверкиСоответствияПароляПолитике.НеСоответствуетТребованиямМинимальнойДлины)
-        <> "Does not meet the minimum length requirements"
+        <> "Не соответствует требованиям минимальной длины"
     Или Строка(РезультатПроверкиСоответствияПароляПолитике.НеСоответствуетТребованиямОграниченияПовторенияСредиПоследних)
-        <> "Does not meet the requirements for reuse limit among recent ones"
+        <> "Не соответствует требованиям ограничения повторения среди последних"
     Или Строка(РезультатПроверкиСоответствияПароляПолитике.НеСоответствуетТребованиямПроверкиРаскрытия)
-        <> "Does not meet compromise check requirements"
+        <> "Не соответствует требованиям проверки раскрытия"
     Или Строка(РезультатПроверкиСоответствияПароляПолитике.НеСоответствуетТребованиямСложности)
-        <> "Does not meet the complexity requirements"
+        <> "Не соответствует требованиям сложности"
     Или Строка(ТипЗнч(РезультатПроверкиСоответствияПароляПолитике.НеСоответствуетТребованиямМинимальнойДлины))
-        <> "PasswordPolicyComplianceCheckResult"
+        <> "РезультатПроверкиСоответствияПароляПолитике"
     Или PasswordPolicyComplianceCheckResult.DoesNotSatisfyMinLengthRequirements
         <> РезультатПроверкиСоответствияПароляПолитике.НеСоответствуетТребованиямМинимальнойДлины
     Или PasswordPolicyComplianceCheckResult.DoesNotSatisfyReuseLimitRequirements

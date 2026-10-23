@@ -1,13 +1,13 @@
 file.begin	predefined-value-1
-PREDEFINED.EMPTY.RU.TYPE	ERR: Predefined value "Обработка.Замеры.ПустаяСсылка" not found.
-PREDEFINED.EMPTY.RU.STRING	ERR: Predefined value "Обработка.Замеры.ПустаяСсылка" not found.
-PREDEFINED.EMPTY.RU.FILLED	ERR: Predefined value "Обработка.Замеры.ПустаяСсылка" not found.
-PREDEFINED.EMPTY.EN.PATH	ERR: Predefined value "DataProcessor.Замеры.EmptyRef" not found.
-PREDEFINED.SYSTEM.RU.TYPE	DataItemSend
-PREDEFINED.SYSTEM.RU.STRING	Auto
-PREDEFINED.FULL_NAME.SYSTEM.RU	DataItemSend.Auto
-PREDEFINED.FULL_NAME.SYSTEM.EN	DataItemSend.Auto
-PREDEFINED.FULL_NAME.UNSUPPORTED	ERR: Predefined value "" not found.
-PREDEFINED.UNKNOWN	ERR: Predefined value "Справочник.НетТакого.НетТакого" not found.
-PREDEFINED.NON_STRING	ERR: Type mismatch (parameter number '1')
+PREDEFINED.EMPTY.RU.TYPE	ERR: Предопределенное значение "Обработка.Замеры.ПустаяСсылка" не найдено.
+PREDEFINED.EMPTY.RU.STRING	ERR: Предопределенное значение "Обработка.Замеры.ПустаяСсылка" не найдено.
+PREDEFINED.EMPTY.RU.FILLED	ERR: Предопределенное значение "Обработка.Замеры.ПустаяСсылка" не найдено.
+PREDEFINED.EMPTY.EN.PATH	ERR: Предопределенное значение "DataProcessor.Замеры.EmptyRef" не найдено.
+PREDEFINED.SYSTEM.RU.TYPE	ОтправкаЭлементаДанных
+PREDEFINED.SYSTEM.RU.STRING	Авто
+PREDEFINED.FULL_NAME.SYSTEM.RU	ОтправкаЭлементаДанных.Авто
+PREDEFINED.FULL_NAME.SYSTEM.EN	ОтправкаЭлементаДанных.Авто
+PREDEFINED.FULL_NAME.UNSUPPORTED	ERR: Предопределенное значение "" не найдено.
+PREDEFINED.UNKNOWN	ERR: Предопределенное значение "Справочник.НетТакого.НетТакого" не найдено.
+PREDEFINED.NON_STRING	ERR: Несоответствие типов (параметр номер '1')
 file.end	predefined-value-1

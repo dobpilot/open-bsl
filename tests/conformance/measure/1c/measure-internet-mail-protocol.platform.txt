@@ -1,5 +1,5 @@
-ROOT	EnumInternetMailProtocol
-TYPE	InternetMailProtocol
+ROOT	ПеречислениеПротоколИнтернетПочты
+TYPE	ПротоколИнтернетПочты
 IMAP	IMAP
 POP3	POP3
 SMTP	SMTP

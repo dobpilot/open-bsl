@@ -12,7 +12,7 @@ use crate::{
 pub(crate) static FIXED_ARRAY_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФиксированныйМассив",
-    type_display: "Fixed array",
+    type_display: "Фиксированный массив",
     type_names: &["FixedArray"],
 };
 

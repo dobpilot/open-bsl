@@ -1,5 +1,5 @@
-ROOT	EnumDataCompositionSettingsRefreshMethod
-TYPE	DataCompositionSettingsRefreshMethod
-FULL	Full
-CHECK	Check accessibility
+ROOT	ПеречислениеСпособВосстановленияНастроекКомпоновкиДанных
+TYPE	СпособВосстановленияНастроекКомпоновкиДанных
+FULL	Полное
+CHECK	Проверять доступность
 ALIASES	PASS

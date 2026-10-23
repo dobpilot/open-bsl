@@ -10,7 +10,7 @@ use open_bsl::{
 pub(super) static TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-session",
     name: "ЭлементПланировщика",
-    type_display: "Planner item",
+    type_display: "Элемент планировщика",
     type_names: &["PlannerItem"],
 };
 

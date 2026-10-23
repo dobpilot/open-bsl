@@ -1,2 +1,2 @@
-html.writer.type	HTML writer
+html.writer.type	Запись HTML
 html.writer.alias	Yes

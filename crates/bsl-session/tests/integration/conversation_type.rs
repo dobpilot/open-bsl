@@ -15,7 +15,7 @@ fn conversation_type_lookup_does_not_require_a_service_or_construct_a_value() {
         state
             .exec("Возврат Строка(Тип(\"ИдентификаторОбсужденияСистемыВзаимодействия\"));")
             .unwrap(),
-        Value::Str("CollaborationSystemConversationID".into())
+        Value::Str("ИдентификаторОбсужденияСистемыВзаимодействия".into())
     );
     assert_eq!(
         state

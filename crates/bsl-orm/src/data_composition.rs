@@ -18,7 +18,7 @@ struct DataCompositionValueCollectionOutputProcessorValue {
 pub(crate) static DATA_COMPOSITION_SETTINGS_COMPOSER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "КомпоновщикНастроекКомпоновкиДанных",
-    type_display: "Data composition settings composer",
+    type_display: "Компоновщик настроек компоновки данных",
     type_names: &["DataCompositionSettingsComposer"],
 };
 
@@ -26,28 +26,28 @@ pub(crate) static DATA_COMPOSITION_AVAILABLE_SETTINGS_SOURCE_TYPE: TypeDescripto
     TypeDescriptor {
         package: "bsl-orm",
         name: "ИсточникДоступныхНастроекКомпоновкиДанных",
-        type_display: "Data composition available settings source",
+        type_display: "Источник доступных настроек компоновки данных",
         type_names: &["DataCompositionAvailableSettingsSource"],
     };
 
 pub(crate) static DATA_COMPOSITION_DETAILS_PROCESS_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ОбработкаРасшифровкиКомпоновкиДанных",
-    type_display: "Data composition details processor",
+    type_display: "Обработка расшифровки компноновки данных",
     type_names: &["DataCompositionDetailsProcess"],
 };
 
 pub(crate) static DATA_COMPOSITION_TEMPLATE_COMPOSER_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "КомпоновщикМакетаКомпоновкиДанных",
-    type_display: "Composer of data composition template",
+    type_display: "Компоновщик макета компоновки данных",
     type_names: &["DataCompositionTemplateComposer"],
 };
 
 pub(crate) static DATA_COMPOSITION_PROCESSOR_TYPE: TypeDescriptor = TypeDescriptor {
     package: "bsl-orm",
     name: "ПроцессорКомпоновкиДанных",
-    type_display: "Data composition processor",
+    type_display: "Процессор компоновки данных",
     type_names: &["DataCompositionProcessor"],
 };
 
@@ -55,7 +55,7 @@ pub(crate) static DATA_COMPOSITION_VALUE_COLLECTION_OUTPUT_PROCESSOR_TYPE: TypeD
     TypeDescriptor {
         package: "bsl-orm",
         name: "ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений",
-        type_display: "Processor of output of data composition result in values collection",
+        type_display: "Процессор вывода результата компоновки данных в коллекцию значений",
         type_names: &["DataCompositionResultValueCollectionOutputProcessor"],
     };
 

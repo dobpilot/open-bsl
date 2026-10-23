@@ -6,17 +6,17 @@ html.body.parent.root	1
 html.text.parent.body	1
 html.text.owner.document	1
 html.child.name	html
-html.child.type	DOM document type definition
+html.child.type	Определение типа документа DOM
 html.child.kind	1:0
 html.child.parent	1
 html.child.name	html
-html.child.type	HTML Marking element
+html.child.type	Элемент разметка HTML
 html.child.kind	0:1
 html.child.parent	1
 html.type.document	1
 html.type.body	1
-html.type.html	HTML Marking element
-html.type.head	HTML Title element
-html.type.title	HTML element
-html.type.div	HTML Block element
-html.type.br	HTML element
+html.type.html	Элемент разметка HTML
+html.type.head	Элемент заголовок HTML
+html.type.title	Элемент HTML
+html.type.div	Элемент блок HTML
+html.type.br	Элемент HTML

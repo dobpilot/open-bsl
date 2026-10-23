@@ -16,7 +16,7 @@ use crate::{
 pub(crate) static USER_MESSAGE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СообщениеПользователю",
-    type_display: "User message",
+    type_display: "Сообщение пользователю",
     type_names: &["UserMessage"],
 };
 

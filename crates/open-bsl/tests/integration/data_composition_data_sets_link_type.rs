@@ -5,14 +5,14 @@ fn data_composition_data_sets_link_type_matches_native_aliases_types_and_present
     let engine = Engine::builder().build().unwrap();
     let mut state = engine.new_state();
     for (russian, english, presentation) in [
-        ("Внешняя", "Outer", "External"),
-        ("Внутренняя", "Inner", "Internal"),
+        ("Внешняя", "Outer", "Внешняя"),
+        ("Внутренняя", "Inner", "Внутренняя"),
     ] {
         let source = format!(
             "ЗначениеПробы = ТипСвязиНаборовДанныхКомпоновкиДанных.{russian};
             Возврат ЗначениеПробы = DataCompositionDataSetsLinkType.{english}
                 И Строка(ЗначениеПробы) = \"{presentation}\"
-                И Строка(ТипЗнч(ЗначениеПробы)) = \"DataCompositionDataSetsLinkType\"
+                И Строка(ТипЗнч(ЗначениеПробы)) = \"ТипСвязиНаборовДанныхКомпоновкиДанных\"
                 И ТипЗнч(ЗначениеПробы) = Тип(\"DataCompositionDataSetsLinkType\")
                 И ТипЗнч(ЗначениеПробы) = Тип(\"ТипСвязиНаборовДанныхКомпоновкиДанных\");"
         );
@@ -22,9 +22,9 @@ fn data_composition_data_sets_link_type_matches_native_aliases_types_and_present
         state
             .exec(
                 "Возврат Строка(ТипСвязиНаборовДанныхКомпоновкиДанных)
-                    = \"EnumDataCompositionDataSetsLinkType\"
+                    = \"ПеречислениеТипСвязиНаборовДанныхКомпоновкиДанных\"
                     И Строка(ТипЗнч(DataCompositionDataSetsLinkType))
-                    = \"EnumDataCompositionDataSetsLinkType\";",
+                    = \"ПеречислениеТипСвязиНаборовДанныхКомпоновкиДанных\";",
             )
             .unwrap(),
         Value::Boolean(true)
