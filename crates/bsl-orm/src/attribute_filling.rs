@@ -1,6 +1,15 @@
 //! Измеренное заполнение собственных реквизитов документа и бизнес-процесса.
 use super::*;
 
+/// `Отказ` после `ОбработкаПроверкиЗаполнения`. Платформа приводит его как
+/// `Булево`, а неприводимое значение (`"abc"`, `Неопределено`, `Null`,
+/// массив) считает отсутствием отказа без ошибки. Измерено на справочнике и
+/// документе: `measure-catalog-cancel-coercion.platform.txt` и
+/// `measure-document-cancel-coercion.platform.txt` в `tests/conformance/measure/1c/`.
+pub(super) fn handler_refused(value: &Value) -> bool {
+    open_bsl::convert_to_boolean(value).unwrap_or(false)
+}
+
 pub(super) fn fill<'a>(
     attributes: impl IntoIterator<Item = (usize, &'a DocumentAttribute)>,
     attribute_values: &RefCell<Vec<Value>>,

@@ -1758,6 +1758,7 @@ if [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-fill-value-stora
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-attribute-conversion.bsl" ] ||
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-fill-primitives.bsl" ] ||
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-object-context.bsl" ] ||
+   [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-cancel-coercion.bsl" ] ||
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-fill-replace.bsl" ] ||
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-fill-explicit.bsl" ] ||
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-fill-attributes-no-handler.bsl" ] ||
@@ -1914,6 +1915,12 @@ if [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-fill-primitives.
     cp tests/conformance/measure/1c/document-fill-primitives.xml "$WORK/cfg/Documents/ЗамерДокумента.xml"
     mkdir -p "$WORK/cfg/Documents/ЗамерДокумента/Ext"
     cp tests/conformance/measure/1c/document-fill-primitives-module.bsl \
+        "$WORK/cfg/Documents/ЗамерДокумента/Ext/ObjectModule.bsl"
+fi
+
+if [ "$SCRIPT" = "tests/conformance/measure/1c/measure-document-cancel-coercion.bsl" ]; then
+    mkdir -p "$WORK/cfg/Documents/ЗамерДокумента/Ext"
+    cp tests/conformance/measure/1c/catalog-cancel-coercion-module.bsl \
         "$WORK/cfg/Documents/ЗамерДокумента/Ext/ObjectModule.bsl"
 fi
 
@@ -2125,10 +2132,14 @@ if [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling.bsl
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-own-attribute-synonym-ru.bsl" ] ||
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-scalars.bsl" ] ||
    [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-common.bsl" ] ||
-   [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-handler.bsl" ]; then
+   [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-handler.bsl" ] ||
+   [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-cancel-coercion.bsl" ]; then
     cp -r tests/conformance/measure/1c/cfg-src-temp-tables/. "$WORK/cfg/"
     mkdir -p "$WORK/cfg/Catalogs/ЗамерВременныхТаблиц/Ext"
     cp tests/conformance/measure/1c/catalog-check-filling-module.bsl "$WORK/cfg/Catalogs/ЗамерВременныхТаблиц/Ext/ObjectModule.bsl"
+    if [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-cancel-coercion.bsl" ]; then
+        cp tests/conformance/measure/1c/catalog-cancel-coercion-module.bsl "$WORK/cfg/Catalogs/ЗамерВременныхТаблиц/Ext/ObjectModule.bsl"
+    fi
     if [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-handler.bsl" ] ||
        [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-messages-code.bsl" ] ||
        [ "$SCRIPT" = "tests/conformance/measure/1c/measure-catalog-check-filling-messages-code-ru.bsl" ]; then

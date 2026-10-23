@@ -1,0 +1,12 @@
+cancel.check.true=FALSE
+cancel.check.false=TRUE
+cancel.check.one=FALSE
+cancel.check.zero=TRUE
+cancel.check.fraction=FALSE
+cancel.check.string_true=FALSE
+cancel.check.string_en=FALSE
+cancel.check.string_other=TRUE
+cancel.check.string_empty=TRUE
+cancel.check.undefined=TRUE
+cancel.check.null=TRUE
+cancel.check.array=TRUE

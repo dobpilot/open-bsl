@@ -1,0 +1,7 @@
+legacy.lifecycle.close-new	
+legacy.lifecycle.set-default	accepted
+legacy.lifecycle.close-default	
+legacy.lifecycle.close-again	
+legacy.lifecycle.aliases	1
+legacy.element	<z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>
+legacy.xpath-result	<z:e xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z"></z:e>

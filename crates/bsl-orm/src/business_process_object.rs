@@ -692,6 +692,10 @@ fn check_filling(
             vec![Value::Boolean(false), paths.clone()],
             Value::new_object(object.clone()),
         )?;
+        // Приведение небулева `Отказ` измерено на справочнике и документе
+        // (`attribute_filling::handler_refused`); база бизнес-процесса для
+        // той же пробы собрана вручную и раннером не воспроизводится, поэтому
+        // здесь остаётся явная ошибка вместо переноса правила.
         let Value::Boolean(handler_refused) = parameters[0] else {
             return Err(RtError::DynamicError(
                 "небулев отказ обработчика проверки бизнес-процесса пока не поддерживается".into(),

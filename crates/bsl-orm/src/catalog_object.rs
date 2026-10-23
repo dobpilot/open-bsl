@@ -923,7 +923,7 @@ fn check_filling(
             vec![Value::Boolean(false), paths.clone()],
             Value::new_object(object.clone()),
         )?;
-        refused = open_bsl::convert_to_boolean(&params[0])?;
+        refused = attribute_filling::handler_refused(&params[0]);
         // Нативная проба закрепляет исходный массив: его мутация влияет на
         // проверку, а присваивание нового массива параметру — нет.
         // Замер: `tests/conformance/measure/1c/measure-catalog-check-filling-handler.platform.txt`.

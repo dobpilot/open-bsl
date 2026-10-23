@@ -165,6 +165,24 @@ fn catalog_check_handler_matches_native_array_identity_and_paths() {
 }
 
 #[test]
+fn catalog_check_refusal_matches_native_boolean_coercion() {
+    assert_eq!(
+        replay(
+            include_str!(
+                "../../../tests/conformance/measure/1c/catalog-cancel-coercion-module.bsl"
+            ),
+            include_str!(
+                "../../../tests/conformance/measure/1c/measure-catalog-cancel-coercion.bsl"
+            ),
+        ),
+        include_str!(
+            "../../../tests/conformance/measure/1c/measure-catalog-cancel-coercion.platform.txt"
+        )
+        .trim(),
+    );
+}
+
+#[test]
 fn unknown_filling_settings_do_not_become_successful_validation() {
     let mut session = session_with_settings("", false);
     let module = session

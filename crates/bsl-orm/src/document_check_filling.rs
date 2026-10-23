@@ -62,7 +62,7 @@ pub(super) fn check_filling(
             vec![Value::Boolean(false), paths.clone()],
             Value::new_object(object.clone()),
         )?;
-        refused = open_bsl::convert_to_boolean(&parameters[0])?;
+        refused = attribute_filling::handler_refused(&parameters[0]);
     }
     // Сохраняем исходный массив: его очистка влияет на проверку,
     // присваивание нового массива параметру обработчика — нет.
