@@ -87,6 +87,14 @@ Crates остаются направленным конвейером. Пред�
 `bsl-bytecode`, переносимые контракты — `bsl-rt`, исполнение — `bsl-vm`, а
 native orchestration и worker pool — фасаду `open-bsl`.
 
+Конфигурационный слой лежит над фасадом: `bsl-orm` и `bsl-session`
+регистрируются в нём как обычные библиотеки, а `bsl-config-db` собирает из
+базы каталог и сеанс. Источник конфигурации (`bsl-config`) фасад знает
+всегда; разбор выгрузок XML и EDT подключает фича `configuration-files`,
+включённая по умолчанию. Ребро `bsl-config-db → bsl-syntax` — переиспользование
+лексера проекта при очистке восстановленного текста модулей
+(`native_source_cleanup.rs`), а не второй разбор BSL.
+
 Внутренние владельцы runtime, jobs и VM показаны в
 [карте Rust-модулей](rust-module-boundaries.md); разделение файлов
 не меняет описанные здесь границы компонентов и потоков.
@@ -106,6 +114,11 @@ flowchart LR
     libs["bsl-* библиотеки<br/>LibraryDescriptor"]
     pool["Пул заданий фасада<br/>std::thread + Mutex/Condvar<br/>(Tokio не понадобился, см. ARCH-10)"]
     http_adapter["process-wide Tokio + reqwest<br/>внутри bsl-http"]
+    config["bsl-config<br/>ConfigurationSource, снимок кода"]
+    config_files["bsl-config-xml, bsl-config-edt<br/>фича configuration-files"]
+    orm["bsl-orm<br/>объекты и менеджеры конфигурации"]
+    session["bsl-session<br/>сеанс конфигурации"]
+    config_db["bsl-config-db<br/>каталог из базы, права, образы"]
 
     legend["Стрелка A → B:<br/>A имеет normal-зависимость от B"]
     cli --> facade
@@ -135,6 +148,19 @@ flowchart LR
     format --> number
     libs --> rt
     facade --> libs
+    facade --> config
+    facade -.->|"configuration-files"| config_files
+    config_files --> config
+    orm --> facade
+    session --> orm
+    session --> config
+    session --> facade
+    config_db --> session
+    config_db --> orm
+    config_db --> config
+    config_db --> facade
+    config_db --> syntax
+    cli --> config_db
 
     forbidden1["ЗАПРЕЩЕНО:<br/>bsl-vm → syntax/sema/compiler"]
     forbidden2["ЗАПРЕЩЕНО:<br/>bsl-rt/bytecode → Tokio/reqwest"]

@@ -56,6 +56,17 @@ configuration path compiles once and reuses the collected names, and the
 alternating A/B. Both are run; if the frame growth shows, the handler stack
 moves to the run state keyed by frame depth.
 
+Result (2026-10-23, `instructions:u`, five alternating pairs of release
+`bsl-cli` built from `2b9a739` and from this change, loaded machine, so
+instructions rather than cycles): `call_overhead` −1.6 %, `pi_leibniz`
+−1.9 %, `str_find` −2.9…−3.5 %, `str_index` −7.5 %, `json_parse` −3.5 %,
+`regexp` −13.9 %, `goto_bench` +1.5 %; per-pair spread under 0.7 %. The
+call-heavy scenario, where a larger `Frame` would show, got cheaper, so the
+handler stack stays in `Frame`. The `goto_bench` growth has no frame
+traffic and is left as a known cost of the added `step` branches.
+`hot-code-diff.sh` against `HEAD` for this change's own VM edit: `step`
+identical, `step_cold` 0xa0 bytes smaller.
+
 ## Remaining structure
 
 - `GetImportedModule` resolves its target through an index computed during
