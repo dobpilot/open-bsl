@@ -48,4 +48,4 @@
 
 ## 8. Verification
 - [x] 8.1 `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`.
-- [ ] 8.2 `openspec validate resolve-unattended-work-review-findings --strict`; merge deltas and archive.
+- [x] 8.2 `openspec validate resolve-unattended-work-review-findings --strict`; merge deltas and archive.

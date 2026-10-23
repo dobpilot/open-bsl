@@ -7147,80 +7147,6 @@ The function SHALL reuse the existing XML reader and XMLDataType representations
 - **WHEN** the reader is initial or on whitespace before an element
 - **THEN** it advances as in the native control and derives the element type, including the XSD builtin-name rule
 
-### Requirement: Load custom settings through their configuration handler
-The ORM SHALL expose Загрузить/Load on acquired custom settings storage managers
-with one required object key and three optional parameters: settings key,
-settings description and user name. Calls in the storage's own manager module
-SHALL use the same receiver method. The operation SHALL invoke the acquired
-ОбработкаЗагрузки/LoadProcessing handler and return its final settings parameter.
-Handler lookup SHALL be case-insensitive, prefer ОбработкаЗагрузки when both
-names exist, and otherwise accept LoadProcessing. This priority SHALL not
-depend on ScriptVariant or declaration order. Missing-handler diagnostics
-SHALL retain the existing Russian-name fallback.
-This SHALL execute original application code rather than substitute an empty
-standard storage or fabricated setting. Omitted optional arguments SHALL match
-retained native controls. Handler errors SHALL propagate to the caller. An uncaught
-BSL exception, including explicit `ВызватьИсключение` and division by zero,
-inside `ОбработкаЗагрузки`
-SHALL terminate execution with a typed critical-configuration error visible to
-the host, bypassing enclosing BSL exception handlers. The original cause SHALL
-remain available. The owning facade State SHALL reject subsequent execution
-entries, including pollable execution and calls on existing module instances.
-A fresh State of the same Engine SHALL remain usable. This requirement does
-not reclassify exceptions outside that handler, cancellation or module-compilation errors.
-The host entry policy SHALL apply critical promotion only after target
-preparation succeeds. It SHALL preserve the existing type and catchability of
-preparation errors rather than promote them to critical handler failures.
-This host API rule SHALL NOT imply that a 1C settings-manager module permits
-module-body operators.
-
-#### Scenario: Native defaults and explicit user
-- **WHEN** the retained native probe loads an object with omitted optional
-  arguments or with an explicit settings key and user
-- **THEN** the handler inputs and returned settings match the native output
-
-#### Scenario: Own manager context
-- **WHEN** an exported function of a settings storage manager calls Load
-  without qualifying the receiver
-- **THEN** its own storage handler supplies the result
-
-#### Scenario: Raised load-handler error terminates the owning State
-- **WHEN** the acquired load handler explicitly raises an exception inside an enclosing BSL try/catch
-- **THEN** the host receives a typed critical-configuration error containing the original cause
-- **AND** the BSL catch block and subsequent statements do not execute
-- **AND** later execution entries on the same State fail before executing BSL
-
-#### Scenario: English custom load handler
-- **WHEN** a manager defines only LoadProcessing, including another letter case
-- **THEN** Load invokes that handler and returns its final settings parameter
-
-#### Scenario: Both handler names are defined
-- **WHEN** a manager defines both handler names in either order
-- **THEN** Load invokes ОбработкаЗагрузки for Russian and English ScriptVariant
-
-#### Scenario: Arithmetic handler failure is critical
-- **WHEN** the acquired load handler divides by zero inside an enclosing BSL try/catch
-- **THEN** the host receives a typed critical-configuration error with the arithmetic cause
-- **AND** the BSL catch and continuation do not execute
-
-#### Scenario: Host target preparation preserves the original error
-- **GIVEN** a host-defined module recipe whose preparation returns an ordinary Raised error
-- **WHEN** the host requests critical entry into its handler
-- **THEN** preparation retains the original Raised result rather than becoming a critical handler failure
-- **AND** unrelated later host execution is not rejected by the critical-State latch
-- **AND** this synthetic host-module case is not a claim about valid 1C manager source
-
-#### Scenario: Critical failure does not poison another State
-- **WHEN** a custom load handler critically fails in one State
-- **THEN** a fresh State of the same Engine can execute a normal load
-- **AND** ordinary BSL exceptions outside that handler remain catchable
-
-#### Scenario: Dynamic expression compilation fails inside the handler body
-- **GIVEN** the retained LoadProcessing body calling Evaluate with an unknown function inside its String expression
-- **WHEN** the storage invokes that handler and dynamic expression compilation fails
-- **THEN** the host receives a critical-configuration error retaining the dynamic-expression cause, the outer BSL catch does not run and State reentry fails
-- **AND** this does not classify preparation failures of the manager module as handler execution errors
-
 ### Requirement: Create an acquired report object
 The ORM SHALL expose Создать/Create with zero arguments on acquired report
 managers, including their own manager-module context. Every successful call
@@ -7825,3 +7751,49 @@ Supported new unsaved document objects SHALL expose Заблокирован/IsL
 #### Scenario: Existing same-named export
 - **WHEN** the owning module already exposes an exported method with the same name and its own arity
 - **THEN** direct object calls preserve that export's result and arity instead of selecting the newly declared platform method
+
+### Requirement: Load custom settings through the acquired handler
+Загрузить/Load on an acquired custom settings storage manager, also called from
+its own manager module, SHALL run the original ОбработкаЗагрузки/LoadProcessing
+handler and return its final settings parameter. The handler SHALL be found
+case-insensitively, preferring ОбработкаЗагрузки regardless of ScriptVariant
+and declaration order; a missing handler SHALL keep the Russian-name diagnostic.
+
+#### Scenario: Native defaults and explicit user
+- **WHEN** the retained native probe loads an object with omitted optional
+  arguments or with an explicit settings key and user
+- **THEN** the handler inputs and returned settings match the native output
+
+#### Scenario: Own manager context
+- **WHEN** an exported function of a settings storage manager calls Load
+  without qualifying the receiver
+- **THEN** its own storage handler supplies the result
+
+#### Scenario: English custom load handler
+- **WHEN** a manager defines only LoadProcessing, including another letter case
+- **THEN** Load invokes that handler and returns its final settings parameter
+
+#### Scenario: Both handler names are defined
+- **WHEN** a manager defines both handler names in either order
+- **THEN** Load invokes ОбработкаЗагрузки for Russian and English ScriptVariant
+
+### Requirement: Load handler errors leave Load as catchable exceptions
+Following the platform documentation, which states only that Загрузить invokes
+ОбработкаЗагрузки, an uncaught BSL exception inside that handler SHALL leave
+Загрузить as an ordinary catchable exception carrying the original cause, and
+the session SHALL remain usable. This deliberately deviates from 1C
+8.3.27.2342, which demands a restart in these cases.
+
+#### Scenario: Raised load-handler error is catchable
+- **WHEN** the acquired load handler explicitly raises an exception inside an enclosing BSL try/catch
+- **THEN** the enclosing catch runs and `ОписаниеОшибки()` contains the raised text
+- **AND** later calls in the same session, including a normal load, succeed
+
+#### Scenario: Runtime failure inside the handler keeps its cause
+- **WHEN** the acquired load handler divides by zero, reads a missing field, converts an invalid string, indexes out of bounds or fails to compile a dynamic expression
+- **THEN** a direct Load call fails with that original runtime error
+- **AND** the same Load inside BSL try/catch is caught
+
+#### Scenario: Startup catches a handler error
+- **WHEN** УстановкаПараметровСеанса calls Load inside try/catch and the handler raises
+- **THEN** the session opens
