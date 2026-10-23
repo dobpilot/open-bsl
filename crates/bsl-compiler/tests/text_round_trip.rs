@@ -113,6 +113,41 @@ fn compile(src: &str) -> Program {
     bsl_compiler::compile_program(&resolved).unwrap_or_else(|e| panic!("{src}\ncompile: {e:?}"))
 }
 
+fn compilation_error_program(optimizations: bsl_compiler::Optimizations) -> Program {
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().unwrap();
+    let parsed = bsl_syntax::parse(
+        "Функция Исправный() Экспорт Возврат 42; КонецФункции
+         Функция Ошибка() Экспорт Возврат СовсемНеизвестноеИмя; КонецФункции",
+    )
+    .unwrap();
+    let resolved = bsl_sema::resolve_configuration_module_with_name_error_policy(
+        &parsed.items,
+        &registry,
+        &[],
+        &[],
+        true,
+    )
+    .unwrap();
+    bsl_compiler::compile_program_with(&resolved, optimizations).unwrap()
+}
+
+#[test]
+fn deferred_compilation_failure_survives_optimization_and_text_round_trip() {
+    for optimizations in [
+        bsl_compiler::Optimizations::default(),
+        bsl_compiler::Optimizations::all(),
+    ] {
+        let program = compilation_error_program(optimizations);
+        let text = write_program(&program, None).unwrap();
+        assert!(text.contains("RaiseCompilationError"));
+        let parsed = parse_program(&text).unwrap();
+        bsl_bytecode::image::verify(&parsed).unwrap();
+        assert_eq!(write_program(&parsed, None).unwrap(), text);
+    }
+}
+
 fn call_component_program() -> Program {
     let mut program = compile("Возврат 1;");
     program
@@ -132,12 +167,14 @@ fn call_component_program() -> Program {
         base: 0,
         count: 0,
     };
-    let name: u16 = program.names.len().try_into().unwrap();
-    program.names.push("ПолеКомпонента".to_string());
-    let type_name: u16 = program.names.len().try_into().unwrap();
-    program.names.push("ТипКомпонента".to_string());
-    let method: u16 = program.names.len().try_into().unwrap();
-    program.names.push("МетодКомпонента".to_string());
+    let mut names = program.names.to_vec();
+    let name: u16 = names.len().try_into().unwrap();
+    names.push("ПолеКомпонента".to_string());
+    let type_name: u16 = names.len().try_into().unwrap();
+    names.push("ТипКомпонента".to_string());
+    let method: u16 = names.len().try_into().unwrap();
+    names.push("МетодКомпонента".to_string());
+    program.names = names.into();
     program.links.push(LinkEntry::ObjectMethod {
         library: 1,
         type_name,
@@ -174,11 +211,15 @@ fn call_component_program() -> Program {
     program
 }
 
-/// Межмодульные опкоды компилятор пока не эмитит: они появляются при
-/// связывании каталога конфигурации. Для покрытия печати и разбора
-/// программа собирается руками — как `call_component_program`.
+/// Межмодульные опкоды требуют каталога конфигурации. Для покрытия печати
+/// и разбора программа собирается руками — как `call_component_program`.
 fn imported_ops_program() -> Program {
     let mut program = compile("Возврат 1;");
+    program.imports.push(bsl_bytecode::ModuleImport {
+        alias: "Служебный".into(),
+        module: ModuleId::new(0),
+        global: false,
+    });
     program.links = vec![
         LinkEntry::Function {
             module: ModuleId::new(0),
@@ -200,6 +241,7 @@ fn imported_ops_program() -> Program {
             dst: 0,
             link_slot: 1,
         },
+        Instr::GetImportedModule { dst: 0, module: 0 },
         Instr::SetImportedVar {
             link_slot: 1,
             src: 0,
@@ -415,7 +457,11 @@ fn the_corpus_covers_every_opcode() {
             }
         }
     }
-    for extra in [call_component_program(), imported_ops_program()] {
+    for extra in [
+        call_component_program(),
+        imported_ops_program(),
+        compilation_error_program(bsl_compiler::Optimizations::default()),
+    ] {
         let text = write_program(&extra, None).unwrap();
         for op in OPCODES {
             if text

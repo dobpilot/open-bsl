@@ -104,7 +104,10 @@ pub(super) struct LinkedTables {
 
     functions: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
     constructors: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
-    object_methods: Vec<Vec<Option<LinkedObjectMethod>>>,
+    // На обычных инструкциях хранится только пустой указатель. Полное
+    // описание нужно лишь типизированным вызовам: иначе каждая инструкция
+    // платит за него при связывании всего каталога.
+    object_methods: Vec<Vec<Option<Box<LinkedObjectMethod>>>>,
     /// Мемоизация «(статическая таблица типа, номер имени) → обработчик»
     /// для компонентных объектов со статическими таблицами методов
     /// (см. `ObjectProtocol::method_table`): разрешение по строке
@@ -121,6 +124,7 @@ pub(super) struct LinkedTables {
     pub(super) zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     pub(super) files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     pub(super) random: bsl_rt::RandomHandle,
+    pub(super) clock: Option<bsl_rt::ClockHandle>,
     pub(super) network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
     pub(super) host_data: Option<std::rc::Rc<dyn std::any::Any>>,
     pub(super) background_jobs: Option<std::rc::Rc<dyn bsl_rt::BackgroundJobService>>,
@@ -142,6 +146,14 @@ pub(super) struct LinkedObjectMethod {
 }
 
 impl LinkedComponents<'_> {
+    pub(super) fn with_clock(mut self, clock: Option<bsl_rt::ClockHandle>) -> Self {
+        // Часы устанавливаются до разделения связанных таблиц, как область модуля.
+        std::rc::Rc::get_mut(&mut self.tables)
+            .expect("часы задаются до разделения связанных таблиц")
+            .clock = clock;
+        self
+    }
+
     pub(super) fn with_scope_module(mut self, module: Option<bsl_bytecode::ModuleId>) -> Self {
         // Область устанавливается сразу после связывания, до разделения
         // таблиц с кадрами или продолжениями.
@@ -187,7 +199,7 @@ impl LinkedComponents<'_> {
         self.object_methods
             .get(func_id)
             .and_then(|chunk| chunk.get(pc))
-            .and_then(|slot| *slot)
+            .and_then(|slot| slot.as_deref().copied())
             .ok_or(RtError::InvalidBytecode(
                 "типизированный вызов не связан с методом объекта",
             ))
@@ -316,7 +328,7 @@ pub(super) fn resolve_component_method(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn link_components<'a>(
-    program: &'a Program,
+    program: &Program,
     registry: Option<&'a bsl_rt::RuntimeRegistry>,
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
@@ -328,13 +340,10 @@ pub(super) fn link_components<'a>(
     message_sink: Option<std::rc::Rc<dyn bsl_rt::UserMessageSink>>,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
-    // Периметр стоит ПЕРВОЙ строкой и отделён от самого связывания
-    // (`link_verified` ниже) ради одного-единственного теста — того, что
-    // проверяет РАЗМОТКУ ошибки из вложенного кадра. Классы порчи,
-    // которыми он раньше пользовался, периметр теперь отвергает до
-    // исполнения, и это правильно; но проверять размотку всё равно надо,
-    // а сохранять ради неё дыру в периметре — нельзя. Шов приватный и
-    // из рабочего пути недостижим.
+    // Периметр предшествует связыванию. Отдельный `link_verified`
+    // используется также каталогом после проверки через кэш неизменяемых
+    // общих таблиц. Приватный тест размотки вызывает его без периметра,
+    // чтобы воспроизвести ошибку вложенного кадра; рабочие пути проверяются.
     bsl_bytecode::image::verify(program)?;
     link_verified(
         program,
@@ -353,7 +362,7 @@ pub(super) fn link_components<'a>(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn link_verified<'a>(
-    program: &'a Program,
+    program: &Program,
     registry: Option<&'a bsl_rt::RuntimeRegistry>,
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
@@ -547,17 +556,15 @@ pub(super) fn link_verified<'a>(
                         })?;
                     let members = library_descriptor
                         .object_members()
-                        .find(|members| std::ptr::eq(members.ty(), ty))
-                        .ok_or_else(|| {
-                            RtError::Link(format!(
-                                "тип {type_written} не объявляет таблицу методов"
-                            ))
-                        })?;
+                        .find(|members| std::ptr::eq(members.ty(), ty));
                     let name = bsl_rt::NameId::from_index(method as u32);
-                    let descriptor = bsl_rt::find_method_from_table(
-                        members.methods(),
-                        field_name(program, name)?,
-                    );
+                    let method_written = field_name(program, name)?;
+                    // Отсутствие таблицы не делает неисполняемый метод
+                    // причиной отказа всего модуля. При реальном вызове
+                    // используется обычный `ObjectProtocol::call_method`.
+                    let descriptor = members.and_then(|members| {
+                        bsl_rt::find_method_from_table(members.methods(), method_written)
+                    });
                     let count = chunk.call_arg_modes[*arg_modes as usize].len();
                     let result_required =
                         matches!(instruction, Instr::CallLinkedObjectMethod { .. });
@@ -569,14 +576,14 @@ pub(super) fn link_verified<'a>(
                     let invalid_result_use = descriptor.is_some_and(|descriptor| {
                         descriptor.check_result_use(result_required).is_err()
                     });
-                    object_method_slots[pc] = Some(LinkedObjectMethod {
+                    object_method_slots[pc] = Some(Box::new(LinkedObjectMethod {
                         ty,
                         name,
                         descriptor,
                         count,
                         invalid_arity,
                         invalid_result_use,
-                    });
+                    }));
                 }
                 _ => {}
             }
@@ -593,6 +600,7 @@ pub(super) fn link_verified<'a>(
             zone,
             files,
             random,
+            clock: None,
             network,
             host_data,
             background_jobs,
@@ -658,3 +666,7 @@ mod tests {
         assert!(files.upgrade().is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "linking_storage_tests.rs"]
+mod storage_tests;

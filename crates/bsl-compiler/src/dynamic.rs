@@ -47,9 +47,68 @@ pub fn compile_dynamic_snippet_with_imports(
     scope: std::num::NonZeroU64,
     imports: &[bsl_sema::ImportedModule],
 ) -> Result<DynamicUnit, String> {
-    if imports.len() != request.imports.len()
+    compile_dynamic_snippet_with_receiver_property_names(
+        request,
+        registry,
+        symbols,
+        scope,
+        imports,
+        &[],
+    )
+}
+
+/// Компилирует фрагмент с конечным контекстом свойств получателя его модуля.
+///
+/// # Errors
+/// Возвращает ошибки обычного фрагмента и несовпадения импортного окружения.
+pub fn compile_dynamic_snippet_with_receiver_property_names(
+    request: &DynamicRequest<'_>,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    symbols: &bsl_syntax::PreprocSymbols,
+    scope: std::num::NonZeroU64,
+    imports: &[bsl_sema::ImportedModule],
+    properties: &[String],
+) -> Result<DynamicUnit, String> {
+    compile_dynamic_snippet_with_import_provider(
+        request, registry, symbols, scope, imports, properties, None,
+    )
+}
+
+/// Компилирует фрагмент, загружая объявления импортов только по обращению.
+///
+/// # Errors
+/// Возвращает ошибки обычного фрагмента либо адресного источника объявлений.
+pub fn compile_dynamic_snippet_with_import_provider(
+    request: &DynamicRequest<'_>,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    symbols: &bsl_syntax::PreprocSymbols,
+    scope: std::num::NonZeroU64,
+    imports: &[bsl_sema::ImportedModule],
+    properties: &[String],
+    provider: Option<&dyn bsl_sema::ImportedModuleProvider>,
+) -> Result<DynamicUnit, String> {
+    // Собственный контекст не является BSL-импортом. Он привязан к
+    // владельцу фрагмента и не открывает функции или переменные модулей.
+    if imports
+        .iter()
+        .filter(|import| import.is_self)
+        .any(|import| {
+            !import.alias.is_empty()
+                || !import.functions.is_empty()
+                || !import.variables.is_empty()
+                || import.component_access.is_some()
+                || request
+                    .scope
+                    .module
+                    .is_none_or(|owner| owner.index() != import.module as usize)
+        })
+    {
+        return Err("собственный контекст фрагмента не совпадает с владельцем".into());
+    }
+    if imports.iter().filter(|import| !import.is_self).count() != request.imports.len()
         || imports
             .iter()
+            .filter(|import| !import.is_self)
             .zip(request.imports)
             .any(|(actual, expected)| {
                 actual.alias != expected.alias
@@ -102,13 +161,15 @@ pub fn compile_dynamic_snippet_with_imports(
     // async-метода. Ошибка должна предшествовать исполнению всего фрагмента,
     // включая инструкции до Ждать (dynamic-async-await 2026-09-17).
     let (all_locals, body, fragment_requirements, links) =
-        bsl_sema::resolve_snippet_stmts_with_imports(
+        bsl_sema::resolve_snippet_stmts_with_provider(
             request.locals,
             request.module_vars,
             &stmts,
             &signatures,
             registry,
             imports,
+            properties,
+            provider,
         )
         .map_err(|error| error.to_string())?;
     let requirements = merge_requirements(request.requirements, &fragment_requirements)?;

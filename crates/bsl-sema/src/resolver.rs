@@ -1,5 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
+#[path = "resolver_import_lookup.rs"]
+mod import_lookup;
+use import_lookup::ImportLookup;
+
 use bsl_number::BslNumber;
 use bsl_syntax::{Expr as AExpr, Item, LValue, Stmt as AStmt, StmtKind as AStmtKind};
 
@@ -22,6 +26,11 @@ enum CallPosition {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SemaError {
+    /// Источник не смог предоставить объявления реально используемого модуля.
+    ImportedModuleUnavailable {
+        module: String,
+        message: String,
+    },
     /// Идентификатор читается раньше первого присваивания/объявления.
     UndefinedVariable(String),
     /// Вызов имени, для которого нет объявленной `Процедура`/`Функция` в
@@ -73,6 +82,8 @@ pub enum SemaError {
     /// числа span не хранит; она придёт вместе с позицией у всей
     /// `SemaError` (остаток плана abi-refactor-f).
     BadNumericLiteral(String),
+    /// Имя конструктора отсутствует в реестре компонентов текущего движка.
+    UnsupportedConstructor(String),
     /// Конструкция языка, для которой ещё нет резолвинга (коллекции,
     /// `Выполнить`/`Вычислить`, значения по умолчанию/пропуски аргументов,
     /// ... — приходят в последующих milestone'ах).
@@ -83,6 +94,12 @@ pub enum SemaError {
 impl std::fmt::Display for SemaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            SemaError::ImportedModuleUnavailable { module, message } => {
+                write!(
+                    f,
+                    "не удалось загрузить объявления модуля «{module}»: {message}"
+                )
+            }
             SemaError::UndefinedVariable(name) => {
                 write!(f, "переменная «{name}» читается до присваивания")
             }
@@ -148,6 +165,9 @@ impl std::fmt::Display for SemaError {
                 write!(f, "некорректный числовой литерал «{preview}{tail}»")
             }
             SemaError::Unsupported(what) => write!(f, "не поддержано: {what}"),
+            SemaError::UnsupportedConstructor(name) => {
+                write!(f, "не поддержано: тип «{name}» в выражении Новый")
+            }
         }
     }
 }
@@ -210,7 +230,7 @@ pub struct SnippetSignature {
 /// Возвращает [`SemaError`] при повторном объявлении функции, неизвестном имени, неверном
 /// числе аргументов, недопустимом литерале даты или ещё не поддерживаемой конструкции.
 pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(items, None, &[])
+    resolve_program_impl(items, None, &[], false, &[], false, None)
 }
 
 /// Разрешает модуль с каталогом функций и конструкторов собранного
@@ -224,7 +244,7 @@ pub fn resolve_program_with_registry(
     items: &[Item],
     registry: &bsl_rt::RuntimeRegistry,
 ) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(items, Some(registry), &[])
+    resolve_program_impl(items, Some(registry), &[], false, &[], false, None)
 }
 
 /// То же с импортным окружением: модуль видит экспортные символы модулей,
@@ -241,7 +261,116 @@ pub fn resolve_program_with_imports(
     registry: &bsl_rt::RuntimeRegistry,
     imports: &[ImportedModule],
 ) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(items, Some(registry), imports)
+    resolve_program_impl(items, Some(registry), imports, false, &[], false, None)
+}
+
+/// Разрешает модуль конфигурации с отложенными ошибками арности в теле метода
+/// и измеренным случаем `Для Каждого X Из X`. Самостоятельные точки входа
+/// остаются строгими.
+///
+/// # Errors
+///
+/// Возвращает ошибки объявлений, тела модуля и все ошибки методов, кроме
+/// неверной арности и указанной самоссылки цикла.
+pub fn resolve_configuration_module_with_imports(
+    items: &[Item],
+    registry: &bsl_rt::RuntimeRegistry,
+    imports: &[ImportedModule],
+) -> Result<ResolvedProgram, SemaError> {
+    resolve_configuration_module_with_receiver_property_names(items, registry, imports, &[])
+}
+
+/// Разрешает модуль конфигурации с конечной таблицей свойств своего получателя.
+/// Объявленные переменные и параметры сохраняют прежний приоритет.
+///
+/// # Errors
+/// Возвращает ошибки обычного разрешения модуля конфигурации.
+pub fn resolve_configuration_module_with_receiver_property_names(
+    items: &[Item],
+    registry: &bsl_rt::RuntimeRegistry,
+    imports: &[ImportedModule],
+    properties: &[String],
+) -> Result<ResolvedProgram, SemaError> {
+    resolve_configuration_module_with_name_error_policy(items, registry, imports, properties, false)
+}
+
+/// Разрешает модуль с явно выбранным отложенным отказом неизвестных имён.
+/// При включённой политике отказ относится ко всему модулю при его инициализации.
+///
+/// # Errors
+/// Возвращает остальные ошибки обычного разрешения модуля конфигурации.
+pub fn resolve_configuration_module_with_name_error_policy(
+    items: &[Item],
+    registry: &bsl_rt::RuntimeRegistry,
+    imports: &[ImportedModule],
+    properties: &[String],
+    defer_name_errors: bool,
+) -> Result<ResolvedProgram, SemaError> {
+    resolve_program_impl(
+        items,
+        Some(registry),
+        imports,
+        true,
+        properties,
+        defer_name_errors,
+        None,
+    )
+}
+
+/// Источник экспортных объявлений, запрашиваемых после выбора импорта.
+pub trait ImportedModuleProvider {
+    /// Возвращает объявления конкретного модуля без разбора его тела.
+    ///
+    /// # Errors
+    /// Возвращает ошибку загрузки или объявления выбранного модуля.
+    fn module_surface(&self, module: u32) -> Result<&ImportedModule, SemaError>;
+}
+
+/// Разрешает модуль с адресной загрузкой экспортных объявлений.
+///
+/// Приоритет переменных и выбор псевдонима остаются в обычном резолвере.
+/// Источник вызывается только после выбора конкретного импортируемого модуля.
+///
+/// # Errors
+/// Возвращает обычные семантические ошибки либо ошибку источника объявлений.
+pub fn resolve_configuration_module_with_provider(
+    items: &[Item],
+    registry: &bsl_rt::RuntimeRegistry,
+    imports: &[ImportedModule],
+    properties: &[String],
+    defer_name_errors: bool,
+    provider: &dyn ImportedModuleProvider,
+) -> Result<ResolvedProgram, SemaError> {
+    resolve_program_impl(
+        items,
+        Some(registry),
+        imports,
+        true,
+        properties,
+        defer_name_errors,
+        Some(provider),
+    )
+}
+
+/// Разрешает входной текст с адресной загрузкой объявлений импортов.
+///
+/// # Errors
+/// Возвращает обычные семантические ошибки либо ошибку источника объявлений.
+pub fn resolve_program_with_provider(
+    items: &[Item],
+    registry: &bsl_rt::RuntimeRegistry,
+    imports: &[ImportedModule],
+    provider: &dyn ImportedModuleProvider,
+) -> Result<ResolvedProgram, SemaError> {
+    resolve_program_impl(
+        items,
+        Some(registry),
+        imports,
+        false,
+        &[],
+        false,
+        Some(provider),
+    )
 }
 
 /// Экспортная функция чужого модуля, видимая при резолвинге импортёра.
@@ -270,10 +399,29 @@ pub struct ImportedVariable {
 pub struct ImportedModule {
     pub alias: String,
     pub module: u32,
+    /// Это экспортная поверхность того же модуля, который сейчас разрешается.
+    /// Его символы компилируются как собственные, без самоимпорта в байт-коде.
+    pub is_self: bool,
     /// Экспортные методы модуля входят в глобальную область импортёра.
     pub global: bool,
     pub functions: Vec<ImportedFunction>,
     pub variables: Vec<ImportedVariable>,
+    /// Компонентное свойство, через которое хост вызывает этот модуль.
+    /// Такая связь задаёт зависимость, но не открывает BSL-импорт модуля.
+    pub component_access: Option<ComponentModuleAccess>,
+    /// Методы собственного получателя, явно объявленные хостом модуля.
+    pub receiver_methods: &'static [bsl_rt::MethodDescriptor],
+}
+
+/// Связь свойства компонентного глобала с модулем конфигурации.
+#[derive(Debug, Clone)]
+pub struct ComponentModuleAccess {
+    /// Компонент, которому принадлежит фабрика глобала.
+    pub library: bsl_rt::LibraryKey,
+    /// Код фабрики глобального объекта.
+    pub function: bsl_rt::FunctionCode,
+    /// Имя свойства этого объекта.
+    pub property: String,
 }
 
 impl ImportedModule {
@@ -309,9 +457,12 @@ impl ImportedModule {
         ImportedModule {
             alias: alias.to_string(),
             module,
+            is_self: false,
             global: false,
             functions,
             variables,
+            component_access: None,
+            receiver_methods: &[],
         }
     }
 }
@@ -342,8 +493,13 @@ fn resolve_program_impl(
     items: &[Item],
     registry: Option<&bsl_rt::RuntimeRegistry>,
     imports: &[ImportedModule],
+    defer_method_arity: bool,
+    receiver_properties: &[String],
+    defer_name_errors: bool,
+    imported_provider: Option<&dyn ImportedModuleProvider>,
 ) -> Result<ResolvedProgram, SemaError> {
     let links = std::cell::RefCell::new(LinkAccumulator::default());
+    let import_lookup = ImportLookup::new(imports);
     // Платформа откладывает ошибку голого имени импортируемого
     // общего модуля до инициализации модуля. Ячейка общая для всех тел:
     // одной ошибки достаточно, чтобы весь модуль не мог завершить старт.
@@ -461,19 +617,71 @@ fn resolve_program_impl(
             registry,
             used_libraries: HashSet::new(),
             strict_stmt_calls: true,
+            allow_foreach_self_reference: defer_method_arity,
             allow_await: is_async,
             core_locals: Some(&core_maps.functions[func_index]),
             core_module: Some(&core_maps.module_slots),
             labels: &labels,
             imports,
+            import_lookup: &import_lookup,
+            receiver_properties,
             links: Some(&links),
-            deferred_module_error: Some(&deferred_module_error),
             deferred_module_dependencies: Some(&deferred_module_dependencies),
+            missing_imported_function: false,
+            imported_provider,
         };
         for p in params {
             r.declare(&p.name);
         }
-        let resolved_body = r.resolve_block(body)?;
+        let resolved_body = match r.resolve_block(body) {
+            Ok(body) => body,
+            Err(error @ SemaError::UndefinedVariable(_)) if defer_name_errors => {
+                // Ошибка соседнего метода запрещает весь модуль при обращении.
+                // Экспортные сигнатуры сохраняются для связывания импортёров.
+                deferred_module_error.replace(Some(error.to_string()));
+                Vec::new()
+            }
+            Err(error @ SemaError::UnsupportedConstructor(_)) if defer_name_errors => {
+                // Нативная проба неизвестного конструктора разрешает старт без
+                // обращения к модулю, но запрещает даже исправный его экспорт.
+                // Замеры: `measure-module-unknown-constructor-unused` и `-lazy`.
+                deferred_module_error.replace(Some(error.to_string()));
+                Vec::new()
+            }
+            Err(error @ SemaError::UndefinedFunction(_))
+                if defer_name_errors && r.missing_imported_function =>
+            {
+                // На 1С 8.3.27 неизвестный метод существующего общего модуля
+                // запрещает только вызывающий метод. Ошибка возникает до его
+                // тела и аргументов; исправные соседние экспорты продолжают работать.
+                // Замер: `measure-module-unknown-common-method.platform.txt`.
+                vec![RStmt {
+                    kind: RStmtKind::Raise(Some(RExpr::Str(error.to_string()))),
+                    line: 0,
+                }]
+            }
+            Err(error @ SemaError::UndefinedFunction(_)) if defer_name_errors => {
+                // Неизвестная глобальная функция, как и переменная, запрещает
+                // весь общий модуль при обращении. Неиспользуемый модуль
+                // не мешает запуску: `deferred-common-function-errors`.
+                // Отсутствующий метод известного импорта обработан выше.
+                deferred_module_error.replace(Some(error.to_string()));
+                Vec::new()
+            }
+            Err(
+                error @ (SemaError::ArgumentCountMismatch { .. }
+                | SemaError::MissingRequiredArgument { .. }),
+            ) if defer_method_arity => {
+                // Платформа компилирует тело метода при первом вызове: соседний
+                // экспорт работает при неверной арности в другом методе.
+                // Сигнатуру цели не меняем; ошибка остаётся ловимой при вызове.
+                vec![RStmt {
+                    kind: RStmtKind::Raise(Some(RExpr::Str(error.to_string()))),
+                    line: 0,
+                }]
+            }
+            Err(error) => return Err(error),
+        };
         // Значения по умолчанию резолвятся ПОСЛЕ тела, но той же `r` — её
         // `locals`/`index` к этому моменту уже содержат слоты параметров
         // (объявлены выше, до `resolve_block`), так что дефолт вида
@@ -482,7 +690,14 @@ fn resolve_program_impl(
         let mut resolved_params = Vec::with_capacity(params.len());
         for p in params {
             let default = match &p.default {
-                Some(e) => Some(r.resolve_expr(e)?),
+                Some(e) => Some(match r.resolve_expr(e) {
+                    Ok(value) => value,
+                    Err(error @ SemaError::UndefinedVariable(_)) if defer_name_errors => {
+                        deferred_module_error.replace(Some(error.to_string()));
+                        RExpr::Undefined
+                    }
+                    Err(error) => return Err(error),
+                }),
                 None => None,
             };
             resolved_params.push(ResolvedParam {
@@ -520,22 +735,37 @@ fn resolve_program_impl(
         registry,
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
+        allow_foreach_self_reference: false,
         allow_await: false,
         core_locals: Some(&core_maps.top),
         core_module: Some(&core_maps.module_slots),
         labels: &top_labels,
         imports,
+        import_lookup: &import_lookup,
+        receiver_properties,
         links: Some(&links),
-        deferred_module_error: Some(&deferred_module_error),
         deferred_module_dependencies: Some(&deferred_module_dependencies),
+        missing_imported_function: false,
+        imported_provider,
     };
-    let mut top_body = r.resolve_block(&top_stmts)?;
+    let mut top_body = match r.resolve_block(&top_stmts) {
+        Ok(body) => body,
+        Err(error @ SemaError::UndefinedVariable(_)) if defer_name_errors => {
+            deferred_module_error.replace(Some(error.to_string()));
+            Vec::new()
+        }
+        Err(error) => return Err(error),
+    };
     used_libraries.extend(r.used_libraries.iter().cloned());
     if let Some(message) = deferred_module_error.borrow_mut().take() {
         top_body.insert(
             0,
             RStmt {
-                kind: RStmtKind::Raise(Some(RExpr::Str(message))),
+                kind: if defer_name_errors {
+                    RStmtKind::RaiseCompilationError(message)
+                } else {
+                    RStmtKind::Raise(Some(RExpr::Str(message)))
+                },
                 line: 0,
             },
         );
@@ -559,6 +789,7 @@ fn resolve_program_impl(
         deferred_module_dependencies: deferred_module_dependencies.into_inner(),
         imports: imports
             .iter()
+            .filter(|module| !module.is_self)
             .map(|module| (module.alias.clone(), module.module, module.global))
             .collect(),
     })
@@ -597,6 +828,7 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
     let empty_funcs = HashMap::new();
     let empty_module = HashMap::new();
     let labels = resolve_labels(stmts)?;
+    let import_lookup = ImportLookup::new(&[]);
     let mut r = Resolver {
         locals: Vec::new(),
         index: HashMap::new(),
@@ -605,14 +837,18 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         registry: None,
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
+        allow_foreach_self_reference: false,
         allow_await: false,
         core_locals: None,
         core_module: None,
         labels: &labels,
         imports: &[],
+        import_lookup: &import_lookup,
+        receiver_properties: &[],
         links: None,
-        deferred_module_error: None,
         deferred_module_dependencies: None,
+        missing_imported_function: false,
+        imported_provider: None,
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
@@ -797,6 +1033,8 @@ fn resolve_snippet_stmts_mode_registry(
         allow_await,
         registry,
         &[],
+        &[],
+        None,
     )?;
     Ok((locals, body, requirements))
 }
@@ -821,6 +1059,30 @@ pub fn resolve_snippet_stmts_with_imports(
     registry: Option<&bsl_rt::RuntimeRegistry>,
     imports: &[ImportedModule],
 ) -> Result<ResolvedImportedSnippet, SemaError> {
+    resolve_snippet_stmts_with_receiver_property_names(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        registry,
+        imports,
+        &[],
+    )
+}
+
+/// Разрешает динамический фрагмент с теми же свойствами получателя, что и модуль.
+///
+/// # Errors
+/// Возвращает ошибки обычного разрешения фрагмента и импортов.
+pub fn resolve_snippet_stmts_with_receiver_property_names(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[SnippetSignature],
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    imports: &[ImportedModule],
+    properties: &[String],
+) -> Result<ResolvedImportedSnippet, SemaError> {
     resolve_snippet_stmts_imports_impl(
         existing_locals,
         module_vars,
@@ -830,6 +1092,37 @@ pub fn resolve_snippet_stmts_with_imports(
         false,
         registry,
         imports,
+        properties,
+        None,
+    )
+}
+
+/// Разрешает динамический фрагмент с адресным источником объявлений.
+///
+/// # Errors
+/// Возвращает ошибки фрагмента или источника выбранного импорта.
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_snippet_stmts_with_provider(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[SnippetSignature],
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    imports: &[ImportedModule],
+    properties: &[String],
+    provider: Option<&dyn ImportedModuleProvider>,
+) -> Result<ResolvedImportedSnippet, SemaError> {
+    resolve_snippet_stmts_imports_impl(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        true,
+        false,
+        registry,
+        imports,
+        properties,
+        provider,
     )
 }
 
@@ -843,6 +1136,8 @@ fn resolve_snippet_stmts_imports_impl(
     allow_await: bool,
     registry: Option<&bsl_rt::RuntimeRegistry>,
     imports: &[ImportedModule],
+    receiver_properties: &[String],
+    imported_provider: Option<&dyn ImportedModuleProvider>,
 ) -> Result<ResolvedImportedSnippet, SemaError> {
     let empty_funcs: HashMap<String, FuncSig> = signatures
         .iter()
@@ -883,6 +1178,7 @@ fn resolve_snippet_stmts_imports_impl(
         .collect();
     let labels = resolve_labels(stmts)?;
     let links = std::cell::RefCell::new(LinkAccumulator::default());
+    let import_lookup = ImportLookup::new(imports);
     let mut r = Resolver {
         locals: existing_locals.to_vec(),
         index,
@@ -891,14 +1187,18 @@ fn resolve_snippet_stmts_imports_impl(
         registry,
         used_libraries: HashSet::new(),
         strict_stmt_calls,
+        allow_foreach_self_reference: false,
         allow_await,
         core_locals: None,
         core_module: None,
         labels: &labels,
         imports,
+        import_lookup: &import_lookup,
+        receiver_properties,
         links: Some(&links),
-        deferred_module_error: None,
         deferred_module_dependencies: None,
+        missing_imported_function: false,
+        imported_provider,
     };
     let body = r.resolve_block(stmts)?;
     let requirements = match registry {
@@ -1049,6 +1349,7 @@ fn resolve_labels(stmts: &[AStmt]) -> Result<HashMap<String, LabelId>, SemaError
 }
 
 struct Resolver<'a> {
+    imported_provider: Option<&'a dyn ImportedModuleProvider>,
     locals: Vec<String>,
     /// Ключ — имя в верхнем регистре: доступ к переменным регистронезависим.
     index: HashMap<String, u32>,
@@ -1073,6 +1374,9 @@ struct Resolver<'a> {
     /// месте этого поля не убрало бы ни ветвления, ни комментария —
     /// значит, добавило бы только тип.
     strict_stmt_calls: bool,
+    /// В конфигурационном методе платформа принимает измеренный случай
+    /// `Для Каждого X Из X`, когда `X` прежде не объявлен.
+    allow_foreach_self_reference: bool,
     /// Разрешён ли `Ждать` в текущем теле.
     allow_await: bool,
     /// Статически доказанные ядровые приёмники этой области (см.
@@ -1088,31 +1392,57 @@ struct Resolver<'a> {
     /// Импортное окружение модуля: экспортные поверхности модулей по
     /// псевдонимам. Пусто у одиночных модулей, REPL и фрагментов.
     imports: &'a [ImportedModule],
+    /// Поиск общих имён переиспользуется между телами этого модуля.
+    import_lookup: &'a ImportLookup<'a>,
+    /// Свойства текущего получателя, явно объявленные хостом для этого модуля.
+    receiver_properties: &'a [String],
     /// Аккумулятор связей программы; `None` там, где импортов нет.
     links: Option<&'a std::cell::RefCell<LinkAccumulator>>,
-    /// Ошибка, которую платформа проявляет лишь при первой инициализации
-    /// модуля. `None` сохраняет строгую диагностику одиночных скриптов и
-    /// фрагментов `Выполнить`/`Вычислить`.
-    deferred_module_error: Option<&'a std::cell::RefCell<Option<String>>>,
-    /// Целевые модули тех же отложенных ошибок. Список нужен только
+    /// Цели отложенных ошибок и чтений модульных ссылок. Список нужен только
     /// при вычислении статического замыкания корневого графа.
     deferred_module_dependencies: Option<&'a std::cell::RefCell<Vec<u32>>>,
+    /// Последний отказ относится к отсутствующему экспорту известного импорта.
+    /// Неизвестные голые функции сохраняют прежнюю строгую диагностику.
+    missing_imported_function: bool,
 }
 
 impl<'a> Resolver<'a> {
+    fn imported_surface<'s>(
+        provider: Option<&'s dyn ImportedModuleProvider>,
+        module: &'s ImportedModule,
+    ) -> Result<&'s ImportedModule, SemaError> {
+        match provider {
+            Some(provider) if !module.is_self && module.component_access.is_none() => {
+                provider.module_surface(module.module)
+            }
+            _ => Ok(module),
+        }
+    }
+
+    fn receiver_property(&self, name: &str) -> bool {
+        self.receiver_properties
+            .iter()
+            .any(|candidate| bsl_rt::folded_eq(candidate, name))
+    }
+
+    fn this_object() -> RExpr {
+        RExpr::CallBuiltinFn {
+            builtin: bsl_rt::BuiltinFn::ThisObject,
+            args: Vec::new(),
+        }
+    }
     /// Импортируемый модуль по имени-псевдониму. Псевдоним активен, только
-    /// если имя не занято локальной или модульной переменной: затенение —
-    /// то же правило, что у `Символы` и имён перечислений.
+    /// если имя не занято переменной или свойством собственного получателя.
+    /// Приоритет свойства над псевдонимом измерен на платформе 1С.
     fn import_alias(&self, base: &str) -> Option<&'a ImportedModule> {
         if self.imports.is_empty()
             || self.lookup(base).is_some()
             || self.module_index.contains_key(&base.to_uppercase())
+            || self.receiver_property(base)
         {
             return None;
         }
-        self.imports
-            .iter()
-            .find(|module| bsl_rt::folded_eq(&module.alias, base))
+        self.import_lookup.alias(base)
     }
 
     /// Номер связи для символа импортируемого модуля.
@@ -1150,14 +1480,27 @@ impl<'a> Resolver<'a> {
         position: CallPosition,
         shown: &str,
     ) -> Result<RExpr, SemaError> {
-        let Some(function) = module
+        let surface = Self::imported_surface(self.imported_provider, module)?;
+        let Some(function) = surface
             .functions
             .iter()
             .find(|f| bsl_rt::folded_eq(&f.name, name))
         else {
+            // После отсечения ошибочного тела сохраняем описание цели в
+            // корневом графе. Иначе повторное разрешение примет её имя за
+            // неизвестную переменную и ошибочно запретит весь модуль.
+            if !module.is_self
+                && let Some(dependencies) = self.deferred_module_dependencies
+            {
+                let mut dependencies = dependencies.borrow_mut();
+                if !dependencies.contains(&module.module) {
+                    dependencies.push(module.module);
+                }
+            }
+            self.missing_imported_function = true;
             return Err(SemaError::UndefinedFunction(shown.to_string()));
         };
-        if function.is_procedure && position != CallPosition::Statement {
+        if function.is_procedure && position != CallPosition::Statement && module.is_self {
             return Err(SemaError::ProcedureAsFunction(shown.to_string()));
         }
         // Асинхронная цель межмодульного вызова закрыта до замера
@@ -1179,14 +1522,40 @@ impl<'a> Resolver<'a> {
         for (i, has_default_i) in function.param_has_default.iter().enumerate() {
             match args.get(i) {
                 Some(Some(e)) => rargs.push(ResolvedArg::Value(self.resolve_expr(e)?)),
-                Some(None) | None if *has_default_i => rargs.push(ResolvedArg::Default),
-                Some(None) | None => {
+                Some(None) if *has_default_i => rargs.push(ResolvedArg::Default),
+                // ИЗМЕРЕНО на 8.3.27 пробой
+                // `measure-imported-omitted-required.bsl`: явный пустой
+                // слот квалифицированного межмодульного вызова доезжает
+                // до обязательного параметра как `Неопределено`.
+                Some(None) => rargs.push(ResolvedArg::Value(RExpr::Undefined)),
+                None if *has_default_i => rargs.push(ResolvedArg::Default),
+                None => {
                     return Err(SemaError::MissingRequiredArgument {
                         name: shown.to_string(),
                         index: i,
                     });
                 }
             }
+        }
+        if function.is_procedure && position != CallPosition::Statement && !module.is_self {
+            // Нативные пробы `imported-procedure-expression` подтверждают:
+            // чужая процедура в выражении отвергается при вызове после
+            // вычисления аргументов. Открытый вызов ссылки на модуль уже
+            // проверяет требование результата до исполнения тела процедуры.
+            return Ok(RExpr::CallMethod {
+                obj: Box::new(RExpr::ImportedModule(module.module)),
+                method: name.to_string(),
+                open: true,
+                component_type: None,
+                component_link: None,
+                args: rargs,
+            });
+        }
+        if module.is_self {
+            return Ok(RExpr::Call {
+                func: u32::from(function.chunk - 1),
+                args: rargs,
+            });
         }
         let link = self.link_slot(crate::resolved::ResolvedLink::Function {
             module: module.module,
@@ -1206,7 +1575,8 @@ impl<'a> Resolver<'a> {
         module: &ImportedModule,
         name: &str,
     ) -> Result<u32, SemaError> {
-        let Some(variable) = module
+        let surface = Self::imported_surface(self.imported_provider, module)?;
+        let Some(variable) = surface
             .variables
             .iter()
             .find(|v| bsl_rt::folded_eq(&v.name, name))
@@ -1253,14 +1623,20 @@ impl<'a> Resolver<'a> {
                 constructor,
                 ..
             } => {
+                let descriptor = self.registry?.library_by_package(library.as_str())?;
+                // Старые конструкторы сохраняют закрытые методы ядра;
+                // `СписокЗначений` читает таблицу компонента.
                 if library.as_str() == bsl_rt::PACKAGE_NAME {
-                    Some(CoreReceiver::Core)
-                } else {
-                    self.registry?
-                        .library_by_package(library.as_str())?
-                        .constructor_type(*constructor)
-                        .map(CoreReceiver::Component)
+                    if constructor.get() == 6 {
+                        return Some(CoreReceiver::BackgroundJobs);
+                    }
+                    if core_receivers::uses_builtin_core_methods(*constructor) {
+                        return Some(CoreReceiver::Core);
+                    }
                 }
+                descriptor
+                    .constructor_type(*constructor)
+                    .map(CoreReceiver::Component)
             }
             RExpr::NewArray { .. }
             | RExpr::NewStructure { .. }
@@ -1302,6 +1678,17 @@ impl<'a> Resolver<'a> {
                         let value = self.resolve_expr(value)?;
                         return Ok(Some(RStmtKind::AssignModuleVar { slot, value }));
                     }
+                    // Измеренный контекст объекта: присваивание его свойству
+                    // не объявляет неявную локальную переменную. Явные переменные
+                    // выше сохраняют приоритет; без таблицы прежний путь не меняется.
+                    if self.receiver_property(name) {
+                        let value = self.resolve_expr(value)?;
+                        return Ok(Some(RStmtKind::AssignField {
+                            obj: Self::this_object(),
+                            name: name.clone(),
+                            value,
+                        }));
+                    }
                     let slot = self.declare(name);
                     let value = self.resolve_expr(value)?;
                     Ok(Some(RStmtKind::AssignLocal { slot, value }))
@@ -1318,8 +1705,8 @@ impl<'a> Resolver<'a> {
                     if let AExpr::Ident(base) = obj
                         && let Some(module) = self.import_alias(base)
                     {
-                        let link = self.resolve_imported_variable(module, name)?;
                         let value = self.resolve_expr(value)?;
+                        let link = self.resolve_imported_variable(module, name)?;
                         return Ok(Some(RStmtKind::AssignImportedVar { link, value }));
                     }
                     let obj = self.resolve_expr(obj)?;
@@ -1453,10 +1840,18 @@ impl<'a> Resolver<'a> {
                 }))
             }
             AStmtKind::ForEach { var, iter, body } => {
+                let self_source = self.allow_foreach_self_reference
+                    && matches!(iter, AExpr::Ident(name) if bsl_rt::folded_eq(name, var))
+                    && self.lookup(var).is_none()
+                    && !self.module_index.contains_key(&var.to_uppercase());
+                // Только измеренный случай видит ещё не инициализированный
+                // слот цикла в собственном источнике. Во всех прочих случаях
+                // выражение разрешается до объявления переменной цикла.
+                let slot = self_source.then(|| self.declare(var));
                 let iter = self.resolve_expr(iter)?;
                 // Как и в ForNumeric: переменная объявляется до тела, живёт
                 // и после КонецЦикла.
-                let slot = self.declare(var);
+                let slot = slot.unwrap_or_else(|| self.declare(var));
                 let body = self.resolve_block(body)?;
                 Ok(Some(RStmtKind::ForEach { slot, iter, body }))
             }
@@ -1572,6 +1967,13 @@ impl<'a> Resolver<'a> {
                 Some(slot) => Ok(RExpr::Local(slot)),
                 None => match self.module_index.get(&name.to_uppercase()) {
                     Some(&slot) => Ok(RExpr::ModuleVar(slot)),
+                    // Свойство собственного получателя доступно только в явно
+                    // заданном контексте модуля. Параметры, локальные и модульные
+                    // переменные проверены выше; глобальная лесенка ниже прежняя.
+                    None if self.receiver_property(name) => Ok(RExpr::Field {
+                        obj: Box::new(Self::this_object()),
+                        name: name.clone(),
+                    }),
                     // Глобальное свойство библиотеки — вызов её функции без
                     // аргументов при каждом чтении. Локальные и модульные
                     // переменные выше побеждают; заглушка `Метаданные` ниже
@@ -1705,34 +2107,28 @@ impl<'a> Resolver<'a> {
                             args: Vec::new(),
                         })
                     }
-                    // Голое имя импортируемого общего модуля не является
-                    // значением. Измерено на 8.3.27: конфигурация загружается,
-                    // а ошибка возникает при первой инициализации именно этого модуля.
-                    // Проверки локальных и модульных переменных выше сохраняют их
-                    // прежний приоритет.
-                    None if self.deferred_module_error.is_some()
-                        && self.import_alias(name).is_some() =>
-                    {
-                        let module = self
-                            .import_alias(name)
-                            .expect("наличие проверено в guard")
-                            .module;
-                        let message = SemaError::UndefinedVariable(name.clone()).to_string();
-                        let mut deferred = self
-                            .deferred_module_error
-                            .expect("наличие проверено в guard")
-                            .borrow_mut();
-                        if deferred.is_none() {
-                            *deferred = Some(message);
+                    // Измерено на 1С 8.3.27: имя общего модуля допустимо как
+                    // значение в аргументе и присваивании, включая собственное имя.
+                    // Прежний отказ пробы относился к ошибочной цели, а не к имени.
+                    // Локальные и модульные переменные выше сохраняют приоритет;
+                    // инициализацию цели выполняет существующий `GetImportedModule`.
+                    None if self.import_alias(name).is_some() => {
+                        let imported = self.import_alias(name).expect("наличие проверено в guard");
+                        if imported.is_self {
+                            // Собственный экземпляр уже находится в текущем кадре:
+                            // `ЭтотОбъект` сохраняет его ссылку без самоимпорта.
+                            Ok(Self::this_object())
+                        } else {
+                            // Чтение ссылки тоже удерживает цель в корневом графе,
+                            // даже если прямых вызовов её экспортов в исходнике нет.
+                            if let Some(dependencies) = self.deferred_module_dependencies {
+                                let mut dependencies = dependencies.borrow_mut();
+                                if !dependencies.contains(&imported.module) {
+                                    dependencies.push(imported.module);
+                                }
+                            }
+                            Ok(RExpr::ImportedModule(imported.module))
                         }
-                        let mut dependencies = self
-                            .deferred_module_dependencies
-                            .expect("ячейки отложенной ошибки создаются вместе")
-                            .borrow_mut();
-                        if !dependencies.contains(&module) {
-                            dependencies.push(module);
-                        }
-                        Ok(RExpr::Undefined)
                     }
                     None => Err(SemaError::UndefinedVariable(name.clone())),
                 },
@@ -1762,10 +2158,10 @@ impl<'a> Resolver<'a> {
                 index: Box::new(self.resolve_expr(index)?),
             }),
             AExpr::Field { obj, name } => {
-                // `Символы.ПС`/`Chars.LF` и `Символы.ВК`/`Chars.CR` —
-                // константы глобального контекста. Значения измерены на
-                // 8.3.27 пробами `CHARS.*`; отдельный runtime-объект ради
-                // двух строковых литералов не нужен. Локальная или
+                // `Символы`/`Chars` — шесть строковых констант
+                // глобального контекста. Значения измерены на 8.3.27
+                // пробами `CHARS.*`; отдельный runtime-объект ради
+                // неизменяемых литералов не нужен. Локальная или
                 // модульная переменная с тем же именем сохраняет обычный
                 // доступ к полю.
                 if let AExpr::Ident(base) = obj.as_ref()
@@ -1776,6 +2172,10 @@ impl<'a> Resolver<'a> {
                     {
                         ("СИМВОЛЫ", "ПС") | ("CHARS", "LF") => Some("\n"),
                         ("СИМВОЛЫ", "ВК") | ("CHARS", "CR") => Some("\r"),
+                        ("СИМВОЛЫ", "ПФ") | ("CHARS", "FF") => Some("\u{000c}"),
+                        ("СИМВОЛЫ", "ТАБ") | ("CHARS", "TAB") => Some("\t"),
+                        ("СИМВОЛЫ", "ВТАБ") | ("CHARS", "VTAB") => Some("\u{000b}"),
+                        ("СИМВОЛЫ", "НПП") | ("CHARS", "NBSP") => Some("\u{00a0}"),
                         _ => None,
                     };
                     if let Some(member) = member {
@@ -1816,8 +2216,34 @@ impl<'a> Resolver<'a> {
                     let link = self.resolve_imported_variable(module, name)?;
                     return Ok(RExpr::ImportedVar(link));
                 }
+                let receiver = self.resolve_expr(obj)?;
+                // Зависимость задаёт хост, но получатель уже разрешён обычным
+                // путём: локальная или модульная переменная по-прежнему
+                // перекрывает глобал. Само чтение свойства не меняется.
+                if let RExpr::CallComponent {
+                    library,
+                    function,
+                    args,
+                    ..
+                } = &receiver
+                    && args.is_empty()
+                    && let Some(dependencies) = self.deferred_module_dependencies
+                {
+                    for module in self.imports {
+                        if let Some(access) = &module.component_access
+                            && access.library == *library
+                            && access.function == *function
+                            && bsl_rt::folded_eq(&access.property, name)
+                        {
+                            let mut dependencies = dependencies.borrow_mut();
+                            if !dependencies.contains(&module.module) {
+                                dependencies.push(module.module);
+                            }
+                        }
+                    }
+                }
                 Ok(RExpr::Field {
-                    obj: Box::new(self.resolve_expr(obj)?),
+                    obj: Box::new(receiver),
                     name: name.clone(),
                 })
             }
@@ -1844,6 +2270,17 @@ impl<'a> Resolver<'a> {
     /// Разбирает известные платформенные типы из [`NEW_TYPES`]. Общие
     /// пользовательские типы пока не поддержаны.
     fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
+        // Обычная запись в файл сохраняет прежний опкод; редкие формы
+        // конструктора проходят через зарегистрированный компонент ядра.
+        if matches!(
+            type_name.to_uppercase().as_str(),
+            "ЗАПИСЬТЕКСТА" | "TEXTWRITER"
+        ) && args.len() == 1
+        {
+            return Ok(RExpr::NewTextWriter {
+                path: Box::new(self.resolve_expr(&args[0])?),
+            });
+        }
         // Одноаргументная форма остаётся дешёвым опкодом. Форма
         // с четырьмя аргументами идёт ниже через конструктор ядра:
         // он вычисляет все квалификаторы, не раздувая байт-код редкой формой.
@@ -2070,6 +2507,18 @@ impl<'a> Resolver<'a> {
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect();
+                if bsl_rt::first_folded_duplicate(&keys).is_some() {
+                    // Повтор поля оставляет одну запись с последними
+                    // значением и написанием. Форма не может содержать
+                    // два одинаковых `NameId`, поэтому используем уже
+                    // существующий путь конструктора времени исполнения.
+                    return Ok(RExpr::NewDynamicStructure {
+                        args: args
+                            .iter()
+                            .map(|argument| self.resolve_expr(argument))
+                            .collect::<Result<_, _>>()?,
+                    });
+                }
                 let rest = &args[1..];
                 let values = if rest.is_empty() {
                     keys.iter().map(|_| RExpr::Undefined).collect()
@@ -2138,17 +2587,8 @@ impl<'a> Resolver<'a> {
                         .transpose()?,
                 ))
             }
-            "ЗАПИСЬТЕКСТА" | "TEXTWRITER" => {
-                if args.len() != 1 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ЗаписьТекста".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewTextWriter {
-                    path: Box::new(self.resolve_expr(&args[0])?),
-                })
+            _ if self.registry.is_some() => {
+                Err(SemaError::UnsupportedConstructor(type_name.to_string()))
             }
             _ => Err(SemaError::Unsupported(
                 "этот тип в выражении Новый пока не поддержан",
@@ -2197,10 +2637,11 @@ impl<'a> Resolver<'a> {
                         });
                     }
                     // Каждая позиция `[0, arity)` разрешается сама: явный
-                    // аргумент — `Value`; пропуск (`Ф(1, , 3)`) или опущенный
-                    // хвост (`i >= args.len()`) допустимы лишь при умолчании у
-                    // ЭТОГО параметра — тогда `ResolvedArg::Default`, — иначе
-                    // обязательный параметр не передан.
+                    // аргумент — `Value`; пустая позиция с умолчанием и
+                    // опущенный необязательный хвост — `Default`. Измерено на
+                    // 8.3.27: явная пустая обязательная позиция передаёт
+                    // `Неопределено`, а отсутствующий обязательный хвост
+                    // остаётся ошибкой (`measure-local-omitted-*.platform.txt`).
                     let mut rargs = Vec::with_capacity(arity);
                     for (i, has_default_i) in has_default.iter().enumerate() {
                         match args.get(i) {
@@ -2208,7 +2649,8 @@ impl<'a> Resolver<'a> {
                             Some(None) | None if *has_default_i => {
                                 rargs.push(ResolvedArg::Default);
                             }
-                            Some(None) | None => {
+                            Some(None) => rargs.push(ResolvedArg::Value(RExpr::Undefined)),
+                            None => {
                                 return Err(SemaError::MissingRequiredArgument {
                                     name: name.clone(),
                                     index: i,
@@ -2222,16 +2664,50 @@ impl<'a> Resolver<'a> {
                     });
                 }
                 // НЕ ИЗМЕРЕНО(MODULE.GLOBAL_EXPORT_PRIORITY): собственное
-                // объявление выше сохраняет прежний приоритет, затем
-                // конфигурационный глобальный экспорт разрешается раньше
-                // библиотечного и встроенного глобального контекста.
-                if let Some(module) = self.imports.iter().find(|module| {
-                    module.global
-                        && module
-                            .functions
-                            .iter()
-                            .any(|function| bsl_rt::folded_eq(&function.name, name))
+                // объявление выше сохраняет прежний приоритет. После
+                // собственного контекста глобальный экспорт конфигурации
+                // разрешается раньше библиотечного и встроенного контекста.
+                // На 1С собственный метод менеджера выигрывает у глобального
+                // экспорта общего модуля (`measure-manager-context-priority`).
+                // Хост задаёт конечную таблицу имён: произвольный неизвестный
+                // вызов не превращается в метод. Получатель — текущий кадр,
+                // а не заново созданный менеджер или другой State.
+                if let Some(descriptor) = self.import_lookup.receiver_methods().find(|descriptor| {
+                    descriptor
+                        .names()
+                        .iter()
+                        .any(|candidate| bsl_rt::folded_eq(candidate, name))
                 }) {
+                    if u8::try_from(args.len())
+                        .ok()
+                        .is_none_or(|count| !descriptor.arity().accepts(count))
+                    {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: name.clone(),
+                            expected: descriptor.arity().max() as usize,
+                            found: args.len(),
+                        });
+                    }
+                    let args = args
+                        .iter()
+                        .map(|arg| match arg {
+                            Some(expr) => self.resolve_expr(expr).map(ResolvedArg::Value),
+                            None => Ok(ResolvedArg::Default),
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    return Ok(RExpr::CallMethod {
+                        obj: Box::new(RExpr::CallBuiltinFn {
+                            builtin: bsl_rt::BuiltinFn::ThisObject,
+                            args: Vec::new(),
+                        }),
+                        method: name.clone(),
+                        open: true,
+                        component_type: None,
+                        component_link: None,
+                        args,
+                    });
+                }
+                if let Some(module) = self.import_lookup.global_function(name) {
                     return self.resolve_imported_call_as(module, name, args, position, name);
                 }
                 if let Some(registry) = self.registry
@@ -2411,7 +2887,10 @@ impl<'a> Resolver<'a> {
                 let method = bsl_rt::BuiltinMethod::lookup(name);
                 let obj = self.resolve_expr(obj)?;
                 let receiver = self.core_receiver_of(&obj);
-                let closed_is_safe = receiver == Some(CoreReceiver::Core);
+                let closed_is_safe = matches!(
+                    receiver,
+                    Some(CoreReceiver::Core | CoreReceiver::BackgroundJobs)
+                );
                 let component_type = match receiver {
                     Some(CoreReceiver::Component(ty)) => Some(ty),
                     _ => None,
@@ -2442,12 +2921,38 @@ impl<'a> Resolver<'a> {
                         found: args.len(),
                     });
                 }
-                let rargs = if closed_is_safe {
+                let background_execute_with_omission = receiver
+                    == Some(CoreReceiver::BackgroundJobs)
+                    && (bsl_rt::folded_eq(name, "Выполнить") || bsl_rt::folded_eq(name, "Execute"))
+                    && args.iter().any(Option::is_none);
+                let core_method_with_omission = receiver == Some(CoreReceiver::Core)
+                    && matches!(
+                        method,
+                        Some(bsl_rt::BuiltinMethod::Copy | bsl_rt::BuiltinMethod::Insert)
+                    )
+                    && args.iter().any(Option::is_none);
+                let rargs = if background_execute_with_omission || core_method_with_omission {
+                    // `ФоновыеЗадания.Выполнить` принимает пропущенные
+                    // необязательные позиции как `Неопределено`. Платформа
+                    // так же обрабатывает пропуски в `Скопировать` и `Вставить`:
+                    // замеры `measure-value-table-copy-omissions.bsl` и
+                    // `measure-insert-omissions.bsl`.
+                    // Остальные закрытые методы сохраняют прежнее правило.
+                    self.resolve_builtin_args(args)?
+                        .into_iter()
+                        .map(ResolvedArg::Value)
+                        .collect()
+                } else if closed_is_safe && method.is_some() {
                     self.resolve_required_args(args)?
                         .into_iter()
                         .map(ResolvedArg::Value)
                         .collect()
                 } else {
+                    // Имя вне таблицы ядровых методов компилятор уже вызывает
+                    // открыто, даже у статически известного ядрового объекта.
+                    // Пропуски сохраняются до этого вызова: нативный контроль
+                    // `open-method-omissions-1016` подтверждает такую форму
+                    // `ЗаписьТекста.Открыть(Путь,,,Истина)`.
                     args.iter()
                         .map(|arg| match arg {
                             Some(expr) => self.resolve_expr(expr).map(ResolvedArg::Value),
@@ -2731,7 +3236,9 @@ mod tests {
 
     #[test]
     fn chars_line_feed_and_carriage_return_are_compile_time_strings() {
-        let resolved = resolve_src("пс = Символы.ПС; вк = Chars.CR;");
+        let resolved = resolve_src(
+            "пс = Символы.ПС; вк = Chars.CR; пф = Символы.ПФ; таб = Chars.Tab; втаб = Символы.ВТаб; нпп = Chars.NBSp;",
+        );
         assert_eq!(
             kinds(&resolved.body),
             vec![
@@ -2743,8 +3250,37 @@ mod tests {
                     slot: 1,
                     value: RExpr::Str("\r".to_string()),
                 },
+                RStmtKind::AssignLocal {
+                    slot: 2,
+                    value: RExpr::Str("\u{000c}".to_string()),
+                },
+                RStmtKind::AssignLocal {
+                    slot: 3,
+                    value: RExpr::Str("\t".to_string()),
+                },
+                RStmtKind::AssignLocal {
+                    slot: 4,
+                    value: RExpr::Str("\u{000b}".to_string()),
+                },
+                RStmtKind::AssignLocal {
+                    slot: 5,
+                    value: RExpr::Str("\u{00a0}".to_string()),
+                },
             ]
         );
+    }
+
+    #[test]
+    fn a_local_named_chars_keeps_ordinary_field_access() {
+        let resolved =
+            resolve_src("Символы = Новый Структура(\"Таб\", \"local\"); значение = Символы.Таб;");
+        assert!(matches!(
+            &resolved.body[1].kind,
+            RStmtKind::AssignLocal {
+                value: RExpr::Field { obj, name },
+                ..
+            } if matches!(obj.as_ref(), RExpr::Local(0)) && name == "Таб"
+        ));
     }
 
     #[test]
@@ -3056,8 +3592,8 @@ mod tests {
     }
 
     #[test]
-    fn skipping_a_parameter_without_a_default_is_an_error() {
-        let prog = parse("Функция Ф(а, б)\nВозврат а;\nКонецФункции\nx = Ф(1, );").unwrap();
+    fn absent_required_trailing_parameter_is_an_error() {
+        let prog = parse("Функция Ф(а, б)\nВозврат а;\nКонецФункции\nx = Ф(1);").unwrap();
         assert_eq!(
             resolve_program(&prog.items).unwrap_err(),
             SemaError::MissingRequiredArgument {
@@ -3092,6 +3628,22 @@ mod tests {
     }
 
     #[test]
+    fn explicitly_skipped_required_parameter_resolves_to_undefined() {
+        let prog = parse("Функция Ф(а, б)\nВозврат а;\nКонецФункции\nx = Ф(1, );").unwrap();
+        let resolved = resolve_program(&prog.items).unwrap();
+        match &resolved.top_level.body[0].kind {
+            RStmtKind::AssignLocal {
+                value: RExpr::Call { args, .. },
+                ..
+            } => assert!(matches!(
+                args.as_slice(),
+                [ResolvedArg::Value(_), ResolvedArg::Value(RExpr::Undefined)]
+            )),
+            other => panic!("ожидался вызов локальной функции, получено {other:?}"),
+        }
+    }
+
+    #[test]
     fn skipping_a_defaulted_parameter_resolves_to_skipped_marker() {
         let prog = parse("Функция Ф(а, б = 100)\nВозврат а;\nКонецФункции\nx = Ф(1, );").unwrap();
         let resolved = resolve_program(&prog.items).unwrap();
@@ -3104,6 +3656,41 @@ mod tests {
             }
             other => panic!("expected AssignLocal(Call), got {other:?}"),
         }
+    }
+
+    #[test]
+    fn an_explicitly_omitted_required_imported_argument_is_undefined() {
+        let target = parse("Функция Ф(а, б, в) Экспорт\nВозврат б;\nКонецФункции").unwrap();
+        let target = resolve_program(&target.items).unwrap();
+        let imported = ImportedModule::from_resolved("М", 1, &target);
+        let registry = synthetic_registry();
+
+        let caller = parse("x = М.Ф(1, , 3);").unwrap();
+        let resolved =
+            resolve_program_with_imports(&caller.items, &registry, std::slice::from_ref(&imported))
+                .unwrap();
+        let RStmtKind::AssignLocal {
+            value: RExpr::CallImported { args, .. },
+            ..
+        } = &resolved.top_level.body[0].kind
+        else {
+            panic!("ожидался квалифицированный межмодульный вызов");
+        };
+        assert_eq!(args[1], ResolvedArg::Value(RExpr::Undefined));
+
+        let caller = parse("x = М.Ф(1);").unwrap();
+        assert_eq!(
+            resolve_program_with_imports(
+                &caller.items,
+                &registry,
+                std::slice::from_ref(&imported),
+            )
+            .unwrap_err(),
+            SemaError::MissingRequiredArgument {
+                name: "М.Ф".to_string(),
+                index: 1,
+            }
+        );
     }
 
     /// ИЗМЕРЕНО(CALL.OMITTED_TRAILING): 8.3.27 принимает `Ф(1)` при

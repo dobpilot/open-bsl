@@ -81,19 +81,19 @@ pub trait DebugValues {
 ///
 /// Живёт ровно на время вызова крючка и ничего не копирует, пока не
 /// спросят: в обычном прогоне отладчик почти всегда просто идёт дальше.
-pub(super) struct FrameValues<'a, 'h, 'd> {
+pub(super) struct FrameValues<'a, 'h, 'd, 'c> {
     pub(super) task: &'a mut Task,
     pub(super) program: &'a Program,
     pub(super) linked: &'a LinkedComponents<'a>,
     pub(super) host: &'a mut HostIo<'h, 'd>,
     pub(super) module_state: &'a mut ModuleState,
     pub(super) async_state: &'a mut super::AsyncState,
-    pub(super) catalog: Option<&'a super::CatalogContext<'a>>,
+    pub(super) catalog: Option<&'a super::CatalogContext<'c>>,
     pub(super) session_modules: &'a mut super::SessionModules,
     pub(super) runtime_shapes: &'a mut bsl_rt::RuntimeShapes,
 }
 
-impl FrameValues<'_, '_, '_> {
+impl FrameValues<'_, '_, '_, '_> {
     fn frame_program(&self, index: usize) -> Option<&Program> {
         let frame = self.task.frames.get(index)?;
         if let Some(code) = &frame.code {
@@ -106,7 +106,7 @@ impl FrameValues<'_, '_, '_> {
     }
 }
 
-impl DebugValues for FrameValues<'_, '_, '_> {
+impl DebugValues for FrameValues<'_, '_, '_, '_> {
     fn locals(&mut self, index: usize) -> Vec<(String, BslValue)> {
         let Some(frame) = self.task.frames.get(index) else {
             return Vec::new();

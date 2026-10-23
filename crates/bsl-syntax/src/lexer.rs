@@ -1,6 +1,7 @@
 use crate::keywords;
 use crate::preproc::{self, Directive, PreprocSymbols};
 use crate::token::{Span, Token, TokenKind};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexError {
@@ -58,6 +59,7 @@ struct OpenIf {
 pub struct Lexer<'src> {
     src: &'src str,
     pos: usize,
+    keyword_cache: HashMap<&'src str, Option<keywords::Keyword>>,
     symbols: PreprocSymbols,
     open_ifs: Vec<OpenIf>,
     /// Смещения незакрытых `#Область`. Платформа парность отслеживает:
@@ -67,11 +69,12 @@ pub struct Lexer<'src> {
 }
 
 fn is_ident_start(c: char) -> bool {
-    c.is_alphabetic() || c == '_'
+    matches!(c, 'A'..='Z' | 'a'..='z' | 'А'..='я' | 'Ё' | 'ё' | '_') || c.is_alphabetic()
 }
 
 fn is_ident_continue(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
+    matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | 'А'..='я' | 'Ё' | 'ё' | '_')
+        || c.is_alphanumeric()
 }
 
 impl<'src> Lexer<'src> {
@@ -88,6 +91,7 @@ impl<'src> Lexer<'src> {
             // диапазоны токенов остаются байтовыми смещениями в исходном файле.
             pos: usize::from(src.starts_with('\u{feff}')) * '\u{feff}'.len_utf8(),
             symbols,
+            keyword_cache: HashMap::new(),
             open_ifs: Vec::new(),
             open_regions: Vec::new(),
         }
@@ -489,7 +493,13 @@ impl<'src> Lexer<'src> {
             }
         }
         let text = &self.src[start..self.pos];
-        match keywords::lookup(text) {
+        // Повторяющееся написание уже проверено по единой таблице. Ключ
+        // заимствован из исходника; кэш не копирует и не меняет его регистр.
+        let keyword = *self
+            .keyword_cache
+            .entry(text)
+            .or_insert_with(|| keywords::lookup(text));
+        match keyword {
             Some(kw) => self.tok(TokenKind::Keyword(kw), start),
             None => self.tok(TokenKind::Ident, start),
         }
@@ -1083,3 +1093,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "lexer_lookup_tests.rs"]
+mod lookup_tests;

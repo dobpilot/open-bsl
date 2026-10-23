@@ -198,6 +198,7 @@ fn expr_reads(e: &RExpr, out: &mut Vec<u32>) {
         | RExpr::Null
         | RExpr::ModuleVar(_)
         | RExpr::ImportedVar(_)
+        | RExpr::ImportedModule(_)
         | RExpr::EnumMember { .. }
         | RExpr::EnumTypeRef(_)
         | RExpr::NewTable
@@ -237,9 +238,13 @@ fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
         // Границы и коллекция вычисляются один раз до цикла, но приписать
         // их чтение заголовку безопасно: завышение живости стоит регистра,
         // занижение стоило бы неверного кода.
-        RStmtKind::ForNumeric { from, to, .. } => {
+        RStmtKind::ForNumeric { slot, from, to, .. } => {
             expr_reads(from, out);
             expr_reads(to, out);
+            // `NumericForNext` читает счётчик на обратном ребре цикла.
+            // В графе он представлен оператором заголовка, поэтому его
+            // чтение здесь удерживает `φ` счётчика живым до следующего шага.
+            out.push(*slot);
         }
         RStmtKind::ForEach { iter, .. } => expr_reads(iter, out),
         // Управляющие формы до блоков не доходят: их разобрал построитель
@@ -284,6 +289,7 @@ fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
         | RStmtKind::Try { .. }
         | RStmtKind::Raise(_)
         | RStmtKind::RaiseDetailed(_)
+        | RStmtKind::RaiseCompilationError(_)
         // `Выполнить` пишет всё, но обеими формами фрагмента ведает
         // `has_dynamic` ниже — здесь он лишь не пишет ничего сам по себе.
         | RStmtKind::Execute(_) => Vec::new(),
@@ -583,7 +589,9 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
                 e.iter().copied().collect()
             }
             crate::cfg::Terminator::RaiseDetailed(arguments) => arguments.iter().collect(),
-            crate::cfg::Terminator::Goto(_) | crate::cfg::Terminator::Exit => Vec::new(),
+            crate::cfg::Terminator::Goto(_)
+            | crate::cfg::Terminator::Exit
+            | crate::cfg::Terminator::RaiseCompilationError => Vec::new(),
         };
         for c in term_exprs {
             let mut read = Vec::new();

@@ -19,7 +19,7 @@ fn sample() -> Program {
     chunk.n_locals = 1;
     chunk.call_arg_modes = vec![vec![ArgMode::ByRefLocal(0)]];
     let mut program = support::program(vec![chunk]);
-    program.names = vec!["Метод".into()];
+    program.names = vec!["Метод".into()].into();
     image::finalize(&mut program);
     program
 }
@@ -60,7 +60,7 @@ fn open_call_modes_survive_round_trip_and_image_validation() {
 #[test]
 fn malformed_open_call_modes_are_rejected_with_or_without_bundles() {
     let mutations: &[fn(&mut Program)] = &[
-        |p| p.names.clear(),
+        |p| p.names = Default::default(),
         |p| p.chunks[0].call_arg_modes.clear(),
         |p| p.chunks[0].call_arg_modes[0] = vec![ArgMode::Value; 256],
         |p| p.chunks[0].call_arg_modes[0] = vec![ArgMode::Value; 3],

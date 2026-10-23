@@ -21,6 +21,10 @@ pub enum CompileError {
     /// пользователю не то, что он просил, и не сказать об этом.
     DebugInfoWithBreakingPass,
     TooManyLocals,
+    /// Ошибка кодогенерации именованного модуля конфигурации.
+    InModule(Box<(String, Self)>),
+    /// Ошибка кодогенерации процедуры или функции внутри модуля.
+    InMethod(Box<(String, Self)>),
     TooManyRegisters,
     TooManyConstants,
     /// Значение, которое текстовый формат байт-кода не представляет
@@ -68,6 +72,14 @@ impl std::fmt::Display for CompileError {
                  инструкции либо переставляет слоты"
             }
             CompileError::TooManyLocals => "слишком много локальных переменных в кадре",
+            CompileError::InModule(context) => {
+                let (module, source) = context.as_ref();
+                return write!(f, "модуль «{module}»: {source}");
+            }
+            CompileError::InMethod(context) => {
+                let (method, source) = context.as_ref();
+                return write!(f, "метод «{method}»: {source}");
+            }
             CompileError::TooManyRegisters => "слишком много регистров в кадре",
             CompileError::TooManyConstants => "слишком много констант в чанке",
             CompileError::UnrepresentableConst => "константа непредставима в байт-коде",
@@ -87,7 +99,14 @@ impl std::fmt::Display for CompileError {
     }
 }
 
-impl std::error::Error for CompileError {}
+impl std::error::Error for CompileError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InModule(context) | Self::InMethod(context) => Some(&context.1),
+            _ => None,
+        }
+    }
+}
 
 /// Компилирует весь модуль: чанк верхнего уровня плюс чанк на каждую
 /// `Процедура`/`Функция`, в том порядке, в котором их видит `bsl-sema`
@@ -242,7 +261,7 @@ pub fn compile_program_with(
     opts.check()?;
     let mut names = NameInterner::new();
     let mut shapes = ShapeTable::new();
-    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
+    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts, false)?;
     Ok(assemble_program(
         resolved,
         chunks,
@@ -261,7 +280,8 @@ pub fn compile_program_with(
 ///
 /// # Errors
 ///
-/// Ошибка компиляции первого сбойного модуля.
+/// Ошибка компиляции первого сбойного модуля с его именем и, для метода,
+/// именем процедуры или функции.
 pub fn compile_configuration(
     modules: &[(String, &ResolvedProgram)],
     entry: Option<&ResolvedProgram>,
@@ -269,16 +289,35 @@ pub fn compile_configuration(
 ) -> Result<(bsl_bytecode::ConfigurationProgram, Option<Program>), CompileError> {
     let opts = opts.into();
     opts.check()?;
+    match compile_configuration_with_names(modules, entry, opts, &[]) {
+        Err(error) if configuration_names::is_capacity_error(&error) => {
+            let prefix = configuration_names::collect(modules, entry, opts)?;
+            compile_configuration_with_names(modules, entry, opts, &prefix)
+        }
+        result => result,
+    }
+}
+
+#[path = "compiler/configuration_names.rs"]
+mod configuration_names;
+
+fn compile_configuration_with_names(
+    modules: &[(String, &ResolvedProgram)],
+    entry: Option<&ResolvedProgram>,
+    opts: BuildOptions,
+    prefix: &[String],
+) -> Result<(bsl_bytecode::ConfigurationProgram, Option<Program>), CompileError> {
     let mut names = NameInterner::new();
+    for name in prefix {
+        names.intern(name);
+    }
     let mut shapes = ShapeTable::new();
     let mut compiled = Vec::with_capacity(modules.len());
-    for (_, resolved) in modules {
-        compiled.push(compile_module_chunks(
-            resolved,
-            &mut names,
-            &mut shapes,
-            opts,
-        )?);
+    for (name, resolved) in modules {
+        compiled.push(
+            compile_module_chunks(resolved, &mut names, &mut shapes, opts, true)
+                .map_err(|source| CompileError::InModule(Box::new((name.clone(), source))))?,
+        );
     }
     let entry_chunks = match entry {
         Some(resolved) => Some(compile_module_chunks(
@@ -286,10 +325,20 @@ pub fn compile_configuration(
             &mut names,
             &mut shapes,
             opts,
+            false,
         )?),
         None => None,
     };
-    let final_names = names.into_names();
+    // Связи тоже содержат узкие индексы. Проверяем их до сборки,
+    // чтобы переполнение каталога не превратилось в `expect` линковщика.
+    for (name, resolved) in modules {
+        configuration_names::check_links(resolved, &names)
+            .map_err(|source| CompileError::InModule(Box::new((name.clone(), source))))?;
+    }
+    if let Some(resolved) = entry {
+        configuration_names::check_links(resolved, &names)?;
+    }
+    let final_names: std::sync::Arc<[String]> = names.into_names().into();
     let final_shapes = shapes.into_shapes();
     let catalog = bsl_bytecode::ConfigurationProgram {
         modules: modules
@@ -343,7 +392,7 @@ pub fn compile_entry_program(
     opts.check()?;
     let mut names = NameInterner::from_existing(base_names.to_vec());
     let mut shapes = ShapeTable::from_existing(base_shapes.to_vec());
-    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
+    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts, false)?;
     Ok(assemble_program(
         resolved,
         chunks,
@@ -359,6 +408,7 @@ fn compile_module_chunks(
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
     opts: BuildOptions,
+    name_methods: bool,
 ) -> Result<(Vec<Chunk>, Vec<Vec<u32>>), CompileError> {
     let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
     // Таблица строк собирается ПАРАЛЛЕЛЬНО чанкам, запись к записи: у
@@ -376,6 +426,7 @@ fn compile_module_chunks(
             &resolved.requirements,
             resolved.top_level.uses_dynamic,
             resolved.module_vars.len(),
+            false,
             false,
             false,
             names,
@@ -398,10 +449,18 @@ fn compile_module_chunks(
                 0,
                 f.is_procedure,
                 f.is_async,
+                name_methods,
                 names,
                 shapes,
                 opts,
-            )?,
+            )
+            .map_err(|source| {
+                if name_methods {
+                    CompileError::InMethod(Box::new((f.name.clone(), source)))
+                } else {
+                    source
+                }
+            })?,
         );
     }
     // Инварианты графа проверяются на КАЖДОЙ компиляции в отладочной
@@ -470,11 +529,11 @@ fn assemble_program(
     resolved: &ResolvedProgram,
     chunks: Vec<Chunk>,
     lines: Vec<Vec<u32>>,
-    names: Vec<String>,
+    names: impl Into<std::sync::Arc<[String]>>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
     debug_info: bool,
 ) -> Program {
-    let mut program = assemble_raw(resolved, chunks, lines, names, shapes);
+    let mut program = assemble_raw(resolved, chunks, lines, names.into(), shapes);
     // Производные таблицы считает ОДНА точка на весь проект: правило
     // пересчёта и оба его аргумента принадлежат образу, а не сборщику.
     //
@@ -520,12 +579,14 @@ pub(crate) fn compile_links(
                     .expect("компонент метода входит в requirements"),
                 type_name: names
                     .iter()
-                    .position(|name| name == type_name)
+                    .position(|name| bsl_rt::folded_eq(name, type_name))
                     .and_then(|index| u16::try_from(index).ok())
                     .expect("имя типа метода интернировано"),
                 method: names
                     .iter()
-                    .position(|name| name == method)
+                    // Интернер хранит первое написание имени во всём
+                    // каталоге, а связь сохраняет написание этого модуля.
+                    .position(|name| bsl_rt::folded_eq(name, method))
                     .and_then(|index| u16::try_from(index).ok())
                     .expect("имя метода интернировано"),
             },
@@ -533,11 +594,15 @@ pub(crate) fn compile_links(
         .collect()
 }
 
+#[cfg(test)]
+#[path = "compiler/links_tests.rs"]
+mod links_tests;
+
 fn assemble_raw(
     resolved: &ResolvedProgram,
     chunks: Vec<Chunk>,
     lines: Vec<Vec<u32>>,
-    names: Vec<String>,
+    names: std::sync::Arc<[String]>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
 ) -> Program {
     let links = compile_links(&resolved.links, &resolved.requirements, &names);
@@ -647,6 +712,7 @@ pub fn compile_snippet_with_requirements(
         0,
         false,
         false,
+        false,
         &mut names,
         &mut shapes,
         // ПРИНЯТОЕ РЕШЕНИЕ, а не следствие: фрагмент компилируется без
@@ -693,7 +759,7 @@ pub fn compile_snippet_with_requirements(
     })
 }
 
-// Двенадцать аргументов — это и есть весь входной контекст чанка;
+// Тринадцать аргументов — это и есть весь входной контекст чанка;
 // структура ради их упаковки ничего бы не объяснила.
 #[allow(clippy::too_many_arguments)]
 fn compile_chunk(
@@ -709,14 +775,20 @@ fn compile_chunk(
     module_vars: usize,
     is_procedure: bool,
     is_async: bool,
+    allow_sparse_large_frame: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
     opts: BuildOptions,
 ) -> Result<(Chunk, Vec<u32>), CompileError> {
-    let n_locals: u8 = locals
-        .len()
-        .try_into()
-        .map_err(|_| CompileError::TooManyLocals)?;
+    let sparse_large_frame = u8::try_from(locals.len()).is_err();
+    if sparse_large_frame
+        && (!allow_sparse_large_frame
+            || materialize_locals
+            || opts.debug_info
+            || u8::try_from(module_vars).is_err())
+    {
+        return Err(CompileError::TooManyLocals);
+    }
     let n_params: u8 = params
         .len()
         .try_into()
@@ -734,46 +806,58 @@ fn compile_chunk(
     // констант. Это тот же класс, из-за которого устранение копий уже
     // запрещено в защищённых диапазонах.
     let identity = || (0..locals.len()).map(|i| i as u8).collect::<Vec<u8>>();
-    let (ssa_consts, slot_reg) = if opts.optimizations.ssa_const || opts.optimizations.ssa_regalloc
-    {
-        let graph = crate::cfg::build(body);
-        if graph.blocks.iter().any(|b| !b.handlers.is_empty()) {
-            // Чанк с `Попытка` не обслуживается ни одним потребителем, и
-            // SSA для него не строится вовсе: платить за анализ, которым
-            // никто не воспользуется, незачем, а заведомо неполную модель
-            // лучше не заводить и вовсе.
-            (std::collections::HashMap::new(), identity())
+    let (ssa_consts, slot_reg) =
+        if opts.optimizations.ssa_const || opts.optimizations.ssa_regalloc || sparse_large_frame {
+            let graph = crate::cfg::build(body);
+            if graph.blocks.iter().any(|b| !b.handlers.is_empty()) {
+                if sparse_large_frame {
+                    return Err(CompileError::TooManyLocals);
+                }
+                // Чанк с `Попытка` не обслуживается ни одним потребителем, и
+                // SSA для него не строится вовсе: платить за анализ, которым
+                // никто не воспользуется, незачем, а заведомо неполную модель
+                // лучше не заводить и вовсе.
+                (std::collections::HashMap::new(), identity())
+            } else {
+                let form = crate::ssa::build(&graph, locals.len());
+                let consts = if opts.optimizations.ssa_const {
+                    let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
+                    crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
+                } else {
+                    std::collections::HashMap::new()
+                };
+                let regs = if (opts.optimizations.ssa_regalloc || sparse_large_frame)
+                    && !materialize_locals
+                {
+                    // Отказ распределителя — ОШИБКА КОМПИЛЯЦИИ, а не тихий
+                    // возврат к тождественному отображению. Проглоченный
+                    // отказ означал бы, что замер считает проход включённым
+                    // там, где он выключился сам, и кампания доказала бы не
+                    // то, что мерила. Пропуск чанка с `Выполнить` или с
+                    // `Попытка` — другое дело: это объявленное правило, а не
+                    // сбой.
+                    let allocate = if sparse_large_frame {
+                        crate::regalloc::allocate_slots_sparse
+                    } else {
+                        crate::regalloc::allocate_slots
+                    };
+                    allocate(&graph, &form, locals.len(), params.len().max(module_vars)).map_err(
+                        |_reason| {
+                            if sparse_large_frame {
+                                CompileError::TooManyLocals
+                            } else {
+                                CompileError::TooManyRegisters
+                            }
+                        },
+                    )?
+                } else {
+                    identity()
+                };
+                (consts, regs)
+            }
         } else {
-            let form = crate::ssa::build(&graph, locals.len());
-            let consts = if opts.optimizations.ssa_const {
-                let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
-                crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
-            } else {
-                std::collections::HashMap::new()
-            };
-            let regs = if opts.optimizations.ssa_regalloc && !materialize_locals {
-                // Отказ распределителя — ОШИБКА КОМПИЛЯЦИИ, а не тихий
-                // возврат к тождественному отображению. Проглоченный
-                // отказ означал бы, что замер считает проход включённым
-                // там, где он выключился сам, и кампания доказала бы не
-                // то, что мерила. Пропуск чанка с `Выполнить` или с
-                // `Попытка` — другое дело: это объявленное правило, а не
-                // сбой.
-                crate::regalloc::allocate_slots(
-                    &graph,
-                    &form,
-                    locals.len(),
-                    params.len().max(module_vars),
-                )
-                .map_err(|_| CompileError::TooManyRegisters)?
-            } else {
-                identity()
-            };
-            (consts, regs)
-        }
-    } else {
-        (std::collections::HashMap::new(), identity())
-    };
+            (std::collections::HashMap::new(), identity())
+        };
 
     let mut c = Compiler {
         instrs: Vec::new(),
@@ -782,8 +866,8 @@ fn compile_chunk(
         consts: Vec::new(),
         call_arg_modes: Vec::new(),
         exception_ranges: Vec::new(),
-        next_reg: n_locals,
-        max_reg: n_locals,
+        next_reg: 0,
+        max_reg: 0,
         loop_stack: Vec::new(),
         label_targets: Vec::new(),
         goto_patches: Vec::new(),
@@ -821,11 +905,45 @@ fn compile_chunk(
         .max()
         .map_or(0, |m| u16::from(m) + 1)
         .max(u16::from(n_params));
-    let n_locals = u8::try_from(n_locals).unwrap_or(u8::MAX);
+    let n_locals = u8::try_from(n_locals).map_err(|_| CompileError::TooManyLocals)?;
     c.next_reg = n_locals;
     c.max_reg = n_locals;
     c.compile_param_defaults(params)?;
-    c.compile_block(body)?;
+    if let Err(error) = c.compile_block(body) {
+        // Даже помещающиеся локали могут не оставить места временным
+        // регистрам. Повторяем только отказавший метод конфигурации;
+        // успешные методы сохраняют прежний путь и раскладку.
+        if matches!(&error, CompileError::TooManyRegisters)
+            && allow_sparse_large_frame
+            && !sparse_large_frame
+            && !materialize_locals
+            && !opts.debug_info
+            && !opts.optimizations.ssa_regalloc
+        {
+            let mut retry_opts = opts;
+            retry_opts.optimizations.ssa_regalloc = true;
+            // Повторные имена и формы интернируются с прежними ID.
+            // Флаг распределителя ограничивает повтор одной попыткой;
+            // его существующая проверка исключает кадры с обработчиками.
+            return compile_chunk(
+                locals,
+                params,
+                body,
+                functions,
+                callee_params,
+                requirements,
+                materialize_locals,
+                module_vars,
+                is_procedure,
+                is_async,
+                allow_sparse_large_frame,
+                c.names,
+                c.shapes,
+                retry_opts,
+            );
+        }
+        return Err(error);
+    }
     c.patch_gotos()?;
     // Производные таблицы — разметка бандлов и пометка «трогает объекты» —
     // здесь не заполняются вовсе: их ставит `image::finalize` при сборке
@@ -1479,6 +1597,12 @@ impl<'a> Compiler<'a> {
                 let link_slot =
                     u16::try_from(*link).map_err(|_| CompileError::TooManyModuleVars)?;
                 self.emit(Instr::GetImportedVar { dst, link_slot });
+            }
+            RExpr::ImportedModule(module) => {
+                self.emit(Instr::GetImportedModule {
+                    dst,
+                    module: *module,
+                });
             }
             RExpr::CallBuiltinFn { builtin, args } => {
                 let base = self.next_reg;
@@ -2355,7 +2479,7 @@ impl<'a> Compiler<'a> {
                     target: 0,
                 });
 
-                self.emit(Instr::GetIndex {
+                self.emit(Instr::GetCollectionItem {
                     dst: slot,
                     obj: iter_reg,
                     idx: idx_reg,
@@ -2409,6 +2533,7 @@ impl<'a> Compiler<'a> {
                     start_pc: start,
                     end_pc: end,
                     handler_pc,
+                    handler_end_pc: after,
                 });
             }
             RStmtKind::Raise(opt) => match opt {
@@ -2422,6 +2547,12 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::Raise { src: None });
                 }
             },
+            RStmtKind::RaiseCompilationError(message) => {
+                let register = self.alloc_temp()?;
+                self.compile_expr(&RExpr::Str(message.clone()), register)?;
+                self.emit(Instr::RaiseCompilationError { src: register });
+                self.free_temp(1);
+            }
             RStmtKind::RaiseDetailed(arguments) => {
                 debug_assert_eq!(arguments.len(), 5);
                 let base = self.next_reg;

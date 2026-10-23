@@ -481,6 +481,11 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             e.heap_read = true;
             e.ctl = Ctl::Trailing;
         }
+        Instr::GetImportedModule { dst, .. } => {
+            write!(dst);
+            e.heap_read = true;
+            e.ctl = Ctl::Trailing;
+        }
         Instr::SetImportedVar { src, .. } => {
             read!(src);
             e.heap_write = true;
@@ -497,7 +502,7 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             }
             e.ctl = Ctl::Trailing;
         }
-        Instr::GetIndex { dst, obj, idx } => {
+        Instr::GetIndex { dst, obj, idx } | Instr::GetCollectionItem { dst, obj, idx } => {
             read!(obj);
             read!(idx);
             write!(dst);
@@ -599,6 +604,10 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             if let Some(src) = src {
                 read!(src);
             }
+            e.ctl = Ctl::Trailing;
+        }
+        Instr::RaiseCompilationError { src } => {
+            read!(src);
             e.ctl = Ctl::Trailing;
         }
         Instr::RaiseDetailed { base } => {
@@ -758,6 +767,7 @@ pub(crate) fn leaders(chunk: &Chunk) -> Vec<bool> {
         mark(r.start_pc);
         mark(r.end_pc);
         mark(r.handler_pc);
+        mark(r.handler_end_pc);
     }
     leader
 }
@@ -787,7 +797,10 @@ fn build_cfg(chunk: &Chunk) -> Cfg {
         let ends = instr.jump_target().is_some()
             || matches!(
                 instr,
-                Instr::Return { .. } | Instr::Raise { .. } | Instr::RaiseDetailed { .. }
+                Instr::Return { .. }
+                    | Instr::Raise { .. }
+                    | Instr::RaiseDetailed { .. }
+                    | Instr::RaiseCompilationError { .. }
             );
         if ends && pc + 1 < n {
             is_leader[pc + 1] = true;
@@ -826,6 +839,7 @@ fn build_cfg(chunk: &Chunk) -> Cfg {
                 | Instr::Return { .. }
                 | Instr::Raise { .. }
                 | Instr::RaiseDetailed { .. }
+                | Instr::RaiseCompilationError { .. }
         );
         if falls && hi < n {
             succs[b].push(block_of[hi]);
@@ -1248,10 +1262,9 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
         let flags = removable_copies(chunk, overlap);
         let cfg = build_cfg(chunk);
         let boundary = |pc: usize| {
-            chunk
-                .exception_ranges
-                .iter()
-                .any(|r| r.start_pc == pc || r.end_pc == pc || r.handler_pc == pc)
+            chunk.exception_ranges.iter().any(|r| {
+                r.start_pc == pc || r.end_pc == pc || r.handler_pc == pc || r.handler_end_pc == pc
+            })
         };
 
         let live = live_out(chunk, &cfg, overlap);
@@ -1445,6 +1458,7 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 shift(&mut r.start_pc);
                 shift(&mut r.end_pc);
                 shift(&mut r.handler_pc);
+                shift(&mut r.handler_end_pc);
             }
             removed += 1;
         }
@@ -1765,6 +1779,7 @@ mod tests {
             start_pc: 0,
             end_pc: 4,
             handler_pc: 4,
+            handler_end_pc: 5,
         }];
         assert!(!removable_copies(&c, None)[1]);
     }

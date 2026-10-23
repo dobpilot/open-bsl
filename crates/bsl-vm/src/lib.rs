@@ -12,6 +12,7 @@
 mod debug;
 mod entry;
 mod instance;
+mod object_instance;
 pub use instance::ModuleMemory;
 
 use entry::call_module_function_in_execution;
@@ -298,6 +299,9 @@ struct Frame {
     /// может наблюдать счётчик, поэтому обычный `BslValue` материализуется
     /// лишь при выходе из цикла.
     numeric_for_state: Option<NumericForState>,
+    /// Пойманные ошибки текущего вызова и явные области их обработчиков.
+    /// Отбор по `pc` восстанавливает внешнюю ошибку без проверок в горячей петле.
+    handled_errors: Vec<(bsl_bytecode::ExceptionRange, BslValue)>,
 }
 
 struct NumericForState {
@@ -448,7 +452,8 @@ fn drive_with(
         env.temp_storage(),
         env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
-    )?;
+    )?
+    .with_clock(Some(env.clock()));
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut dynamic = tests::TestDynamic::bare();
@@ -492,17 +497,16 @@ fn drive_with(
 /// везде совпало.
 #[inline(never)]
 fn drive_prologue(program: &Program, linked: &LinkedComponents) -> bsl_rt::RuntimeShapes {
-    // Затравлена формами/именами ЭТОЙ программы — см. `bsl_rt::RuntimeShapes`
-    // doc comment про то, почему не общий на процесс синглтон: у вложенного
-    // `Program` (см. `run_dynamic_snippet`) свои `names`/`shapes`, и рантайм-
-    // расширения этой таблицы (`Вставить`/`Удалить` на структуре, меняющие
-    // её форму) актуальны только для объектов внутри ОДНОГО такого вызова.
+    // Пространство имён принадлежит исполнению, а не процессу. Поздние модули
+    // и динамические фрагменты сохраняют собственные таблицы программы,
+    // но связывают поля с этим же пространством через кэши исполнения.
+    // Поэтому переданная структура сохраняет поля при переходе между ними.
     // Типы компонентов и каталог их написаний приходят из реестра ОДНИМ
     // вызовом: промежуточного состояния «формы есть, типов ещё нет» не
     // существует. По ним `Тип("Имя")` находит то, чего нет в закрытом
     // реестре ядра (см. `TypeRef`).
     bsl_rt::RuntimeShapes::seeded(
-        program.names.clone(),
+        program.names.to_vec(),
         program.shapes.clone(),
         linked.registry,
     )
@@ -518,7 +522,28 @@ pub enum ProgramPoll {
 
 /// Слот инлайн-кэша `GetProp`/`SetProp`: интернированная форма структуры
 /// и номер слота поля в ней.
-type PropCacheSlot = std::cell::RefCell<Option<(std::rc::Rc<bsl_rt::Shape>, u32)>>;
+struct PropCacheSlot {
+    runtime_name: bsl_rt::NameId,
+    value: std::cell::RefCell<Option<(std::rc::Rc<bsl_rt::Shape>, u32)>>,
+}
+
+impl std::ops::Deref for PropCacheSlot {
+    type Target = std::cell::RefCell<Option<(std::rc::Rc<bsl_rt::Shape>, u32)>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+fn property_instruction_name(instruction: &Instr) -> Option<bsl_rt::NameId> {
+    match instruction {
+        Instr::GetProp { name, .. } | Instr::SetProp { name, .. } => Some(*name),
+        Instr::GetObjectProp { name, .. } | Instr::SetObjectProp { name, .. } => {
+            Some(bsl_rt::NameId::from_index(u32::from(*name)))
+        }
+        _ => None,
+    }
+}
 
 /// Разрешённый план открытого вызова для одного типа получателя.
 #[derive(Clone, Copy)]
@@ -554,18 +579,96 @@ struct ImportSite {
 /// каждого вида на инструкцию.
 struct RunCaches {
     prop: Vec<Vec<PropCacheSlot>>,
+    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
     open_call: Vec<Vec<Option<OpenCallSite>>>,
     import: Vec<Vec<Option<ImportSite>>>,
+    deferred: Option<std::cell::OnceCell<Box<RunCaches>>>,
+    binding: std::cell::OnceCell<Result<Option<Box<BoundRun>>, RtError>>,
+}
+
+struct BoundRun {
+    caches: RunCaches,
 }
 
 impl RunCaches {
+    fn deferred() -> Self {
+        Self {
+            prop: Vec::new(),
+            shapes: Vec::new(),
+            open_call: Vec::new(),
+            import: Vec::new(),
+            deferred: Some(std::cell::OnceCell::new()),
+            binding: std::cell::OnceCell::new(),
+        }
+    }
+
+    fn ready(&self, program: &Program) -> &Self {
+        self.deferred.as_ref().map_or(self, |cell| {
+            cell.get_or_init(|| Box::new(Self::for_program(program)))
+        })
+    }
+
+    fn bind(
+        &self,
+        program: &Program,
+        _linked: &LinkedComponents<'_>,
+        runtime: &mut bsl_rt::RuntimeShapes,
+    ) -> Result<Option<&BoundRun>, RtError> {
+        self.binding
+            .get_or_init(|| {
+                // Рантайм мог добавить поля до первого обращения к позднему
+                // модулю. Его исходные номера тогда уже заняты другими именами.
+                let compatible = program.names.iter().enumerate().all(|(index, name)| {
+                    runtime
+                        .names
+                        .name(bsl_rt::NameId::from_index(index as u32))
+                        .is_some_and(|candidate| candidate == name)
+                });
+                if compatible {
+                    return Ok(None);
+                }
+                let mut caches = Self::for_program(program);
+                for (chunk, slots) in program.chunks.iter().zip(&mut caches.prop) {
+                    for (instruction, slot) in chunk.instrs.iter().zip(slots) {
+                        if let Some(name) = property_instruction_name(instruction) {
+                            let spelling = program
+                                .names
+                                .get(name.index())
+                                .ok_or(RtError::InvalidBytecode("имя свойства вне таблицы имён"))?;
+                            slot.runtime_name = runtime.names.intern(spelling);
+                        }
+                    }
+                }
+                caches.shapes = bsl_bytecode::bind_program_shapes(program, runtime)?;
+                Ok(Some(Box::new(BoundRun { caches })))
+            })
+            .as_ref()
+            .map(|binding| binding.as_deref())
+            .map_err(Clone::clone)
+    }
+
+    fn for_catalog(catalog: &dyn bsl_bytecode::ExecutionCatalog) -> Vec<Self> {
+        // Подготовленный код разделяется сеансами, но его наличие не означает,
+        // что новый сеанс войдёт в модуль. Кэши создаются при первом входе,
+        // иначе каждый дочерний сеанс оплачивает все тела общего каталога.
+        (0..catalog.module_count())
+            .map(|_| Self::deferred())
+            .collect()
+    }
+
     fn for_program(program: &Program) -> Self {
         let prop = program
             .chunks
             .iter()
             .map(|chunk| {
-                std::iter::repeat_with(|| std::cell::RefCell::new(None))
-                    .take(chunk.instrs.len())
+                chunk
+                    .instrs
+                    .iter()
+                    .map(|instruction| PropCacheSlot {
+                        runtime_name: property_instruction_name(instruction)
+                            .unwrap_or(bsl_rt::NameId::from_index(0)),
+                        value: std::cell::RefCell::new(None),
+                    })
                     .collect()
             })
             .collect();
@@ -649,8 +752,11 @@ impl RunCaches {
             .collect();
         Self {
             prop,
+            shapes: program.shapes.clone(),
             open_call,
             import,
+            deferred: None,
+            binding: std::cell::OnceCell::new(),
         }
     }
 }
@@ -730,6 +836,24 @@ impl ProgramExecution {
         module_state: ModuleState,
         scheduler: SchedulerConfig,
     ) -> Self {
+        Self::new_linked_with_runtime(
+            program,
+            func_id,
+            stack,
+            module_state,
+            scheduler,
+            drive_prologue(program, linked),
+        )
+    }
+
+    fn new_linked_with_runtime(
+        program: &Program,
+        func_id: usize,
+        stack: Vec<BslValue>,
+        module_state: ModuleState,
+        scheduler: SchedulerConfig,
+        runtime_shapes: bsl_rt::RuntimeShapes,
+    ) -> Self {
         let root = Task {
             frames: vec![Frame {
                 module: ROOT_MODULE,
@@ -742,6 +866,7 @@ impl ProgramExecution {
                 return_reg: 0,
                 module_copybacks: Vec::new(),
                 numeric_for_state: None,
+                handled_errors: Vec::new(),
             }],
             security_modes: TaskSecurityModes::default(),
             stack,
@@ -750,7 +875,6 @@ impl ProgramExecution {
             quantum_remaining: scheduler.safe_points_per_quantum,
         };
         let async_state = AsyncState::new(root, scheduler.safe_points_per_quantum);
-        let runtime_shapes = drive_prologue(program, linked);
         Self {
             async_state,
             runtime_shapes,
@@ -783,20 +907,11 @@ impl ProgramExecution {
     /// `catalog` обязан быть тем же и неизменённым, что и в последующих
     /// `poll_configuration_*`: кэши и сессия строятся под его модули (см.
     /// контракт у [`Self::poll_with_registry_and_io`]).
-    pub fn attach_catalog(&mut self, catalog: &bsl_bytecode::ConfigurationProgram) {
+    pub fn attach_catalog(&mut self, catalog: &dyn bsl_bytecode::ExecutionCatalog) {
         self.session_modules = SessionModules::for_catalog(catalog);
-        // Ячейки заводятся ЭНЕРГИЧНО для всех модулей каталога — так
-        // требует спецификация образа («по ячейке на инструкцию до
-        // исполнения первой инструкции»), и это сознательная цена: запуск
-        // платит аллокацией, пропорциональной всему байт-коду каталога,
-        // даже за модули, которых не коснётся. Ленивое заведение по
-        // первому кадру модуля — изменение требования, не оптимизация на
-        // месте (см. риски в `docs/plans/bsl-vm-refactor.md`).
-        self.catalog_caches = catalog
-            .modules
-            .iter()
-            .map(|module| RunCaches::for_program(&module.program))
-            .collect();
+        // Неподготовленные модули получают только пустую ячейку. Полный
+        // образ по-прежнему создаёт кэши всех уже имеющихся инструкций.
+        self.catalog_caches = RunCaches::for_catalog(catalog);
     }
 
     /// Включает постоянное квантование — для фонового прогона, которым
@@ -832,7 +947,7 @@ impl ProgramExecution {
     /// `RtError::InvalidBytecode` при номере модуля вне каталога.
     pub fn schedule_eager_init(
         &mut self,
-        catalog: &bsl_bytecode::ConfigurationProgram,
+        catalog: &dyn bsl_bytecode::ExecutionCatalog,
         order: &[u32],
     ) -> Result<(), RtError> {
         let root = self
@@ -857,13 +972,10 @@ impl ProgramExecution {
                 continue;
             }
             instance.init = ModuleInitState::Initializing;
-            let body = catalog
-                .modules
-                .get(*module as usize)
-                .map(|m| &m.program)
-                .ok_or(RtError::InvalidBytecode(
-                    "номер модуля инициализации вне каталога",
-                ))?;
+            let body = &catalog
+                .module_code(bsl_bytecode::ModuleId::new(*module))?
+                .program;
+            instance.prepare(body);
             let chunk0 = at(&body.chunks, 0, "у модуля каталога нет тела")?;
             let call_start = root.stack.len();
             let own_base = root.stack.len();
@@ -879,6 +991,7 @@ impl ProgramExecution {
                 return_reg: 0,
                 module_copybacks: Vec::new(),
                 numeric_for_state: None,
+                handled_errors: Vec::new(),
             });
         }
         Ok(())
@@ -913,6 +1026,32 @@ impl ProgramExecution {
         host_env: &bsl_rt::HostEnv,
         scheduler: SchedulerConfig,
     ) -> Result<Self, RtError> {
+        Self::start_with_runtime_owner(program, registry, host_env, scheduler, None)
+    }
+
+    /// Создаёт запуск с таблицами имён и форм явного сеанса.
+    /// После исполнения владелец возвращает их через [`Self::swap_runtime_shapes`].
+    /// До успешного связывания таблицы остаются у владельца.
+    ///
+    /// # Errors
+    /// Возвращает ошибку связывания, программы либо нулевого кванта.
+    pub fn start_with_shared_runtime(
+        program: &Program,
+        registry: &bsl_rt::RuntimeRegistry,
+        host_env: &bsl_rt::HostEnv,
+        scheduler: SchedulerConfig,
+        runtime: &mut bsl_rt::RuntimeShapes,
+    ) -> Result<Self, RtError> {
+        Self::start_with_runtime_owner(program, registry, host_env, scheduler, Some(runtime))
+    }
+
+    fn start_with_runtime_owner(
+        program: &Program,
+        registry: &bsl_rt::RuntimeRegistry,
+        host_env: &bsl_rt::HostEnv,
+        scheduler: SchedulerConfig,
+        runtime: Option<&mut bsl_rt::RuntimeShapes>,
+    ) -> Result<Self, RtError> {
         if scheduler.safe_points_per_quantum == 0 {
             return Err(RtError::DynamicError(
                 "квант планировщика должен содержать хотя бы одну безопасную точку".into(),
@@ -935,14 +1074,24 @@ impl ProgramExecution {
             host_env.temp_storage(),
             host_env.message_sink(),
             bsl_bytecode::DynamicScope::ROOT,
-        )?;
-        Ok(Self::new_linked(
+        )?
+        .with_clock(Some(host_env.clock()));
+        let runtime = runtime.map_or_else(
+            || drive_prologue(program, &linked),
+            |owner| {
+                std::mem::replace(
+                    owner,
+                    bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new(), None),
+                )
+            },
+        );
+        Ok(Self::new_linked_with_runtime(
             program,
             0,
             stack,
-            &linked,
             ModuleState::new(program),
             scheduler,
+            runtime,
         ))
     }
 
@@ -1001,7 +1150,8 @@ impl ProgramExecution {
             host_env.temp_storage(),
             host_env.message_sink(),
             bsl_bytecode::DynamicScope::ROOT,
-        )?;
+        )?
+        .with_clock(Some(host_env.clock()));
         let dynamic_depth = std::cell::Cell::new(0);
         let mut host = HostIo {
             stdout,
@@ -1034,7 +1184,7 @@ impl ProgramExecution {
     pub fn poll_configuration_with_registry_and_io<'a>(
         &mut self,
         entry: &Program,
-        catalog: &bsl_bytecode::ConfigurationProgram,
+        catalog: &dyn bsl_bytecode::ExecutionCatalog,
         registry: &bsl_rt::RuntimeRegistry,
         stdout: &'a mut dyn Write,
         stderr: &'a mut dyn Write,
@@ -1059,7 +1209,7 @@ impl ProgramExecution {
     pub fn poll_configuration_with_budget<'a>(
         &mut self,
         entry: &Program,
-        catalog: &bsl_bytecode::ConfigurationProgram,
+        catalog: &dyn bsl_bytecode::ExecutionCatalog,
         registry: &bsl_rt::RuntimeRegistry,
         stdout: &'a mut dyn Write,
         stderr: &'a mut dyn Write,
@@ -1080,29 +1230,14 @@ impl ProgramExecution {
             host_env.temp_storage(),
             host_env.message_sink(),
             bsl_bytecode::DynamicScope::ROOT,
-        )?;
+        )?
+        .with_clock(Some(host_env.clock()));
         // Статические чанки каждого модуля имеют область ROOT.
         // Владелец задаётся отдельно в DynamicScope.module, а не номером
         // из пространства фрагментов, выдаваемого компилятором хоста.
-        let mut linked_modules = Vec::with_capacity(catalog.modules.len());
-        for module in &catalog.modules {
-            linked_modules.push(link_components(
-                &module.program,
-                Some(registry),
-                host_env.zone(),
-                host_env.files(),
-                host_env.random(),
-                host_env.network(),
-                host_env.host_data(),
-                host_env.background_jobs(),
-                host_env.temp_storage(),
-                host_env.message_sink(),
-                bsl_bytecode::DynamicScope::ROOT,
-            )?);
-        }
         let ctx = CatalogContext {
             catalog,
-            linked: linked_modules,
+            linked: modules::ModuleLinks::for_catalog(catalog, registry, host_env)?,
         };
         let dynamic_depth = std::cell::Cell::new(0);
         let mut host = HostIo {
@@ -1381,18 +1516,16 @@ impl ProgramExecution {
                     .module;
                 let code = task.frames.last().unwrap().code.clone();
                 let dynamic_linked;
-                let mut dynamic_shapes;
                 let (cur_program, cur_linked, cur_caches, cur_shapes) = if let Some(code) = &code {
                     dynamic_linked = LinkedComponents {
                         registry: linked.registry,
                         tables: code.tables.clone(),
                     };
-                    dynamic_shapes = code.shapes.borrow_mut();
                     (
                         &code.program,
                         &dynamic_linked,
                         &code.caches,
-                        &mut *dynamic_shapes,
+                        &mut *runtime_shapes,
                     )
                 } else if cur_module == ROOT_MODULE {
                     (program, linked, &*caches, &mut *runtime_shapes)
@@ -1407,6 +1540,12 @@ impl ProgramExecution {
                     (program, linked, caches, &mut *runtime_shapes)
                 };
                 let before = task_position(&task);
+                let (cur_program, cur_linked, cur_caches) =
+                    if let Some(bound) = cur_caches.bind(cur_program, cur_linked, cur_shapes)? {
+                        (cur_program, cur_linked, &bound.caches)
+                    } else {
+                        (cur_program, cur_linked, cur_caches)
+                    };
                 // Состояние модульных переменных текущего модуля на время
                 // шага изымается из сессии: `step` видит его обычным
                 // `module_state`, а чужие модули достаёт через сессию, в
@@ -1653,9 +1792,131 @@ fn drive_linked(
     result
 }
 
-/// Исполняет экспорт каталожного модуля из компонентного обработчика.
-/// Состояние целевого модуля на время вложенного запуска изымается из той
-/// же сессии и возвращается при любом результате.
+/// Вызывает обработчик каталожного модуля из хоста в существующем сеансе.
+/// Тело модуля инициализируется при первом обращении; состояние остаётся в
+/// `session` даже при ошибке исполнения.
+///
+/// # Errors
+/// Возвращает ошибку поиска, арности, связывания или исполнения обработчика.
+#[allow(clippy::too_many_arguments)]
+pub fn call_configuration_handler_with_registry_and_io(
+    catalog: &dyn bsl_bytecode::ExecutionCatalog,
+    session: &mut SessionModules,
+    module: &str,
+    handler: &str,
+    args: Vec<BslValue>,
+    registry: &bsl_rt::RuntimeRegistry,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    dynamic: &mut dyn DynamicCompiler,
+    host_env: &mut bsl_rt::HostEnv,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    call_configuration_handler_with_mode_and_registry_and_io(
+        catalog,
+        session,
+        module,
+        handler,
+        args,
+        bsl_rt::ConfigurationHandlerEntryMode::Inherit,
+        registry,
+        stdout,
+        stderr,
+        dynamic,
+        host_env,
+    )
+}
+
+/// Вызывает обработчик с режимом входа, принадлежащим только этому вызову.
+/// Безопасный и привилегированный режимы тела модуля не меняются.
+///
+/// # Errors
+/// Возвращает ошибки поиска, арности, связывания и исполнения обработчика.
+/// Критическая политика входа различает отказ подготовки модуля и
+/// неперехваченное исключение самого обработчика.
+#[allow(clippy::too_many_arguments)]
+pub fn call_configuration_handler_with_mode_and_registry_and_io(
+    catalog: &dyn bsl_bytecode::ExecutionCatalog,
+    session: &mut SessionModules,
+    module: &str,
+    handler: &str,
+    args: Vec<BslValue>,
+    entry_mode: bsl_rt::ConfigurationHandlerEntryMode,
+    registry: &bsl_rt::RuntimeRegistry,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    dynamic: &mut dyn DynamicCompiler,
+    host_env: &mut bsl_rt::HostEnv,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    call_configuration_handler_with_runtime(
+        catalog, session, module, handler, args, entry_mode, registry, stdout, stderr, dynamic,
+        host_env, None,
+    )
+}
+
+/// Вызывает обработчик с таблицами имён и форм явного сеанса.
+///
+/// # Errors
+/// Возвращает ошибки загрузки, связывания и исполнения обработчика.
+#[allow(clippy::too_many_arguments)]
+pub fn call_configuration_handler_with_runtime(
+    catalog: &dyn bsl_bytecode::ExecutionCatalog,
+    session: &mut SessionModules,
+    module: &str,
+    handler: &str,
+    args: Vec<BslValue>,
+    entry_mode: bsl_rt::ConfigurationHandlerEntryMode,
+    registry: &bsl_rt::RuntimeRegistry,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    dynamic: &mut dyn DynamicCompiler,
+    host_env: &mut bsl_rt::HostEnv,
+    runtime: Option<&mut bsl_rt::RuntimeShapes>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let context = CatalogContext {
+        catalog,
+        linked: modules::ModuleLinks::for_catalog(catalog, registry, host_env)?,
+    };
+    let dynamic_depth = Cell::new(0);
+    let mut host = HostIo {
+        stdout,
+        stderr,
+        env: Some(host_env),
+        dynamic: Some(dynamic),
+        dynamic_depth: &dynamic_depth,
+        cancel_flag: None,
+        file_promises: None,
+        security_modes: SecurityModeSnapshot::default(),
+    };
+    let security_modes = TaskSecurityModes::default();
+    let root = catalog.module_id(module).ok_or_else(|| {
+        RtError::DynamicError(format!("Модуль конфигурации «{module}» не найден"))
+    })?;
+    let root_program = &catalog.module_code(root)?.program;
+    let mut root_state = ModuleState::empty();
+    let mut modules = ModulesCtx {
+        root_program,
+        session,
+        catalog: Some(&context),
+        root_state: None,
+        root_catalog_module: None,
+        security_modes: &security_modes,
+        security_frame: 0,
+    };
+    call_configuration_module_in_execution(
+        module,
+        handler,
+        args,
+        None,
+        ROOT_MODULE,
+        &mut root_state,
+        &mut modules,
+        &mut host,
+        false,
+        entry_mode,
+        runtime,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn call_configuration_module_in_execution(
     module_name: &str,
@@ -1666,6 +1927,9 @@ fn call_configuration_module_in_execution(
     current_state: &mut ModuleState,
     modules: &mut ModulesCtx<'_, '_>,
     host: &mut HostIo<'_, '_>,
+    require_export: bool,
+    entry_mode: bsl_rt::ConfigurationHandlerEntryMode,
+    mut caller_runtime: Option<&mut bsl_rt::RuntimeShapes>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let catalog = modules.catalog.ok_or(RtError::CapabilityMissing {
         capability: bsl_rt::Capability::ConfigurationModuleCaller,
@@ -1673,17 +1937,17 @@ fn call_configuration_module_in_execution(
     })?;
     let target = catalog
         .catalog
-        .modules
-        .iter()
-        .position(|module| bsl_rt::folded_eq(&module.name, module_name))
+        .module_id(module_name)
         .ok_or_else(|| {
             RtError::DynamicError(format!("Модуль конфигурации «{module_name}» не найден"))
-        })?;
+        })?
+        .index();
     let target_u32 = u32::try_from(target)
         .map_err(|_| RtError::InvalidBytecode("номер модуля не помещается в u32"))?;
     let target_is_current = current_module == target_u32
         || current_module == ROOT_MODULE && modules.root_catalog_module == Some(target_u32);
     let target_program = catalog.program(target_u32)?;
+    modules.session.instances[target].prepare(target_program);
     let target_linked = catalog.linked(target_u32)?;
 
     let function = target_program
@@ -1695,11 +1959,12 @@ fn call_configuration_module_in_execution(
                 "Процедура или функция «{export}» в модуле «{module_name}» не найдена"
             ))
         })?;
-    if !target_program
-        .exported_functions
-        .get(function)
-        .copied()
-        .unwrap_or(false)
+    if require_export
+        && !target_program
+            .exported_functions
+            .get(function)
+            .copied()
+            .unwrap_or(false)
     {
         return Err(RtError::DynamicError(format!(
             "Процедура или функция «{export}» модуля «{module_name}» не экспортируется"
@@ -1766,6 +2031,9 @@ fn call_configuration_module_in_execution(
             execution.root_catalog_module = Some(target_u32);
             execution.attach_catalog(catalog.catalog);
             execution.swap_session_modules(modules.session);
+            if let Some(runtime) = caller_runtime.as_deref_mut() {
+                execution.swap_runtime_shapes(runtime);
+            }
             let result: Result<(), RtError> = loop {
                 match execution.poll_linked(
                     target_program,
@@ -1781,6 +2049,9 @@ fn call_configuration_module_in_execution(
                 }
             };
             execution.swap_session_modules(modules.session);
+            if let Some(runtime) = caller_runtime.as_deref_mut() {
+                execution.swap_runtime_shapes(runtime);
+            }
             target_state = execution.take_module_memory().0;
             result?;
             modules.session.instances[target].init = ModuleInitState::Ready;
@@ -1801,10 +2072,19 @@ fn call_configuration_module_in_execution(
             target_state.take_for_execution(),
             SchedulerConfig::default(),
         );
-        execution.inherit_security_modes(host.security_modes.clone());
+        // Автоматический вход получает собственный унаследованный режим:
+        // счётчики вызывающего кадра и инициализация тела модуля не меняются.
+        let mut entry_security = host.security_modes.clone();
+        if entry_mode == bsl_rt::ConfigurationHandlerEntryMode::Privileged {
+            entry_security.privileged = true;
+        }
+        execution.inherit_security_modes(entry_security);
         execution.root_catalog_module = Some(target_u32);
         execution.attach_catalog(catalog.catalog);
         execution.swap_session_modules(modules.session);
+        if let Some(runtime) = caller_runtime.as_deref_mut() {
+            execution.swap_runtime_shapes(runtime);
+        }
         let result: Result<(BslValue, Vec<BslValue>), RtError> = loop {
             match execution.poll_linked(
                 target_program,
@@ -1820,8 +2100,24 @@ fn call_configuration_module_in_execution(
             }
         };
         execution.swap_session_modules(modules.session);
+        if let Some(runtime) = caller_runtime {
+            execution.swap_runtime_shapes(runtime);
+        }
         target_state = execution.take_module_memory().0;
-        let (value, stack) = result?;
+        // Политика относится только к исключению, покинувшему обработчик:
+        // его собственная `Попытка` уже могла перехватить обычную ошибку.
+        let (value, stack) = result.map_err(|error| {
+            if let bsl_rt::ConfigurationHandlerEntryMode::Critical(operation) = entry_mode
+                && error.is_bsl_exception()
+            {
+                RtError::CriticalConfiguration {
+                    operation,
+                    cause: Box::new(error),
+                }
+            } else {
+                error
+            }
+        })?;
         Ok((value, stack[..chunk.n_params as usize].to_vec()))
     })();
 
@@ -1841,6 +2137,95 @@ fn call_configuration_module_in_execution(
         modules.session.instances[target].init = ModuleInitState::Failed;
     }
     run
+}
+
+// Все компонентные пути используют одинаковое разрешение обратного вызова.
+#[allow(clippy::too_many_arguments)]
+fn call_component_target(
+    target: bsl_rt::FunctionCall<'_>,
+    args: Vec<BslValue>,
+    program: &Program,
+    linked: &LinkedComponents<'_>,
+    host: &mut HostIo<'_, '_>,
+    module_state: &mut ModuleState,
+    modules: &mut ModulesCtx<'_, '_>,
+    current_module: u32,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    match target {
+        bsl_rt::FunctionCall::Current(name) => {
+            call_module_function_in_execution(program, name, args, linked, host, module_state)
+        }
+        bsl_rt::FunctionCall::ConfigurationHasExport { module, name } => {
+            object_instance::has_export(module, name, modules)
+        }
+        bsl_rt::FunctionCall::ConfigurationFunctionParameterCount { module, name } => {
+            object_instance::function_parameter_count(module, name, modules)
+        }
+        bsl_rt::FunctionCall::ConfigurationInstanceVariable {
+            module,
+            name,
+            instance,
+            value,
+        } => object_instance::variable(module, name, instance, value, module_state, modules, host),
+        bsl_rt::FunctionCall::ConfigurationInstance {
+            module,
+            export,
+            require_export,
+            entry_mode,
+            instance,
+            this_object,
+            runtime_shapes,
+        } => object_instance::call(
+            module,
+            export,
+            require_export,
+            entry_mode,
+            instance,
+            this_object,
+            args,
+            current_module,
+            module_state,
+            modules,
+            host,
+            runtime_shapes,
+        ),
+        bsl_rt::FunctionCall::Configuration {
+            module,
+            export,
+            this_object,
+            runtime_shapes,
+        } => call_configuration_module_in_execution(
+            module,
+            export,
+            args,
+            this_object,
+            current_module,
+            module_state,
+            modules,
+            host,
+            true,
+            bsl_rt::ConfigurationHandlerEntryMode::Inherit,
+            runtime_shapes,
+        ),
+        bsl_rt::FunctionCall::ConfigurationHandler {
+            module,
+            handler,
+            entry_mode,
+            runtime_shapes,
+        } => call_configuration_module_in_execution(
+            module,
+            handler,
+            args,
+            None,
+            current_module,
+            module_state,
+            modules,
+            host,
+            false,
+            entry_mode,
+            runtime_shapes,
+        ),
+    }
 }
 
 /// Строит полный контекст компонентной операции, которой разрешён обратный
@@ -1885,48 +2270,37 @@ fn with_component_module_caller<R>(
             file_promises: file_promises.as_deref_mut(),
             security_modes: security_control.modes.snapshot(),
         };
-        match target {
-            bsl_rt::FunctionCall::Current(name) => call_module_function_in_execution(
-                program,
-                name,
-                args,
-                linked,
-                &mut nested_host,
-                module_state,
-            ),
-            bsl_rt::FunctionCall::Configuration {
-                module,
-                export,
-                this_object,
-            } => call_configuration_module_in_execution(
-                module,
-                export,
-                args,
-                this_object,
-                current_module,
-                module_state,
-                modules,
-                &mut nested_host,
-            ),
-        }
+        call_component_target(
+            target,
+            args,
+            program,
+            linked,
+            &mut nested_host,
+            module_state,
+            modules,
+            current_module,
+        )
     };
-    let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-        runtime_shapes,
-        stdout: &mut **stdout,
-        stderr: &mut **stderr,
-        formatter: bsl_format::format_value,
-        zone: &linked.zone,
-        files: &linked.files,
-        random: &linked.random,
-        network: linked.network.as_ref(),
-        host_data: linked.host_data.as_ref(),
-        background_jobs: linked.background_jobs.as_ref(),
-        temp_storage: linked.temp_storage.as_ref(),
-        message_sink: linked.message_sink.as_ref(),
-        host_promises: None,
-        function_caller: Some(&mut function_caller),
-        security_modes: Some(&security_control),
-    });
+    let mut context = component_context(
+        bsl_rt::InterpreterServices {
+            runtime_shapes,
+            stdout: &mut **stdout,
+            stderr: &mut **stderr,
+            formatter: bsl_format::format_value,
+            zone: &linked.zone,
+            files: &linked.files,
+            random: &linked.random,
+            network: linked.network.as_ref(),
+            host_data: linked.host_data.as_ref(),
+            background_jobs: linked.background_jobs.as_ref(),
+            temp_storage: linked.temp_storage.as_ref(),
+            message_sink: linked.message_sink.as_ref(),
+            host_promises: None,
+            function_caller: Some(&mut function_caller),
+            security_modes: Some(&security_control),
+        },
+        linked.clock.as_ref(),
+    );
     if let Some(registry) = temporary_files {
         context.set_temporary_files(registry);
     }
@@ -2060,6 +2434,7 @@ struct OpenOutputContext<'a, 'session, 'host> {
     frames: &'a [Frame],
     frame_idx: usize,
     stack: &'a mut [BslValue],
+    names: &'a bsl_rt::NameInterner,
 }
 
 fn store_open_output(
@@ -2074,6 +2449,7 @@ fn store_open_output(
         frames,
         frame_idx,
         stack,
+        names,
     } = context;
     match mode {
         ArgMode::Value | ArgMode::Default => Ok(()),
@@ -2101,7 +2477,7 @@ fn store_open_output(
         ArgMode::ByRefIndex { object, index } => {
             let object = reg_load(stack, frames[frame_idx].reg_index(object))?;
             let index = reg_load(stack, frames[frame_idx].reg_index(index))?;
-            object.set_index(&index, value)
+            object.set_index_with_names(&index, value, names)
         }
     }
 }
@@ -2270,7 +2646,9 @@ fn cached_object_method_plan(
     {
         return Ok(plan);
     }
-    let plan = if std::ptr::eq(descriptor, &bsl_rt::BSL_MODULE_TYPE) {
+    let plan = if std::ptr::eq(descriptor, &bsl_rt::BSL_MODULE_TYPE)
+        || std::ptr::eq(descriptor, &bsl_rt::COMMON_MODULE_TYPE)
+    {
         ObjectMethodPlan::ModuleReference
     } else {
         match resolve_component_method(map, object.method_table(), site.name, program)? {
@@ -2611,11 +2989,21 @@ fn step(
                 frames[frame_idx].pc += 1;
             }
             Instr::Add { dst, a, b } => {
-                add_op(frames, stack, frame_idx, dst, a, b)?;
+                add_op(frames, stack, frame_idx, dst, a, b, runtime_shapes, host)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::AddConst { dst, src, k } => {
-                add_const_op(program, frames, stack, frame_idx, dst, src, k)?;
+                add_const_op(
+                    program,
+                    frames,
+                    stack,
+                    frame_idx,
+                    dst,
+                    src,
+                    k,
+                    runtime_shapes,
+                    host,
+                )?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Sub { dst, a, b } => {
@@ -2917,6 +3305,7 @@ fn step(
                             return_reg: 0,
                             module_copybacks: Vec::new(),
                             numeric_for_state: None,
+                            handled_errors: Vec::new(),
                         }],
                         // НЕ ИЗМЕРЕНО(SECURITY.ASYNC_INHERITANCE) — отдельная
                         // async-задача получает снимок режимов в момент вызова.
@@ -3036,6 +3425,7 @@ fn step(
                     return_reg: ret,
                     module_copybacks,
                     numeric_for_state: None,
+                    handled_errors: Vec::new(),
                 });
             }
             Instr::Await { dst, promise } => {
@@ -3092,6 +3482,14 @@ fn step(
                     },
                 );
             }
+            Instr::GetCollectionItem { dst, obj, idx } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
+                let v = ov.collection_item(&iv, &runtime_shapes.names)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::GetIndex { dst, obj, idx } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
@@ -3104,7 +3502,7 @@ fn step(
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
                 let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
-                ov.set_index(&iv, sv)?;
+                ov.set_index_with_names(&iv, sv, &runtime_shapes.names)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::GetProp { dst, obj, name } => {
@@ -3130,7 +3528,8 @@ fn step(
                         frames[frame_idx].module,
                     )?
                 } else {
-                    match ov.get_field_cached(name, prop_cache(caches, func_id, pc)?) {
+                    let cache = prop_cache(caches, func_id, pc)?;
+                    match ov.get_field_cached(cache.runtime_name, cache) {
                         Err(RtError::NotAnObject) => {
                             ov.get_field_by_name(field_name(program, name)?)?
                         }
@@ -3159,7 +3558,8 @@ fn step(
                     )?;
                 } else {
                     let имя = field_name(program, name)?;
-                    match ov.set_field_cached(name, sv.clone(), prop_cache(caches, func_id, pc)?) {
+                    let cache = prop_cache(caches, func_id, pc)?;
+                    match ov.set_field_cached(cache.runtime_name, sv.clone(), cache) {
                         Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
                         other => other?,
                     }
@@ -3175,6 +3575,8 @@ fn step(
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
                 let v = if builtin == bsl_rt::BuiltinFn::ErrorInfo {
                     current_error_info(current_exception.as_ref())?
+                } else if builtin == bsl_rt::BuiltinFn::ErrorDescription {
+                    current_handler_description(&frames[frame_idx])?
                 } else if builtin == bsl_rt::BuiltinFn::ThisObject {
                     module_state.reference()?
                 } else if builtin == bsl_rt::BuiltinFn::RunApp {
@@ -3246,8 +3648,8 @@ fn step(
                         linked,
                         module: frames[frame_idx].module,
                     };
-                    let mut context =
-                        bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
+                    let mut context = component_context(
+                        bsl_rt::InterpreterServices {
                             runtime_shapes,
                             stdout: &mut *host.stdout,
                             stderr: &mut *host.stderr,
@@ -3263,7 +3665,9 @@ fn step(
                             host_promises: Some(&mut promises),
                             function_caller: None,
                             security_modes: Some(&security_control),
-                        });
+                        },
+                        linked.clock.as_ref(),
+                    );
                     if let Some(env) = host.env.as_ref() {
                         context.set_temporary_files(env.temporary_files());
                     }
@@ -3309,6 +3713,7 @@ fn step(
             | Instr::NewTextWriter { .. }
             | Instr::Raise { .. }
             | Instr::RaiseDetailed { .. }
+            | Instr::RaiseCompilationError { .. }
             | Instr::CallObjectMethod { .. }
             | Instr::CallObjectProcedure { .. }
             | Instr::CallLinkedObjectMethod { .. }
@@ -3319,6 +3724,7 @@ fn step(
             | Instr::CreateObject { .. }
             | Instr::CallImported { .. }
             | Instr::GetImportedVar { .. }
+            | Instr::GetImportedModule { .. }
             | Instr::SetImportedVar { .. }
             | Instr::RunDynamic { .. } => {
                 if let Some(child) = step_cold(
@@ -3466,10 +3872,10 @@ fn step_cold(
                 })
                 .unwrap_or_default();
 
-            let value = if let Some(value) = construct_dynamic_native(ty, &args, runtime_shapes)? {
+            let value = if let Some(value) = construct_dynamic_native(&ty, &args, runtime_shapes)? {
                 value
             } else {
-                let descriptor = dynamic_constructor(linked, ty).ok_or_else(|| {
+                let descriptor = dynamic_constructor(linked, &ty).ok_or_else(|| {
                     RtError::DynamicError(format!("Для типа «{ty}» конструктор недоступен"))
                 })?;
                 let count = u8::try_from(args.len()).map_err(|_| {
@@ -3481,23 +3887,26 @@ fn step_cold(
                         args.len()
                     )));
                 }
-                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-                    runtime_shapes,
-                    stdout: &mut *host.stdout,
-                    stderr: &mut *host.stderr,
-                    formatter: bsl_format::format_value,
-                    zone: &linked.zone,
-                    files: &linked.files,
-                    random: &linked.random,
-                    network: linked.network.as_ref(),
-                    host_data: linked.host_data.as_ref(),
-                    background_jobs: linked.background_jobs.as_ref(),
-                    temp_storage: linked.temp_storage.as_ref(),
-                    message_sink: linked.message_sink.as_ref(),
-                    host_promises: None,
-                    function_caller: None,
-                    security_modes: Some(&security_control),
-                });
+                let mut context = component_context(
+                    bsl_rt::InterpreterServices {
+                        runtime_shapes,
+                        stdout: &mut *host.stdout,
+                        stderr: &mut *host.stderr,
+                        formatter: bsl_format::format_value,
+                        zone: &linked.zone,
+                        files: &linked.files,
+                        random: &linked.random,
+                        network: linked.network.as_ref(),
+                        host_data: linked.host_data.as_ref(),
+                        background_jobs: linked.background_jobs.as_ref(),
+                        temp_storage: linked.temp_storage.as_ref(),
+                        message_sink: linked.message_sink.as_ref(),
+                        host_promises: None,
+                        function_caller: None,
+                        security_modes: Some(&security_control),
+                    },
+                    linked.clock.as_ref(),
+                );
                 if let Some(env) = host.env.as_ref() {
                     context.set_temporary_files(env.temporary_files());
                 }
@@ -3524,7 +3933,7 @@ fn step_cold(
             count,
         } => {
             let shape_rc = at(
-                &program.shapes,
+                &caches.shapes,
                 shape as usize,
                 "номер формы вне таблицы форм программы",
             )?
@@ -3589,6 +3998,15 @@ fn step_cold(
             };
             return Err(RtError::Raised(value));
         }
+        Instr::RaiseCompilationError { src } => {
+            let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
+            let BslValue::Str(message) = value else {
+                return Err(RtError::InvalidBytecode(
+                    "диагностика компиляции должна быть строкой",
+                ));
+            };
+            return Err(RtError::ModuleCompilation(message.to_string()));
+        }
         Instr::RaiseDetailed { base } => {
             let mut arguments = Vec::with_capacity(5);
             for offset in 0..5 {
@@ -3622,9 +4040,8 @@ fn step_cold(
                     },
                 )?
             } else {
-                match ov
-                    .get_field_cached(name_id, prop_cache(caches, func_id, frames[frame_idx].pc)?)
-                {
+                let cache = prop_cache(caches, func_id, frames[frame_idx].pc)?;
+                match ov.get_field_cached(cache.runtime_name, cache) {
                     Err(RtError::NotAnObject) => {
                         ov.get_field_by_name(field_name(program, name_id)?)?
                     }
@@ -3660,11 +4077,8 @@ fn step_cold(
                     },
                 )?;
             } else {
-                match ov.set_field_cached(
-                    name_id,
-                    value.clone(),
-                    prop_cache(caches, func_id, frames[frame_idx].pc)?,
-                ) {
+                let cache = prop_cache(caches, func_id, frames[frame_idx].pc)?;
+                match ov.set_field_cached(cache.runtime_name, value.clone(), cache) {
                     Err(RtError::NotAnObject) => {
                         ov.set_field_by_name(field_name(program, name_id)?, value)?
                     }
@@ -3730,10 +4144,54 @@ fn step_cold(
                             &mut nested_host,
                             module_state,
                         ),
+                        bsl_rt::FunctionCall::ConfigurationHasExport { module, name } => {
+                            object_instance::has_export(module, name, modules)
+                        }
+                        bsl_rt::FunctionCall::ConfigurationFunctionParameterCount {
+                            module,
+                            name,
+                        } => object_instance::function_parameter_count(module, name, modules),
+                        bsl_rt::FunctionCall::ConfigurationInstanceVariable {
+                            module,
+                            name,
+                            instance,
+                            value,
+                        } => object_instance::variable(
+                            module,
+                            name,
+                            instance,
+                            value,
+                            module_state,
+                            modules,
+                            &mut nested_host,
+                        ),
+                        bsl_rt::FunctionCall::ConfigurationInstance {
+                            module,
+                            export,
+                            require_export,
+                            entry_mode,
+                            instance,
+                            this_object,
+                            runtime_shapes,
+                        } => object_instance::call(
+                            module,
+                            export,
+                            require_export,
+                            entry_mode,
+                            instance,
+                            this_object,
+                            call_args,
+                            current_module,
+                            module_state,
+                            modules,
+                            &mut nested_host,
+                            runtime_shapes,
+                        ),
                         bsl_rt::FunctionCall::Configuration {
                             module,
                             export,
                             this_object,
+                            runtime_shapes,
                         } => call_configuration_module_in_execution(
                             module,
                             export,
@@ -3743,26 +4201,50 @@ fn step_cold(
                             module_state,
                             modules,
                             &mut nested_host,
+                            true,
+                            bsl_rt::ConfigurationHandlerEntryMode::Inherit,
+                            runtime_shapes,
+                        ),
+                        bsl_rt::FunctionCall::ConfigurationHandler {
+                            module,
+                            handler,
+                            entry_mode,
+                            runtime_shapes,
+                        } => call_configuration_module_in_execution(
+                            module,
+                            handler,
+                            call_args,
+                            None,
+                            current_module,
+                            module_state,
+                            modules,
+                            &mut nested_host,
+                            false,
+                            entry_mode,
+                            runtime_shapes,
                         ),
                     }
                 };
-            let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-                runtime_shapes,
-                stdout: &mut **host_stdout,
-                stderr: &mut **host_stderr,
-                formatter: bsl_format::format_value,
-                zone: &linked.zone,
-                files: &linked.files,
-                random: &linked.random,
-                network: linked.network.as_ref(),
-                host_data: linked.host_data.as_ref(),
-                background_jobs: linked.background_jobs.as_ref(),
-                temp_storage: linked.temp_storage.as_ref(),
-                message_sink: linked.message_sink.as_ref(),
-                host_promises: None,
-                function_caller: Some(&mut function_caller),
-                security_modes: Some(&security_control),
-            });
+            let mut context = component_context(
+                bsl_rt::InterpreterServices {
+                    runtime_shapes,
+                    stdout: &mut **host_stdout,
+                    stderr: &mut **host_stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    files: &linked.files,
+                    random: &linked.random,
+                    network: linked.network.as_ref(),
+                    host_data: linked.host_data.as_ref(),
+                    background_jobs: linked.background_jobs.as_ref(),
+                    temp_storage: linked.temp_storage.as_ref(),
+                    message_sink: linked.message_sink.as_ref(),
+                    host_promises: None,
+                    function_caller: Some(&mut function_caller),
+                    security_modes: Some(&security_control),
+                },
+                linked.clock.as_ref(),
+            );
             if let Some(registry) = temporary_files {
                 context.set_temporary_files(registry);
             }
@@ -3776,23 +4258,26 @@ fn step_cold(
         } => {
             let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
             let call = linked.constructor(func_id, frames[frame_idx].pc)?;
-            let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-                runtime_shapes,
-                stdout: &mut *host.stdout,
-                stderr: &mut *host.stderr,
-                formatter: bsl_format::format_value,
-                zone: &linked.zone,
-                files: &linked.files,
-                random: &linked.random,
-                network: linked.network.as_ref(),
-                host_data: linked.host_data.as_ref(),
-                background_jobs: linked.background_jobs.as_ref(),
-                temp_storage: linked.temp_storage.as_ref(),
-                message_sink: linked.message_sink.as_ref(),
-                host_promises: None,
-                function_caller: None,
-                security_modes: Some(&security_control),
-            });
+            let mut context = component_context(
+                bsl_rt::InterpreterServices {
+                    runtime_shapes,
+                    stdout: &mut *host.stdout,
+                    stderr: &mut *host.stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    files: &linked.files,
+                    random: &linked.random,
+                    network: linked.network.as_ref(),
+                    host_data: linked.host_data.as_ref(),
+                    background_jobs: linked.background_jobs.as_ref(),
+                    temp_storage: linked.temp_storage.as_ref(),
+                    message_sink: linked.message_sink.as_ref(),
+                    host_promises: None,
+                    function_caller: None,
+                    security_modes: Some(&security_control),
+                },
+                linked.clock.as_ref(),
+            );
             if let Some(env) = host.env.as_ref() {
                 context.set_temporary_files(env.temporary_files());
             }
@@ -3857,6 +4342,36 @@ fn step_cold(
                 )?;
                 fallback_args.as_slice()
             };
+            let temporary_files = host.env.as_ref().map(|env| env.temporary_files());
+            let current_module = frames[frame_idx].module;
+            // Связанный метод, как и открытый, может лениво запросить параметр
+            // сеанса через BSL-обработчик в том же каталоге конфигурации.
+            let mut function_caller =
+                |target: bsl_rt::FunctionCall<'_>,
+                 args: Vec<BslValue>,
+                 stdout: &mut dyn Write,
+                 stderr: &mut dyn Write| {
+                    let mut nested_host = HostIo {
+                        stdout,
+                        stderr,
+                        env: host.env.as_deref_mut(),
+                        dynamic: host.dynamic.as_deref_mut(),
+                        dynamic_depth: host.dynamic_depth,
+                        cancel_flag: host.cancel_flag.clone(),
+                        file_promises: None,
+                        security_modes: modules.security_modes.snapshot(),
+                    };
+                    call_component_target(
+                        target,
+                        args,
+                        program,
+                        linked,
+                        &mut nested_host,
+                        module_state,
+                        modules,
+                        current_module,
+                    )
+                };
             let mut promises = scheduler::ComponentPromises {
                 local: async_state,
                 files: host.file_promises.as_deref_mut(),
@@ -3864,25 +4379,28 @@ fn step_cold(
                 linked,
                 module: frames[frame_idx].module,
             };
-            let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-                runtime_shapes,
-                stdout: &mut *host.stdout,
-                stderr: &mut *host.stderr,
-                formatter: bsl_format::format_value,
-                zone: &linked.zone,
-                files: &linked.files,
-                random: &linked.random,
-                network: linked.network.as_ref(),
-                host_data: linked.host_data.as_ref(),
-                background_jobs: linked.background_jobs.as_ref(),
-                temp_storage: linked.temp_storage.as_ref(),
-                message_sink: linked.message_sink.as_ref(),
-                host_promises: Some(&mut promises),
-                function_caller: None,
-                security_modes: Some(&security_control),
-            });
-            if let Some(env) = host.env.as_ref() {
-                context.set_temporary_files(env.temporary_files());
+            let mut context = component_context(
+                bsl_rt::InterpreterServices {
+                    runtime_shapes,
+                    stdout: &mut *host.stdout,
+                    stderr: &mut *host.stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    files: &linked.files,
+                    random: &linked.random,
+                    network: linked.network.as_ref(),
+                    host_data: linked.host_data.as_ref(),
+                    background_jobs: linked.background_jobs.as_ref(),
+                    temp_storage: linked.temp_storage.as_ref(),
+                    message_sink: linked.message_sink.as_ref(),
+                    host_promises: Some(&mut promises),
+                    function_caller: Some(&mut function_caller),
+                    security_modes: Some(&security_control),
+                },
+                linked.clock.as_ref(),
+            );
+            if let Some(registry) = temporary_files {
+                context.set_temporary_files(registry);
             }
             let outcome = match linked_method.descriptor {
                 Some(descriptor) => descriptor.invoke(object.as_dyn(), args, &mut context)?,
@@ -4013,10 +4531,54 @@ fn step_cold(
                                     module_state,
                                 )
                             }
+                            bsl_rt::FunctionCall::ConfigurationHasExport { module, name } => {
+                                object_instance::has_export(module, name, modules)
+                            }
+                            bsl_rt::FunctionCall::ConfigurationFunctionParameterCount {
+                                module,
+                                name,
+                            } => object_instance::function_parameter_count(module, name, modules),
+                            bsl_rt::FunctionCall::ConfigurationInstanceVariable {
+                                module,
+                                name,
+                                instance,
+                                value,
+                            } => object_instance::variable(
+                                module,
+                                name,
+                                instance,
+                                value,
+                                module_state,
+                                modules,
+                                &mut nested_host,
+                            ),
+                            bsl_rt::FunctionCall::ConfigurationInstance {
+                                module,
+                                export,
+                                require_export,
+                                entry_mode,
+                                instance,
+                                this_object,
+                                runtime_shapes,
+                            } => object_instance::call(
+                                module,
+                                export,
+                                require_export,
+                                entry_mode,
+                                instance,
+                                this_object,
+                                call_args,
+                                current_module,
+                                module_state,
+                                modules,
+                                &mut nested_host,
+                                runtime_shapes,
+                            ),
                             bsl_rt::FunctionCall::Configuration {
                                 module,
                                 export,
                                 this_object,
+                                runtime_shapes,
                             } => call_configuration_module_in_execution(
                                 module,
                                 export,
@@ -4026,6 +4588,27 @@ fn step_cold(
                                 module_state,
                                 modules,
                                 &mut nested_host,
+                                true,
+                                bsl_rt::ConfigurationHandlerEntryMode::Inherit,
+                                runtime_shapes,
+                            ),
+                            bsl_rt::FunctionCall::ConfigurationHandler {
+                                module,
+                                handler,
+                                entry_mode,
+                                runtime_shapes,
+                            } => call_configuration_module_in_execution(
+                                module,
+                                handler,
+                                call_args,
+                                None,
+                                current_module,
+                                module_state,
+                                modules,
+                                &mut nested_host,
+                                false,
+                                entry_mode,
+                                runtime_shapes,
                             ),
                         }
                     };
@@ -4036,23 +4619,26 @@ fn step_cold(
                     linked,
                     module: frames[frame_idx].module,
                 };
-                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-                    runtime_shapes,
-                    stdout: &mut *host.stdout,
-                    stderr: &mut *host.stderr,
-                    formatter: bsl_format::format_value,
-                    zone: &linked.zone,
-                    files: &linked.files,
-                    random: &linked.random,
-                    network: linked.network.as_ref(),
-                    host_data: linked.host_data.as_ref(),
-                    background_jobs: linked.background_jobs.as_ref(),
-                    temp_storage: linked.temp_storage.as_ref(),
-                    message_sink: linked.message_sink.as_ref(),
-                    host_promises: Some(&mut promises),
-                    function_caller: Some(&mut function_caller),
-                    security_modes: Some(&security_control),
-                });
+                let mut context = component_context(
+                    bsl_rt::InterpreterServices {
+                        runtime_shapes,
+                        stdout: &mut *host.stdout,
+                        stderr: &mut *host.stderr,
+                        formatter: bsl_format::format_value,
+                        zone: &linked.zone,
+                        files: &linked.files,
+                        random: &linked.random,
+                        network: linked.network.as_ref(),
+                        host_data: linked.host_data.as_ref(),
+                        background_jobs: linked.background_jobs.as_ref(),
+                        temp_storage: linked.temp_storage.as_ref(),
+                        message_sink: linked.message_sink.as_ref(),
+                        host_promises: Some(&mut promises),
+                        function_caller: Some(&mut function_caller),
+                        security_modes: Some(&security_control),
+                    },
+                    linked.clock.as_ref(),
+                );
                 if let Some(registry) = temporary_files {
                     context.set_temporary_files(registry);
                 }
@@ -4169,6 +4755,7 @@ fn step_cold(
                         frames,
                         frame_idx,
                         stack,
+                        names: &runtime_shapes.names,
                     },
                 )?;
             }
@@ -4324,6 +4911,7 @@ fn step_cold(
                 return_reg: ret,
                 module_copybacks,
                 numeric_for_state: None,
+                handled_errors: Vec::new(),
             });
         }
         // Чтение экспортной переменной чужого модуля — с той же ленивой
@@ -4350,6 +4938,33 @@ fn step_cold(
             };
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, value)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::GetImportedModule { dst, module } => {
+            let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
+                "ссылка на общий модуль вне каталога конфигурации",
+            ))?;
+            if !program
+                .imports
+                .iter()
+                .any(|import| import.module.index() == module as usize)
+            {
+                return Err(RtError::InvalidBytecode(
+                    "ссылка на необъявленный общий модуль",
+                ));
+            }
+            if ensure_module_ready(module, ctx, modules.session, frames, stack)? {
+                return Ok(None);
+            }
+            let reference = modules
+                .session
+                .instances
+                .get(module as usize)
+                .ok_or(RtError::InvalidBytecode("ссылка ведёт мимо сессии модулей"))?
+                .state
+                .reference()?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, reference)?;
             frames[frame_idx].pc += 1;
         }
         Instr::SetImportedVar { src, .. } => {
@@ -4405,19 +5020,20 @@ fn dim_to_usize(v: &BslValue) -> Result<usize, RtError> {
 /// Для прогона без реестра доступна только базовая библиотека runtime.
 fn dynamic_constructor(
     linked: &LinkedComponents<'_>,
-    ty: bsl_rt::TypeRef,
+    ty: &bsl_rt::TypeRef,
 ) -> Option<&'static bsl_rt::ConstructorDescriptor> {
     if let Some(registry) = linked.registry {
-        return registry.constructor_for_type(ty);
+        return registry.constructor_for_type(ty.clone());
     }
     let core = bsl_rt::core_library();
     match ty {
+        bsl_rt::TypeRef::Value(_) => None,
         bsl_rt::TypeRef::Object(ty) => core.constructor_for_type(ty),
         bsl_rt::TypeRef::Native(ty) => core.constructors().iter().find(|constructor| {
             constructor
                 .names
                 .iter()
-                .any(|name| bsl_rt::TypeId::lookup(name) == Some(ty))
+                .any(|name| bsl_rt::TypeId::lookup(name) == Some(*ty))
         }),
     }
 }
@@ -4426,7 +5042,7 @@ fn dynamic_constructor(
 /// потому остаются теми же операциями `BslValue`, что у статических опкодов.
 /// `None` означает, что тип должен пройти через обычный дескриптор.
 fn construct_dynamic_native(
-    ty: bsl_rt::TypeRef,
+    ty: &bsl_rt::TypeRef,
     args: &[BslValue],
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
 ) -> Result<Option<BslValue>, RtError> {
@@ -4496,7 +5112,13 @@ fn construct_structure(
         for (index, key) in keys.iter().enumerate() {
             let field = runtime_shapes.names.intern(key);
             let value = values.get(index).cloned().unwrap_or(BslValue::Undefined);
-            structure.structure_insert(field, value, &mut runtime_shapes.shapes)?;
+            structure.structure_insert_spelled(
+                field,
+                key,
+                value,
+                &mut runtime_shapes.shapes,
+                &runtime_shapes.names,
+            )?;
         }
         return Ok(structure);
     }
@@ -4507,7 +5129,7 @@ fn construct_structure(
     let entries = if let Some(fields) = fixed_fields {
         fields
             .into_iter()
-            .map(|(name, value)| (runtime_shapes.names.intern(&name), value))
+            .map(|(name, value)| (runtime_shapes.names.intern(&name), name, value))
             .collect()
     } else {
         let names = match first {
@@ -4524,11 +5146,14 @@ fn construct_structure(
                     .get(index + 1)
                     .cloned()
                     .unwrap_or(BslValue::Undefined);
-                (runtime_shapes.names.intern(name), value)
+                (runtime_shapes.names.intern(name), name.to_string(), value)
             })
             .collect()
     };
-    Ok(BslValue::new_dictionary_structure(entries))
+    Ok(BslValue::new_dictionary_structure_spelled(
+        entries,
+        &runtime_shapes.names,
+    ))
 }
 
 /// `Новый Массив(3, 4)` — массив из 3 массивов по 4: каждое измерение
@@ -4654,13 +5279,12 @@ fn do_return_with_value(
 /// Ищет защищённый диапазон, содержащий `pc`, в данном чанке. При
 /// нескольких вложенных диапазонах (`Попытка` внутри `Попытка`) выбирает
 /// самый узкий — самый внутренний `Try` должен ловить раньше внешнего.
-fn find_handler(chunk: &bsl_bytecode::Chunk, pc: usize) -> Option<usize> {
+fn find_handler(chunk: &bsl_bytecode::Chunk, pc: usize) -> Option<&bsl_bytecode::ExceptionRange> {
     chunk
         .exception_ranges
         .iter()
         .filter(|r| pc >= r.start_pc && pc < r.end_pc)
         .min_by_key(|r| r.end_pc - r.start_pc)
-        .map(|r| r.handler_pc)
 }
 
 /// Разматывает кадры в поисках обработчика для только что брошенной ошибки.
@@ -4722,9 +5346,17 @@ fn unwind_to_handler(
             frames[frame_idx].pc.saturating_sub(1)
         };
 
-        if let Some(handler_pc) = find_handler(chunk, check_pc) {
-            *current_exception = Some(err_to_value(err));
-            frames[frame_idx].pc = handler_pc;
+        if let Some(range) = find_handler(chunk, check_pc).copied() {
+            let value = err_to_value(err);
+            let frame = &mut frames[frame_idx];
+            // Сохраняем только внешние обработчики точки броска. Завершённый
+            // вложенный обработчик не должен накапливаться при повторе цикла.
+            frame.handled_errors.retain(|(handler, _)| {
+                check_pc >= handler.handler_pc && check_pc < handler.handler_end_pc
+            });
+            frame.handled_errors.push((range, value.clone()));
+            *current_exception = Some(value);
+            frame.pc = range.handler_pc;
             return true;
         }
 
@@ -4780,6 +5412,22 @@ fn err_to_value(err: &RtError) -> BslValue {
         RtError::Raised(v) => v.clone(),
         other => BslValue::Str(bsl_rt::BslString::from_str(&other.to_string())),
     }
+}
+
+fn current_handler_description(frame: &Frame) -> Result<BslValue, RtError> {
+    let Some((_, value)) = frame
+        .handled_errors
+        .iter()
+        .rev()
+        .find(|(range, _)| frame.pc >= range.handler_pc && frame.pc < range.handler_end_pc)
+    else {
+        return Ok(BslValue::Str(bsl_rt::BslString::from_str("")));
+    };
+    // Как и у `current_error_info`, сохраняем сознательное ограничение
+    // диагностики: безопасный текст без платформенных координат и стека.
+    // Нативное ОписаниеОшибки отличается от подробного представления;
+    // совпадение полного формата здесь не заявляется.
+    bsl_rt::detailed_error_description(&current_error_info(Some(value))?)
 }
 
 /// Снимает текущую ошибку задачи до выхода из обработчика. Платформенное
@@ -4864,6 +5512,65 @@ fn structured_error_info(arguments: &[BslValue]) -> Result<BslValue, RtError> {
 /// вызов, чтобы ни эта функция, ни `bsl_rt::call_builtin_fn` (тоже
 /// индексирующая `args` напрямую) не паниковали на чанке, собранном мимо
 /// резолвера.
+// Представление компонента получает данные именно вызывающего прогона.
+// Обычные значения сохраняют прежний путь форматирования.
+fn format_value_in_context(
+    value: &BslValue,
+    spec: Option<&str>,
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    host: &mut HostIo<'_, '_>,
+) -> Result<String, RtError> {
+    if !matches!(value, BslValue::Object(object) if matches!(object.as_ref(), bsl_rt::BslObject::Extension(_)))
+    {
+        return bsl_format::format_value(value, spec);
+    }
+    let env = host.env()?;
+    let zone = env.zone();
+    let files = env.files();
+    let random = env.random();
+    let clock = env.clock();
+    let network = env.network();
+    let host_data = env.host_data();
+    let background_jobs = env.background_jobs();
+    let temp_storage = env.temp_storage();
+    let message_sink = env.message_sink();
+    let context = component_context(
+        bsl_rt::InterpreterServices {
+            runtime_shapes,
+            formatter: bsl_format::format_value,
+            stdout: &mut *host.stdout,
+            stderr: &mut *host.stderr,
+            zone: &zone,
+            files: &files,
+            random: &random,
+            network: network.as_ref(),
+            host_data: host_data.as_ref(),
+            background_jobs: background_jobs.as_ref(),
+            temp_storage: temp_storage.as_ref(),
+            message_sink: message_sink.as_ref(),
+            host_promises: None,
+            function_caller: None,
+            security_modes: None,
+        },
+        Some(&clock),
+    );
+    context.format_value(value, spec)
+}
+
+// Нативные контроли поиска и замены подтверждают преобразование простых
+// аргументов. Числа используют точку без группировки, в отличие от `Строка`.
+// Остальные значения сохраняются для прежних проверок runtime, включая UUID.
+fn coerce_string_builtin_argument(value: &BslValue) -> Result<BslValue, RtError> {
+    let spec = match value {
+        BslValue::Number(_) => Some("ЧГ=; ЧРД=.; ЧН=0"),
+        BslValue::Undefined | BslValue::Null | BslValue::Boolean(_) => None,
+        _ => return Ok(value.clone()),
+    };
+    Ok(BslValue::Str(bsl_rt::BslString::from_str(
+        &bsl_format::format_value(value, spec)?,
+    )))
+}
+
 fn call_builtin_with_format(
     builtin: bsl_rt::BuiltinFn,
     args: &[BslValue],
@@ -4889,21 +5596,26 @@ fn call_builtin_with_format(
     }
     match builtin {
         BuiltinFn::Message => {
-            let text = bsl_format::format_value(&args[0], None)?;
+            let text = format_value_in_context(&args[0], None, runtime_shapes, host)?;
             // Сеанс с внедрённым sink отдаёт владеющий DTO: историю
             // сообщений задания пишет runtime, представление выбирает
             // host. Без sink — прежний путь, строка в stdout сеанса.
             match host.env().ok().and_then(|env| env.message_sink()) {
-                Some(sink) => sink
-                    .enqueue(&bsl_rt::UserMessageDto::from_text(text))
-                    .map_err(bsl_rt::HostError::raise)?,
+                Some(sink) => {
+                    let message = bsl_rt::UserMessageDto::from_text(text);
+                    sink.enqueue(&message).map_err(bsl_rt::HostError::raise)?;
+                    if sink.also_write_to_stdout() {
+                        writeln!(host.stdout, "{}", message.text)
+                            .map_err(|error| RtError::IoError(error.to_string()))?;
+                    }
+                }
                 None => writeln!(host.stdout, "{text}")
                     .map_err(|error| RtError::IoError(error.to_string()))?,
             }
             Ok(BslValue::Undefined)
         }
         BuiltinFn::ToString => {
-            let s = bsl_format::format_value(&args[0], None)?;
+            let s = format_value_in_context(&args[0], None, runtime_shapes, host)?;
             Ok(BslValue::Str(bsl_rt::BslString::from_str(&s)))
         }
         BuiltinFn::Format => {
@@ -4916,11 +5628,17 @@ fn call_builtin_with_format(
                     });
                 }
             };
-            let s = bsl_format::format_value(&args[0], Some(&spec))?;
+            let s = format_value_in_context(&args[0], Some(&spec), runtime_shapes, host)?;
             Ok(BslValue::Str(bsl_rt::BslString::from_str(&s)))
         }
         BuiltinFn::ToNumber => {
+            // Нативная проба `measure-number-conversion-source` подтверждает
+            // числовые и булевы аргументы наряду со строковым разбором.
             let s = match &args[0] {
+                BslValue::Number(_) => return Ok(args[0].clone()),
+                BslValue::Boolean(value) => {
+                    return Ok(BslValue::number_from_i64(i64::from(*value)));
+                }
                 BslValue::Str(s) => s,
                 _ => {
                     return Err(RtError::TypeError {
@@ -4932,9 +5650,32 @@ fn call_builtin_with_format(
             let n = bsl_format::parse_number(&s.to_string(), &bsl_format::NumberFormat::default())?;
             Ok(BslValue::Number(n))
         }
+        BuiltinFn::StrFind => {
+            let text = coerce_string_builtin_argument(&args[0])?;
+            let needle = coerce_string_builtin_argument(&args[1])?;
+            text.str_find(&needle, &args[2], &args[3], &args[4])
+        }
+        BuiltinFn::StrReplace => {
+            let text = coerce_string_builtin_argument(&args[0])?;
+            let needle = coerce_string_builtin_argument(&args[1])?;
+            let replacement = coerce_string_builtin_argument(&args[2])?;
+            text.str_replace(&needle, &replacement)
+        }
         BuiltinFn::StrCompare => {
-            let left = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[0], None)?);
-            let right = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[1], None)?);
+            let left = bsl_rt::BslString::from_str(&format_value_in_context(
+                &args[0],
+                None,
+                runtime_shapes,
+                host,
+            )?);
+            // Оба аргумента используют обычную `Строка` вызывающего State;
+            // второй объект не должен терять контекст представления.
+            let right = bsl_rt::BslString::from_str(&format_value_in_context(
+                &args[1],
+                None,
+                runtime_shapes,
+                host,
+            )?);
             let result = match left.compare_case_insensitive(&right) {
                 std::cmp::Ordering::Less => -1,
                 std::cmp::Ordering::Equal => 0,
@@ -4943,8 +5684,18 @@ fn call_builtin_with_format(
             Ok(BslValue::number_from_i64(result))
         }
         BuiltinFn::StrOccurrenceCount => {
-            let text = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[0], None)?);
-            let needle = bsl_rt::BslString::from_str(&bsl_format::format_value(&args[1], None)?);
+            let text = bsl_rt::BslString::from_str(&format_value_in_context(
+                &args[0],
+                None,
+                runtime_shapes,
+                host,
+            )?);
+            let needle = bsl_rt::BslString::from_str(&format_value_in_context(
+                &args[1],
+                None,
+                runtime_shapes,
+                host,
+            )?);
             Ok(BslValue::number_from_i64(
                 text.occurrence_count(&needle) as i64
             ))
@@ -5021,6 +5772,7 @@ fn call_builtin_with_format(
 ///
 /// Отдельной функцией, чтобы арифметика и конкатенация не раздували ветку
 /// `step` диспетчерского цикла.
+#[allow(clippy::too_many_arguments)]
 fn add_op(
     frames: &mut [Frame],
     stack: &mut [BslValue],
@@ -5028,15 +5780,18 @@ fn add_op(
     dst: u8,
     a: u8,
     b: u8,
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    host: &mut HostIo<'_, '_>,
 ) -> Result<(), RtError> {
     let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
-    add_rhs_op(frames, stack, frame_idx, dst, a, &bv)
+    add_rhs_op(frames, stack, frame_idx, dst, a, &bv, runtime_shapes, host)
 }
 
 /// Тело `AddConst` вынесено из `step`: разворачивание двух проверок таблиц
 /// в цикл диспетчеризации сдвигает код остальных опкодов, хотя они этой
 /// инструкцией не пользуются.
 #[inline(never)]
+#[allow(clippy::too_many_arguments)]
 fn add_const_op(
     program: &Program,
     frames: &mut [Frame],
@@ -5045,6 +5800,8 @@ fn add_const_op(
     dst: u8,
     src: u8,
     k: u16,
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    host: &mut HostIo<'_, '_>,
 ) -> Result<(), RtError> {
     let chunk = at(
         &program.chunks,
@@ -5056,11 +5813,21 @@ fn add_const_op(
         k as usize,
         "номер константы вне таблицы констант чанка",
     )?;
-    add_rhs_op(frames, stack, frame_idx, dst, src, value)
+    add_rhs_op(
+        frames,
+        stack,
+        frame_idx,
+        dst,
+        src,
+        value,
+        runtime_shapes,
+        host,
+    )
 }
 
 /// Общее тело `Add` и `AddConst`: правый операнд уже найден, но порядок и
 /// все преобразования остаются прежними.
+#[allow(clippy::too_many_arguments)]
 fn add_rhs_op(
     frames: &mut [Frame],
     stack: &mut [BslValue],
@@ -5068,6 +5835,8 @@ fn add_rhs_op(
     dst: u8,
     a: u8,
     bv: &BslValue,
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    host: &mut HostIo<'_, '_>,
 ) -> Result<(), RtError> {
     // Накопление строки в саму себя (`Текст = Текст + Кусок`
     // — приёмник и левый операнд один регистр) идёт особым
@@ -5103,7 +5872,7 @@ fn add_rhs_op(
         let BslValue::Str(left) = av else {
             unreachable!("тип проверен выше")
         };
-        let right = bsl_format::format_value(bv, None)?;
+        let right = format_value_in_context(bv, None, runtime_shapes, host)?;
         let joined = left.append(&bsl_rt::BslString::from_str(&right));
         reg_store(stack, d, BslValue::Str(joined))?;
     } else {
@@ -5236,3 +6005,20 @@ fn cmp(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "indexed_catalog_tests.rs"]
+mod indexed_catalog_tests;
+
+// Контекст сохраняет исходный контракт сервисов; часы прикрепляются отдельно,
+// чтобы автономные потребители InterpreterServices не получали системные часы молча.
+fn component_context<'a>(
+    services: bsl_rt::InterpreterServices<'a>,
+    clock: Option<&'a bsl_rt::ClockHandle>,
+) -> bsl_rt::CallContext<'a> {
+    let context = bsl_rt::CallContext::interpreter(services);
+    match clock {
+        Some(clock) => context.with_clock(clock),
+        None => context,
+    }
+}

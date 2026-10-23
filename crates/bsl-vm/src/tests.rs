@@ -353,6 +353,7 @@ fn a_run_allocates_both_cache_slots_for_every_instruction() {
     execution.attach_catalog(&catalog);
     assert_eq!(execution.catalog_caches.len(), catalog.modules.len());
     for (module, caches) in catalog.modules.iter().zip(&execution.catalog_caches) {
+        let caches = caches.ready(&module.program);
         // Длины утверждаются явно: zip молча обрезается по короткому, и
         // без них модуль с пустыми кэшами прошёл бы проверку зелёным.
         assert_eq!(caches.prop.len(), module.program.chunks.len());
@@ -911,6 +912,7 @@ fn a_failed_module_body_poisons_the_instance_for_the_session() {
         start_pc: 0,
         end_pc: 1,
         handler_pc: 1,
+        handler_end_pc: 3,
     }];
     chunk.n_regs = 2;
     bsl_bytecode::image::finalize(&mut entry);
@@ -2549,7 +2551,7 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
-        imports: Vec::new(),
+        imports: Default::default(),
         links: Vec::new(),
         lines: Vec::new(),
         chunks: vec![{
@@ -2570,7 +2572,7 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
             bsl_bytecode::image::finalize_lone_chunk_unbundled(&mut c);
             c
         }],
-        names: Vec::new(),
+        names: Vec::new().into(),
         shapes: Vec::new(),
         top_level_locals: Vec::new(),
     }
@@ -3540,8 +3542,7 @@ fn date_components_are_readable_individually() {
 
 #[test]
 fn period_boundaries_and_weekday_from_script() {
-    // 15 января 2024 — понедельник
-    // (НЕ ИЗМЕРЕНО(DATE.WEEKDAY_NUMBERING), что пн = 1).
+    // Измерено на платформе: 15 января 2024 — понедельник с номером 1.
     assert_eq!(run_src("Возврат ДеньНедели(Дата(2024, 1, 15));"), num("1"));
     assert_eq!(
         date_str("Возврат Строка(НачалоДня(Дата(2024, 2, 17, 13, 45, 30)));"),
@@ -3568,7 +3569,7 @@ fn period_boundaries_and_weekday_from_script() {
         date_str("Возврат Строка(КонецГода(Дата(2024, 7, 4)));"),
         "31.12.2024 23:59:59"
     );
-    // Среда 17 января -> понедельник 15-го.
+    // Среда 17 января -> понедельник 15-го в серверном оракуле.
     assert_eq!(
         date_str("Возврат Строка(НачалоНедели(Дата(2024, 1, 17)));"),
         "15.01.2024 0:00:00"

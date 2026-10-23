@@ -21,4 +21,7 @@ pub use compiler::{
     compile_entry_program, compile_program, compile_program_with, compile_snippet,
     compile_snippet_with_requirements,
 };
-pub use dynamic::{compile_dynamic_snippet, compile_dynamic_snippet_with_imports};
+pub use dynamic::{
+    compile_dynamic_snippet, compile_dynamic_snippet_with_import_provider,
+    compile_dynamic_snippet_with_imports, compile_dynamic_snippet_with_receiver_property_names,
+};

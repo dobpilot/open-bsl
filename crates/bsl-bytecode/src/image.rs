@@ -174,17 +174,18 @@ fn check_line_table(program: &Program) -> Result<(), RtError> {
 }
 
 pub fn verify(program: &Program) -> Result<(), RtError> {
-    let aliases: Vec<String> = program
-        .imports
-        .iter()
-        .map(|import| import.alias.clone())
-        .collect();
-    if aliases.iter().any(String::is_empty) || bsl_rt::first_folded_duplicate(&aliases).is_some() {
-        return Err(RtError::InvalidBytecode(
-            "пустой или повторный псевдоним импорта",
-        ));
+    verify_with_shared_tables(program, false, false)
+}
+
+fn verify_with_shared_tables(
+    program: &Program,
+    names_verified: bool,
+    aliases_verified: bool,
+) -> Result<(), RtError> {
+    if !aliases_verified {
+        check_import_aliases(program.imports.iter())?;
     }
-    check_program_tables(program)?;
+    check_program_tables(program, names_verified)?;
     check_line_table(program)?;
     for chunk in &program.chunks {
         // Геометрия кадра упорядочена: параметры занимают первые слоты
@@ -246,7 +247,12 @@ pub fn verify(program: &Program) -> Result<(), RtError> {
             // есть в обычное завершение — ровно как у перехода с целью
             // `limit`. Строгое `>=` здесь однажды отвергло корректную
             // программу с пустым `Исключение` в конце.
-            if range.start_pc > range.end_pc || range.end_pc > limit || range.handler_pc > limit {
+            if range.start_pc > range.end_pc
+                || range.end_pc > limit
+                || range.handler_pc > limit
+                || range.handler_end_pc < range.handler_pc
+                || range.handler_end_pc > limit
+            {
                 return Err(RtError::InvalidBytecode(
                     "диапазон «Попытка» за пределами чанка",
                 ));
@@ -360,7 +366,7 @@ pub fn verify(program: &Program) -> Result<(), RtError> {
 /// переменных. Проверяются один раз на связывание, до первой инструкции, —
 /// как и всё остальное в [`check_control_flow`], потому что каждое из этих
 /// свойств при нарушении даёт не отказ, а неверный ответ.
-fn check_program_tables(program: &Program) -> Result<(), RtError> {
+fn check_program_tables(program: &Program, names_verified: bool) -> Result<(), RtError> {
     // Индексы полей формы — те же `NameId`, что и у инструкций доступа к
     // полю: форма, ссылающаяся за таблицу имён, даёт структуру с полем без
     // имени. Такое поле не найти по имени, а печать документа молча его
@@ -446,20 +452,26 @@ fn check_program_tables(program: &Program) -> Result<(), RtError> {
     // Правило свёртки берётся у самого интернера (`bsl-rt`), а не пишется
     // здесь второй раз, и проход линейный.
     for (table, duplicate) in [
-        (&program.names, "таблица имён содержит повтор написания"),
         (
-            &program.function_names,
+            program.names.as_ref(),
+            "таблица имён содержит повтор написания",
+        ),
+        (
+            program.function_names.as_slice(),
             "имя процедуры или функции встречается дважды",
         ),
         (
-            &program.module_vars,
+            program.module_vars.as_slice(),
             "имя переменной модуля встречается дважды",
         ),
         (
-            &program.top_level_locals,
+            program.top_level_locals.as_slice(),
             "имя локальной переменной верхнего уровня встречается дважды",
         ),
     ] {
+        if names_verified && std::ptr::eq(table, program.names.as_ref()) {
+            continue;
+        }
         if bsl_rt::first_folded_duplicate(table).is_some() {
             return Err(RtError::InvalidBytecode(duplicate));
         }
@@ -735,6 +747,18 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
             }
             Ok(())
         }
+        Instr::GetImportedModule { module, .. } => {
+            if !program
+                .imports
+                .iter()
+                .any(|import| import.module.index() == *module as usize)
+            {
+                return Err(RtError::InvalidBytecode(
+                    "ссылка на необъявленный общий модуль",
+                ));
+            }
+            Ok(())
+        }
         Instr::NewStructure {
             shape, base, count, ..
         } => {
@@ -828,13 +852,13 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
 
 fn check_links(
     program: &Program,
-    catalog: &crate::ConfigurationProgram,
+    catalog: &dyn crate::ExecutionCatalog,
     own: Option<usize>,
 ) -> Result<(), RtError> {
     use crate::configuration::LinkEntry;
 
     for import in &program.imports {
-        if own == Some(import.module.index()) || catalog.module(import.module).is_none() {
+        if own == Some(import.module.index()) || catalog.module_name(import.module).is_none() {
             return Err(RtError::InvalidBytecode(
                 "импорт указывает на себя или мимо каталога",
             ));
@@ -867,9 +891,10 @@ fn check_links(
                 "связь указывает на собственный модуль",
             ));
         }
-        let Some(target) = catalog.module(module) else {
+        if catalog.module_name(module).is_none() {
             return Err(RtError::InvalidBytecode("связь ведёт мимо каталога"));
-        };
+        }
+        let target = catalog.module_code(module)?;
         match link {
             LinkEntry::Function { func, .. } => {
                 debug_assert!(target_is_function);
@@ -906,7 +931,7 @@ fn check_links(
     }
     Ok(())
 }
-fn check_calls(program: &Program, catalog: &crate::ConfigurationProgram) -> Result<(), RtError> {
+fn check_calls(program: &Program, catalog: &dyn crate::ExecutionCatalog) -> Result<(), RtError> {
     use crate::configuration::LinkEntry;
     for chunk in &program.chunks {
         for instr in &chunk.instrs {
@@ -922,7 +947,7 @@ fn check_calls(program: &Program, catalog: &crate::ConfigurationProgram) -> Resu
             else {
                 unreachable!("одиночный verify уже проверил вид связи");
             };
-            let callee = &catalog.modules[module.index()].program.chunks[*func as usize];
+            let callee = &catalog.module_code(*module)?.program.chunks[*func as usize];
             let modes = &chunk.call_arg_modes[*arg_modes as usize];
             if modes.len() != callee.n_params as usize {
                 return Err(RtError::InvalidBytecode(
@@ -956,12 +981,84 @@ fn check_calls(program: &Program, catalog: &crate::ConfigurationProgram) -> Resu
 /// Несогласованный образ программы, недоступная цель или неверная арность связи.
 pub fn verify_linked_program(
     program: &Program,
-    catalog: &crate::ConfigurationProgram,
+    catalog: &dyn crate::ExecutionCatalog,
     own: Option<crate::ModuleId>,
 ) -> Result<(), RtError> {
     verify(program)?;
     check_links(program, catalog, own.map(crate::ModuleId::index))?;
     check_calls(program, catalog)
+}
+
+fn check_import_aliases<'a>(
+    imports: impl Iterator<Item = &'a crate::ModuleImport>,
+) -> Result<(), RtError> {
+    let aliases: Vec<String> = imports.map(|import| import.alias.clone()).collect();
+    if aliases.iter().any(String::is_empty) || bsl_rt::first_folded_duplicate(&aliases).is_some() {
+        return Err(RtError::InvalidBytecode(
+            "пустой или повторный псевдоним импорта",
+        ));
+    }
+    Ok(())
+}
+
+/// Кэш проверки неизменяемых общих таблиц последовательных программ.
+/// Слабые ссылки не удерживают старые таблицы и не позволяют изменить
+/// проверенное хранилище через `Arc::get_mut`. Новая копия проверяется заново.
+#[derive(Default)]
+pub struct VerificationCache {
+    names: Option<std::sync::Weak<[String]>>,
+    aliases: Option<std::sync::Weak<[crate::ModuleImport]>>,
+}
+
+impl VerificationCache {
+    /// Проверяет программу, повторно используя только проверку тех же таблиц.
+    ///
+    /// # Errors
+    /// Возвращает те же ошибки образа, что [`verify`].
+    pub fn verify(&mut self, program: &Program) -> Result<(), RtError> {
+        let names_verified = self
+            .names
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .is_some_and(|names| std::sync::Arc::ptr_eq(&names, &program.names));
+        let aliases_verified = if let Some(table) = program.imports.shared_alias_table() {
+            if self
+                .aliases
+                .as_ref()
+                .and_then(std::sync::Weak::upgrade)
+                .is_some_and(|aliases| std::sync::Arc::ptr_eq(&aliases, table))
+            {
+                true
+            } else if check_import_aliases(table.iter()).is_ok() {
+                self.aliases = Some(std::sync::Arc::downgrade(table));
+                true
+            } else {
+                // Общий массив может содержать исключённые записи. Его
+                // непригодность для кэша не означает порчу выбранных диапазонов.
+                false
+            }
+        } else {
+            false
+        };
+        verify_with_shared_tables(program, names_verified, aliases_verified)?;
+        self.names = Some(std::sync::Arc::downgrade(&program.names));
+        Ok(())
+    }
+
+    /// Проверяет новую программу и её связи с индексным каталогом.
+    ///
+    /// # Errors
+    /// Возвращает ошибки [`Self::verify`], отсутствующих целей и несовместимых вызовов.
+    pub fn verify_linked(
+        &mut self,
+        program: &Program,
+        catalog: &dyn crate::ExecutionCatalog,
+        own: Option<crate::ModuleId>,
+    ) -> Result<(), RtError> {
+        self.verify(program)?;
+        check_links(program, catalog, own.map(crate::ModuleId::index))?;
+        check_calls(program, catalog)
+    }
 }
 
 /// Периметр конфигурационного образа: то, что нельзя проверить на одном
@@ -1130,14 +1227,14 @@ mod tests {
         let mut p = Program {
             requirements: vec![bsl_rt::LibraryRequirement::new("bsl-rt", "0.2.0")],
             chunks: vec![top, callee],
-            names: Vec::new(),
+            names: Vec::new().into(),
             shapes: Vec::new(),
             top_level_locals: Vec::new(),
             module_vars: vec!["Общая".to_string()],
             exported_module_vars: vec![true],
             function_names: vec!["Ф".to_string()],
             exported_functions: vec![true],
-            imports: Vec::new(),
+            imports: Default::default(),
             links: Vec::new(),
             lines: Vec::new(),
         };

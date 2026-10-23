@@ -1,10 +1,10 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use bsl_rt::{BslValue, LibraryRequirement, Shape};
 
 use crate::instr::{ArgMode, Instr};
 
-/// `(начало_pc, конец_pc, обработчик_pc)` на функцию — ноль стоимости, пока
+/// Защищённый диапазон и явные границы обработчика на функцию — ноль стоимости, пока
 /// исключение не брошено, как и описано в брифе (JVM/CPython делают так
 /// же). `end_pc` эксклюзивно.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,6 +12,8 @@ pub struct ExceptionRange {
     pub start_pc: usize,
     pub end_pc: usize,
     pub handler_pc: usize,
+    /// Позиция за последней инструкцией обработчика; у пустого тела равна входу.
+    pub handler_end_pc: usize,
 }
 
 /// Константа таблицы констант чанка.
@@ -257,7 +259,8 @@ pub struct Program {
     /// операнд `library` универсальных инструкций компонентов.
     pub requirements: Vec<LibraryRequirement>,
     pub chunks: Vec<Chunk>,
-    pub names: Vec<String>,
+    /// Неизменяемая таблица имён; модули каталога разделяют её хранение.
+    pub names: Arc<[String]>,
     pub shapes: Vec<Rc<Shape>>,
     /// Слоты верхнего уровня по именам, в порядке — нужно `Выполнить`/
     /// `Вычислить` (см. `bsl-vm`), чтобы резолвить уже объявленные
@@ -290,7 +293,7 @@ pub struct Program {
     pub links: Vec<crate::configuration::LinkEntry>,
     /// Точное окружение разрешённых импортов для динамических фрагментов.
     /// Сохраняется независимо от фактически использованных `links`.
-    pub imports: Vec<crate::configuration::ModuleImport>,
+    pub imports: crate::ModuleImports,
     /// Таблица строк исходника: `lines[i][pc]` — номер строки, с которой
     /// начинается оператор, породивший инструкцию `pc` чанка `i`.
     ///

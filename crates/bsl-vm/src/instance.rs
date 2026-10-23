@@ -8,6 +8,13 @@ use super::*;
 pub struct ModuleMemory(pub(super) ModuleState);
 
 impl ProgramExecution {
+    /// Обменивает таблицы имён и форм с владельцем явных экземпляров.
+    /// Программы должны быть заранее связаны с пространством имён владельца.
+    /// После исполнения таблицы возвращаются тем же обменом и при ошибке.
+    pub fn swap_runtime_shapes(&mut self, shapes: &mut bsl_rt::RuntimeShapes) {
+        std::mem::swap(&mut self.runtime_shapes, shapes);
+    }
+
     /// Создаёт запуск экспортной процедуры или функции без исполнения тела
     /// модуля. До первого poll хост обязан вернуть память этого модуля
     /// через [`Self::replace_module_memory`]. Асинхронный экспорт исполняется
@@ -24,6 +31,48 @@ impl ProgramExecution {
         host_env: &bsl_rt::HostEnv,
         scheduler: SchedulerConfig,
     ) -> Result<Self, RtError> {
+        Self::start_named_with_registry_and_scheduler(
+            program, name, args, registry, host_env, scheduler, true, None,
+        )
+    }
+
+    /// Создаёт вызов экспорта, принимая таблицы явного сеанса после проверки
+    /// имени и аргументов. Владелец возвращает таблицы после исполнения.
+    ///
+    /// # Errors
+    /// Возвращает ошибку имени, экспорта, арности либо связывания программы.
+    pub fn start_export_with_shared_runtime(
+        program: &Program,
+        name: &str,
+        args: Vec<BslValue>,
+        registry: &bsl_rt::RuntimeRegistry,
+        host_env: &bsl_rt::HostEnv,
+        scheduler: SchedulerConfig,
+        runtime: &mut bsl_rt::RuntimeShapes,
+    ) -> Result<Self, RtError> {
+        Self::start_named_with_registry_and_scheduler(
+            program,
+            name,
+            args,
+            registry,
+            host_env,
+            scheduler,
+            true,
+            Some(runtime),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_named_with_registry_and_scheduler(
+        program: &Program,
+        name: &str,
+        args: Vec<BslValue>,
+        registry: &bsl_rt::RuntimeRegistry,
+        host_env: &bsl_rt::HostEnv,
+        scheduler: SchedulerConfig,
+        require_export: bool,
+        runtime: Option<&mut bsl_rt::RuntimeShapes>,
+    ) -> Result<Self, RtError> {
         let index = program
             .function_names
             .iter()
@@ -33,11 +82,12 @@ impl ProgramExecution {
                     "Процедура или функция «{name}» в модуле не найдена"
                 ))
             })?;
-        if !program
-            .exported_functions
-            .get(index)
-            .copied()
-            .unwrap_or(false)
+        if require_export
+            && !program
+                .exported_functions
+                .get(index)
+                .copied()
+                .unwrap_or(false)
         {
             return Err(RtError::DynamicError(format!(
                 "Процедура или функция «{name}» не экспортируется"
@@ -56,7 +106,7 @@ impl ProgramExecution {
             )));
         }
         let mut execution =
-            Self::start_with_registry_and_scheduler(program, registry, host_env, scheduler)?;
+            Self::start_with_runtime_owner(program, registry, host_env, scheduler, runtime)?;
         let root = execution.async_state.tasks[0]
             .as_mut()
             .expect("новый запуск содержит корневую задачу");

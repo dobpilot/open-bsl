@@ -110,12 +110,26 @@ impl Keyword {
 /// Регистронезависимый поиск ключевого слова по идентификатору.
 /// `None` значит, что это обычный идентификатор, а не ключевое слово.
 pub fn lookup(ident: &str) -> Option<Keyword> {
-    let upper = ident.to_uppercase();
-    SPELLINGS
-        .iter()
-        .find(|(ru, en, _)| ru.to_uppercase() == upper || en.to_uppercase() == upper)
-        .map(|(_, _, kw)| *kw)
+    static INDEX: std::sync::OnceLock<std::collections::HashMap<String, Keyword>> =
+        std::sync::OnceLock::new();
+    // Лексер спрашивает таблицу для каждого идентификатора. Неизменяемые
+    // написания сворачиваются один раз, а не при каждом просмотре таблицы.
+    INDEX
+        .get_or_init(|| {
+            let mut index = std::collections::HashMap::with_capacity(SPELLINGS.len() * 2);
+            for (ru, en, keyword) in SPELLINGS {
+                index.entry(ru.to_uppercase()).or_insert(*keyword);
+                index.entry(en.to_uppercase()).or_insert(*keyword);
+            }
+            index
+        })
+        .get(&ident.to_uppercase())
+        .copied()
 }
+
+#[cfg(test)]
+#[path = "keyword_lookup_tests.rs"]
+mod lookup_tests;
 
 #[cfg(test)]
 mod tests {

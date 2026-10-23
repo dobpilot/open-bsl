@@ -35,12 +35,19 @@ use bsl_syntax::{Expr, LValue, Param, Stmt, StmtKind};
 
 use crate::resolver::NEW_TYPES;
 
+/// Старые конструкторы ядра сохраняют закрытые методы; `СписокЗначений`
+/// использует собственную таблицу с измеренными пропущенными позициями.
+pub(crate) fn uses_builtin_core_methods(constructor: bsl_rt::ConstructorCode) -> bool {
+    (constructor.get() <= 16 && constructor.get() != 3) || constructor.get() == 27 // `ЗаписьТекста` по-прежнему пользуется закрытыми методами ядра.
+}
+
 /// Статически доказанный класс приёмника. Для компонента конкретный тип
 /// сохраняется до места вызова; ядровые объекты обслуживает общий закрытый
 /// `CallMethod`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CoreReceiver {
     Core,
+    BackgroundJobs,
     Component(&'static bsl_rt::TypeDescriptor),
 }
 
@@ -156,11 +163,18 @@ impl Collector<'_> {
         if let Some(registry) = self.registry
             && let Some((library, constructor)) = registry.lookup_constructor(type_name)
         {
-            if registry
+            let descriptor = registry
                 .library(library)
-                .is_some_and(|descriptor| descriptor.package() == bsl_rt::PACKAGE_NAME)
-            {
-                return Some(CoreReceiver::Core);
+                .expect("индекс получен из таблицы конструкторов этого реестра");
+            // Старые конструкторы сохраняют закрытый путь, кроме
+            // `СписокЗначений` с пропущенными аргументами `Добавить`.
+            if descriptor.package() == bsl_rt::PACKAGE_NAME {
+                if constructor.get() == 6 {
+                    return Some(CoreReceiver::BackgroundJobs);
+                }
+                if uses_builtin_core_methods(constructor) {
+                    return Some(CoreReceiver::Core);
+                }
             }
             return registry
                 .constructor_type(library, constructor)

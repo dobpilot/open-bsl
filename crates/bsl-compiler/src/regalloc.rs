@@ -41,13 +41,23 @@ pub fn live_out(cfg: &Cfg<'_>, ssa: &Ssa) -> Vec<HashSet<ValueId>> {
     // список на каждой итерации.
     let mut used_in: Vec<Vec<ValueId>> = vec![Vec::new(); nb];
     for u in &ssa.uses {
-        used_in[u.block].push(u.value);
+        // Определение внутри блока нельзя возвращать в его `live_in`:
+        // до входа в блок этого значения ещё не существует. Раньше
+        // общий список чтений снова добавлял его после снятия `defs`.
+        if !matches!(ssa.values[u.value], Value::Def { block, .. } | Value::Phi { block, .. } if block == u.block)
+        {
+            used_in[u.block].push(u.value);
+        }
     }
-    // Операнд `φ` живёт до КОНЦА соответствующего предшественника, а не
-    // до входа в блок с `φ`: именно там он и передаётся.
+    let live_values = live_phi_dependencies(ssa);
+    // Операнд живого `φ` живёт до КОНЦА соответствующего предшественника,
+    // а не до входа в блок с `φ`: именно там он и передаётся.
     let mut phi_in_pred: Vec<Vec<ValueId>> = vec![Vec::new(); nb];
     for (b, phis) in ssa.phis.iter().enumerate() {
         for &phi in phis {
+            if !live_values.contains(&phi) {
+                continue;
+            }
             let Value::Phi { operands, .. } = &ssa.values[phi] else {
                 continue;
             };
@@ -90,6 +100,21 @@ pub fn live_out(cfg: &Cfg<'_>, ssa: &Ssa) -> Vec<HashSet<ValueId>> {
     out
 }
 
+// Мёртвое `φ` не читает входы и не пишет в кадр. Иначе слияние сотен
+// неиспользуемых локалей на одном ребре создаёт фиктивный конфликт.
+fn live_phi_dependencies(ssa: &Ssa) -> HashSet<ValueId> {
+    let mut live_values = HashSet::new();
+    let mut pending: Vec<ValueId> = ssa.uses.iter().map(|use_site| use_site.value).collect();
+    while let Some(value) = pending.pop() {
+        if live_values.insert(value)
+            && let Value::Phi { operands, .. } = &ssa.values[value]
+        {
+            pending.extend(operands.iter().copied());
+        }
+    }
+    live_values
+}
+
 /// Проходит все точки программы, отдавая множество живых значений в
 /// каждой из них.
 ///
@@ -98,6 +123,7 @@ pub fn live_out(cfg: &Cfg<'_>, ssa: &Ssa) -> Vec<HashSet<ValueId>> {
 /// бы подтверждать не то, что построено.
 fn for_each_point<F: FnMut(&HashSet<ValueId>)>(cfg: &Cfg<'_>, ssa: &Ssa, mut f: F) {
     let out = live_out(cfg, ssa);
+    let live_values = live_phi_dependencies(ssa);
     let mut uses_at: HashMap<(usize, Option<usize>), Vec<ValueId>> = HashMap::new();
     for u in &ssa.uses {
         uses_at.entry((u.block, u.stmt)).or_default().push(u.value);
@@ -144,12 +170,16 @@ fn for_each_point<F: FnMut(&HashSet<ValueId>)>(cfg: &Cfg<'_>, ssa: &Ssa, mut f: 
             }
             f(&live);
         }
-        // На входе в блок живы его `φ` — и они точно так же обязаны
-        // конфликтовать друг с другом и с пришедшим снаружи.
-        // То же для `φ`: они пишут на входе в блок и конфликтуют со всем,
-        // что живо, независимо от того, читают ли их.
+        // Используемые `φ` пишут на входе в блок и конфликтуют с
+        // остальными живыми значениями. Неиспользуемые слияния байт-кода
+        // не порождают и места в кадре не занимают.
         let mut with_phis = live.clone();
-        with_phis.extend(ssa.phis[b].iter().copied());
+        with_phis.extend(
+            ssa.phis[b]
+                .iter()
+                .copied()
+                .filter(|phi| live_values.contains(phi)),
+        );
         f(&with_phis);
         for &phi in &ssa.phis[b] {
             live.remove(&phi);
@@ -262,13 +292,38 @@ pub fn verify(cfg: &Cfg<'_>, ssa: &Ssa, alloc: &Allocation) -> Result<(), String
 ///
 /// # Errors
 ///
-/// Сообщение, если слотов, живых одновременно, больше, чем регистров.
+/// Сообщение, если жадная раскладка не нашла свободного регистра.
 pub fn allocate_slots(
     cfg: &Cfg<'_>,
     ssa: &Ssa,
     n_slots: usize,
     pinned: usize,
 ) -> Result<Vec<u8>, String> {
+    allocate_slots_with_order(cfg, ssa, n_slots, pinned, false)
+}
+
+/// Для большого исходного кадра сначала размещает самые конфликтующие
+/// слоты, чтобы ранние короткоживущие имена не заняли все цвета графа.
+pub fn allocate_slots_sparse(
+    cfg: &Cfg<'_>,
+    ssa: &Ssa,
+    n_slots: usize,
+    pinned: usize,
+) -> Result<Vec<u8>, String> {
+    allocate_slots_with_order(cfg, ssa, n_slots, pinned, true)
+}
+
+fn allocate_slots_with_order(
+    cfg: &Cfg<'_>,
+    ssa: &Ssa,
+    n_slots: usize,
+    pinned: usize,
+    high_degree_first: bool,
+) -> Result<Vec<u8>, String> {
+    let pinned = pinned.min(n_slots);
+    if pinned > u8::MAX as usize {
+        return Err("закреплённых слотов больше, чем регистров кадра".to_string());
+    }
     // Слот каждого значения; у `Bottom` слота нет.
     let mut slot_of: Vec<Option<u32>> = vec![None; ssa.values.len()];
     for (id, v) in ssa.values.iter().enumerate() {
@@ -280,39 +335,69 @@ pub fn allocate_slots(
         };
     }
 
-    let mut interfere: Vec<HashSet<usize>> = vec![HashSet::new(); n_slots];
+    // У каждой точки бывает много живых значений. Битовая строка сразу
+    // добавляет все их конфликты слоту, не вставляя каждую пару в `HashSet`.
+    let words = n_slots.div_ceil(u64::BITS as usize);
+    let mut interfere = vec![vec![0_u64; words]; n_slots];
     for_each_point(cfg, ssa, |live| {
-        let slots: Vec<usize> = live
-            .iter()
-            .filter_map(|&id| slot_of[id])
-            .map(|s| s as usize)
-            .filter(|s| *s < n_slots)
-            .collect();
-        for (i, &a) in slots.iter().enumerate() {
-            for &b in &slots[i + 1..] {
-                if a != b {
-                    interfere[a].insert(b);
-                    interfere[b].insert(a);
+        let mut mask = vec![0_u64; words];
+        for &id in live {
+            if let Some(slot) = slot_of[id].map(|slot| slot as usize)
+                && slot < n_slots
+            {
+                mask[slot / 64] |= 1_u64 << (slot % 64);
+            }
+        }
+        for (word_index, mut word) in mask.iter().copied().enumerate() {
+            while word != 0 {
+                let slot = word_index * 64 + word.trailing_zeros() as usize;
+                for (neighbours, live_mask) in interfere[slot].iter_mut().zip(&mask) {
+                    *neighbours |= live_mask;
                 }
+                interfere[slot][word_index] &= !(1_u64 << (slot % 64));
+                word &= word - 1;
             }
         }
     });
 
-    let mut reg: Vec<u8> = (0..n_slots)
-        .map(|i| u8::try_from(i).unwrap_or(u8::MAX))
-        .collect();
-    for slot in pinned..n_slots {
-        let taken: HashSet<u8> = interfere[slot]
-            .iter()
-            .filter(|&&o| o < slot)
-            .map(|&o| reg[o])
-            .collect();
-        let Some(free) =
-            (u8::try_from(pinned).unwrap_or(u8::MAX)..=u8::MAX).find(|r| !taken.contains(r))
-        else {
+    let mut reg = vec![0_u8; n_slots];
+    let mut colored = vec![false; n_slots];
+    for slot in 0..pinned {
+        reg[slot] = slot as u8;
+        colored[slot] = true;
+    }
+    let mut order: Vec<usize> = (pinned..n_slots).collect();
+    if high_degree_first {
+        // Это лишь порядок выбора цвета: проверка пересечений и граница
+        // кадра остаются теми же, что у обычной раскладки.
+        order.sort_unstable_by_key(|&slot| {
+            (
+                std::cmp::Reverse(
+                    interfere[slot]
+                        .iter()
+                        .map(|word| word.count_ones())
+                        .sum::<u32>(),
+                ),
+                slot,
+            )
+        });
+    }
+    for slot in order {
+        let mut taken = [false; 256];
+        for (word_index, mut word) in interfere[slot].iter().copied().enumerate() {
+            while word != 0 {
+                let neighbour = word_index * 64 + word.trailing_zeros() as usize;
+                if colored[neighbour] {
+                    taken[reg[neighbour] as usize] = true;
+                }
+                word &= word - 1;
+            }
+        }
+        let Some(free) = (pinned..=u8::MAX as usize).find(|&r| !taken[r]) else {
             return Err(format!("слоту {slot} не нашлось регистра"));
         };
-        reg[slot] = free;
+        reg[slot] = free as u8;
+        colored[slot] = true;
     }
     Ok(reg)
 }

@@ -29,7 +29,7 @@ fn declared_imports_round_trip_without_static_links() {
     let mut catalog = catalog();
     let mut global = import("Данные", 1);
     global.global = true;
-    catalog.modules[0].program.imports = vec![global, import("Alias", 1)];
+    catalog.modules[0].program.imports = vec![global, import("Alias", 1)].into();
     image::verify_configuration(&catalog, None).unwrap();
     let text = bsl_bytecode::write_image(
         &bsl_bytecode::BytecodeImage::Configuration {
@@ -39,7 +39,7 @@ fn declared_imports_round_trip_without_static_links() {
         None,
     )
     .unwrap();
-    assert!(text.starts_with("bslc 40\n"));
+    assert!(text.starts_with("bslc 45\n"));
     assert!(text.contains(".imports 2"));
     let bsl_bytecode::BytecodeImage::Configuration {
         catalog: parsed, ..
@@ -54,7 +54,7 @@ fn declared_imports_round_trip_without_static_links() {
     assert!(parsed.modules[0].program.imports[0].global);
     assert!(parsed.modules[0].program.links.is_empty());
     assert!(matches!(
-        bsl_bytecode::parse_image(&text.replacen("bslc 40", "bslc 39", 1)),
+        bsl_bytecode::parse_image(&text.replacen("bslc 45", "bslc 44", 1)),
         Err(bsl_bytecode::TextError::BadHeader(_))
     ));
     for (from, to) in [
@@ -75,12 +75,12 @@ fn import_names_targets_and_unused_cycles_are_verified() {
         vec![import("Данные", 0)],
     ] {
         let mut catalog = catalog();
-        catalog.modules[0].program.imports = imports;
+        catalog.modules[0].program.imports = imports.into();
         assert!(image::verify_configuration(&catalog, None).is_err());
     }
     let mut catalog = catalog();
-    catalog.modules[0].program.imports = vec![import("Второй", 1)];
-    catalog.modules[1].program.imports = vec![import("Первый", 0)];
+    catalog.modules[0].program.imports = vec![import("Второй", 1)].into();
+    catalog.modules[1].program.imports = vec![import("Первый", 0)].into();
     image::verify_configuration(&catalog, None).expect("цикл объявлений допустим");
 }
 
@@ -94,7 +94,7 @@ fn a_dynamic_program_is_checked_against_the_catalog_export_surface() {
     target.function_names.push("Метод".into());
     target.exported_functions.push(false);
     let mut fragment = support::program(vec![support::chunk(vec![Instr::Return { src: None }])]);
-    fragment.imports = vec![import("Данные", 1)];
+    fragment.imports = vec![import("Данные", 1)].into();
     fragment.links = vec![bsl_bytecode::LinkEntry::Function {
         module: ModuleId::new(1),
         func: 1,

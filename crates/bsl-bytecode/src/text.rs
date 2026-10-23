@@ -35,7 +35,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 40;
+pub const FORMAT_VERSION: u32 = 45;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -87,10 +87,10 @@ opcodes! {
     Eq, NotEq, Lt, Gt, Le, Ge, Jump,
     JumpIfFalse, JumpIfTrue, JumpIfNotEqConst, JumpIfNotLtConst, JumpIfNotSkipped, NumericForNext,
     NumericForNextI64, Call, CallImported, Await, Return,
-    GetImportedVar, SetImportedVar,
-    GetIndex, SetIndex, GetProp, SetProp, CreateObject, CreateDynamicObject, NewArray, NewStructure,
+    GetImportedVar, SetImportedVar, GetImportedModule,
+    GetCollectionItem, GetIndex, SetIndex, GetProp, SetProp, CreateObject, CreateDynamicObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
-    CollectionLen, Raise, RaiseDetailed, CallBuiltin, CallComponent, CallMethod,
+    CollectionLen, Raise, RaiseDetailed, RaiseCompilationError, CallBuiltin, CallComponent, CallMethod,
     RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp, CallObjectProcedure,
     CallLinkedObjectMethod, CallLinkedObjectProcedure,
     NewDynamicStructure,
@@ -185,7 +185,7 @@ pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> 
     if let Some(src) = source {
         writeln!(out, "; исходник: {src}").unwrap();
     }
-    write_program_body(&mut out, program)?;
+    write_program_body(&mut out, program, None)?;
     Ok(out)
 }
 
@@ -193,7 +193,10 @@ pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> 
 /// печатается ровно как [`write_program`]; конфигурация — заголовком
 /// `.configuration`, за которым идут модули каталога (`.module N "имя"`) и,
 /// если есть, transient entry (`.entry id=N`). Тело каждого модуля — те же
-/// секции, что у одиночной программы.
+/// секции, что у одиночной программы. Равные таблицы имён и форм последующих
+/// модулей и entry ссылаются на таблицы первого модуля через `.tables shared`.
+/// Общий хвост импортов первого модуля задаётся через `.imports N shared-tail=K`
+/// после `N` явных записей собственного префикса.
 ///
 /// # Errors
 ///
@@ -223,18 +226,30 @@ pub fn write_image(image: &crate::BytecodeImage, source: Option<&str>) -> Result
                     quote(&module.name)
                 )
                 .unwrap();
-                write_program_body(&mut out, &module.program)?;
+                write_program_body(
+                    &mut out,
+                    &module.program,
+                    catalog
+                        .modules
+                        .first()
+                        .filter(|_| i != 0)
+                        .map(|module| &module.program),
+                )?;
             }
             if let Some(entry) = entry {
                 writeln!(out, "\n.entry id={}", entry.id.get()).unwrap();
-                write_program_body(&mut out, &entry.program)?;
+                write_program_body(
+                    &mut out,
+                    &entry.program,
+                    catalog.modules.first().map(|module| &module.program),
+                )?;
             }
             Ok(out)
         }
     }
 }
 
-fn write_program_body(out: &mut String, program: &Program) -> Result<()> {
+fn write_program_body(out: &mut String, program: &Program, shared: Option<&Program>) -> Result<()> {
     validate_requirements(&program.requirements).map_err(TextError::InvalidRequirements)?;
     let out = &mut *out;
 
@@ -249,21 +264,36 @@ fn write_program_body(out: &mut String, program: &Program) -> Result<()> {
         .unwrap();
     }
 
-    writeln!(out, "\n.names {}", program.names.len()).unwrap();
-    for (i, name) in program.names.iter().enumerate() {
-        writeln!(out, "  {i} {}", quote(name)).unwrap();
-    }
+    // Каталог уже разделяет эти таблицы в памяти. Повторная печать на
+    // каждый модуль превращала размер worker-образа в произведение размеров
+    // таблиц и каталога; ссылка сохраняет те же индексы без их копий.
+    if shared.is_some_and(|base| {
+        (std::sync::Arc::ptr_eq(&base.names, &program.names) || base.names == program.names)
+            && base.shapes.len() == program.shapes.len()
+            && base
+                .shapes
+                .iter()
+                .zip(&program.shapes)
+                .all(|(left, right)| std::rc::Rc::ptr_eq(left, right) || left.names == right.names)
+    }) {
+        writeln!(out, "\n.tables shared").unwrap();
+    } else {
+        writeln!(out, "\n.names {}", program.names.len()).unwrap();
+        for (i, name) in program.names.iter().enumerate() {
+            writeln!(out, "  {i} {}", quote(name)).unwrap();
+        }
 
-    writeln!(out, "\n.shapes {}", program.shapes.len()).unwrap();
-    for (i, shape) in program.shapes.iter().enumerate() {
-        let ids: Vec<String> = shape.names.iter().map(|n| n.index().to_string()).collect();
-        writeln!(
-            out,
-            "  {i} [{}]  ; {}",
-            ids.join(" "),
-            field_names(&shape.names, program)
-        )
-        .unwrap();
+        writeln!(out, "\n.shapes {}", program.shapes.len()).unwrap();
+        for (i, shape) in program.shapes.iter().enumerate() {
+            let ids: Vec<String> = shape.names.iter().map(|n| n.index().to_string()).collect();
+            writeln!(
+                out,
+                "  {i} [{}]  ; {}",
+                ids.join(" "),
+                field_names(&shape.names, program)
+            )
+            .unwrap();
+        }
     }
 
     writeln!(out, "\n.top-locals {}", program.top_level_locals.len()).unwrap();
@@ -285,8 +315,24 @@ fn write_program_body(out: &mut String, program: &Program) -> Result<()> {
         writeln!(out, "  {i} {}{export}  ; .chunk {}", quote(name), i + 1).unwrap();
     }
 
-    writeln!(out, "\n.imports {}", program.imports.len()).unwrap();
-    for (i, import) in program.imports.iter().enumerate() {
+    // Неявно видимые общие модули образуют одинаковый хвост импортов;
+    // собственные псевдонимы получателя остаются явным префиксом.
+    let shared_tail = shared.map_or(0, |base| {
+        program
+            .imports
+            .iter()
+            .rev()
+            .zip(base.imports.iter().rev())
+            .take_while(|(left, right)| left == right)
+            .count()
+    });
+    let prefix = program.imports.len() - shared_tail;
+    if shared_tail == 0 {
+        writeln!(out, "\n.imports {prefix}").unwrap();
+    } else {
+        writeln!(out, "\n.imports {prefix} shared-tail={shared_tail}").unwrap();
+    }
+    for (i, import) in program.imports.iter().take(prefix).enumerate() {
         writeln!(
             out,
             "  {i} module={} global={} {}",
@@ -398,8 +444,15 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
     for (i, r) in chunk.exception_ranges.iter().enumerate() {
         writeln!(
             out,
-            "    {i} {} {} {}  ; Попытка {}..{} -> обработчик {}",
-            r.start_pc, r.end_pc, r.handler_pc, r.start_pc, r.end_pc, r.handler_pc
+            "    {i} {} {} {} {}  ; Попытка {}..{} -> обработчик {}..{}",
+            r.start_pc,
+            r.end_pc,
+            r.handler_pc,
+            r.handler_end_pc,
+            r.start_pc,
+            r.end_pc,
+            r.handler_pc,
+            r.handler_end_pc
         )
         .unwrap();
     }
@@ -709,13 +762,16 @@ fn write_instr(instr: &Instr) -> String {
             ret,
         } => format!("{op} link={link_slot} base={base} arg_modes={arg_modes} ret={ret}"),
         Instr::GetImportedVar { dst, link_slot } => format!("{op} dst={dst} link={link_slot}"),
+        Instr::GetImportedModule { dst, module } => format!("{op} dst={dst} module={module}"),
         Instr::SetImportedVar { link_slot, src } => format!("{op} link={link_slot} src={src}"),
         Instr::Await { dst, promise } => format!("{op} dst={dst} promise={promise}"),
         Instr::Return { src } => match src {
             Some(src) => format!("{op} src={src}"),
             None => op.to_string(),
         },
-        Instr::GetIndex { dst, obj, idx } => format!("{op} dst={dst} obj={obj} idx={idx}"),
+        Instr::GetIndex { dst, obj, idx } | Instr::GetCollectionItem { dst, obj, idx } => {
+            format!("{op} dst={dst} obj={obj} idx={idx}")
+        }
         Instr::SetIndex { obj, idx, src } => format!("{op} obj={obj} idx={idx} src={src}"),
         Instr::GetProp { dst, obj, name } => {
             format!("{op} dst={dst} obj={obj} name={}", name.index())
@@ -762,6 +818,7 @@ fn write_instr(instr: &Instr) -> String {
             None => op.to_string(),
         },
         Instr::RaiseDetailed { base } => format!("{op} base={base}"),
+        Instr::RaiseCompilationError { src } => format!("{op} src={src}"),
         Instr::CallBuiltin {
             dst,
             builtin,
@@ -872,64 +929,71 @@ fn quote(s: &str) -> String {
 
 /// Одна значащая строка файла: номер (для сообщений) и текст без
 /// комментария.
-struct Line {
+struct Line<'a> {
     no: usize,
-    text: String,
+    text: &'a str,
 }
 
-/// Снимает комментарии (`;` вне кавычек) и пустые строки.
-fn significant_lines(src: &str) -> Vec<Line> {
-    let mut out = Vec::new();
-    for (i, raw) in src.lines().enumerate() {
-        let mut text = String::with_capacity(raw.len());
-        let mut in_quotes = false;
-        let mut escaped = false;
-        for c in raw.chars() {
-            if in_quotes {
-                text.push(c);
-                if escaped {
-                    escaped = false;
-                } else if c == '\\' {
-                    escaped = true;
-                } else if c == '"' {
-                    in_quotes = false;
-                }
-                continue;
+type SignificantLines<'a> = std::iter::FilterMap<
+    std::iter::Enumerate<std::str::Lines<'a>>,
+    fn((usize, &'a str)) -> Option<Line<'a>>,
+>;
+
+/// Снимает комментарии (`;` вне кавычек) и пустые строки без копии текста.
+fn significant_lines(src: &str) -> SignificantLines<'_> {
+    src.lines().enumerate().filter_map(significant_line)
+}
+
+fn significant_line((i, raw): (usize, &str)) -> Option<Line<'_>> {
+    let mut end = raw.len();
+    let mut in_quotes = false;
+    let mut escaped = false;
+    for (offset, c) in raw.char_indices() {
+        if in_quotes {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_quotes = false;
             }
-            match c {
-                '"' => {
-                    in_quotes = true;
-                    text.push(c);
-                }
-                ';' => break,
-                other => text.push(other),
-            }
+            continue;
         }
-        let text = text.trim().to_string();
-        if !text.is_empty() {
-            out.push(Line { no: i + 1, text });
+        match c {
+            '"' => in_quotes = true,
+            ';' => {
+                end = offset;
+                break;
+            }
+            _ => {}
         }
     }
-    out
+    let text = raw[..end].trim();
+    (!text.is_empty()).then_some(Line { no: i + 1, text })
 }
 
-struct Reader {
-    lines: Vec<Line>,
-    pos: usize,
+struct Reader<'a> {
+    lines: SignificantLines<'a>,
+    current: Option<Line<'a>>,
+    total_lines: usize,
+    remaining: usize,
+    last_no: usize,
 }
 
-impl Reader {
-    fn next(&mut self) -> Option<&Line> {
-        let line = self.lines.get(self.pos)?;
-        self.pos += 1;
+impl<'a> Reader<'a> {
+    fn next(&mut self) -> Option<Line<'a>> {
+        let line = self.current.take()?;
+        self.last_no = line.no;
+        self.current = self.lines.next();
+        self.remaining -= 1;
         Some(line)
     }
 
     fn expect(&mut self, what: &str) -> Result<(usize, String)> {
         match self.next() {
-            Some(l) => Ok((l.no, l.text.clone())),
+            Some(l) => Ok((l.no, l.text.to_string())),
             None => Err(TextError::At(
-                self.lines.last().map(|l| l.no).unwrap_or(0),
+                self.last_no,
                 format!("файл кончился, ожидалось: {what}"),
             )),
         }
@@ -953,7 +1017,7 @@ impl Reader {
                 .map_err(|_| TextError::At(no, format!("{name}: «{n}» не число")))?,
             _ => return Err(TextError::At(no, format!("ожидалась директива {name} N"))),
         };
-        let left = self.lines.len() - self.pos;
+        let left = self.remaining;
         if n > left {
             return Err(TextError::At(
                 no,
@@ -1019,7 +1083,7 @@ pub fn parse_program(src: &str) -> Result<Program> {
             "это конфигурационный образ: его читает parse_image".to_string(),
         ));
     }
-    parse_program_body(&mut r)
+    parse_program_body(&mut r, None)
 }
 
 /// Разбирает одиночный либо конфигурационный образ — обратная сторона
@@ -1033,7 +1097,7 @@ pub fn parse_program(src: &str) -> Result<Program> {
 pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
     let mut r = reader_after_header(src)?;
     if !peek_directive(&r).is_some_and(|d| d == ".configuration") {
-        return parse_program_body(&mut r).map(crate::BytecodeImage::Program);
+        return parse_program_body(&mut r, None).map(crate::BytecodeImage::Program);
     }
     let (no, text) = r.expect(".configuration")?;
     let mut parts = text.split_whitespace();
@@ -1059,7 +1123,9 @@ pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
         }
     };
 
-    let mut modules = Vec::with_capacity(module_count.min(r.lines.len()));
+    let mut modules: Vec<crate::ModuleProgram> =
+        Vec::with_capacity(module_count.min(r.total_lines));
+    let mut shared_names: Option<std::sync::Arc<[String]>> = None;
     for i in 0..module_count {
         let (no, text) = r.expect(".module")?;
         let rest = text
@@ -1095,7 +1161,16 @@ pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
                 format!("лишнее после имени модуля: «{tail}»"),
             ));
         }
-        let program = parse_program_body(&mut r)?;
+        let mut program =
+            parse_program_body(&mut r, modules.first().map(|module| &module.program))?;
+        if let Some(names) = &shared_names {
+            // Несовпадающие таблицы сохраняются для обычной проверки образа.
+            if names == &program.names {
+                program.names = names.clone();
+            }
+        } else {
+            shared_names = Some(program.names.clone());
+        }
         modules.push(crate::ModuleProgram {
             name,
             entry_visible,
@@ -1116,7 +1191,15 @@ pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
             .ok_or_else(|| TextError::At(no, "ожидалось «.entry id=N»".to_string()))?
             .parse()
             .map_err(|_| TextError::At(no, "id entry не число".to_string()))?;
-        let program = parse_program_body(&mut r)?;
+        let mut program = parse_program_body(
+            &mut r,
+            catalog.modules.first().map(|module| &module.program),
+        )?;
+        if let Some(names) = &shared_names
+            && names == &program.names
+        {
+            program.names = names.clone();
+        }
         Some(crate::EntryProgram {
             id: crate::EntryId::new(id),
             program,
@@ -1124,8 +1207,7 @@ pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
     } else {
         None
     };
-    if r.pos < r.lines.len() {
-        let line = &r.lines[r.pos];
+    if let Some(line) = &r.current {
         return Err(TextError::At(
             line.no,
             format!("лишнее после конца образа: «{}»", line.text),
@@ -1135,9 +1217,19 @@ pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
 }
 
 /// Общий заголовок обеих форм: `bslc N` с точной сверкой версии.
-fn reader_after_header(src: &str) -> Result<Reader> {
-    let lines = significant_lines(src);
-    let mut r = Reader { lines, pos: 0 };
+fn reader_after_header(src: &str) -> Result<Reader<'_>> {
+    // Счётчики секций ограничены точным числом значимых строк, как прежде.
+    // Предварительный проход считает строки, не удерживая их текст в памяти.
+    let total_lines = significant_lines(src).count();
+    let mut lines = significant_lines(src);
+    let current = lines.next();
+    let mut r = Reader {
+        lines,
+        current,
+        total_lines,
+        remaining: total_lines,
+        last_no: 0,
+    };
     let (no, header) = r
         .expect("заголовок")
         .map_err(|_| TextError::BadHeader("файл пуст".to_string()))?;
@@ -1159,19 +1251,19 @@ fn reader_after_header(src: &str) -> Result<Reader> {
 }
 
 /// Первая директива впереди, если она есть, — без продвижения позиции.
-fn peek_directive(r: &Reader) -> Option<&str> {
-    r.lines
-        .get(r.pos)
+fn peek_directive<'a>(r: &Reader<'a>) -> Option<&'a str> {
+    r.current
+        .as_ref()
         .map(|line| line.text.split_whitespace().next().unwrap_or(""))
 }
 
 /// Начинается ли строка с граничной директивы конфигурации: тело модуля
 /// заканчивается там, где начинается следующий модуль либо entry.
-fn at_image_boundary(r: &Reader) -> bool {
+fn at_image_boundary(r: &Reader<'_>) -> bool {
     matches!(peek_directive(r), Some(".module") | Some(".entry"))
 }
 
-fn parse_program_body(r: &mut Reader) -> Result<Program> {
+fn parse_program_body(r: &mut Reader<'_>, shared: Option<&Program>) -> Result<Program> {
     // Точные версии runtime-компонентов. Индекс строки используется
     // инструкциями как локальный номер библиотеки, поэтому порядок
     // проверяется так же строго, как индексы имён и форм.
@@ -1195,43 +1287,59 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
     }
     validate_requirements(&requirements).map_err(TextError::InvalidRequirements)?;
 
-    // Имена.
-    let n = r.directive(".names")?;
-    let mut names = Vec::with_capacity(n);
-    for i in 0..n {
-        let (no, text) = r.expect("имя")?;
-        let (idx, rest) = text
-            .split_once(char::is_whitespace)
-            .ok_or_else(|| TextError::At(no, "ожидалось «N \"имя\"»".to_string()))?;
-        parse_index(no, idx, i)?;
-        let (name, tail) = unquote(no, rest.trim())?;
-        if !tail.is_empty() {
-            return Err(TextError::At(no, format!("лишнее после имени: «{tail}»")));
+    let (names, shapes) = if peek_directive(r) == Some(".tables") {
+        let (no, text) = r.expect("ссылка на общие таблицы")?;
+        if text.split_whitespace().collect::<Vec<_>>() != [".tables", "shared"] {
+            return Err(TextError::At(no, "ожидалось «.tables shared»".into()));
         }
-        names.push(name);
-    }
-
-    // Формы. Интернируются в свежую таблицу В ТОМ ЖЕ ПОРЯДКЕ, поэтому
-    // индексы форм совпадают с исходными — на них ссылается NewStructure.
-    let n = r.directive(".shapes")?;
-    let mut shapes = ShapeTable::new();
-    for i in 0..n {
-        let (no, text) = r.expect("форму")?;
-        let (idx, rest) = text
-            .split_once(char::is_whitespace)
-            .ok_or_else(|| TextError::At(no, "ожидалось «N [поля]»".to_string()))?;
-        parse_index(no, idx, i)?;
-        let ids = parse_id_list(no, rest.trim())?;
-        let ids: Vec<NameId> = ids.into_iter().map(NameId::from_index).collect();
-        let interned = shapes.intern(&ids);
-        if interned as usize != i {
-            return Err(TextError::At(
+        let base = shared.ok_or_else(|| {
+            TextError::At(
                 no,
-                format!("форма {i} совпала с уже описанной формой {interned}"),
-            ));
+                "общие таблицы требуют первого модуля конфигурации".into(),
+            )
+        })?;
+        (std::sync::Arc::clone(&base.names), base.shapes.clone())
+    } else {
+        // Имена.
+        let n = r.directive(".names")?;
+        let mut names = Vec::with_capacity(n);
+        for i in 0..n {
+            let (no, text) = r.expect("имя")?;
+            let (idx, rest) = text
+                .split_once(char::is_whitespace)
+                .ok_or_else(|| TextError::At(no, "ожидалось «N \"имя\"»".to_string()))?;
+            parse_index(no, idx, i)?;
+            let (name, tail) = unquote(no, rest.trim())?;
+            if !tail.is_empty() {
+                return Err(TextError::At(no, format!("лишнее после имени: «{tail}»")));
+            }
+            names.push(name);
         }
-    }
-    let shapes: Vec<std::rc::Rc<Shape>> = shapes.into_shapes();
+
+        // Формы. Интернируются в свежую таблицу В ТОМ ЖЕ ПОРЯДКЕ, поэтому
+        // индексы форм совпадают с исходными — на них ссылается NewStructure.
+        let n = r.directive(".shapes")?;
+        let mut shapes = ShapeTable::new();
+        for i in 0..n {
+            let (no, text) = r.expect("форму")?;
+            let (idx, rest) = text
+                .split_once(char::is_whitespace)
+                .ok_or_else(|| TextError::At(no, "ожидалось «N [поля]»".to_string()))?;
+            parse_index(no, idx, i)?;
+            let ids = parse_id_list(no, rest.trim())?;
+            let ids: Vec<NameId> = ids.into_iter().map(NameId::from_index).collect();
+            let interned = shapes.intern(&ids);
+            if interned as usize != i {
+                return Err(TextError::At(
+                    no,
+                    format!("форма {i} совпала с уже описанной формой {interned}"),
+                ));
+            }
+        }
+        let shapes: Vec<std::rc::Rc<Shape>> = shapes.into_shapes();
+
+        (std::sync::Arc::<[String]>::from(names), shapes)
+    };
 
     // Локали верхнего уровня.
     let n = r.directive(".top-locals")?;
@@ -1274,7 +1382,50 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         exported_functions.push(parse_export_flag(no, &tail)?);
     }
 
-    let n = r.directive(".imports")?;
+    let (no, declaration) = r.expect(".imports")?;
+    let mut fields = declaration.split_whitespace();
+    if fields.next() != Some(".imports") {
+        return Err(TextError::At(no, "ожидалась директива .imports N".into()));
+    }
+    let n = fields
+        .next()
+        .and_then(|value| value.parse::<usize>().ok())
+        .ok_or_else(|| TextError::At(no, "ожидалось число записей .imports".into()))?;
+    if n > r.remaining {
+        return Err(TextError::At(
+            no,
+            format!(".imports: записей {n}, а строк осталось {}", r.remaining),
+        ));
+    }
+    let shared_tail = if let Some(field) = fields.next() {
+        let count = field
+            .strip_prefix("shared-tail=")
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|count| *count != 0)
+            .ok_or_else(|| {
+                TextError::At(no, "ожидалось shared-tail= с положительным числом".into())
+            })?;
+        let base = shared.ok_or_else(|| {
+            TextError::At(
+                no,
+                "общий хвост импортов требует первого модуля конфигурации".into(),
+            )
+        })?;
+        let start = base.imports.len().checked_sub(count).ok_or_else(|| {
+            TextError::At(
+                no,
+                "общий хвост импортов выходит за таблицу первого модуля".into(),
+            )
+        })?;
+        Some((&base.imports, start..base.imports.len()))
+    } else {
+        None
+    };
+    if fields.next().is_some() {
+        return Err(TextError::At(no, "лишние поля директивы .imports".into()));
+    }
+    n.checked_add(shared_tail.as_ref().map_or(0, |(_, range)| range.len()))
+        .ok_or_else(|| TextError::At(no, "переполнение числа импортов".into()))?;
     let mut imports = Vec::with_capacity(n);
     for i in 0..n {
         let (no, text) = r.expect("объявленный импорт")?;
@@ -1308,6 +1459,16 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
             module: ModuleId::new(module),
             global,
         });
+    }
+    let mut imports = if let Some(base) = shared {
+        // Даже явный префикс может повторять участки общего окружения:
+        // собственный модуль исключён в разных позициях разных программ.
+        crate::ModuleImports::sharing(imports, &base.imports)
+    } else {
+        imports.into()
+    };
+    if let Some((base, range)) = shared_tail {
+        imports.extend_shared(base, range);
     }
     let n = r.directive(".links")?;
     let mut links = Vec::with_capacity(n);
@@ -1362,7 +1523,7 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
     let mut chunks = Vec::new();
     // Таблица строк собирается ПАРАЛЛЕЛЬНО чанкам, как и у компилятора.
     let mut lines: Vec<Vec<u32>> = Vec::new();
-    while r.pos < r.lines.len() && !at_image_boundary(r) {
+    while r.current.is_some() && !at_image_boundary(r) {
         let (chunk, chunk_lines) = parse_chunk(r, chunks.len())?;
         chunks.push(chunk);
         lines.push(chunk_lines);
@@ -1390,6 +1551,8 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
                 Some("конец диапазона «Попытка» за концом чанка")
             } else if range.handler_pc > limit {
                 Some("обработчик «Попытка» за концом чанка")
+            } else if range.handler_end_pc < range.handler_pc || range.handler_end_pc > limit {
+                Some("конец обработчика «Попытка» вне допустимого диапазона")
             } else {
                 None
             };
@@ -1535,7 +1698,7 @@ fn parse_id_list(no: usize, text: &str) -> Result<Vec<u32>> {
         .collect()
 }
 
-fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<(Chunk, Vec<u32>)> {
+fn parse_chunk(r: &mut Reader<'_>, expected_index: usize) -> Result<(Chunk, Vec<u32>)> {
     let (no, text) = r.expect(".chunk")?;
     let mut parts = text.split_whitespace();
     if parts.next() != Some(".chunk") {
@@ -1707,10 +1870,10 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<(Chunk, Vec<u32>
     for i in 0..n {
         let (no, text) = r.expect("обработчик")?;
         let nums: Vec<&str> = text.split_whitespace().collect();
-        if nums.len() != 4 {
+        if nums.len() != 5 {
             return Err(TextError::At(
                 no,
-                "ожидалось «N начало конец обработчик»".to_string(),
+                "ожидалось «N начало конец вход_обработчика конец_обработчика»".to_string(),
             ));
         }
         parse_index(no, nums[0], i)?;
@@ -1722,6 +1885,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<(Chunk, Vec<u32>
             start_pc: num(nums[1])?,
             end_pc: num(nums[2])?,
             handler_pc: num(nums[3])?,
+            handler_end_pc: num(nums[4])?,
         });
     }
 
@@ -1877,6 +2041,12 @@ fn field_u16(fields: &[(String, String)], no: usize, key: &str) -> Result<u16> {
         .map_err(|_| TextError::At(no, format!("поле «{key}»: не число 0..65535")))
 }
 
+fn field_u32(fields: &[(String, String)], no: usize, key: &str) -> Result<u32> {
+    field(fields, no, key)?
+        .parse()
+        .map_err(|_| TextError::At(no, format!("поле «{key}»: не число 0..4294967295")))
+}
+
 fn field_i16(fields: &[(String, String)], no: usize, key: &str) -> Result<i16> {
     field(fields, no, key)?
         .parse()
@@ -1895,7 +2065,7 @@ fn field_bool(fields: &[(String, String)], no: usize, key: &str) -> Result<bool>
 }
 
 fn field_name(fields: &[(String, String)], no: usize, key: &str) -> Result<NameId> {
-    Ok(NameId::from_index(field_u16(fields, no, key)? as u32))
+    Ok(NameId::from_index(field_u32(fields, no, key)?))
 }
 
 fn parse_instr(no: usize, text: &str) -> Result<Instr> {
@@ -2059,6 +2229,10 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             link_slot: field_u16(&f, no, "link")?,
         },
+        "GetImportedModule" => Instr::GetImportedModule {
+            dst: dst(&f)?,
+            module: field_u32(&f, no, "module")?,
+        },
         "SetImportedVar" => Instr::SetImportedVar {
             link_slot: field_u16(&f, no, "link")?,
             src: src(&f)?,
@@ -2072,6 +2246,11 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
                 Ok(_) => Some(src(&f)?),
                 Err(_) => None,
             },
+        },
+        "GetCollectionItem" => Instr::GetCollectionItem {
+            dst: dst(&f)?,
+            obj: obj(&f)?,
+            idx: field_u8(&f, no, "idx")?,
         },
         "GetIndex" => Instr::GetIndex {
             dst: dst(&f)?,
@@ -2152,6 +2331,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             },
         },
         "RaiseDetailed" => Instr::RaiseDetailed { base: base(&f)? },
+        "RaiseCompilationError" => Instr::RaiseCompilationError { src: src(&f)? },
         "CallBuiltin" => {
             let name = field(&f, no, "builtin")?;
             Instr::CallBuiltin {

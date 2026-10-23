@@ -57,6 +57,8 @@ pub enum Terminator<'a> {
     Raise(Option<&'a RExpr>),
     /// Скобочная форма `ВызватьИсключение` с пятью значениями.
     RaiseDetailed(&'a [RExpr]),
+    /// Фатальный отказ компиляции, не перехватываемый BSL.
+    RaiseCompilationError,
     /// Блок, из которого управление никуда не идёт: конец тела.
     Exit,
 }
@@ -91,6 +93,7 @@ impl<'a> Cfg<'a> {
             Terminator::Return(_)
             | Terminator::Raise(_)
             | Terminator::RaiseDetailed(_)
+            | Terminator::RaiseCompilationError
             | Terminator::Exit => Vec::new(),
         };
         out.extend(self.blocks[b].handlers.iter().copied());
@@ -403,6 +406,12 @@ impl<'a> Builder<'a> {
             }
             RStmtKind::Raise(e) => {
                 self.blocks[cur].term = Terminator::Raise(e.as_ref());
+                self.new_block()
+            }
+            RStmtKind::RaiseCompilationError(_) => {
+                // Диагностика остаётся в операторе для обычного кодогенератора.
+                self.blocks[cur].stmts.push(s);
+                self.blocks[cur].term = Terminator::RaiseCompilationError;
                 self.new_block()
             }
             RStmtKind::RaiseDetailed(arguments) => {

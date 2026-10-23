@@ -169,6 +169,7 @@ fn a_tampered_exception_handler_is_rejected_before_execution() {
         start_pc: 0,
         end_pc: 1,
         handler_pc: 1,
+        handler_end_pc: 2,
     }];
     let text = write_program(&program(vec![c]), None).expect("печать");
     assert!(
@@ -182,7 +183,7 @@ fn a_tampered_exception_handler_is_rejected_before_execution() {
     let line = text[line_start..line_end].to_string();
     let head = line.split(';').next().unwrap_or(&line).trim().to_string();
     let mut nums: Vec<&str> = head.split_whitespace().collect();
-    assert_eq!(nums.len(), 4, "строка обработчика: «{head}»");
+    assert_eq!(nums.len(), 5, "строка обработчика: «{head}»");
 
     for bad in ["9999", "-1"] {
         nums[3] = bad;
@@ -210,6 +211,7 @@ fn an_empty_handler_at_the_end_of_the_chunk_is_legal() {
         start_pc: 0,
         end_pc: 1,
         handler_pc: 1,
+        handler_end_pc: 1,
     }];
     let program = program(vec![c]);
     assert_eq!(

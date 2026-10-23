@@ -43,12 +43,12 @@ pub fn program(chunks: Vec<Chunk>) -> Program {
     Program {
         requirements: vec![LibraryRequirement::bsl_rt()],
         chunks,
-        names: Vec::new(),
+        names: Vec::new().into(),
         shapes: Vec::new(),
         top_level_locals: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
-        imports: Vec::new(),
+        imports: Default::default(),
         links: Vec::new(),
         lines: Vec::new(),
         function_names: Vec::new(),
@@ -100,6 +100,7 @@ pub fn every_section() -> Program {
         start_pc: 0,
         end_pc: 3,
         handler_pc: 4,
+        handler_end_pc: 5,
     }];
     top.local_names = vec!["х".to_string()];
     top.n_locals = 1;
@@ -113,7 +114,7 @@ pub fn every_section() -> Program {
     let mut p = program(vec![top, callee]);
     p.requirements
         .push(LibraryRequirement::new("bsl-test-host", "1.2.3"));
-    p.names = vec!["Поле".to_string()];
+    p.names = vec!["Поле".to_string()].into();
     p.shapes = shapes(&[field]);
     p.top_level_locals = vec!["х".to_string()];
     p.module_vars = vec!["Общая".to_string()];

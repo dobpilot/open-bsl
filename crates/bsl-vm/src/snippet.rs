@@ -47,7 +47,6 @@ impl Drop for DynamicDepthGuard<'_> {
 pub(super) struct DynamicImage {
     pub(super) program: Program,
     pub(super) tables: std::rc::Rc<super::linking::LinkedTables>,
-    pub(super) shapes: std::cell::RefCell<bsl_rt::RuntimeShapes>,
     pub(super) caches: super::RunCaches,
 }
 
@@ -61,7 +60,8 @@ fn prepare_dynamic_snippet(
     frame: &Frame,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
-    catalog: Option<&bsl_bytecode::ConfigurationProgram>,
+    catalog: Option<&dyn bsl_bytecode::ExecutionCatalog>,
+    names: &[String],
 ) -> Result<std::rc::Rc<DynamicImage>, RtError> {
     // Вход в host-компилятор тоже учитывается в глубине: он может
     // обратиться к исполнителю через обратный вызов.
@@ -93,6 +93,8 @@ fn prepare_dynamic_snippet(
             }
         })
         .collect();
+    // Срез нужен только на время компиляции фрагмента; программа хранит общие диапазоны.
+    let imports: Vec<_> = program.imports.iter().cloned().collect();
     let request = bsl_bytecode::DynamicRequest {
         source: code,
         // Отладочность — свойство ОБЪЕМЛЮЩЕЙ программы, и признак её —
@@ -127,9 +129,9 @@ fn prepare_dynamic_snippet(
         locals: scope_locals,
         module_vars: &program.module_vars,
         functions: &functions,
-        names: &program.names,
+        names,
         requirements: &program.requirements,
-        imports: &program.imports,
+        imports: &imports,
     };
     // Неудача любой фазы фронтенда — обычное исключение В МОМЕНТ
     // ИСПОЛНЕНИЯ, а не паника: текст фрагмента становится известен только
@@ -233,7 +235,7 @@ fn prepare_dynamic_snippet(
         // статического кода вокруг, и вложенных вызовов функций программы
         // (см. ниже про `chunks`) — по-прежнему резолвятся: их `NameId`
         // меньше длины `program.names` и указывают на тот же префикс.
-        names: compiled.names.clone(),
+        names: compiled.names.clone().into(),
         shapes,
         top_level_locals: Vec::new(),
         function_names: program.function_names.clone(),
@@ -270,9 +272,9 @@ fn prepare_dynamic_snippet(
         linked.message_sink.as_ref().map(std::rc::Rc::clone),
         compiled.scope.get(),
     )?
+    .with_clock(linked.clock.clone())
     .with_scope_module(scope_module);
     Ok(std::rc::Rc::new(DynamicImage {
-        shapes: std::cell::RefCell::new(super::drive_prologue(&snippet_program, &snippet_linked)),
         caches: super::RunCaches::for_program(&snippet_program),
         tables: snippet_linked.tables,
         program: snippet_program,
@@ -328,7 +330,7 @@ pub(super) fn push_dynamic_frame(
     stack: &mut Vec<BslValue>,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
-    catalog: Option<&bsl_bytecode::ConfigurationProgram>,
+    catalog: Option<&dyn bsl_bytecode::ExecutionCatalog>,
 ) -> Result<(), RtError> {
     let depth = frames
         .iter()
@@ -355,6 +357,9 @@ pub(super) fn push_dynamic_frame(
         linked,
         host,
         catalog,
+        // Скопированные чанки сохраняют локальные операнды этой программы.
+        // Поля связываются с общим пространством исполнения через кэши VM.
+        &program.names,
     )?;
     let extra = (image.program.chunks[0].n_regs as usize)
         .checked_sub(scope_locals.len())
@@ -382,6 +387,7 @@ pub(super) fn push_dynamic_frame(
         return_reg: dst,
         module_copybacks: Vec::new(),
         numeric_for_state: None,
+        handled_errors: Vec::new(),
     });
     Ok(())
 }
@@ -416,6 +422,7 @@ fn start_dynamic_snippet(
         linked,
         host,
         catalog.map(|ctx| ctx.catalog),
+        &program.names,
     )?;
     let old_count = scope_locals.len();
     let mut snippet_stack = (0..old_count)
@@ -469,12 +476,7 @@ fn start_dynamic_snippet(
     root_frame.own_base = old_count;
     execution.cancel_flag = host.cancel_flag.clone();
     if let Some(catalog) = catalog {
-        execution.catalog_caches = catalog
-            .catalog
-            .modules
-            .iter()
-            .map(|module| super::RunCaches::for_program(&module.program))
-            .collect();
+        execution.catalog_caches = super::RunCaches::for_catalog(catalog.catalog);
     }
     Ok(DynamicExecution {
         execution,

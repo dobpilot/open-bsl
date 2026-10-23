@@ -33,6 +33,12 @@ pub enum Instr {
         dst: u8,
         link_slot: u16,
     },
+    /// Возвращает ссылку на импортированный общий модуль текущего сеанса.
+    /// Выражение передаёт номер модуля из каталога, а не копирует состояние.
+    GetImportedModule {
+        dst: u8,
+        module: u32,
+    },
     /// Запись экспортной переменной чужого модуля — см. `GetImportedVar`.
     SetImportedVar {
         link_slot: u16,
@@ -229,6 +235,12 @@ pub enum Instr {
         src: Option<u8>,
     },
 
+    /// Чтение элемента при обходе коллекции; публичный индексный доступ не требуется.
+    GetCollectionItem {
+        dst: u8,
+        obj: u8,
+        idx: u8,
+    },
     GetIndex {
         dst: u8,
         obj: u8,
@@ -332,6 +344,10 @@ pub enum Instr {
     /// с `base` (описание, категория, код, дополнение, причина).
     RaiseDetailed {
         base: u8,
+    },
+    /// Фатальный отказ компиляции модуля; `src` содержит строку диагностики.
+    RaiseCompilationError {
+        src: u8,
     },
 
     /// Встроенная функция (`Sqrt`, `Pow`, `Message`, ...) — всегда по
@@ -533,6 +549,7 @@ impl Instr {
             | Instr::GetModuleVar { .. }
             | Instr::SetModuleVar { .. }
             | Instr::GetImportedVar { .. }
+            | Instr::GetImportedModule { .. }
             | Instr::SetImportedVar { .. }
             | Instr::LoadBool { .. }
             | Instr::LoadUndefined { .. }
@@ -561,6 +578,7 @@ impl Instr {
             | Instr::Await { .. }
             | Instr::Return { .. }
             | Instr::GetIndex { .. }
+            | Instr::GetCollectionItem { .. }
             | Instr::SetIndex { .. }
             | Instr::GetProp { .. }
             | Instr::SetProp { .. }
@@ -577,6 +595,7 @@ impl Instr {
             | Instr::CollectionLen { .. }
             | Instr::Raise { .. }
             | Instr::RaiseDetailed { .. }
+            | Instr::RaiseCompilationError { .. }
             | Instr::CallBuiltin { .. }
             | Instr::CallComponent { .. }
             | Instr::CallMethod { .. }
@@ -642,6 +661,7 @@ impl Instr {
                 r(a);
                 r(b);
             }
+            Instr::RaiseCompilationError { src } => r(src),
             Instr::JumpIfFalse { cond, .. } | Instr::JumpIfTrue { cond, .. } => r(cond),
             Instr::NumericForNext { bound, .. } | Instr::NumericForNextI64 { bound, .. } => r(bound),
             Instr::Await { promise, .. } => r(promise),
@@ -650,7 +670,7 @@ impl Instr {
                     r(src);
                 }
             }
-            Instr::GetIndex { obj, idx, .. } => {
+            Instr::GetIndex { obj, idx, .. } | Instr::GetCollectionItem { obj, idx, .. } => {
                 r(obj);
                 r(idx);
             }
@@ -683,6 +703,7 @@ impl Instr {
             // пишут, либо читают позиционно, либо не трогают регистры.
             Instr::GetModuleVar { .. }
             | Instr::GetImportedVar { .. }
+            | Instr::GetImportedModule { .. }
             | Instr::LoadConst { .. }
             | Instr::LoadBool { .. }
             | Instr::LoadUndefined { .. }

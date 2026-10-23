@@ -7,7 +7,7 @@ use bsl_rt::{
     BslValue, FileNotificationOperation, HostPromiseSpawner, NotificationDescription, PromiseId,
     RtError,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 fn method_name(program: &mut Program, name: &bsl_rt::BslString) -> Result<u16, RtError> {
     let name = name.to_string();
@@ -18,7 +18,9 @@ fn method_name(program: &mut Program, name: &bsl_rt::BslString) -> Result<u16, R
     let index = u16::try_from(existing.unwrap_or(program.names.len()))
         .map_err(|_| RtError::InvalidBytecode("имя обработчика не помещается в таблицу"))?;
     if existing.is_none() {
-        program.names.push(name);
+        let mut names = program.names.to_vec();
+        names.push(name);
+        program.names = names.into();
     }
     Ok(index)
 }
@@ -63,6 +65,7 @@ fn prepare(
         start_pc: 0,
         end_pc: 1,
         handler_pc,
+        handler_end_pc: handler_pc,
     });
     chunk.instrs.extend([
         Instr::CallBuiltin {
@@ -89,6 +92,7 @@ fn prepare(
         });
     }
     chunk.instrs.push(Instr::Return { src: Some(5) });
+    chunk.exception_ranges[0].handler_end_pc = chunk.instrs.len();
     program.chunks[0] = chunk;
     program.top_level_locals.clear();
     if !program.lines.is_empty() {
@@ -114,9 +118,9 @@ fn prepare(
         linked.message_sink.clone(),
         linked.scope,
     )?
+    .with_clock(linked.clock.clone())
     .with_scope_module(scope_module);
     Ok(Rc::new(super::snippet::DynamicImage {
-        shapes: RefCell::new(super::drive_prologue(&program, &tables)),
         caches: super::RunCaches::for_program(&program),
         tables: tables.tables,
         program,
@@ -165,6 +169,7 @@ pub(super) fn register(
             return_reg: 0,
             module_copybacks: Vec::new(),
             numeric_for_state: None,
+            handled_errors: Vec::new(),
         }],
         security_modes: super::TaskSecurityModes::default(),
         stack,

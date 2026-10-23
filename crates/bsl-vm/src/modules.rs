@@ -19,9 +19,14 @@ pub(super) struct ModuleState {
 
 impl ModuleState {
     pub(super) fn new(program: &Program) -> Self {
+        Self::new_with_type(program, &bsl_rt::BSL_MODULE_TYPE)
+    }
+
+    fn new_with_type(program: &Program, ty: &'static bsl_rt::TypeDescriptor) -> Self {
         Self {
             slots: vec![BslValue::Undefined; program.module_vars.len()],
             identity: Some(BslValue::new_object(ModuleReference {
+                ty,
                 exports: program
                     .function_names
                     .iter()
@@ -70,12 +75,13 @@ impl ModuleState {
 /// в собственной модульной переменной не образует цикл владения.
 #[derive(Debug)]
 pub(super) struct ModuleReference {
+    ty: &'static bsl_rt::TypeDescriptor,
     exports: Vec<String>,
 }
 
 impl bsl_rt::ObjectProtocol for ModuleReference {
     fn type_descriptor(&self) -> &'static bsl_rt::TypeDescriptor {
-        &bsl_rt::BSL_MODULE_TYPE
+        self.ty
     }
 
     fn has_method(&self, name: &str) -> bool {
@@ -141,6 +147,14 @@ pub(super) struct ModuleInstance {
     pub(super) init: ModuleInitState,
 }
 
+impl ModuleInstance {
+    pub(super) fn prepare(&mut self, program: &Program) {
+        if self.state.identity.is_none() {
+            self.state = ModuleState::new_with_type(program, &bsl_rt::COMMON_MODULE_TYPE);
+        }
+    }
+}
+
 /// Сессионные экземпляры всех модулей каталога, индекс — `ModuleId`.
 /// У одиночной программы пуст.
 #[derive(Default)]
@@ -149,13 +163,19 @@ pub struct SessionModules {
 }
 
 impl SessionModules {
-    pub(super) fn for_catalog(catalog: &bsl_bytecode::ConfigurationProgram) -> Self {
+    /// Создаёт пустые экземпляры модулей одного сеанса конфигурации.
+    #[must_use]
+    pub fn for_catalog(catalog: &dyn bsl_bytecode::ExecutionCatalog) -> Self {
         Self {
-            instances: catalog
-                .modules
-                .iter()
-                .map(|module| ModuleInstance {
-                    state: ModuleState::new(&module.program),
+            instances: (0..catalog.module_count())
+                .map(|index| ModuleInstance {
+                    // ИЗМЕРЕНО на 1С 8.3.27: ссылка имеет тип
+                    // `ОбщийМодуль` с отображением `Common module`.
+                    state: catalog
+                        .prepared_module(bsl_bytecode::ModuleId::new(index as u32))
+                        .map_or_else(ModuleState::empty, |module| {
+                            ModuleState::new_with_type(&module.program, &bsl_rt::COMMON_MODULE_TYPE)
+                        }),
                     init: ModuleInitState::NotStarted,
                 })
                 .collect(),
@@ -166,8 +186,112 @@ impl SessionModules {
 /// Каталожный контекст одного poll: программы модулей и их связанные
 /// компонентные таблицы. Живёт не дольше poll, как `LinkedComponents`.
 pub struct CatalogContext<'a> {
-    pub(super) catalog: &'a bsl_bytecode::ConfigurationProgram,
-    pub(super) linked: Vec<LinkedComponents<'a>>,
+    pub(super) catalog: &'a dyn bsl_bytecode::ExecutionCatalog,
+    pub(super) linked: ModuleLinks<'a>,
+}
+
+type LinkFactory<'a> = dyn Fn(u32) -> Result<LinkedComponents<'a>, RtError> + 'a;
+
+/// Таблицы host-сервисов создаются только для подготовленного кода.
+/// Ошибка также сохраняется: повторное обращение в одном poll не запускает
+/// загрузку или связывание повторно.
+pub(super) struct ModuleLinks<'a> {
+    slots: Vec<std::cell::OnceCell<Result<LinkedComponents<'a>, RtError>>>,
+    factory: Option<Box<LinkFactory<'a>>>,
+}
+
+impl<'a> ModuleLinks<'a> {
+    pub(super) fn for_catalog(
+        catalog: &'a dyn bsl_bytecode::ExecutionCatalog,
+        registry: &'a bsl_rt::RuntimeRegistry,
+        env: &bsl_rt::HostEnv,
+    ) -> Result<Self, RtError> {
+        let (zone, files, random, clock) = (env.zone(), env.files(), env.random(), env.clock());
+        let (network, data, jobs) = (env.network(), env.host_data(), env.background_jobs());
+        let (storage, sink) = (env.temp_storage(), env.message_sink());
+        let verifier = std::cell::RefCell::new(bsl_bytecode::image::VerificationCache::default());
+        let links = Self {
+            slots: (0..catalog.module_count())
+                .map(|_| std::cell::OnceCell::new())
+                .collect(),
+            factory: Some(Box::new(move |index| {
+                let module = bsl_bytecode::ModuleId::new(index);
+                let program = &catalog.module_code(module)?.program;
+                // Тела проверяются до связывания, общие неизменяемые
+                // таблицы каталога проходят ту же проверку только один раз.
+                verifier.borrow_mut().verify(program)?;
+                super::linking::link_verified(
+                    program,
+                    Some(registry),
+                    zone.clone(),
+                    files.clone(),
+                    random.clone(),
+                    network.clone(),
+                    data.clone(),
+                    jobs.clone(),
+                    storage.clone(),
+                    sink.clone(),
+                    bsl_bytecode::DynamicScope::ROOT,
+                )
+                .map(|linked| {
+                    linked
+                        .with_clock(Some(clock.clone()))
+                        .with_scope_module(Some(module))
+                })
+            })),
+        };
+        // Для полного образа сохраняем прежние ранние ошибки связывания.
+        // Индексный каталог не запрашивает здесь ещё не подготовленные тела.
+        for index in 0..catalog.module_count() {
+            if catalog
+                .prepared_module(bsl_bytecode::ModuleId::new(index as u32))
+                .is_some()
+            {
+                links.get(index as u32)?;
+            }
+        }
+        Ok(links)
+    }
+
+    fn get(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
+        let cell = self
+            .slots
+            .get(module as usize)
+            .ok_or(RtError::InvalidBytecode(
+                "номер модуля кадра вне таблиц линковки",
+            ))?;
+        cell.get_or_init(|| {
+            self.factory
+                .as_ref()
+                .ok_or(RtError::InvalidBytecode("для модуля нет таблиц связывания"))?(
+                module,
+            )
+        })
+        .as_ref()
+        .map_err(Clone::clone)
+    }
+}
+
+impl<'a> FromIterator<LinkedComponents<'a>> for ModuleLinks<'a> {
+    fn from_iter<T: IntoIterator<Item = LinkedComponents<'a>>>(iter: T) -> Self {
+        Self {
+            slots: iter
+                .into_iter()
+                .map(|linked| std::cell::OnceCell::from(Ok(linked)))
+                .collect(),
+            factory: None,
+        }
+    }
+}
+
+#[cfg(test)]
+impl<'a> std::ops::Index<usize> for ModuleLinks<'a> {
+    type Output = LinkedComponents<'a>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.get(index as u32)
+            .expect("таблицы тестового каталога согласованы")
+    }
 }
 
 /// Модульный контекст шага: сессия, каталог и корневое состояние одним
@@ -191,21 +315,23 @@ pub(super) struct ModulesCtx<'a, 'b> {
 
 impl<'a> CatalogContext<'a> {
     pub(super) fn program(&self, module: u32) -> Result<&'a Program, RtError> {
-        self.catalog
-            .modules
-            .get(module as usize)
-            .map(|m| &m.program)
-            .ok_or(RtError::InvalidBytecode(
+        if self
+            .catalog
+            .module_name(bsl_bytecode::ModuleId::new(module))
+            .is_none()
+        {
+            return Err(RtError::InvalidBytecode(
                 "номер модуля кадра вне каталога конфигурации",
-            ))
+            ));
+        }
+        Ok(&self
+            .catalog
+            .module_code(bsl_bytecode::ModuleId::new(module))?
+            .program)
     }
 
     pub(super) fn linked(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
-        self.linked
-            .get(module as usize)
-            .ok_or(RtError::InvalidBytecode(
-                "номер модуля кадра вне таблиц линковки",
-            ))
+        self.linked.get(module)
     }
 
     /// Программа, линковка и кэши одного модуля выбираются общим ключом.
@@ -224,7 +350,8 @@ impl<'a> CatalogContext<'a> {
                 caches,
                 module as usize,
                 "номер модуля вне таблицы кэшей запуска",
-            )?,
+            )?
+            .ready(self.program(module)?),
         ))
     }
 }
@@ -262,8 +389,9 @@ pub(super) fn ensure_module_ready(
                     what: "слишком глубокая рекурсия вызовов",
                 });
             }
-            instance.init = ModuleInitState::Initializing;
             let body = ctx.program(target)?;
+            instance.prepare(body);
+            instance.init = ModuleInitState::Initializing;
             let chunk0 = at(&body.chunks, 0, "у модуля каталога нет тела")?;
             let call_start = stack.len();
             let own_base = stack.len();
@@ -279,6 +407,7 @@ pub(super) fn ensure_module_ready(
                 return_reg: 0,
                 module_copybacks: Vec::new(),
                 numeric_for_state: None,
+                handled_errors: Vec::new(),
             });
             Ok(true)
         }
@@ -364,7 +493,7 @@ mod tests {
         let catalog = catalog();
         let ctx = CatalogContext {
             catalog: &catalog,
-            linked: Vec::new(),
+            linked: std::iter::empty().collect(),
         };
         assert!(matches!(
             ctx.execution_parts(2, &[]),

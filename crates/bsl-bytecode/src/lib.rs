@@ -12,14 +12,19 @@
 
 pub mod analysis;
 pub mod bundle;
+mod catalog;
 mod chunk;
 mod configuration;
 pub mod dynamic;
 pub mod image;
+mod imports;
 mod instr;
+mod namespace;
+pub use namespace::bind_program_shapes;
 mod text;
 
 pub use bsl_rt::LibraryRequirement;
+pub use catalog::ExecutionCatalog;
 pub use chunk::{BytecodeConst, Chunk, ExceptionRange, Program, SnippetUnit};
 pub use configuration::{
     BytecodeImage, ConfigurationProgram, EntryId, EntryProgram, LinkEntry, LinkSlot, ModuleId,
@@ -28,6 +33,7 @@ pub use configuration::{
 pub use dynamic::{
     DynamicCompiler, DynamicKind, DynamicRequest, DynamicScope, DynamicSignature, DynamicUnit,
 };
+pub use imports::{ModuleImports, ModuleImportsIter};
 pub use instr::{ArgMode, Instr};
 pub use text::{
     FORMAT_VERSION, OPCODE_COUNT, OPCODES, TextError, parse_image, parse_program, write_image,

@@ -17,6 +17,11 @@ pub use diagnostics::{Diagnostic, Expectation, FoundToken, ParseError, ParseErro
 pub use keywords::{Keyword, SPELLINGS as KEYWORD_SPELLINGS, lookup as lookup_keyword};
 pub use lexer::{LexError, LexResult, Lexer};
 pub use lines::LineIndex;
+pub use parser::{FunctionDeclaration, ModuleDeclarations, scan_declarations_with_symbols};
 pub use parser::{parse, parse_with_symbols};
+
+#[cfg(test)]
+#[path = "declaration_tests.rs"]
+mod declaration_tests;
 pub use preproc::PreprocSymbols;
 pub use token::{Span, Token, TokenKind};

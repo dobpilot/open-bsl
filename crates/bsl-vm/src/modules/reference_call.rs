@@ -184,6 +184,7 @@ pub(crate) fn call_reference(
                 return_reg: 0,
                 module_copybacks: Vec::new(),
                 numeric_for_state: None,
+                handled_errors: Vec::new(),
             }],
             // НЕ ИЗМЕРЕНО(SECURITY.ASYNC_INHERITANCE) — отдельная async-задача
             // получает снимок режимов в момент вызова.
@@ -229,6 +230,7 @@ pub(crate) fn call_reference(
         return_reg: dst,
         module_copybacks: copybacks,
         numeric_for_state: None,
+        handled_errors: Vec::new(),
     });
     Ok(None)
 }

@@ -91,7 +91,8 @@ pub(super) fn run_program_with_host<'a>(
         host_env.temp_storage(),
         host_env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
-    )?;
+    )?
+    .with_clock(Some(host_env.clock()));
     let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout,
@@ -145,14 +146,14 @@ pub fn run_repl_chunk_with_registry<'a>(
     let program = Program {
         requirements,
         chunks: vec![unit.chunk.clone()],
-        names: unit.names.clone(),
+        names: unit.names.clone().into(),
         shapes: unit.shapes.clone(),
         top_level_locals: locals,
         function_names: Vec::new(),
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
-        imports: Vec::new(),
+        imports: Default::default(),
         links: Vec::new(),
         // Чанк REPL собирается без сведений об отладке, поэтому строк у
         // него нет; форма таблицы всё равно соблюдается — запись на чанк.
@@ -174,7 +175,8 @@ pub fn run_repl_chunk_with_registry<'a>(
         host_env.temp_storage(),
         host_env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
-    )?;
+    )?
+    .with_clock(Some(host_env.clock()));
     let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout,
@@ -261,7 +263,8 @@ pub fn call_module_function(
         env.temp_storage(),
         env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
-    )?;
+    )?
+    .with_clock(Some(env.clock()));
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let dynamic_depth = std::cell::Cell::new(0);
@@ -309,7 +312,8 @@ pub fn call_module_function_with_registry_and_io<'a>(
         host_env.temp_storage(),
         host_env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
-    )?;
+    )?
+    .with_clock(Some(host_env.clock()));
     let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout,

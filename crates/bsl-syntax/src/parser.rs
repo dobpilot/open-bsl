@@ -53,6 +53,52 @@ pub fn parse_with_symbols(
     parser.parse_program().map_err(Diagnostic::Parse)
 }
 
+/// Объявления модуля без синтаксических деревьев тел.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModuleDeclarations {
+    /// Процедуры и функции в порядке объявления.
+    pub functions: Vec<FunctionDeclaration>,
+    /// Объявления переменных уровня модуля.
+    pub variables: Vec<VarDecl>,
+}
+
+/// Сигнатура процедуры или функции; исполняемого тела не содержит.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionDeclaration {
+    /// Исходное имя.
+    pub name: String,
+    /// Процедура, а не функция.
+    pub is_procedure: bool,
+    /// Модификатор асинхронного вызова.
+    pub is_async: bool,
+    /// Параметры с объявлениями умолчаний.
+    pub params: Vec<Param>,
+    /// Признак экспорта.
+    pub export: bool,
+}
+
+/// Читает объявления, не разбирая выражения и операторы тел.
+///
+/// Это индекс для поиска экспортов, а не успешная компиляция модуля.
+/// Перед исполнением исходник должен пройти обычный полный разбор.
+///
+/// # Errors
+/// Возвращает ошибки лексики, препроцессора и заголовков объявлений.
+pub fn scan_declarations_with_symbols(
+    src: &str,
+    symbols: &crate::PreprocSymbols,
+) -> Result<ModuleDeclarations, Diagnostic> {
+    let tokens = tokenize_all(src, symbols).map_err(Diagnostic::Lex)?;
+    let mut parser = Parser {
+        tokens,
+        pos: 0,
+        src,
+        lines: crate::LineIndex::new(src),
+        depth: 0,
+    };
+    parser.scan_declarations().map_err(Diagnostic::Parse)
+}
+
 /// Максимальная глубина вложенности выражений и операторов.
 ///
 /// Парсер — рекурсивный спуск, и глубина входного текста напрямую расходует
@@ -92,6 +138,50 @@ struct Parser<'src> {
 }
 
 impl<'src> Parser<'src> {
+    fn scan_declarations(&mut self) -> Result<ModuleDeclarations, ParseError> {
+        let mut declarations = ModuleDeclarations {
+            functions: Vec::new(),
+            variables: Vec::new(),
+        };
+        while !self.at_eof() {
+            let is_async = self.eat_keyword(Keyword::Async);
+            if self.at_keyword(Keyword::Procedure) || self.at_keyword(Keyword::Function) {
+                let is_procedure = self.eat_keyword(Keyword::Procedure);
+                if !is_procedure {
+                    self.expect_keyword(Keyword::Function)?;
+                }
+                let name = self.expect_ident()?;
+                let params = self.parse_params()?;
+                let export = self.eat_keyword(Keyword::Export);
+                declarations.functions.push(FunctionDeclaration {
+                    name,
+                    is_procedure,
+                    is_async,
+                    params,
+                    export,
+                });
+                let end = if is_procedure {
+                    Keyword::EndProcedure
+                } else {
+                    Keyword::EndFunction
+                };
+                // Строки и комментарии уже отделены общим лексером: слово
+                // «КонецФункции» внутри строки не завершает объявление.
+                while !self.at_eof() && !self.at_keyword(end) {
+                    self.bump();
+                }
+                self.expect_keyword(end)?;
+            } else if is_async {
+                return Err(self.expected(Expectation::Keyword(Keyword::Procedure)));
+            } else if self.at_keyword(Keyword::Var) {
+                declarations.variables.push(self.parse_var_decl()?);
+            } else {
+                self.bump();
+            }
+        }
+        Ok(declarations)
+    }
+
     fn text(&self, span: Span) -> &'src str {
         &self.src[span.start as usize..span.end as usize]
     }
