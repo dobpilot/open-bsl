@@ -1545,6 +1545,9 @@ impl<'a> Resolver<'a> {
             // чужая процедура в выражении отвергается при вызове после
             // вычисления аргументов. Открытый вызов ссылки на модуль уже
             // проверяет требование результата до исполнения тела процедуры.
+            // Замеры `measure-expression.platform.txt` и
+            // `measure-arguments.platform.txt` в
+            // `docs/research/fixtures/imported-procedure-expression/`.
             return Ok(RExpr::CallMethod {
                 obj: Box::new(RExpr::ImportedModule(module.module)),
                 method: name.to_string(),
@@ -2955,7 +2958,8 @@ impl<'a> Resolver<'a> {
                     // открыто, даже у статически известного ядрового объекта.
                     // Пропуски сохраняются до этого вызова: нативный контроль
                     // `open-method-omissions-1016` подтверждает такую форму
-                    // `ЗаписьТекста.Открыть(Путь,,,Истина)`.
+                    // `ЗаписьТекста.Открыть(Путь,,,Истина)`; замер
+                    // `docs/research/fixtures/open-method-omissions-1016/platform.oracle`.
                     args.iter()
                         .map(|arg| match arg {
                             Some(expr) => self.resolve_expr(expr).map(ResolvedArg::Value),

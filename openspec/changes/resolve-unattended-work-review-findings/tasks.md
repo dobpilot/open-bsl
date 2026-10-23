@@ -8,7 +8,7 @@
 
 ## 2. Measurement discipline
 - [x] 2.1 Add `НЕ ИЗМЕРЕНО` markers, registry entries and `measure-all.bsl` lines (or name the existing probe) for: `ОписаниеОшибки` outside the handler frame and its text format; deferred name errors raised with line 0 versus `RaiseCompilationError`; the `SortDirection` `Ascending` alias; `LegacyFind` of an empty substring; lenient `ПолучитьДвоичныеДанныеИзBase64ДвоичныхДанных`; the empty-date `Формат` case.
-- [ ] 2.2 Replace every "нативная проба подтверждает"-style comment that names no probe with the probe path or a marker.
+- [x] 2.2 Replace every "нативная проба подтверждает"-style comment that names no probe with the probe path or a marker.
 - [x] 2.3 Re-measure `tests/conformance/fixtures/structure_duplicate_fields` on the platform and keep the raw platform output beside it; commit the `platform.oracle` receipts behind `chart_plot_area` and `spreadsheet_pattern`.
 - [ ] 2.4 Run or delete the 28 `tests/conformance/measure/1c/measure-*.bsl` probes that have no `.platform.txt`; mark hand-assembled native images as such.
 - [ ] 2.5 Measure the `Отказ` coercion of fill and fill-check handlers once and record it.

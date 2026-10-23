@@ -1616,13 +1616,15 @@ const DISPLAY: &[(TypeId, &str)] = &[
         TypeId::FormattedDocumentItemType,
         "FormattedDocumentItemType",
     ),
-    // Представление подтверждено нативной пробой бухгалтерского движения.
+    // Представление подтверждено нативной пробой бухгалтерского движения
+    // (`docs/research/fixtures/accounting-record-type/measure.platform.txt`).
     (TypeId::AccountingRecordType, "AccountingRecordType"),
     (
         TypeId::TextPositionRelativeToPicture,
         "TextPositionRelativeToPicture",
     ),
-    // Английское представление подтверждено нативным контролем форматов.
+    // Английское представление подтверждено нативным контролем форматов
+    // (`docs/research/fixtures/formatted-document-file-type/measure.platform.txt`).
     (
         TypeId::FormattedDocumentFileType,
         "FormattedDocumentFileType",

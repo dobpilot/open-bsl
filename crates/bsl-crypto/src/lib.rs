@@ -114,6 +114,7 @@ fn add(
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     // Нативный контроль подтверждает UTF-8 без BOM для строкового входа.
+    // Замер: `tests/conformance/measure/1c/measure-hash-string-input.platform.txt`.
     if let BslValue::Str(text) = &arguments[0] {
         data_hashing(receiver)?
             .hasher

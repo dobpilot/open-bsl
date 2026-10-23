@@ -219,6 +219,7 @@ pub(crate) fn qualifier_property(object: &BslObject, name: &str) -> RtResult<Bsl
     };
     // Нативная проба `type-description-qualifiers` подтверждает нулевые
     // квалификаторы отсутствующего типа и политики «Переменная» / «Любой».
+    // Замер: `docs/research/fixtures/type-description-qualifiers/measure.platform.txt`.
     let policy_index = if number { 2 } else { 1 };
     if qualifiers
         .get(policy_index)

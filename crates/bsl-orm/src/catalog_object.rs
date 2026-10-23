@@ -634,7 +634,8 @@ fn set_code(receiver: &dyn ObjectProtocol, value: Value, _: &mut CallContext<'_>
         value,
         &[ColumnType {
             id: TypeRef::Native(id),
-            // Нативный контроль кода сохраняет короткую строку без пробелов.
+            // Нативный контроль кода сохраняет короткую строку без пробелов
+            // (`tests/conformance/measure/1c/measure-catalog-assign-string.platform.txt`).
             // Второй квалификатор числа задаёт дробность, строки — политику длины.
             quals: vec![
                 settings.code_length.to_string(),
@@ -925,6 +926,7 @@ fn check_filling(
         refused = open_bsl::convert_to_boolean(&params[0])?;
         // Нативная проба закрепляет исходный массив: его мутация влияет на
         // проверку, а присваивание нового массива параметру — нет.
+        // Замер: `tests/conformance/measure/1c/measure-catalog-check-filling-handler.platform.txt`.
     }
     let Value::Object(paths) = paths else {
         unreachable!("массив создан выше");

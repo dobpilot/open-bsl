@@ -22,6 +22,8 @@ impl ReadPlan {
         }
         // SDK уже проверил ширину единственной проекции. Отсутствие строки
         // даёт булево `Ложь` даже для числовой опции, как в нативном контроле.
+        // Замеры: `tests/conformance/measure/1c/measure-functional-option-register.platform.txt`,
+        // `tests/conformance/measure/1c/measure-functional-option-catalog.platform.txt`.
         rows.first()
             .and_then(|row| row.first())
             .cloned()

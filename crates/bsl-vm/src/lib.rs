@@ -5572,6 +5572,8 @@ fn format_value_in_context(
 // Нативные контроли поиска и замены подтверждают преобразование простых
 // аргументов. Числа используют точку без группировки, в отличие от `Строка`.
 // Остальные значения сохраняются для прежних проверок runtime, включая UUID.
+// Замеры: `tests/conformance/measure/1c/measure-str-find-undefined.platform.txt`
+// и `tests/conformance/measure/1c/measure-str-replace-coercion.platform.txt`.
 fn coerce_string_builtin_argument(value: &BslValue) -> Result<BslValue, RtError> {
     let spec = match value {
         BslValue::Number(_) => Some("ЧГ=; ЧРД=.; ЧН=0"),

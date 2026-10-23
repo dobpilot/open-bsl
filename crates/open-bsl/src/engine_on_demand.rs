@@ -471,6 +471,8 @@ impl OnDemandCatalog {
             // Статическая ссылка требует объявлений, а не тела цели.
             // Нативный контроль `native-transitive-body` разрешает исправный
             // экспорт родителя до компиляции ошибочного невызываемого потомка.
+            // Замер `unused.platform.txt` в
+            // `docs/research/fixtures/session-factory-hotspot-1021/native-transitive-body/`.
             // Явные импорты сохраняют прежнюю политику подготовки.
             for target in recipe
                 .imports

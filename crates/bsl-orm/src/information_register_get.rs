@@ -95,6 +95,7 @@ fn get(
         .ok_or_else(|| failure("полный состав ресурсов неизвестен"))?;
     // Пока реализована только форма, для которой сохранён нативный контроль.
     // Другие типы не превращаются в пустой успешный результат.
+    // Замеры: `docs/research/fixtures/information-register-get/*.platform.txt`.
     let supported = |field: &DocumentAttribute, digits: &str| {
         matches!(field.types(),
         [column] if column.id.native() == Some(TypeId::Number) && column.quals == [digits, "0", "0"])

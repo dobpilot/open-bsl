@@ -117,6 +117,7 @@ impl BslValue {
         let needle = needle.as_str("СтрНайти")?;
         // Пустая подстрока даёт 1 независимо от дополнительных параметров:
         // это отдельный ранний результат, подтверждённый нативным контролем.
+        // Замер: `tests/conformance/measure/1c/measure-str-find-undefined.platform.txt`.
         if needle.units().is_empty() {
             return Ok(BslValue::number_from_i64(1));
         }

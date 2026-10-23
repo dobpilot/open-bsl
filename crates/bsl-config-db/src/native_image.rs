@@ -567,7 +567,9 @@ fn reachable_commands_with_labels(
             }
             30 | 31 => {
                 // Нативные пробы `short-circuit32` и `constant-short-circuit`
-                // проверяют сохранение результата выбранной короткой ветви.
+                // проверяют сохранение результата выбранной короткой ветви
+                // (`tests/conformance/measure/1c/measure-native-image-short-circuit32.platform.txt`,
+                // `tests/conformance/measure/1c/measure-native-image-constant-short-circuit.platform.txt`).
                 successors = match before {
                     One(value) | Two(_, value) if value == (command.code == 31) => {
                         [target.map(|target| (target, before)), None]
@@ -1658,6 +1660,8 @@ fn recover_linear_module_with_scoped_bodies(
         // Внешние имена с флагом `2` измерены нативной пробой глобальной
         // ссылки. Их связывает существующий резолвер. Проба инициализатора
         // отдельно проверяет частную модульную переменную с флагом `0`.
+        // Замеры: `tests/conformance/measure/1c/measure-native-image-global.platform.txt`,
+        // `tests/conformance/measure/1c/measure-native-image-module-initializer.platform.txt`.
         if !matches!(variable.flags, 0 | 2)
             || (variable.flags == 0 && initializer.is_none())
             || variable.external_slot != -1
@@ -1697,7 +1701,8 @@ fn recover_linear_module_with_scoped_bodies(
             return Err(format!("{at}: повторное имя метода"));
         }
         if matches!(procedure.flags, 32 | 33) {
-            // Нативная проба внешних методов измеряет записи без тела.
+            // Нативная проба внешних методов измеряет записи без тела
+            // (`tests/conformance/measure/1c/measure-native-image-external-methods.platform.txt`).
             // Сохраняем их индексы для вызовов, но не создаем заглушек:
             // имя связывает обычный резолвер с функцией runtime или хоста.
             if procedure.entry != 0 || procedure.variables.is_some() || procedure.defaults.is_some()
@@ -1815,7 +1820,8 @@ fn recover_linear_module_with_scoped_bodies(
         let has_statement_try = image.instructions[start..end]
             .iter()
             .any(|instruction| instruction.code == 44);
-        // Нативная проба допускает отсутствие номера строки перед `End`.
+        // Нативная проба допускает отсутствие номера строки перед `End`
+        // (`tests/conformance/measure/1c/measure-native-image-procedure-exit-no-line.platform.txt`).
         // Адрес выхода берётся из фактического хвоста, а переход проверяется точно.
         let exit = if end - start >= 2
             && image.instructions[end - 2].code == 1
@@ -2840,7 +2846,8 @@ fn recover_statement_branches_with_loop_exits(
         loop_targets,
     )?;
     // Ветка продолжает исполнение общего хвоста. Нативная проба
-    // присваивает ссылочному параметру разные значения в обеих ветках.
+    // присваивает ссылочному параметру разные значения в обеих ветках
+    // (`tests/conformance/measure/1c/measure-native-image-branch.platform.txt`).
     prelude.push(if no.is_empty() {
         format!("Если {condition} Тогда\n{yes}\nКонецЕсли;")
     } else {
@@ -2970,7 +2977,8 @@ fn recover_caught_return(
     {
         return Err(format!("{at}: неподдерживаемая форма завершения попытки"));
     }
-    // Нативная проба проверяет отказ внутри попытки и возврат обработчика.
+    // Нативная проба проверяет отказ внутри попытки и возврат обработчика
+    // (`ИсключениеПробы`, `tests/conformance/measure/1c/measure-native-image-compiled.platform.txt`).
     // Другие формы выхода и вложенные обработчики здесь не принимаются.
     let body = recover_variable_expressions(
         range.start + 1..handler - 2,
@@ -3068,7 +3076,8 @@ fn recover_loop_sequence_with_frame(
             let Some(begin) = begin else {
                 // Условный переход перед циклом может быть обычной веткой.
                 // Направление проверенного завершающего перехода различает
-                // эти формы; нативная проба охватывает выполнение и пропуск.
+                // эти формы; нативная проба охватывает выполнение и пропуск
+                // (`tests/conformance/measure/1c/measure-native-image-branch-loop.platform.txt`).
                 statements.push(recover_statement_branches_with_loop_exits(
                     cursor..range.end,
                     variables,
@@ -3323,7 +3332,8 @@ fn recover_return_branches(
     constants: &[String],
     image: &Image,
 ) -> Result<String, String> {
-    // Нативный контрольный модуль проверяет все три пути возврата.
+    // Нативный контрольный модуль проверяет все три пути возврата
+    // (`Ветвление`, `tests/conformance/measure/1c/measure-native-image-compiled.platform.txt`).
     // Принимаем только структурированное ветвление с полными ветками:
     // переходы должны вести к началу альтернативы и общему выходу.
     let commands = &image.instructions[range.clone()];
@@ -3988,7 +3998,8 @@ fn recover_expression_sequence_with_prelude(
             }
             70 => {
                 // Нативная проба `number-conversion` проверяет тип, значения,
-                // перехватываемые ошибки и запись через ссылочный параметр.
+                // перехватываемые ошибки и запись через ссылочный параметр
+                // (`tests/conformance/measure/1c/measure-native-image-number-conversion.platform.txt`).
                 let (value, _) = pop_expression(&mut stack, &at)?;
                 stack.push((format!("Число({value})"), false));
             }
@@ -4064,7 +4075,8 @@ fn recover_expression_sequence_with_prelude(
             }
             65 => {
                 // Та же нативная проба подтверждает булев результат проверки
-                // пробельной строки до следующего изменяющего вызова.
+                // пробельной строки до следующего изменяющего вызова
+                // (`tests/conformance/measure/1c/measure-native-image-remaining-string-snapshots.platform.txt`).
                 let (value, _) = pop_expression(&mut stack, &at)?;
                 stack.push((format!("ПустаяСтрока({value})"), false));
             }
@@ -4082,7 +4094,8 @@ fn recover_expression_sequence_with_prelude(
             }
             59 => {
                 // Нативная проба скалярных функций проверяет порядок аргументов,
-                // кириллицу, пустую строку и выход за конец строки.
+                // кириллицу, пустую строку и выход за конец строки
+                // (`tests/conformance/measure/1c/measure-native-image-scalar-builtins.platform.txt`).
                 let arguments = pop_arguments(&mut stack, 3, &at, false)?;
                 stack.push((format!("Сред({arguments})"), false));
             }

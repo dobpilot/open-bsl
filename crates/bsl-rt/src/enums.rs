@@ -461,7 +461,10 @@ pub enum EnumValue {
     DataCompositionResourcesPlacementVertically,
     DataCompositionResourcesPlacementHorizontally,
 
-    // Представления подтверждены нативным контролем 8.3.27.2342.
+    // Представления подтверждены нативным контролем 8.3.27.2342. Замеры:
+    // `tests/conformance/measure/1c/measure-data-composition-*.platform.txt`
+    // для `conditional-appearance-use`, `field-placement`,
+    // `accounting-balance-type`, `balance-type` и `period-type`.
     DataCompositionConditionalAppearanceUseUse,
     DataCompositionConditionalAppearanceUseDontUse,
     DataCompositionFieldPlacementAuto,
@@ -2974,7 +2977,8 @@ impl EnumKind {
             EnumKind::VerticalFormScroll => "VerticalFormScroll",
             EnumKind::VerticalAlign => "VerticalAlign",
             EnumKind::AccumulationRecordType => "AccumulationRecordType",
-            // Нативная проба подтверждает тип самого перечисления.
+            // Нативная проба подтверждает тип самого перечисления
+            // (`docs/research/fixtures/accounting-record-type/measure.platform.txt`).
             EnumKind::AccountingRecordType => "EnumAccountingRecordType",
             EnumKind::TextPositionRelativeToPicture => "EnumTextPositionRelativeToPicture",
             EnumKind::HorizontalAlign => "HorizontalAlign",
@@ -7078,7 +7082,8 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "UseCoordinates",
         "Use coordinates",
     ),
-    // `НеРастягивать` печатается как `No`; строка взята из нативного замера.
+    // `НеРастягивать` печатается как `No`; строка взята из нативного замера
+    // (`tests/conformance/measure/measure-gantt-vertical-stretch.platform.txt`).
     (
         EnumKind::GanttChartVerticalStretch,
         EnumValue::GanttChartVerticalStretchNone,
@@ -7157,7 +7162,8 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Year",
         "Year",
     ),
-    // Представления, включая порядок частей, взяты из нативного замера.
+    // Представления, включая порядок частей, взяты из нативного замера
+    // (`tests/conformance/measure/measure-time-scale-day-format.platform.txt`).
     (
         EnumKind::TimeScaleDayFormat,
         EnumValue::TimeScaleDayFormatMonthDay,

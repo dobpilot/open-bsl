@@ -229,6 +229,7 @@ fn create_inner(
         for attribute in attributes {
             // Первая нативная проба подтверждает собственные Булево и Число.
             // Иные декларации не получают семантику таблицы по предположению.
+            // Замер: `tests/conformance/measure/1c/measure-document-tabular-sections.platform.txt`.
             if !(business || processor)
                 && !matches!(attribute.types(), [column] if matches!(column.id,
                 TypeRef::Native(TypeId::Boolean | TypeId::Number)))
@@ -342,6 +343,7 @@ impl ObjectProtocol for Row {
         }
         // Нативная проба присваивает значения объявленных примитивных типов.
         // Неизмеренные преобразования не выполняются неявно.
+        // Замер: `tests/conformance/measure/1c/measure-document-tabular-sections.platform.txt`.
         let attribute = self
             .section
             .attributes

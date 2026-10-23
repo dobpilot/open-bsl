@@ -2512,7 +2512,8 @@ pub(crate) fn canonical_selection(
     };
     match evaluator.eval(&ast, &context)? {
         XValue::Nodes(nodes) => Ok(Some(evaluator.sort_unique(nodes))),
-        // Нативные контроли скалярного XPath сохраняют весь документ.
+        // Нативные контроли скалярного XPath сохраняют весь документ
+        // (`docs/research/fixtures/xml-canonicalization/measure-edge-arguments.platform.txt`).
         XValue::Number(_) | XValue::Str(_) | XValue::Bool(_) => Ok(None),
     }
 }
@@ -2521,9 +2522,11 @@ pub(crate) fn canonical_result_selection(value: &BslValue) -> RtResult<Option<Ve
     if as_result(value, "Канонизация XML").is_ok() {
         // Нативные контроли узлового и трёх скалярных результатов
         // сохраняют весь документ; готовый набор здесь не применяется.
+        // Замер: `docs/research/fixtures/xml-canonicalization/measure-xpath-result.platform.txt`.
         return Ok(None);
     }
-    // Эти два нестроковых значения дают пустой набор в нативных контролях.
+    // Эти два нестроковых значения дают пустой набор в нативных контролях
+    // (`docs/research/fixtures/xml-canonicalization/measure-edge-arguments.platform.txt`).
     if matches!(value, BslValue::Boolean(false)) || value.type_name() == "Структура" {
         return Ok(Some(Vec::new()));
     }

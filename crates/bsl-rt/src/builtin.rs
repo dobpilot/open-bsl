@@ -2722,7 +2722,9 @@ pub fn call_builtin_method(
         BuiltinMethod::Types => match obj {
             BslValue::Object(object) => match object.as_ref() {
                 // Нативная проба подтверждает, что изменение массива не меняет
-                // состав исходного описания типов.
+                // состав исходного описания типов. Замер
+                // `measure-characteristic-types.platform.txt` в
+                // `docs/research/fixtures/characteristic-manager-types/`.
                 BslObject::TypeDescription(types) => Ok(BslValue::new_array(
                     types.iter().cloned().map(BslValue::Type).collect(),
                 )),

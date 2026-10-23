@@ -238,6 +238,7 @@ fn set_deletion_mark(
     let object = object(receiver)?;
     // Нативная проба разрешает чтение в теле модуля, но запись — только
     // после выбора нового элемента. Свойство не записывает объект в базу.
+    // Замер: `docs/research/fixtures/characteristic-deletion-mark/measure.platform.txt`.
     object.require_selected()?;
     object
         .0

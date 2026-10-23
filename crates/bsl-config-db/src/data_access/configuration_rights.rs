@@ -67,7 +67,8 @@ pub(super) fn metadata_access_right(
     }
     // Явный субъект сохраняет собственные роли даже в привилегированном
     // кадре. Для описания пользователя отдельно проверяется администрирование;
-    // неприменимость права уже установлена выше, как в нативном контроле.
+    // неприменимость права уже установлена выше, как в нативном контроле
+    // (`docs/research/fixtures/metadata-explicit-subjects-native-1018/platform.oracle`).
     let root = if !privileged && matches!(request.subject(), AccessRightSubject::Principal(_)) {
         context
             .host_data()?
@@ -123,6 +124,8 @@ pub(super) fn access_right(
         // Нативные контроли опций и RLS различают само право чтения и отбор
         // строк. Проверку выдачи права и умолчаний уже выполняет SDK;
         // вычислять условие RLS для ответа ПравоДоступа не требуется.
+        // Замер RLS: `docs/research/fixtures/accumulation-field-access/query-rls-allowed.platform.txt`;
+        // половина про функциональные опции отдельно не измерена.
         if context.privileged_mode()? {
             return Ok(true);
         }

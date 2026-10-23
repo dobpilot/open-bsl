@@ -279,6 +279,7 @@ pub(super) fn create(
         context.initialize_configuration_instance(module, &object.0.instance, value.clone())?;
         // Нативная проба сохраняет часть тела с её строками в переменной
         // модуля, но у выбранного документа появляется новая пустая часть.
+        // Замер: `tests/conformance/measure/1c/measure-document-tabular-sections-properties.platform.txt`.
         *object.0.sections.borrow_mut() = create_sections()?;
     }
     // На платформе запись номера и даты и `ЭтоНовый` доступны после тела модуля.
@@ -527,7 +528,8 @@ fn is_locked(
 ) -> RtResult<Value> {
     object(receiver)?.require_selected()?;
     // Здесь представлены только новые документы без собственной блокировки.
-    // Ложь после выбора и ошибку в теле модуля подтверждает нативный контроль.
+    // Ложь после выбора и ошибку в теле модуля подтверждает нативный контроль
+    // (`docs/research/fixtures/document-lock-state-native-1015/platform.oracle`).
     Ok(Value::Boolean(false))
 }
 
@@ -562,6 +564,7 @@ fn set_new_reference(
     }
     // Назначается ссылка будущей записи. Нативная проба сохраняет пустую
     // `Ссылка` самого объекта; отклонённое значение не меняет прежнее.
+    // Замер: `tests/conformance/measure/1c/measure-document-new-reference.platform.txt`.
     *object.0.new_reference.borrow_mut() = value.clone();
     Ok(Value::Undefined)
 }

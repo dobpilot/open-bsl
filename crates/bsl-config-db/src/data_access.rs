@@ -1699,6 +1699,7 @@ fn resolve_storage_scalar(
         .ok_or_else(|| error("неверная скалярная запись ссылки"))?;
     // Нативный контроль допускает знак и ведущие нули; числовое значение
     // не меняет тип или UUID ссылки и не является ключом поиска владельца.
+    // Замер: `tests/conformance/measure/1c/measure-storage-reference-prefix.platform.txt`.
     let digits = prefix
         .strip_prefix('+')
         .or_else(|| prefix.strip_prefix('-'))

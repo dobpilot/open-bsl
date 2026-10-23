@@ -8,6 +8,7 @@ pub(super) static METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["СоздатьУзел", "CreateNode"], Arity::exact(0), create_node),
     // Нативная проба подтверждает тот же пустой UUID и собственный тип
     // владельца, которые уже хранит общая ссылка конфигурации.
+    // Замер: `docs/research/fixtures/exchange-plan-session-reference-1016/measure.platform.txt`.
     MethodDescriptor::new(
         &["ПустаяСсылка", "EmptyRef"],
         Arity::exact(0),

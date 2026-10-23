@@ -332,6 +332,8 @@ fn read(
     // Нативный контроль нового объекта сохраняет состояние модуля и
     // дополнительные свойства. Старые части и строки остаются доступны
     // через прежние ссылки, поэтому части заменяются, а не очищаются.
+    // Замеры: `docs/research/fixtures/business-process-object/read-new-module.platform.txt`,
+    // `docs/research/fixtures/business-process-object/read-new-section.platform.txt`.
     object.0.values.borrow_mut()[..5].clone_from_slice(&[
         Value::Str("".into()),
         Value::Date(BslDate::empty()),
@@ -375,6 +377,7 @@ fn set_head_task(
     let object = object(receiver)?;
     // Нативный контроль допускает чтение при инициализации модуля,
     // но отклоняет присваивание до выбора объекта.
+    // Замер: `docs/research/fixtures/business-process-object/head-task-module.platform.txt`.
     if !object.0.ready.get() {
         return Err(RtError::DynamicError("Бизнес-процесс не выбран".into()));
     }
@@ -447,6 +450,8 @@ fn exchange(receiver: &dyn ObjectProtocol, _: &mut CallContext<'_>) -> RtResult<
     let object = object(receiver)?;
     // Нативный контроль отклоняет доступ к параметрам обмена в теле модуля.
     // После выбора один набор сохраняется вместе с его ссылками даже при Read.
+    // Замеры: `docs/research/fixtures/business-process-object/data-exchange-phase.platform.txt`,
+    // `docs/research/fixtures/business-process-object/data-exchange.platform.txt`.
     if !object.0.ready.get() {
         return Err(RtError::DynamicError("Бизнес-процесс не выбран".into()));
     }
@@ -779,6 +784,8 @@ fn set_new_reference(
     }
     // Нативные контроли сохраняют эту ссылку после Read, отдельно от
     // пустой ссылки самого объекта и его флага модифицированности.
+    // Замеры: `docs/research/fixtures/business-process-object/new-reference.platform.txt`,
+    // `docs/research/fixtures/business-process-object/new-reference-module.platform.txt`.
     *object.0.new_reference.borrow_mut() = value.clone();
     Ok(Value::Undefined)
 }

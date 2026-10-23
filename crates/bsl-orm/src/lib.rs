@@ -5639,6 +5639,7 @@ fn report_get_template(
 // Сигнатуры проверены по синтакс-помощнику и нативным контролям.
 // Нативный прямой вызов без аргументов возвращает `Неопределено`.
 // Именованный макет требует настоящего приобретённого ресурса.
+// Замер: `docs/research/fixtures/chart-manager-template/runtime.oracle`.
 fn chart_get_template(
     receiver: &dyn ObjectProtocol,
     arguments: &[Value],
@@ -5771,6 +5772,7 @@ static INFORMATION_REGISTER_MANAGER_METHODS: &[MethodDescriptor] = &[
     ),
     // Сигнатура периодического регистра подтверждена нативным контролем.
     // Она разрешает исходник, но не подменяет отсутствующее чтение записи.
+    // Замер: `docs/research/fixtures/information-register-last-native-1015/platform.oracle`.
     MethodDescriptor::new(
         &["ПолучитьПоследнее", "GetLast"],
         Arity::range(0, 2),
@@ -6492,6 +6494,8 @@ fn metadata_value_full_name(
         .script_variant;
     // Нативные контроли обоих вариантов языка закрепляют префикс,
     // независимо от языка обращения к объекту и методу.
+    // Замеры: `tests/conformance/measure/1c/measure-metadata-full-name*.platform.txt`,
+    // `tests/conformance/measure/1c/measure-metadata-option-full-name*.platform.txt`.
     let prefix = match (object.kind, variant) {
         (MetadataKind::Catalog, ScriptVariant::Russian) => "Справочник",
         (MetadataKind::Catalog, ScriptVariant::English) => "Catalog",
@@ -8766,10 +8770,12 @@ fn settings_storage_load(
     };
     // Пользовательское хранилище выполняет собственный обработчик; оно не
     // подменяется стандартным хранилищем. Значение возвращается из параметра
-    // `Настройки`, как в нативном замере вызовов менеджера и его модуля.
+    // `Настройки`, как в нативном замере вызовов менеджера и его модуля
+    // (`docs/research/fixtures/settings-storage-load/measure.platform.txt`).
     // На 8.3.27.2342 явное исключение, деление на ноль, отсутствующее поле,
     // ошибка преобразования строки в число и выход за границы массива
-    // требуют перезапуска.
+    // требуют перезапуска; это записано по снимкам экрана, текстовым
+    // выводом платформы не измерено.
     // Мост преобразует ошибку только после подготовки
     // цели; ошибки подготовки возвращаются в исходном виде. Прочие классы
     // ошибок обработчика ещё требуют отдельных нативных замеров.
