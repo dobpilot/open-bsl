@@ -7,6 +7,8 @@ use std::io::Write as _;
 
 use bsl_rt::{FunctionKind, LibraryDescriptor, RuntimeRegistry};
 
+use crate::api_reference_sources::{Entry, SourceIndex};
+
 /// Печатает справочник в stdout либо записывает его в указанный файл.
 pub fn emit(output: Option<&str>) -> i32 {
     // Конфигурационные библиотеки входят в поставляемый API, но не в
@@ -23,7 +25,17 @@ pub fn emit(output: Option<&str>) -> i32 {
             return 1;
         }
     };
-    let text = render(engine.registry());
+    // Описания и файлы реализаций берутся из исходников того workspace, из
+    // которого собран `bsl-cli`; без них справочник был бы другим.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let sources = match SourceIndex::load(&root) {
+        Ok(sources) => sources,
+        Err(error) => {
+            eprintln!("не удалось собрать каталог API: {error}");
+            return 1;
+        }
+    };
+    let text = render(engine.registry(), &sources);
     let result = match output {
         Some(path) => std::fs::write(path, text.as_bytes()),
         None => std::io::stdout().lock().write_all(text.as_bytes()),
@@ -41,7 +53,7 @@ pub fn emit(output: Option<&str>) -> i32 {
 }
 
 /// Детерминированный Markdown-каталог стандартного движка.
-fn render(registry: &RuntimeRegistry) -> String {
+fn render(registry: &RuntimeRegistry, sources: &SourceIndex) -> String {
     let mut out = String::new();
     out.push_str(
         "<!-- Сгенерировано bsl-cli --emit-api-reference. Не редактировать вручную. -->\n\n",
@@ -51,11 +63,12 @@ fn render(registry: &RuntimeRegistry) -> String {
         "Справочник построен из runtime-дескрипторов стандартной сборки `open-bsl`. \
          Имена регистронезависимы; первым указано каноническое написание. \
          Пометка «объявлено без реализации» означает, что имя компилируется, \
-         а вызов поднимает ошибку.\n\n",
+         а вызов поднимает ошибку. Описание — первое предложение doc-комментария \
+         реализации; «Реализация» — файл в `crates/`, где она находится.\n\n",
     );
 
-    write_builtin_functions(&mut out);
-    write_builtin_methods(&mut out);
+    write_builtin_functions(&mut out, sources);
+    write_builtin_methods(&mut out, sources);
     out.push_str(
         "Свойства нативного `ОписаниеТипов` описаны в \
          [справочнике квалификаторов](type-description-qualifiers.md).\n\n",
@@ -101,8 +114,9 @@ fn render(registry: &RuntimeRegistry) -> String {
         if library.functions().is_empty() {
             out.push_str("Нет.\n\n");
         } else {
-            out.push_str("| Имя и псевдонимы | Вид | Аргументы |\n");
-            out.push_str("|---|---|---:|\n");
+            out.push_str("| Имя и псевдонимы | Вид | Описание | Реализация |\n");
+            out.push_str("|---|---|---|---|\n");
+            let table: Vec<&[&str]> = library.functions().iter().map(|f| f.names).collect();
             for function in library.functions() {
                 writeln!(
                     out,
@@ -110,7 +124,7 @@ fn render(registry: &RuntimeRegistry) -> String {
                     names(function.names),
                     declared_only_mark(function.call.is_none()),
                     function_kind(function.kind),
-                    function.arity,
+                    cells(&sources.row(library.package(), function.names, &table)),
                 )
                 .unwrap();
             }
@@ -121,15 +135,16 @@ fn render(registry: &RuntimeRegistry) -> String {
         if library.constructors().is_empty() {
             out.push_str("Нет.\n\n");
         } else {
-            out.push_str("| Имя и псевдонимы | Аргументы |\n");
-            out.push_str("|---|---:|\n");
+            out.push_str("| Имя и псевдонимы | Описание | Реализация |\n");
+            out.push_str("|---|---|---|\n");
+            let table: Vec<&[&str]> = library.constructors().iter().map(|c| c.names).collect();
             for constructor in library.constructors() {
                 writeln!(
                     out,
                     "| {}{} | {} |",
                     names(constructor.names),
                     declared_only_mark(constructor.call.is_none()),
-                    constructor.arity,
+                    cells(&sources.row(library.package(), constructor.names, &table)),
                 )
                 .unwrap();
             }
@@ -140,13 +155,15 @@ fn render(registry: &RuntimeRegistry) -> String {
         if library.types().is_empty() {
             out.push_str("Нет.\n\n");
         } else {
-            out.push_str("| Имя | Представление типа | Дополнительные имена |\n");
-            out.push_str("|---|---|---|\n");
+            out.push_str(
+                "| Имя | Представление типа | Дополнительные имена | Описание | Реализация |\n",
+            );
+            out.push_str("|---|---|---|---|---|\n");
             for ty in library.types() {
                 let aliases = type_aliases(ty);
                 writeln!(
                     out,
-                    "| `{}` | `{}` | {} |",
+                    "| `{}` | `{}` | {} | {} |",
                     ty.name,
                     ty.type_display,
                     if aliases.is_empty() {
@@ -154,12 +171,13 @@ fn render(registry: &RuntimeRegistry) -> String {
                     } else {
                         names(&aliases)
                     },
+                    cells(&sources.ty(ty.package, ty.name)),
                 )
                 .unwrap();
             }
             out.push('\n');
         }
-        write_object_members(&mut out, library);
+        write_object_members(&mut out, library, sources);
     }
     while out.ends_with("\n\n") {
         out.pop();
@@ -177,7 +195,16 @@ fn declared_only_mark(declared_only: bool) -> &'static str {
     }
 }
 
-fn write_object_members(out: &mut String, library: &LibraryDescriptor) {
+/// Колонки «Описание» и «Реализация» строки справочника.
+fn cells(entry: &Entry) -> String {
+    let description = entry.description.as_deref().unwrap_or("—");
+    match &entry.file {
+        Some(file) => format!("{description} | [{file}](../../../crates/{file})"),
+        None => format!("{description} | —"),
+    }
+}
+
+fn write_object_members(out: &mut String, library: &LibraryDescriptor, sources: &SourceIndex) {
     let mut any_members = false;
     for ty in library.types() {
         let members = library
@@ -203,38 +230,57 @@ fn write_object_members(out: &mut String, library: &LibraryDescriptor) {
             );
         }
         if !members.properties().is_empty() {
-            out.push_str("| Свойство | Доступ |\n");
-            out.push_str("|---|---|\n");
+            out.push_str("| Свойство | Доступ | Описание | Реализация |\n");
+            out.push_str("|---|---|---|---|\n");
+            let table: Vec<&[&str]> = members.properties().iter().map(|p| p.names).collect();
             for property in members.properties() {
                 writeln!(
                     out,
-                    "| {} | {} |",
+                    "| {} | {} | {} |",
                     names(property.names),
                     if property.set.is_some() {
                         "чтение и запись"
                     } else {
                         "только чтение"
                     },
+                    cells(&sources.member(
+                        library.package(),
+                        Some(ty.name),
+                        property.names,
+                        &table
+                    )),
                 )
                 .unwrap();
             }
             out.push('\n');
         }
         if !members.methods().is_empty() {
-            out.push_str("| Метод | Аргументы |\n");
-            out.push_str("|---|---:|\n");
+            out.push_str("| Метод | Описание | Реализация |\n");
+            out.push_str("|---|---|---|\n");
+            let table: Vec<&[&str]> = members.methods().iter().map(|m| m.names()).collect();
             for method in members.methods() {
-                writeln!(out, "| {} | {} |", names(method.names()), method.arity(),).unwrap();
+                writeln!(
+                    out,
+                    "| {} | {} |",
+                    names(method.names()),
+                    cells(&sources.member(
+                        library.package(),
+                        Some(ty.name),
+                        method.names(),
+                        &table
+                    )),
+                )
+                .unwrap();
             }
             out.push('\n');
         }
     }
 }
 
-fn write_builtin_functions(out: &mut String) {
+fn write_builtin_functions(out: &mut String, sources: &SourceIndex) {
     out.push_str("## Встроенные глобальные функции\n\n");
-    out.push_str("| Имя и псевдонимы | Вид | Аргументы |\n");
-    out.push_str("|---|---|---:|\n");
+    out.push_str("| Имя и псевдонимы | Вид | Описание | Реализация |\n");
+    out.push_str("|---|---|---|---|\n");
     let mut seen = Vec::new();
     for &(_, function) in bsl_rt::BUILTIN_FN_NAMES {
         if seen.contains(&function) {
@@ -245,7 +291,6 @@ fn write_builtin_functions(out: &mut String) {
             .iter()
             .filter_map(|(name, candidate)| (*candidate == function).then_some(*name))
             .collect::<Vec<_>>();
-        let (min, max) = function.arity_range();
         let kind = if function.is_intrinsic() {
             "встроенная функция"
         } else if function.is_procedure() {
@@ -258,21 +303,21 @@ fn write_builtin_functions(out: &mut String) {
             "| {}{} | {kind} | {} |",
             names(&aliases),
             declared_only_mark(function.is_declared_only()),
-            arity(min, max),
+            cells(&sources.builtin_fn(&format!("{function:?}"))),
         )
         .unwrap();
     }
     out.push('\n');
 }
 
-fn write_builtin_methods(out: &mut String) {
+fn write_builtin_methods(out: &mut String, sources: &SourceIndex) {
     out.push_str("## Встроенные методы\n\n");
     out.push_str(
-        "Эти методы обслуживает базовый runtime. Применимость и иногда арность \
-         зависят от типа получателя.\n\n",
+        "Эти методы обслуживает базовый runtime. Применимость зависит от типа \
+         получателя, поэтому ссылка ведёт на общую таблицу методов.\n\n",
     );
-    out.push_str("| Имя и псевдонимы | Аргументы |\n");
-    out.push_str("|---|---:|\n");
+    out.push_str("| Имя и псевдонимы | Описание | Реализация |\n");
+    out.push_str("|---|---|---|\n");
     let mut seen = Vec::new();
     for &(_, method) in bsl_rt::BUILTIN_METHOD_NAMES {
         if seen.contains(&method) {
@@ -283,11 +328,13 @@ fn write_builtin_methods(out: &mut String) {
             .iter()
             .filter_map(|(name, candidate)| (*candidate == method).then_some(*name))
             .collect::<Vec<_>>();
-        let arity = method
-            .static_arity()
-            .map(|count| count.to_string())
-            .unwrap_or_else(|| "зависит от получателя".to_string());
-        writeln!(out, "| {} | {arity} |", names(&aliases)).unwrap();
+        writeln!(
+            out,
+            "| {} | {} |",
+            names(&aliases),
+            cells(&sources.builtin_method(&format!("{method:?}")))
+        )
+        .unwrap();
     }
     out.push('\n');
 }
@@ -310,14 +357,6 @@ fn type_aliases(ty: &bsl_rt::TypeDescriptor) -> Vec<&'static str> {
     aliases
 }
 
-fn arity(min: usize, max: usize) -> String {
-    if min == max {
-        min.to_string()
-    } else {
-        format!("{min}…{max}")
-    }
-}
-
 fn function_kind(kind: FunctionKind) -> &'static str {
     match kind {
         FunctionKind::Function => "функция",
@@ -335,7 +374,10 @@ mod tests {
         let engine = open_bsl::Engine::builder()
             .build()
             .expect("движок собирается");
-        let text = render(engine.registry());
+        let sources =
+            SourceIndex::load(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+                .expect("исходники workspace");
+        let text = render(engine.registry(), &sources);
         let row = |name: &str| {
             text.lines()
                 .find(|line| line.starts_with(&format!("| `{name}`")))
@@ -351,13 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn arity_formats_exact_and_ranged_counts() {
-        assert_eq!(arity(2, 2), "2");
-        assert_eq!(arity(1, 3), "1…3");
-    }
-
-    #[test]
-    fn disjoint_arities_are_rendered_for_all_component_members() {
+    fn arities_are_not_rendered_and_unknown_sources_show_dashes() {
         use bsl_rt::*;
         fn call(_: &mut CallContext<'_>, _: &[BslValue]) -> RtResult<BslValue> {
             Ok(BslValue::Undefined)
@@ -397,10 +433,12 @@ mod tests {
             .with_object_member_groups(&[MEMBERS]);
         let mut builder = RuntimeBuilder::new();
         builder.register(core_library()).register(LIBRARY);
-        let text = render(&builder.build().unwrap());
-        assert!(text.contains("| `Раздельный` | 0, 2, 3, 5 |"));
-        assert!(text.contains("| `Раздельная` | функция | 0, 2, 3, 5 |"));
-        assert!(text.contains("| `Метод` | 0, 2, 3, 5 |"));
+        let text = render(&builder.build().unwrap(), &SourceIndex::default());
+        assert!(!text.contains("0, 2, 3, 5"));
+        assert!(!text.contains("| Аргументы |") && !text.contains("---:"));
+        assert!(text.contains("| `Раздельный` | — | — |"));
+        assert!(text.contains("| `Раздельная` | функция | — | — |"));
+        assert!(text.contains("| `Метод` | — | — |"));
     }
 
     #[test]

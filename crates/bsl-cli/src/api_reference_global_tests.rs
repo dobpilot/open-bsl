@@ -20,7 +20,10 @@ fn globals_are_rendered_from_the_registered_descriptor() {
         }]);
     let mut builder = RuntimeBuilder::new();
     builder.register(core_library()).register(LIBRARY);
-    let text = render(&builder.build().unwrap());
+    let text = render(
+        &builder.build().unwrap(),
+        &crate::api_reference_sources::SourceIndex::default(),
+    );
     assert!(text.contains("#### Глобальные свойства"));
     assert!(text.contains("`ОбъектХоста`, `HostObject`"));
     assert!(text.contains("| `ОбъектХоста`, `HostObject` | `ПолучитьОбъект` |"));

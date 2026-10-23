@@ -2,208 +2,208 @@
 
 # BSL API open-bsl
 
-Справочник построен из runtime-дескрипторов стандартной сборки `open-bsl`. Имена регистронезависимы; первым указано каноническое написание. Пометка «объявлено без реализации» означает, что имя компилируется, а вызов поднимает ошибку.
+Справочник построен из runtime-дескрипторов стандартной сборки `open-bsl`. Имена регистронезависимы; первым указано каноническое написание. Пометка «объявлено без реализации» означает, что имя компилируется, а вызов поднимает ошибку. Описание — первое предложение doc-комментария реализации; «Реализация» — файл в `crates/`, где она находится.
 
 ## Встроенные глобальные функции
 
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `Sqrt` | встроенная функция | 1 |
-| `Pow` | встроенная функция | 2 |
-| `Log` | встроенная функция | 1 |
-| `Log10` | встроенная функция | 1 |
-| `Exp` | встроенная функция | 1 |
-| `Sin` | встроенная функция | 1 |
-| `Cos` | встроенная функция | 1 |
-| `Tan` | встроенная функция | 1 |
-| `ASin` | встроенная функция | 1 |
-| `ACos` | встроенная функция | 1 |
-| `ATan` | встроенная функция | 1 |
-| `Мин`, `Min` | встроенная функция | 1…255 |
-| `Макс`, `Max` | встроенная функция | 1…255 |
-| `Окр`, `Round` | встроенная функция | 3 |
-| `Цел`, `Int` | встроенная функция | 1 |
-| `Сообщить`, `Message` | процедура | 1…2 |
-| `Строка`, `String` | встроенная функция | 1 |
-| `Формат`, `Format` | встроенная функция | 2 |
-| `СтрокаСЧислом`, `StringWithNumber` — *объявлено без реализации* | функция | 3…4 |
-| `ПолучитьСклоненияСтроки`, `GetStringDeclensions` — *объявлено без реализации* | функция | 1…3 |
-| `ПолучитьСклоненияСтрокиПоЧислу`, `GetStringDeclensionsByNumber` — *объявлено без реализации* | функция | 2…6 |
-| `ДанныеФормыВЗначение`, `FormDataToValue` — *объявлено без реализации* | функция | 2 |
-| `ЗначениеВДанныеФормы`, `ValueToFormData` — *объявлено без реализации* | процедура | 2 |
-| `КопироватьДанныеФормы`, `CopyFormData` — *объявлено без реализации* | функция | 2 |
-| `ПредставлениеСобытияЖурналаРегистрации`, `EventLogEventPresentation` — *объявлено без реализации* | функция | 1 |
-| `ПредставлениеПериода`, `PeriodPresentation` — *объявлено без реализации* | функция | 2…3 |
-| `ЧислоПрописью`, `NumberInWords` — *объявлено без реализации* | функция | 1…3 |
-| `Число`, `Number` | встроенная функция | 1 |
-| `Булево`, `Boolean` | встроенная функция | 1 |
-| `СтрДлина`, `StrLen` | встроенная функция | 1 |
-| `Лев`, `Left` | встроенная функция | 2 |
-| `Прав`, `Right` | встроенная функция | 2 |
-| `Сред`, `Mid` | встроенная функция | 2…3 |
-| `ВРег`, `Upper` | встроенная функция | 1 |
-| `НРег`, `Lower` | встроенная функция | 1 |
-| `ТРег`, `Title` | функция | 1 |
-| `СокрЛП`, `TrimAll` | встроенная функция | 1 |
-| `СокрЛ`, `TrimL` | встроенная функция | 1 |
-| `СокрП`, `TrimR` | встроенная функция | 1 |
-| `СтрНайти`, `StrFind` | функция | 2…5 |
-| `Найти`, `Find` | функция | 2 |
-| `СтрСравнить`, `StrCompare` | функция | 2 |
-| `СтрЧислоВхождений`, `StrOccurrenceCount` | функция | 2 |
-| `СтрНачинаетсяС`, `StrStartsWith` | функция | 2 |
-| `СтрЗаканчиваетсяНа`, `StrEndsWith` | функция | 2 |
-| `СтрЗаменить`, `StrReplace` | встроенная функция | 3 |
-| `СтрРазделить`, `StrSplit` | функция | 2…3 |
-| `СтрСоединить`, `StrConcat` | функция | 1…2 |
-| `СтрЧислоСтрок`, `StrLineCount` | встроенная функция | 1 |
-| `СтрПолучитьСтроку`, `StrGetLine` | встроенная функция | 2 |
-| `СтрШаблон`, `StrTemplate` | функция | 1…11 |
-| `НСтр`, `NStr` | функция | 1…2 |
-| `ПустаяСтрока`, `IsBlankString` | функция | 1 |
-| `Символ`, `Char` | встроенная функция | 1 |
-| `КодСимвола`, `CharCode` | встроенная функция | 1…2 |
-| `ЗначениеЗаполнено`, `ValueIsFilled` | функция | 1 |
-| `ТипЗнч`, `TypeOf` | встроенная функция | 1 |
-| `Тип`, `Type` | встроенная функция | 1 |
-| `ИнформацияОбОшибке`, `ErrorInfo` | функция | 0 |
-| `ОписаниеОшибки`, `ErrorDescription` | функция | 0 |
-| `КраткоеПредставлениеОшибки`, `BriefErrorDescription` | функция | 1 |
-| `ПодробноеПредставлениеОшибки`, `DetailedErrorDescription` | функция | 1 |
-| `Дата`, `Date` | встроенная функция | 1…6 |
-| `ТекущаяДата`, `CurrentDate` | встроенная функция | 0 |
-| `ТекущаяДатаСеанса`, `CurrentSessionDate` | встроенная функция | 0 |
-| `СмещениеСтандартногоВремени`, `StandardTimeOffset` | функция | 0…2 |
-| `СмещениеЛетнегоВремени`, `DaylightTimeOffset` | функция | 0…2 |
-| `УниверсальноеВремя`, `ToUniversalTime` | функция | 1…2 |
-| `МестноеВремя`, `ToLocalTime` | функция | 1…2 |
-| `ЧасовойПоясСеанса`, `SessionTimeZone` | функция | 0 |
-| `ЧасовойПояс`, `TimeZone` | функция | 0 |
-| `ПолучитьДопустимыеЧасовыеПояса`, `GetAvailableTimeZones` — *объявлено без реализации* | функция | 0 |
-| `ТекущаяУниверсальнаяДата`, `CurrentUniversalDate` | функция | 0 |
-| `ТекущаяУниверсальнаяДатаВМиллисекундах`, `CurrentUniversalDateInMilliseconds` | функция | 0 |
-| `Год`, `Year` | встроенная функция | 1 |
-| `Месяц`, `Month` | встроенная функция | 1 |
-| `День`, `Day` | встроенная функция | 1 |
-| `Час`, `Hour` | встроенная функция | 1 |
-| `Минута`, `Minute` | встроенная функция | 1 |
-| `Секунда`, `Second` | встроенная функция | 1 |
-| `ДеньНедели`, `WeekDay` | встроенная функция | 1 |
-| `ДеньГода`, `DayOfYear` | встроенная функция | 1 |
-| `НеделяГода`, `WeekOfYear` | встроенная функция | 1 |
-| `НачалоМинуты`, `BegOfMinute` | встроенная функция | 1 |
-| `КонецМинуты`, `EndOfMinute` | встроенная функция | 1 |
-| `НачалоЧаса`, `BegOfHour` | встроенная функция | 1 |
-| `КонецЧаса`, `EndOfHour` | встроенная функция | 1 |
-| `НачалоДня`, `BegOfDay` | встроенная функция | 1 |
-| `КонецДня`, `EndOfDay` | встроенная функция | 1 |
-| `НачалоМесяца`, `BegOfMonth` | встроенная функция | 1 |
-| `КонецМесяца`, `EndOfMonth` | встроенная функция | 1 |
-| `НачалоКвартала`, `BegOfQuarter` | встроенная функция | 1 |
-| `КонецКвартала`, `EndOfQuarter` | встроенная функция | 1 |
-| `НачалоГода`, `BegOfYear` | встроенная функция | 1 |
-| `КонецГода`, `EndOfYear` | встроенная функция | 1 |
-| `НачалоНедели`, `BegOfWeek` | встроенная функция | 1 |
-| `КонецНедели`, `EndOfWeek` | встроенная функция | 1 |
-| `ДобавитьМесяц`, `AddMonth` | встроенная функция | 2 |
-| `ЗаполнитьЗначенияСвойств`, `FillPropertyValues` | процедура | 2…4 |
-| `ЗначениеВСтрокуВнутр`, `ValueToStringInternal` | функция | 1 |
-| `ЗначениеИзСтрокиВнутр`, `ValueFromStringInternal` | функция | 1 |
-| `ЗначениеВФайл`, `ValueToFile` | функция | 2 |
-| `ЗначениеИзФайла`, `ValueFromFile` | функция | 1 |
-| `АргументыКоманднойСтроки`, `CommandLineArguments` | функция | 0 |
-| `Метаданные`, `Metadata` | функция | 0 |
-| `ЭтотОбъект`, `ThisObject` | функция | 0 |
-| `ПолучитьИмяВременногоФайла`, `GetTempFileName` | функция | 0…1 |
-| `КаталогВременныхФайлов`, `TempFilesDir` | функция | 0 |
-| `КаталогПрограммы`, `BinDir` — *объявлено без реализации* | функция | 0 |
-| `ПолучитьРазделительПути`, `GetPathSeparator` | функция | 0 |
-| `ПолучитьМаскуВсеФайлы`, `GetAllFilesMask` | функция | 0 |
-| `УдалитьФайлы`, `DeleteFiles` | процедура | 1…2 |
-| `СоздатьКаталог`, `CreateDirectory` | процедура | 1 |
-| `НайтиФайлы`, `FindFiles` | функция | 1…3 |
-| `НайтиФайлыАсинх`, `FindFilesAsync` | функция | 1…3 |
-| `ЗапуститьПриложение`, `RunApp` | процедура | 1…4 |
-| `ЗапуститьПриложениеАсинх`, `RunAppAsync` | функция | 1…3 |
-| `СоздатьКаталогАсинх`, `CreateDirectoryAsync` | функция | 1 |
-| `УдалитьФайлыАсинх`, `DeleteFilesAsync` | функция | 1…2 |
-| `КаталогВременныхФайловАсинх`, `TempFilesDirAsync` | функция | 0 |
-| `РазделитьДвоичныеДанные`, `SplitBinaryData` | функция | 2 |
-| `СоединитьДвоичныеДанные`, `ConcatBinaryData` | функция | 1 |
-| `СоединитьБуферыДвоичныхДанных`, `ConcatBinaryDataBuffers` | функция | 1…3 |
-| `Base64Значение`, `Base64Value` | функция | 1 |
-| `Base64Строка`, `Base64String` | функция | 1 |
-| `ПолучитьBase64СтрокуИзДвоичныхДанных`, `GetBase64StringFromBinaryData` | функция | 1 |
-| `ПолучитьBase64СтрокуИзБуфераДвоичныхДанных`, `GetBase64StringFromBinaryDataBuffer` | функция | 1 |
-| `ПолучитьДвоичныеДанныеИзBase64Строки`, `GetBinaryDataFromBase64String` | функция | 1 |
-| `ПолучитьДвоичныеДанныеИзBase64ДвоичныхДанных`, `GetBinaryDataFromBase64BinaryData` | функция | 1 |
-| `ПолучитьHexСтрокуИзДвоичныхДанных`, `GetHexStringFromBinaryData` | функция | 1 |
-| `ПолучитьДвоичныеДанныеИзHexСтроки`, `GetBinaryDataFromHexString` | функция | 1 |
-| `ПолучитьБуферДвоичныхДанныхИзHexСтроки`, `GetBinaryDataBufferFromHexString` | функция | 1 |
-| `ПолучитьHexСтрокуИзБуфераДвоичныхДанных`, `GetHexStringFromBinaryDataBuffer` | функция | 1 |
-| `КодироватьСтроку`, `EncodeString` | функция | 2 |
-| `РаскодироватьСтроку`, `DecodeString` | функция | 2 |
-| `ПолучитьДвоичныеДанныеИзСтроки`, `GetBinaryDataFromString` | функция | 1…3 |
-| `ПолучитьБуферДвоичныхДанныхИзСтроки`, `GetBinaryDataBufferFromString` | функция | 1…3 |
-| `ПолучитьСтрокуИзДвоичныхДанных`, `GetStringFromBinaryData` | функция | 1…2 |
-| `ПолучитьСтрокуИзБуфераДвоичныхДанных`, `GetStringFromBinaryDataBuffer` | функция | 1…2 |
-| `ПолучитьДвоичныеДанныеИзБуфераДвоичныхДанных`, `GetBinaryDataFromBinaryDataBuffer` | функция | 1 |
-| `ПолучитьБуферДвоичныхДанныхИзДвоичныхДанных`, `GetBinaryDataBufferFromBinaryData` | функция | 1 |
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `Sqrt` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Pow` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Log` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Log10` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Exp` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Sin` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Cos` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Tan` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ASin` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ACos` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ATan` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Мин`, `Min` | встроенная функция | Наименьшее из одного или нескольких сравнимых значений. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Макс`, `Max` | встроенная функция | Наибольшее из одного или нескольких сравнимых значений. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Окр`, `Round` | встроенная функция | `Окр(x, ЧислоРазрядов, Режим)` — арность у самой функции в 1С переменная (второй и третий аргументы необязательны, оба по умолчанию `0`), но здесь всегда 3: `bsl-sema::resolver::resolve_call` подставляет недостающие `0` литералами при резолвинге, а не вводит вариативную арность ради одной функции. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Цел`, `Int` | встроенная функция | `Цел(x)` — усечение к нулю, не округление (см. `BslValue::trunc`). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Сообщить`, `Message` | процедура | Побочный эффект — печать в stdout. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Строка`, `String` | встроенная функция | `Строка(x)` = `Формат(x, Неопределено)` — форматная строка по умолчанию. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Формат`, `Format` | встроенная функция | `Формат(x, spec)` — с явной форматной строкой. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрокаСЧислом`, `StringWithNumber` — *объявлено без реализации* | функция | Локализованное склонение числа; пока без таблицы категорий языков. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьСклоненияСтроки`, `GetStringDeclensions` — *объявлено без реализации* | функция | Склонение строки; пока без морфологического движка. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьСклоненияСтрокиПоЧислу`, `GetStringDeclensionsByNumber` — *объявлено без реализации* | функция | Склонение строки по числу; пока без русской морфологии. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ДанныеФормыВЗначение`, `FormDataToValue` — *объявлено без реализации* | функция | Преобразование данных управляемой формы; модель данных формы пока отсутствует. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗначениеВДанныеФормы`, `ValueToFormData` — *объявлено без реализации* | процедура | Обратное преобразование в данные формы; модель данных формы пока отсутствует. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КопироватьДанныеФормы`, `CopyFormData` — *объявлено без реализации* | функция | Копирование данных формы; модель данных формы пока отсутствует. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПредставлениеСобытияЖурналаРегистрации`, `EventLogEventPresentation` — *объявлено без реализации* | функция | Представление события журнала; пока без локализованного каталога. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПредставлениеПериода`, `PeriodPresentation` — *объявлено без реализации* | функция | Внешнее представление периода; пока без локализованного форматирования. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЧислоПрописью`, `NumberInWords` — *объявлено без реализации* | функция | Пропись числа; пока без форм слов для разных локализаций. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Число`, `Number` | встроенная функция | `Число(строка)` — обратный разбор форматированной строки в число. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Булево`, `Boolean` | встроенная функция | `Булево(Значение)` / `Boolean(Value)` — измеренное преобразование числа, булева и строк `Истина`/`True`/`Yes`, `Ложь`/`False`/`No`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрДлина`, `StrLen` | встроенная функция | `СтрДлина`/`StrLen` — длина в код-юнитах UTF-16, не в символах. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Лев`, `Left` | встроенная функция | `Лев`/`Left(строка, длина)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Прав`, `Right` | встроенная функция | `Прав`/`Right(строка, длина)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Сред`, `Mid` | встроенная функция | `Сред`/`Mid(строка, начало, длина)` — длину можно опустить, тогда берётся всё до конца строки (см. `arity_range`, который и делает третий аргумент необязательным). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ВРег`, `Upper` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НРег`, `Lower` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ТРег`, `Title` | функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СокрЛП`, `TrimAll` | встроенная функция | `СокрЛП`/`TrimAll` — обрезка пробелов с обеих сторон. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СокрЛ`, `TrimL` | встроенная функция | `СокрЛ`/`TrimL` — только слева. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СокрП`, `TrimR` | встроенная функция | `СокрП`/`TrimR` — только справа. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрНайти`, `StrFind` | функция | `СтрНайти`/`StrFind(строка, подстрока)` -> позиция 1-based в код-юнитах UTF-16, `0` если не найдено. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Найти`, `Find` | функция | `Найти`/`Find` — старый двухаргументный поиск с позицией `1` для пустой подстроки. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрСравнить`, `StrCompare` | функция | `СтрСравнить`/`StrCompare(левое, правое)` — регистронезависимое сравнение строковых представлений со знаком `-1`, `0` или `1`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрЧислоВхождений`, `StrOccurrenceCount` | функция | `СтрЧислоВхождений`/`StrOccurrenceCount(строка, подстрока)` — число неперекрывающихся регистрозависимых вхождений. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрНачинаетсяС`, `StrStartsWith` | функция | Регистрозависимая проверка непустого префикса. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрЗаканчиваетсяНа`, `StrEndsWith` | функция | Регистрозависимая проверка непустого суффикса. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрЗаменить`, `StrReplace` | встроенная функция | `СтрЗаменить`/`StrReplace(строка, что, чем)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрРазделить`, `StrSplit` | функция | `СтрРазделить`/`StrSplit(строка, разделитель)` -> `Массив`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрСоединить`, `StrConcat` | функция | `СтрСоединить`/`StrConcat(массив, разделитель)` -> `Строка`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрЧислоСтрок`, `StrLineCount` | встроенная функция | `СтрЧислоСтрок`/`StrLineCount`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрПолучитьСтроку`, `StrGetLine` | встроенная функция | `СтрПолучитьСтроку`/`StrGetLine(строка, номер)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СтрШаблон`, `StrTemplate` | функция | `СтрШаблон`/`StrTemplate(шаблон, З1..З10)` — единственная по-настоящему вариативная встроенная функция (см. `arity_range`). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НСтр`, `NStr` | функция | `НСтр`/`NStr(РесурснаяСтрока, КодЯзыка)` выбирает одно значение из записи `ru = '...'; en = '...'`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПустаяСтрока`, `IsBlankString` | функция | `ПустаяСтрока`/`IsBlankString(Значение)` проверяет отсутствие непробельных символов; `Неопределено` также считается пустым. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Символ`, `Char` | встроенная функция | `Символ`/`Char(код)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КодСимвола`, `CharCode` | встроенная функция | `КодСимвола`/`CharCode(строка, позиция)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗначениеЗаполнено`, `ValueIsFilled` | функция | `ЗначениеЗаполнено`/`ValueIsFilled` — см. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ТипЗнч`, `TypeOf` | встроенная функция | `ТипЗнч`/`TypeOf(значение)` -> `Тип`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Тип`, `Type` | встроенная функция | `Тип`/`Type("ИмяТипа")` -> `Тип`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ИнформацияОбОшибке`, `ErrorInfo` | функция | Снимок текущего исключения BSL-задачи. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ОписаниеОшибки`, `ErrorDescription` | функция | Безопасное описание ошибки активного обработчика текущего вызова. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КраткоеПредставлениеОшибки`, `BriefErrorDescription` | функция | Краткое описание из неизменяемого снимка `ИнформацияОбОшибке`. | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `ПодробноеПредставлениеОшибки`, `DetailedErrorDescription` | функция | Безопасный текст из неизменяемого снимка `ИнформацияОбОшибке`. | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `Дата`, `Date` | встроенная функция | `Дата(Год, Месяц, День, Час, Минута, Секунда)` либо `Дата("ГГГГММДДЧЧММСС")` — одна встроенная функция с перегрузкой по типу первого аргумента, как и в самой 1С (см. `BslValue::make_date`). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ТекущаяДата`, `CurrentDate` | встроенная функция | `ТекущаяДата`/`CurrentDate` — см. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ТекущаяДатаСеанса`, `CurrentSessionDate` | встроенная функция | `ТекущаяДатаСеанса`/`CurrentSessionDate` — текущий момент в эффективном часовом поясе этого прогона. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СмещениеСтандартногоВремени`, `StandardTimeOffset` | функция | `СмещениеСтандартногоВремени`/`StandardTimeOffset` — стандартное смещение текущей или именованной зоны в секундах. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СмещениеЛетнегоВремени`, `DaylightTimeOffset` | функция | `СмещениеЛетнегоВремени`/`DaylightTimeOffset` — летнее смещение в секундах. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `УниверсальноеВремя`, `ToUniversalTime` | функция | `УниверсальноеВремя`/`ToUniversalTime` — перевод местной даты текущей или явно заданной зоны в UTC. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `МестноеВремя`, `ToLocalTime` | функция | `МестноеВремя`/`ToLocalTime` — перевод UTC в текущую или явно заданную зону. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЧасовойПоясСеанса`, `SessionTimeZone` | функция | `ЧасовойПоясСеанса`/`SessionTimeZone` — идентификатор зоны текущего прогона. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЧасовойПояс`, `TimeZone` | функция | `ЧасовойПояс`/`TimeZone` — идентификатор зоны компьютера. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьДопустимыеЧасовыеПояса`, `GetAvailableTimeZones` — *объявлено без реализации* | функция | `ПолучитьДопустимыеЧасовыеПояса` — список зон платформы текущего хоста. | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ТекущаяУниверсальнаяДата`, `CurrentUniversalDate` | функция | `ТекущаяУниверсальнаяДата`/`CurrentUniversalDate` — текущий момент UTC как значение `Дата`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ТекущаяУниверсальнаяДатаВМиллисекундах`, `CurrentUniversalDateInMilliseconds` | функция | Число миллисекунд с начала Unix-эпохи в UTC. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Год`, `Year` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Месяц`, `Month` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `День`, `Day` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Час`, `Hour` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Минута`, `Minute` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Секунда`, `Second` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ДеньНедели`, `WeekDay` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ДеньГода`, `DayOfYear` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НеделяГода`, `WeekOfYear` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НачалоМинуты`, `BegOfMinute` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КонецМинуты`, `EndOfMinute` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НачалоЧаса`, `BegOfHour` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КонецЧаса`, `EndOfHour` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НачалоДня`, `BegOfDay` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КонецДня`, `EndOfDay` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НачалоМесяца`, `BegOfMonth` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КонецМесяца`, `EndOfMonth` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НачалоКвартала`, `BegOfQuarter` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КонецКвартала`, `EndOfQuarter` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НачалоГода`, `BegOfYear` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КонецГода`, `EndOfYear` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НачалоНедели`, `BegOfWeek` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КонецНедели`, `EndOfWeek` | встроенная функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ДобавитьМесяц`, `AddMonth` | встроенная функция | `ДобавитьМесяц(Дата, Количество)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаполнитьЗначенияСвойств`, `FillPropertyValues` | процедура | `ЗаполнитьЗначенияСвойств(Приемник, Источник, СписокСвойств[, ИсключаяСвойства])` — единственная встроенная ФУНКЦИЯ, которой нужен рантайм-контекст имён (набор полей приёмника резолвится по `NameId`), поэтому её тело живёт в модуле `fill` и вызывается через `call_builtin_fn_ctx`, а не через `call_builtin_fn`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗначениеВСтрокуВнутр`, `ValueToStringInternal` | функция | `ЗначениеВСтрокуВнутр(Значение)` — внутренний строковый формат платформы (см. модуль `vstr`). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗначениеИзСтрокиВнутр`, `ValueFromStringInternal` | функция | `ЗначениеИзСтрокиВнутр(Строка)` — обратный разбор; контекст нужен на запись: поля структур интернируются, формы растут. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗначениеВФайл`, `ValueToFile` | функция | `ЗначениеВФайл(ИмяФайла, Значение)` — строка `ЗначениеВСтрокуВнутр` в UTF-8 С BOM и переводами строк CRLF (измерено побайтовым сравнением с файлами платформы, см. `vstr::value_to_file`). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗначениеИзФайла`, `ValueFromFile` | функция | `ЗначениеИзФайла(ИмяФайла)` — обратное чтение того же файла. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `АргументыКоманднойСтроки`, `CommandLineArguments` | функция | `АргументыКоманднойСтроки` — массив строк, переданных скрипту после его имени в командной строке. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Метаданные`, `Metadata` | функция | Глобальное свойство конфигурации. | [bsl-rt/src/metadata.rs](../../../crates/bsl-rt/src/metadata.rs) |
+| `ЭтотОбъект`, `ThisObject` | функция | Ссылка на текущий экземпляр BSL-модуля open-bsl, предоставляемая VM. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьИмяВременногоФайла`, `GetTempFileName` | функция | `ПолучитьИмяВременногоФайла(Расширение)` — отсутствующий путь из пространства host-файловой системы. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КаталогВременныхФайлов`, `TempFilesDir` | функция | Временный каталог host с завершающим разделителем. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КаталогПрограммы`, `BinDir` — *объявлено без реализации* | функция | Каталог исполняемых файлов платформы 1С; host пока не задаёт его. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьРазделительПути`, `GetPathSeparator` | функция | Разделитель пути host-файловой системы. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьМаскуВсеФайлы`, `GetAllFilesMask` | функция | Маска выбора всех файлов в host-файловой системе. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `УдалитьФайлы`, `DeleteFiles` | процедура | `УдалитьФайлы(Путь)` — файл либо дерево; отсутствующий путь не ошибка. | [bsl-rt/src/file_search.rs](../../../crates/bsl-rt/src/file_search.rs) |
+| `СоздатьКаталог`, `CreateDirectory` | процедура | `СоздатьКаталог(Путь)` — создание каталога с родителями через host. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НайтиФайлы`, `FindFiles` | функция | `НайтиФайлы(Путь, Маска, Рекурсивно)` — массив объектов Файл. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НайтиФайлыАсинх`, `FindFilesAsync` | функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗапуститьПриложение`, `RunApp` | процедура | Процедурный запуск; внутренний результат используется для выходного аргумента. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗапуститьПриложениеАсинх`, `RunAppAsync` | функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СоздатьКаталогАсинх`, `CreateDirectoryAsync` | функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `УдалитьФайлыАсинх`, `DeleteFilesAsync` | функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КаталогВременныхФайловАсинх`, `TempFilesDirAsync` | функция | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `РазделитьДвоичныеДанные`, `SplitBinaryData` | функция | `РазделитьДвоичныеДанные(Данные, РазмерЧасти)` -> `Массив` частей (см. `BslValue::binary_data_split`). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СоединитьДвоичныеДанные`, `ConcatBinaryData` | функция | `СоединитьДвоичныеДанные(Массив)` -> склеенные данные (см. `BslValue::binary_data_combine`). | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СоединитьБуферыДвоичныхДанных`, `ConcatBinaryDataBuffers` | функция | Соединяет массив буферов с необязательными разделителем и порядком байтов. | [bsl-rt/src/bindata.rs](../../../crates/bsl-rt/src/bindata.rs) |
+| `Base64Значение`, `Base64Value` | функция | `Base64Значение(Строка)` — двоичные данные из Base64. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Base64Строка`, `Base64String` | функция | `Base64Строка(ДвоичныеДанные)` — исходная функция платформы. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьBase64СтрокуИзДвоичныхДанных`, `GetBase64StringFromBinaryData` | функция | Стандартный Base64 без переносов строк. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьBase64СтрокуИзБуфераДвоичныхДанных`, `GetBase64StringFromBinaryDataBuffer` | функция | Кодирует байты буфера в Base64 с переносами по 64 символа. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьДвоичныеДанныеИзBase64Строки`, `GetBinaryDataFromBase64String` | функция | Обратное преобразование Base64 в `ДвоичныеДанные`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьДвоичныеДанныеИзBase64ДвоичныхДанных`, `GetBinaryDataFromBase64BinaryData` | функция | Декодирует Base64 из байтов `ДвоичныеДанные`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьHexСтрокуИзДвоичныхДанных`, `GetHexStringFromBinaryData` | функция | Заглавное шестнадцатеричное представление байтов. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьДвоичныеДанныеИзHexСтроки`, `GetBinaryDataFromHexString` | функция | Двоичные данные из Hex-цифр строки с пропуском остальных символов. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьБуферДвоичныхДанныхИзHexСтроки`, `GetBinaryDataBufferFromHexString` | функция | Из тех же Hex-цифр создаёт изменяемый буфер. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьHexСтрокуИзБуфераДвоичныхДанных`, `GetHexStringFromBinaryDataBuffer` | функция | Заглавное шестнадцатеричное представление байтов буфера. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `КодироватьСтроку`, `EncodeString` | функция | Percent-кодирование UTF-8 строки в одном из двух режимов платформы. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `РаскодироватьСтроку`, `DecodeString` | функция | Обратное percent-декодирование; `+` не считается пробелом. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьДвоичныеДанныеИзСтроки`, `GetBinaryDataFromString` | функция | `ПолучитьДвоичныеДанныеИзСтроки(Строка, Кодировка, ДобавлятьBOM)` (см. `bindata::binary_data_from_string`). | [bsl-rt/src/bindata.rs](../../../crates/bsl-rt/src/bindata.rs) |
+| `ПолучитьБуферДвоичныхДанныхИзСтроки`, `GetBinaryDataBufferFromString` | функция | `ПолучитьБуферДвоичныхДанныхИзСтроки` — то же самое, но в буфер. | [bsl-rt/src/bindata.rs](../../../crates/bsl-rt/src/bindata.rs) |
+| `ПолучитьСтрокуИзДвоичныхДанных`, `GetStringFromBinaryData` | функция | `ПолучитьСтрокуИзДвоичныхДанных(Данные, Кодировка)`; ведущая сигнатура снимается (измерено). | [bsl-rt/src/bindata.rs](../../../crates/bsl-rt/src/bindata.rs) |
+| `ПолучитьСтрокуИзБуфераДвоичныхДанных`, `GetStringFromBinaryDataBuffer` | функция | `ПолучитьСтрокуИзБуфераДвоичныхДанных(Буфер, Кодировка)`. | [bsl-rt/src/bindata.rs](../../../crates/bsl-rt/src/bindata.rs) |
+| `ПолучитьДвоичныеДанныеИзБуфераДвоичныхДанных`, `GetBinaryDataFromBinaryDataBuffer` | функция | Снимок байтов буфера как неизменяемые `ДвоичныеДанные`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьБуферДвоичныхДанныхИзДвоичныхДанных`, `GetBinaryDataBufferFromBinaryData` | функция | Новый изменяемый буфер из байтов `ДвоичныеДанные`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
 
 ## Встроенные методы
 
-Эти методы обслуживает базовый runtime. Применимость и иногда арность зависят от типа получателя.
+Эти методы обслуживает базовый runtime. Применимость зависит от типа получателя, поэтому ссылка ведёт на общую таблицу методов.
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `ВГраница`, `UBound` | 0 |
-| `Добавить`, `Add` | зависит от получателя |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Вставить`, `Insert` | зависит от получателя |
-| `Получить`, `Get` | зависит от получателя |
-| `Свойство`, `Property` | зависит от получателя |
-| `Найти`, `Find` | зависит от получателя |
-| `НайтиСтроки`, `FindRows` | 1 |
-| `Сортировать`, `Sort` | зависит от получателя |
-| `ЗаполнитьЗначения`, `FillValues` | зависит от получателя |
-| `Итог`, `Total` | 1 |
-| `Скопировать`, `Copy` | зависит от получателя |
-| `СкопироватьКолонки`, `CopyColumns` | зависит от получателя |
-| `ВыгрузитьКолонку`, `UnloadColumn` | 1 |
-| `ЗагрузитьКолонку`, `LoadColumn` | 2 |
-| `Сдвинуть`, `Move` | 2 |
-| `Индекс`, `IndexOf` | 1 |
-| `Свернуть`, `GroupBy` | зависит от получателя |
-| `Записать`, `Write` | зависит от получателя |
-| `Закрыть`, `Close` | 0 |
-| `Размер`, `Size` | 0 |
-| `ОткрытьПотокДляЧтения`, `OpenStreamForRead` | 0 |
-| `ПривестиЗначение` | зависит от получателя |
-| `Типы`, `Types` | 0 |
-| `СодержитТип`, `ContainsType` | 1 |
-| `Установить`, `Set` | зависит от получателя |
-| `ПрочитатьЦелое16`, `ReadInt16` | зависит от получателя |
-| `ПрочитатьЦелое32`, `ReadInt32` | зависит от получателя |
-| `ПрочитатьЦелое64`, `ReadInt64` | зависит от получателя |
-| `ЗаписатьЦелое16`, `WriteInt16` | зависит от получателя |
-| `ЗаписатьЦелое32`, `WriteInt32` | зависит от получателя |
-| `ЗаписатьЦелое64`, `WriteInt64` | зависит от получателя |
-| `Разделить`, `Split` | 1 |
-| `Соединить`, `Concat` | 1 |
-| `ПолучитьСрез`, `GetSlice` | зависит от получателя |
-| `ЗаписатьПобитовоеИ`, `WriteBitwiseAnd` | 2 |
-| `ЗаписатьПобитовоеИли`, `WriteBitwiseOr` | 2 |
-| `ЗаписатьПобитовоеИсключительноеИли`, `WriteBitwiseXor` | 2 |
-| `ЗаписатьПобитовоеИНе`, `WriteBitwiseAndNot` | 2 |
-| `Инвертировать`, `Invert` | зависит от получателя |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ВГраница`, `UBound` | `Массив.ВГраница()` — последний индекс или `-1` для пустого массива. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Добавить`, `Add` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Удалить`, `Delete` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Очистить`, `Clear` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Вставить`, `Insert` | `Массив.Вставить(Индекс, Значение)` и вставка пары в структуру/соответствие. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Получить`, `Get` | `Соответствие.Получить(Ключ)` и `БуферДвоичныхДанных.Получить(Позиция)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Свойство`, `Property` | `Структура.Свойство(Ключ, ЗначениеПоУмолчанию)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Найти`, `Find` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `НайтиСтроки`, `FindRows` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Сортировать`, `Sort` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаполнитьЗначения`, `FillValues` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Итог`, `Total` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Скопировать`, `Copy` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СкопироватьКолонки`, `CopyColumns` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ВыгрузитьКолонку`, `UnloadColumn` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗагрузитьКолонку`, `LoadColumn` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Сдвинуть`, `Move` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Индекс`, `IndexOf` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Свернуть`, `GroupBy` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Записать`, `Write` | `ЗаписьТекста.Записать(Текст)` и блочная запись в буфер. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Закрыть`, `Close` | `ЗаписьТекста.Закрыть()`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Размер`, `Size` | `ДвоичныеДанные.Размер()`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ОткрытьПотокДляЧтения`, `OpenStreamForRead` | `ДвоичныеДанные.ОткрытьПотокДляЧтения()` — объект строит зарегистрированный компонент потоков. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПривестиЗначение` | `ОписаниеТипов.ПривестиЗначение(Значение)`. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Типы`, `Types` | `ОписаниеТипов.Типы()` возвращает независимый массив типов. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `СодержитТип`, `ContainsType` | `ОписаниеТипов.СодержитТип(Тип)` проверяет состав описания. | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Установить`, `Set` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПрочитатьЦелое16`, `ReadInt16` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПрочитатьЦелое32`, `ReadInt32` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПрочитатьЦелое64`, `ReadInt64` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаписатьЦелое16`, `WriteInt16` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаписатьЦелое32`, `WriteInt32` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаписатьЦелое64`, `WriteInt64` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Разделить`, `Split` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Соединить`, `Concat` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ПолучитьСрез`, `GetSlice` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаписатьПобитовоеИ`, `WriteBitwiseAnd` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаписатьПобитовоеИли`, `WriteBitwiseOr` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаписатьПобитовоеИсключительноеИли`, `WriteBitwiseXor` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `ЗаписатьПобитовоеИНе`, `WriteBitwiseAndNot` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
+| `Инвертировать`, `Invert` | — | [bsl-rt/src/builtin.rs](../../../crates/bsl-rt/src/builtin.rs) |
 
 Свойства нативного `ОписаниеТипов` описаны в [справочнике квалификаторов](type-description-qualifiers.md).
 
 ## Компоненты
 
-### `bsl-rt` 0.4.0
+### `bsl-rt` 0.5.0
 
 #### Глобальные свойства
 
@@ -215,414 +215,414 @@
 
 #### Глобальные функции
 
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `РазделитьФайл`, `SplitFile` — *объявлено без реализации* | функция | 2…3 |
-| `СтрНайтиИВыделитьОформлением`, `StrFindAndHighlightByAppearance` — *объявлено без реализации* | функция | 2 |
-| `КопироватьФайл`, `CopyFile` — *объявлено без реализации* | процедура | 2 |
-| `ПереместитьФайл`, `MoveFile` — *объявлено без реализации* | процедура | 2 |
-| `ОбъединитьФайлы`, `MergeFiles` — *объявлено без реализации* | процедура | 2 |
-| `WebЦвета`, `WebColors` — *объявлено без реализации* | функция | 0 |
-| `ШрифтыСтиля`, `StyleFonts` — *объявлено без реализации* | функция | 0 |
-| `ЦветаСтиля`, `StyleColors` — *объявлено без реализации* | функция | 0 |
-| `ПоместитьВоВременноеХранилище`, `PutToTempStorage` | функция | 1…2 |
-| `ПолучитьИзВременногоХранилища`, `GetFromTempStorage` | функция | 1 |
-| `УдалитьИзВременногоХранилища`, `DeleteFromTempStorage` | процедура | 1 |
-| `ПолучитьСообщенияПользователю`, `GetUserMessages` | функция | 0…1 |
-| `ЭтоАдресВременногоХранилища`, `IsTempStorageURL` | функция | 1 |
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `РазделитьФайл`, `SplitFile` — *объявлено без реализации* | функция | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `СтрНайтиИВыделитьОформлением`, `StrFindAndHighlightByAppearance` — *объявлено без реализации* | функция | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `КопироватьФайл`, `CopyFile` — *объявлено без реализации* | процедура | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ПереместитьФайл`, `MoveFile` — *объявлено без реализации* | процедура | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ОбъединитьФайлы`, `MergeFiles` — *объявлено без реализации* | процедура | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `WebЦвета`, `WebColors` — *объявлено без реализации* | функция | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ШрифтыСтиля`, `StyleFonts` — *объявлено без реализации* | функция | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ЦветаСтиля`, `StyleColors` — *объявлено без реализации* | функция | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ПоместитьВоВременноеХранилище`, `PutToTempStorage` | функция | `ПоместитьВоВременноеХранилище(Значение, Адрес)`. | [bsl-rt/src/temp_storage.rs](../../../crates/bsl-rt/src/temp_storage.rs) |
+| `ПолучитьИзВременногоХранилища`, `GetFromTempStorage` | функция | `ПолучитьИзВременногоХранилища(Адрес)`. | [bsl-rt/src/temp_storage.rs](../../../crates/bsl-rt/src/temp_storage.rs) |
+| `УдалитьИзВременногоХранилища`, `DeleteFromTempStorage` | процедура | `УдалитьИзВременногоХранилища(Адрес)`. | [bsl-rt/src/temp_storage.rs](../../../crates/bsl-rt/src/temp_storage.rs) |
+| `ПолучитьСообщенияПользователю`, `GetUserMessages` | функция | Возвращает ожидающие сообщения внедрённого хоста. | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
+| `ЭтоАдресВременногоХранилища`, `IsTempStorageURL` | функция | `ЭтоАдресВременногоХранилища(Адрес)` проверяет форму адреса, а не его наличие. | [bsl-rt/src/temp_storage.rs](../../../crates/bsl-rt/src/temp_storage.rs) |
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `МакетКомпоновкиДанных`, `DataCompositionTemplate` — *объявлено без реализации* | 0 |
-| `МакетЗаголовкаКоллекцииЗначенийОбластиКомпоновкиДанных`, `DataCompositionAreaTemplateValueCollectionHeader` — *объявлено без реализации* | 0 |
-| `МакетКоллекцииЗначенийОбластиКомпоновкиДанных`, `DataCompositionAreaTemplateValueCollection` — *объявлено без реализации* | 0 |
-| `Диапазон`, `Range` — *объявлено без реализации* | 1…2 |
-| `ТекстыСообщенияОбОшибке`, `ErrorMessageTexts` — *объявлено без реализации* | 2 |
-| `БлокировкаСеансов`, `SessionsLock` — *объявлено без реализации* | 0 |
-| `ЭлементИзбранногоРаботыПользователя`, `UserWorkFavoritesItem` — *объявлено без реализации* | 0 |
-| `ИзбранноеРаботыПользователя`, `UserWorkFavorites` — *объявлено без реализации* | 0 |
-| `ОтборКомпоновкиДанных`, `DataCompositionFilter` — *объявлено без реализации* | 0 |
-| `ИзвлечениеТекста`, `TextExtraction` — *объявлено без реализации* | 0…1 |
-| `ФлагиИнтернетПочтовогоСообщения`, `InternetMailMessageFlags` | 0 |
-| `МоментВремени`, `PointInTime` | 1…2 |
-| `ОписаниеПередаваемогоФайла`, `TransferableFileDescription` | 0…2 |
-| `COMSafeArray` — *объявлено без реализации* | 1…255 |
-| `СвязьПараметраВыбора`, `ChoiceParameterLink` — *объявлено без реализации* | 2…3 |
-| `FTPСоединение`, `FTPConnection` — *объявлено без реализации* | 1…9 |
-| `СвязьПоТипу`, `TypeLink` — *объявлено без реализации* | 0…2 |
-| `ДанныеРасшифровкиКомпоновкиДанных`, `DataCompositionDetailsData` — *объявлено без реализации* | 0 |
-| `ПакетОтображаемыхДокументов`, `RepresentableDocumentBatch` — *объявлено без реализации* | 0 |
-| `ЧтениеHTML`, `HTMLReader` — *объявлено без реализации* | 0 |
-| `МенеджерКриптографии`, `CryptoManager` — *объявлено без реализации* | 0, 1, 3, 4 |
-| `Рамка`, `Border` — *объявлено без реализации* | 1…2 |
-| `СочетаниеКлавиш`, `Shortcut` — *объявлено без реализации* | 1…4 |
-| `СертификатКриптографии`, `CryptoCertificate` — *объявлено без реализации* | 0…1 |
-| `WSПрокси`, `WSProxy` — *объявлено без реализации* | 4…9 |
-| `WSОпределения`, `WSDefinitions` — *объявлено без реализации* | 1…7 |
-| `ДоставляемоеУведомление`, `DeliverableNotification` — *объявлено без реализации* | 0 |
-| `ФорматированныйДокумент`, `FormattedDocument` — *объявлено без реализации* | 0 |
-| `ГенераторСлучайныхЧисел`, `RandomNumberGenerator` — *объявлено без реализации* | 0…1 |
-| `ОбрабатываемаяКартинка`, `ProcessingPicture` — *объявлено без реализации* | 0…3 |
-| `Линия`, `Line` — *объявлено без реализации* | 1…3 |
-| `ПараметрВыбора`, `ChoiceParameter` — *объявлено без реализации* | 2 |
-| `ЗаписьТекста`, `TextWriter` | 0…5 |
-| `Цвет`, `Color` — *объявлено без реализации* | 0, 3 |
-| `РеквизитФормы`, `FormAttribute` — *объявлено без реализации* | 2…5 |
-| `ИнтернетПочтовыйПрофиль`, `InternetMailProfile` — *объявлено без реализации* | 0 |
-| `ИнтернетПочта`, `InternetMail` — *объявлено без реализации* | 0 |
-| `ДеревоЗначений`, `ValueTree` — *объявлено без реализации* | 0 |
-| `Шрифт`, `Font` — *объявлено без реализации* | 0…8 |
-| `COMОбъект`, `COMObject` — *объявлено без реализации* | 1…2 |
-| `ОписаниеОповещения`, `NotifyDescription` | 0, 2, 3, 5 |
-| `Файл`, `File` | 0…1 |
-| `ДвоичныеДанные`, `BinaryData` | 1 |
-| `УникальныйИдентификатор`, `UUID` | 0…1 |
-| `СписокЗначений`, `ValueList` | 0 |
-| `КвалификаторыДаты` | 1 |
-| `ОписаниеТипов`, `TypeDescription` | 0…7 |
-| `ФоновыеЗадания`, `BackgroundJobs` | 0 |
-| `ФиксированныйМассив`, `FixedArray` | 1 |
-| `СообщениеПользователю`, `UserMessage` | 0 |
-| `ФиксированнаяСтруктура`, `FixedStructure` | 0…1 |
-| `ФиксированноеСоответствие`, `FixedMap` | 1 |
-| `ПолеКомпоновкиДанных`, `DataCompositionField` | 1 |
-| `СтандартнаяДатаНачала`, `StandardBeginningDate` | 1 |
-| `КвалификаторыСтроки`, `StringQualifiers` | 0…2 |
-| `КвалификаторыЧисла`, `NumberQualifiers` | 0…3 |
-| `ФорматированнаяСтрока`, `FormattedString` | 1…255 |
-| `Картинка`, `Picture` | 0…2 |
-| `ПараметрКомпоновкиДанных`, `DataCompositionParameter` | 1 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `МакетКомпоновкиДанных`, `DataCompositionTemplate` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `МакетЗаголовкаКоллекцииЗначенийОбластиКомпоновкиДанных`, `DataCompositionAreaTemplateValueCollectionHeader` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `МакетКоллекцииЗначенийОбластиКомпоновкиДанных`, `DataCompositionAreaTemplateValueCollection` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `Диапазон`, `Range` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ТекстыСообщенияОбОшибке`, `ErrorMessageTexts` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `БлокировкаСеансов`, `SessionsLock` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ЭлементИзбранногоРаботыПользователя`, `UserWorkFavoritesItem` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ИзбранноеРаботыПользователя`, `UserWorkFavorites` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ОтборКомпоновкиДанных`, `DataCompositionFilter` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ИзвлечениеТекста`, `TextExtraction` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ФлагиИнтернетПочтовогоСообщения`, `InternetMailMessageFlags` | Создаёт набор, в котором ни один флаг ещё не установлен. | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `МоментВремени`, `PointInTime` | Создаёт набор, в котором ни один флаг ещё не установлен. | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `ОписаниеПередаваемогоФайла`, `TransferableFileDescription` | Создаёт набор, в котором ни один флаг ещё не установлен. | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `COMSafeArray` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `СвязьПараметраВыбора`, `ChoiceParameterLink` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `FTPСоединение`, `FTPConnection` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `СвязьПоТипу`, `TypeLink` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ДанныеРасшифровкиКомпоновкиДанных`, `DataCompositionDetailsData` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ПакетОтображаемыхДокументов`, `RepresentableDocumentBatch` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ЧтениеHTML`, `HTMLReader` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `МенеджерКриптографии`, `CryptoManager` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `Рамка`, `Border` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `СочетаниеКлавиш`, `Shortcut` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `СертификатКриптографии`, `CryptoCertificate` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `WSПрокси`, `WSProxy` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `WSОпределения`, `WSDefinitions` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ДоставляемоеУведомление`, `DeliverableNotification` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ФорматированныйДокумент`, `FormattedDocument` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ГенераторСлучайныхЧисел`, `RandomNumberGenerator` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ОбрабатываемаяКартинка`, `ProcessingPicture` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `Линия`, `Line` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ПараметрВыбора`, `ChoiceParameter` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ЗаписьТекста`, `TextWriter` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `Цвет`, `Color` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `РеквизитФормы`, `FormAttribute` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ИнтернетПочтовыйПрофиль`, `InternetMailProfile` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ИнтернетПочта`, `InternetMail` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ДеревоЗначений`, `ValueTree` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `Шрифт`, `Font` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `COMОбъект`, `COMObject` — *объявлено без реализации* | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ОписаниеОповещения`, `NotifyDescription` | — | [bsl-rt/src/notification.rs](../../../crates/bsl-rt/src/notification.rs) |
+| `Файл`, `File` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ДвоичныеДанные`, `BinaryData` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `УникальныйИдентификатор`, `UUID` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `СписокЗначений`, `ValueList` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `КвалификаторыДаты` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ОписаниеТипов`, `TypeDescription` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ФоновыеЗадания`, `BackgroundJobs` | Конструктор менеджера для голого имени `ФоновыеЗадания`. | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ФиксированныйМассив`, `FixedArray` | `Новый ФиксированныйМассив(<Массив>)` — конструктор ядра. | [bsl-rt/src/fixed_array.rs](../../../crates/bsl-rt/src/fixed_array.rs) |
+| `СообщениеПользователю`, `UserMessage` | `Новый СообщениеПользователю` — конструктор по умолчанию. | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
+| `ФиксированнаяСтруктура`, `FixedStructure` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
+| `ФиксированноеСоответствие`, `FixedMap` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
+| `ПолеКомпоновкиДанных`, `DataCompositionField` | — | [bsl-rt/src/data_composition.rs](../../../crates/bsl-rt/src/data_composition.rs) |
+| `СтандартнаяДатаНачала`, `StandardBeginningDate` | — | [bsl-rt/src/data_composition.rs](../../../crates/bsl-rt/src/data_composition.rs) |
+| `КвалификаторыСтроки`, `StringQualifiers` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `КвалификаторыЧисла`, `NumberQualifiers` | — | [bsl-rt/src/component.rs](../../../crates/bsl-rt/src/component.rs) |
+| `ФорматированнаяСтрока`, `FormattedString` | — | [bsl-rt/src/formatted_string.rs](../../../crates/bsl-rt/src/formatted_string.rs) |
+| `Картинка`, `Picture` | — | [bsl-rt/src/picture.rs](../../../crates/bsl-rt/src/picture.rs) |
+| `ПараметрКомпоновкиДанных`, `DataCompositionParameter` | — | [bsl-rt/src/data_composition.rs](../../../crates/bsl-rt/src/data_composition.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `МоментВремени` | `Момент времени` | `PointInTime` |
-| `ФлагиИнтернетПочтовогоСообщения` | `ФлагиИнтернетПочтовогоСообщения` | `InternetMailMessageFlags` |
-| `ОписаниеПередаваемогоФайла` | `Описание передаваемого файла` | `TransferableFileDescription` |
-| `МодульBSL` | `Модуль BSL` | `BSLModule` |
-| `ОбщийМодуль` | `Общий Модуль` | `CommonModule` |
-| `ОписаниеОповещения` | `Описание оповещения` | `NotifyDescription` |
-| `Обещание` | `Обещание` | — |
-| `Файл` | `Файл` | `File` |
-| `ФиксированныйМассив` | `Фиксированный массив` | `FixedArray` |
-| `ФиксированнаяСтруктура` | `Фиксированная структура` | `FixedStructure` |
-| `ФиксированноеСоответствие` | `Фиксированное соответствие` | `FixedMap` |
-| `МенеджерФоновыхЗаданий` | `Менеджер фоновых заданий` | `BackgroundJobsManager` |
-| `ФоновоеЗадание` | `Фоновое задание` | `BackgroundJob` |
-| `СообщениеПользователю` | `Сообщение пользователю` | `UserMessage` |
-| `ИнформацияОбОшибке` | `Информация об ошибке` | `ErrorInfo` |
-| `СписокЗначений` | `Список значений` | `ValueList` |
-| `ЭлементСпискаЗначений` | `Элемент списка значений` | `ValueListItem` |
-| `КоллекцияИндексовТаблицыЗначений` | `Value table index collection` | `ValueTableIndexCollection` |
-| `ИндексТаблицыЗначений` | `Value table index` | `ValueTableIndex` |
-| `КвалификаторыДаты` | `Квалификаторы даты` | `DateQualifiers` |
-| `КвалификаторыСтроки` | `Квалификаторы строки` | `StringQualifiers` |
-| `КвалификаторыЧисла` | `Квалификаторы числа` | `NumberQualifiers` |
-| `ПолеКомпоновкиДанных` | `Поле компоновки данных` | `DataCompositionField` |
-| `ПараметрКомпоновкиДанных` | `Параметр компоновки данных` | `DataCompositionParameter` |
-| `СтандартнаяДатаНачала` | `Стандартная дата начала` | `StandardBeginningDate` |
-| `ФорматированнаяСтрока` | `Форматированная строка` | `FormattedString` |
-| `Картинка` | `Картинка` | `Picture` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `МоментВремени` | `Момент времени` | `PointInTime` | Описание общего типа момента времени. | [bsl-rt/src/point_in_time.rs](../../../crates/bsl-rt/src/point_in_time.rs) |
+| `ФлагиИнтернетПочтовогоСообщения` | `ФлагиИнтернетПочтовогоСообщения` | `InternetMailMessageFlags` | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `ОписаниеПередаваемогоФайла` | `Описание передаваемого файла` | `TransferableFileDescription` | — | [bsl-rt/src/transferable_file_description.rs](../../../crates/bsl-rt/src/transferable_file_description.rs) |
+| `МодульBSL` | `Модуль BSL` | `BSLModule` | Тип значения ЭтотОбъект. | [bsl-rt/src/module_reference.rs](../../../crates/bsl-rt/src/module_reference.rs) |
+| `ОбщийМодуль` | `Общий Модуль` | `CommonModule` | Тип ссылки на общий модуль конфигурации текущего сеанса. | [bsl-rt/src/module_reference.rs](../../../crates/bsl-rt/src/module_reference.rs) |
+| `ОписаниеОповещения` | `Описание оповещения` | `NotifyDescription` | — | [bsl-rt/src/notification.rs](../../../crates/bsl-rt/src/notification.rs) |
+| `Обещание` | `Обещание` | — | Тип намеренно не имеет конструктора, методов и свойств BSL. | [bsl-rt/src/promise.rs](../../../crates/bsl-rt/src/promise.rs) |
+| `Файл` | `Файл` | `File` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ФиксированныйМассив` | `Фиксированный массив` | `FixedArray` | — | [bsl-rt/src/fixed_array.rs](../../../crates/bsl-rt/src/fixed_array.rs) |
+| `ФиксированнаяСтруктура` | `Фиксированная структура` | `FixedStructure` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
+| `ФиксированноеСоответствие` | `Фиксированное соответствие` | `FixedMap` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
+| `МенеджерФоновыхЗаданий` | `Менеджер фоновых заданий` | `BackgroundJobsManager` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ФоновоеЗадание` | `Фоновое задание` | `BackgroundJob` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `СообщениеПользователю` | `Сообщение пользователю` | `UserMessage` | — | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
+| `ИнформацияОбОшибке` | `Информация об ошибке` | `ErrorInfo` | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `СписокЗначений` | `Список значений` | `ValueList` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `ЭлементСпискаЗначений` | `Элемент списка значений` | `ValueListItem` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `КоллекцияИндексовТаблицыЗначений` | `Value table index collection` | `ValueTableIndexCollection` | — | [bsl-rt/src/value_table_indexes.rs](../../../crates/bsl-rt/src/value_table_indexes.rs) |
+| `ИндексТаблицыЗначений` | `Value table index` | `ValueTableIndex` | — | [bsl-rt/src/value_table_indexes.rs](../../../crates/bsl-rt/src/value_table_indexes.rs) |
+| `КвалификаторыДаты` | `Квалификаторы даты` | `DateQualifiers` | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
+| `КвалификаторыСтроки` | `Квалификаторы строки` | `StringQualifiers` | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
+| `КвалификаторыЧисла` | `Квалификаторы числа` | `NumberQualifiers` | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
+| `ПолеКомпоновкиДанных` | `Поле компоновки данных` | `DataCompositionField` | — | [bsl-rt/src/data_composition.rs](../../../crates/bsl-rt/src/data_composition.rs) |
+| `ПараметрКомпоновкиДанных` | `Параметр компоновки данных` | `DataCompositionParameter` | — | [bsl-rt/src/data_composition.rs](../../../crates/bsl-rt/src/data_composition.rs) |
+| `СтандартнаяДатаНачала` | `Стандартная дата начала` | `StandardBeginningDate` | — | [bsl-rt/src/data_composition.rs](../../../crates/bsl-rt/src/data_composition.rs) |
+| `ФорматированнаяСтрока` | `Форматированная строка` | `FormattedString` | — | [bsl-rt/src/formatted_string.rs](../../../crates/bsl-rt/src/formatted_string.rs) |
+| `Картинка` | `Картинка` | `Picture` | Дескриптор единого платформенного типа `Картинка`. | [bsl-rt/src/picture.rs](../../../crates/bsl-rt/src/picture.rs) |
 
 #### Члены объектов
 
 ##### `МоментВремени`
 
-| Свойство | Доступ |
-|---|---|
-| `Дата`, `Date` | только чтение |
-| `Ссылка`, `Ref` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Дата`, `Date` | только чтение | Возвращает дату снимка без округления. | [bsl-rt/src/point_in_time.rs](../../../crates/bsl-rt/src/point_in_time.rs) |
+| `Ссылка`, `Ref` | только чтение | Возвращает ссылку либо `Неопределено`, если ссылка не задана. | [bsl-rt/src/point_in_time.rs](../../../crates/bsl-rt/src/point_in_time.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Сравнить`, `Compare` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Сравнить`, `Compare` | — | [bsl-rt/src/point_in_time.rs](../../../crates/bsl-rt/src/point_in_time.rs) |
 
 ##### `ФлагиИнтернетПочтовогоСообщения`
 
-| Свойство | Доступ |
-|---|---|
-| `Новое`, `New` | только чтение |
-| `Отвеченное`, `Answered` | чтение и запись |
-| `Отмененное`, `Canceled` | чтение и запись |
-| `Пересланное`, `Forwarded` | чтение и запись |
-| `Помеченное`, `Flagged` | чтение и запись |
-| `Прочитанное`, `Seen` | чтение и запись |
-| `Удаленное`, `Deleted` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Новое`, `New` | только чтение | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `Отвеченное`, `Answered` | чтение и запись | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `Отмененное`, `Canceled` | чтение и запись | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `Пересланное`, `Forwarded` | чтение и запись | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `Помеченное`, `Flagged` | чтение и запись | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `Прочитанное`, `Seen` | чтение и запись | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
+| `Удаленное`, `Deleted` | чтение и запись | — | [bsl-rt/src/internet_mail_message_flags.rs](../../../crates/bsl-rt/src/internet_mail_message_flags.rs) |
 
 ##### `ОписаниеПередаваемогоФайла`
 
-| Свойство | Доступ |
-|---|---|
-| `Имя`, `Name` | чтение и запись |
-| `Хранение`, `Location` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Имя`, `Name` | чтение и запись | — | [bsl-rt/src/transferable_file_description.rs](../../../crates/bsl-rt/src/transferable_file_description.rs) |
+| `Хранение`, `Location` | чтение и запись | — | [bsl-rt/src/transferable_file_description.rs](../../../crates/bsl-rt/src/transferable_file_description.rs) |
 
 ##### `ОписаниеОповещения`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяПроцедуры`, `ProcedureName` | только чтение |
-| `Модуль`, `Module` | только чтение |
-| `ДополнительныеПараметры`, `AdditionalParameters` | только чтение |
-| `ИмяПроцедурыОбработкиОшибки`, `ErrorHandlerProcedureName` | только чтение |
-| `МодульОбработкиОшибки`, `ErrorHandlerModule` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяПроцедуры`, `ProcedureName` | только чтение | — | [bsl-rt/src/notification.rs](../../../crates/bsl-rt/src/notification.rs) |
+| `Модуль`, `Module` | только чтение | — | [bsl-rt/src/notification.rs](../../../crates/bsl-rt/src/notification.rs) |
+| `ДополнительныеПараметры`, `AdditionalParameters` | только чтение | — | [bsl-rt/src/notification.rs](../../../crates/bsl-rt/src/notification.rs) |
+| `ИмяПроцедурыОбработкиОшибки`, `ErrorHandlerProcedureName` | только чтение | — | [bsl-rt/src/notification.rs](../../../crates/bsl-rt/src/notification.rs) |
+| `МодульОбработкиОшибки`, `ErrorHandlerModule` | только чтение | — | [bsl-rt/src/notification.rs](../../../crates/bsl-rt/src/notification.rs) |
 
 ##### `Файл`
 
-| Свойство | Доступ |
-|---|---|
-| `ПолноеИмя`, `FullName` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Путь`, `Path` | только чтение |
-| `ИмяБезРасширения`, `BaseName` | только чтение |
-| `Расширение`, `Extension` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ПолноеИмя`, `FullName` | только чтение | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-rt/src/transferable_file_description.rs](../../../crates/bsl-rt/src/transferable_file_description.rs) |
+| `Путь`, `Path` | только чтение | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ИмяБезРасширения`, `BaseName` | только чтение | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `Расширение`, `Extension` | только чтение | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьПредставлениеФайлаБиблиотекиМобильногоУстройства`, `GetMobileDeviceLibraryFilePresentation` | 0 |
-| `ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройства`, `GetMobileDeviceLibraryFileThumbnail` | 0 |
-| `ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройстваАсинх`, `GetMobileDeviceLibraryFileThumbnailAsync` | 0 |
-| `НачатьПолучениеКартинкиПредставленияФайлаБиблиотекиМобильногоУстройства`, `BeginGetMobileDeviceLibraryFileThumbnail` | 1 |
-| `НачатьИнициализацию`, `BeginInitialization` | 2 |
-| `НачатьПроверкуСуществования`, `BeginCheckingExistence` | 1 |
-| `НачатьПроверкуЭтоФайл`, `BeginCheckingIsFile` | 1 |
-| `НачатьПроверкуЭтоКаталог`, `BeginCheckingIsDirectory` | 1 |
-| `НачатьПолучениеРазмера`, `BeginGettingSize` | 1 |
-| `НачатьПолучениеТолькоЧтения`, `BeginGettingReadOnly` | 1 |
-| `НачатьПолучениеНевидимости`, `BeginGettingHidden` | 1 |
-| `НачатьПолучениеВремениИзменения`, `BeginGettingModificationTime` | 1 |
-| `НачатьПолучениеУниверсальногоВремениИзменения`, `BeginGettingModificationUniversalTime` | 1 |
-| `НачатьУстановкуТолькоЧтения`, `BeginSettingReadOnly` | 2 |
-| `НачатьУстановкуНевидимости`, `BeginSettingHidden` | 2 |
-| `НачатьУстановкуВремениИзменения`, `BeginSettingModificationTime` | 2 |
-| `НачатьУстановкуУниверсальногоВремениИзменения`, `BeginSettingModificationUniversalTime` | 2 |
-| `ИнициализироватьАсинх`, `InitializeAsync` | 1 |
-| `УстановитьТолькоЧтениеАсинх`, `SetReadOnlyAsync` | 1 |
-| `УстановитьНевидимостьАсинх`, `SetHiddenAsync` | 1 |
-| `УстановитьВремяИзмененияАсинх`, `SetModificationTimeAsync` | 1 |
-| `УстановитьУниверсальноеВремяИзмененияАсинх`, `SetModificationUniversalTimeAsync` | 1 |
-| `СуществуетАсинх`, `ExistsAsync` | 0 |
-| `ЭтоФайлАсинх`, `IsFileAsync` | 0 |
-| `ЭтоКаталогАсинх`, `IsDirectoryAsync` | 0 |
-| `РазмерАсинх`, `SizeAsync` | 0 |
-| `ПолучитьТолькоЧтениеАсинх`, `GetReadOnlyAsync` | 0 |
-| `ПолучитьНевидимостьАсинх`, `GetHiddenAsync` | 0 |
-| `ПолучитьВремяИзмененияАсинх`, `GetModificationTimeAsync` | 0 |
-| `ПолучитьУниверсальноеВремяИзмененияАсинх`, `GetModificationUniversalTimeAsync` | 0 |
-| `ПолучитьНевидимость`, `GetHidden` | 0 |
-| `УстановитьНевидимость`, `SetHidden` | 1 |
-| `ПолучитьТолькоЧтение`, `GetReadOnly` | 0 |
-| `УстановитьТолькоЧтение`, `SetReadOnly` | 1 |
-| `ПолучитьВремяИзменения`, `GetModificationTime` | 0 |
-| `ПолучитьУниверсальноеВремяИзменения`, `GetModificationUniversalTime` | 0 |
-| `УстановитьВремяИзменения`, `SetModificationTime` | 1 |
-| `УстановитьУниверсальноеВремяИзменения`, `SetModificationUniversalTime` | 1 |
-| `Существует`, `Exists` | 0 |
-| `ЭтоФайл`, `IsFile` | 0 |
-| `ЭтоКаталог`, `IsDirectory` | 0 |
-| `Размер`, `Size` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьПредставлениеФайлаБиблиотекиМобильногоУстройства`, `GetMobileDeviceLibraryFilePresentation` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройства`, `GetMobileDeviceLibraryFileThumbnail` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьКартинкуПредставленияФайлаБиблиотекиМобильногоУстройстваАсинх`, `GetMobileDeviceLibraryFileThumbnailAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПолучениеКартинкиПредставленияФайлаБиблиотекиМобильногоУстройства`, `BeginGetMobileDeviceLibraryFileThumbnail` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьИнициализацию`, `BeginInitialization` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПроверкуСуществования`, `BeginCheckingExistence` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПроверкуЭтоФайл`, `BeginCheckingIsFile` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПроверкуЭтоКаталог`, `BeginCheckingIsDirectory` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПолучениеРазмера`, `BeginGettingSize` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПолучениеТолькоЧтения`, `BeginGettingReadOnly` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПолучениеНевидимости`, `BeginGettingHidden` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПолучениеВремениИзменения`, `BeginGettingModificationTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьПолучениеУниверсальногоВремениИзменения`, `BeginGettingModificationUniversalTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьУстановкуТолькоЧтения`, `BeginSettingReadOnly` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьУстановкуНевидимости`, `BeginSettingHidden` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьУстановкуВремениИзменения`, `BeginSettingModificationTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `НачатьУстановкуУниверсальногоВремениИзменения`, `BeginSettingModificationUniversalTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ИнициализироватьАсинх`, `InitializeAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьТолькоЧтениеАсинх`, `SetReadOnlyAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьНевидимостьАсинх`, `SetHiddenAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьВремяИзмененияАсинх`, `SetModificationTimeAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьУниверсальноеВремяИзмененияАсинх`, `SetModificationUniversalTimeAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `СуществуетАсинх`, `ExistsAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ЭтоФайлАсинх`, `IsFileAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ЭтоКаталогАсинх`, `IsDirectoryAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `РазмерАсинх`, `SizeAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьТолькоЧтениеАсинх`, `GetReadOnlyAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьНевидимостьАсинх`, `GetHiddenAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьВремяИзмененияАсинх`, `GetModificationTimeAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьУниверсальноеВремяИзмененияАсинх`, `GetModificationUniversalTimeAsync` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьНевидимость`, `GetHidden` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьНевидимость`, `SetHidden` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьТолькоЧтение`, `GetReadOnly` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьТолькоЧтение`, `SetReadOnly` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьВремяИзменения`, `GetModificationTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ПолучитьУниверсальноеВремяИзменения`, `GetModificationUniversalTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьВремяИзменения`, `SetModificationTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `УстановитьУниверсальноеВремяИзменения`, `SetModificationUniversalTime` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `Существует`, `Exists` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ЭтоФайл`, `IsFile` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `ЭтоКаталог`, `IsDirectory` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
+| `Размер`, `Size` | — | [bsl-rt/src/file.rs](../../../crates/bsl-rt/src/file.rs) |
 
 ##### `ФиксированныйМассив`
 
-| Метод | Аргументы |
-|---|---:|
-| `ВГраница`, `UBound` | 0 |
-| `Количество`, `Count` | 0 |
-| `Найти`, `Find` | 1 |
-| `Получить`, `Get` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ВГраница`, `UBound` | — | [bsl-rt/src/fixed_array.rs](../../../crates/bsl-rt/src/fixed_array.rs) |
+| `Количество`, `Count` | — | [bsl-rt/src/fixed_array.rs](../../../crates/bsl-rt/src/fixed_array.rs) |
+| `Найти`, `Find` | — | [bsl-rt/src/fixed_array.rs](../../../crates/bsl-rt/src/fixed_array.rs) |
+| `Получить`, `Get` | — | [bsl-rt/src/fixed_array.rs](../../../crates/bsl-rt/src/fixed_array.rs) |
 
 ##### `ФиксированнаяСтруктура`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Свойство`, `Property` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
+| `Свойство`, `Property` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
 
 ##### `ФиксированноеСоответствие`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
+| `Получить`, `Get` | — | [bsl-rt/src/fixed_collections.rs](../../../crates/bsl-rt/src/fixed_collections.rs) |
 
 ##### `МенеджерФоновыхЗаданий`
 
-| Метод | Аргументы |
-|---|---:|
-| `Выполнить`, `Execute` | 1…4 |
-| `ПолучитьФоновыеЗадания`, `GetBackgroundJobs` | 0…1 |
-| `НайтиПоУникальномуИдентификатору`, `FindByUUID` | 1 |
-| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion` | 1…2 |
-| `ОжидатьЗавершения`, `WaitForCompletion` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Выполнить`, `Execute` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ПолучитьФоновыеЗадания`, `GetBackgroundJobs` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `НайтиПоУникальномуИдентификатору`, `FindByUUID` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ОжидатьЗавершения`, `WaitForCompletion` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
 
 ##### `ФоновоеЗадание`
 
-| Свойство | Доступ |
-|---|---|
-| `УникальныйИдентификатор`, `UUID` | только чтение |
-| `ИмяМетода`, `MethodName` | только чтение |
-| `Ключ`, `Key` | только чтение |
-| `Наименование`, `Description` | только чтение |
-| `Состояние`, `State` | только чтение |
-| `Начало`, `Begin` | только чтение |
-| `Конец`, `End` | только чтение |
-| `ИнформацияОбОшибке`, `ErrorInfo` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `УникальныйИдентификатор`, `UUID` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ИмяМетода`, `MethodName` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `Ключ`, `Key` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `Наименование`, `Description` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `Состояние`, `State` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `Начало`, `Begin` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `Конец`, `End` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ИнформацияОбОшибке`, `ErrorInfo` | только чтение | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Отменить`, `Cancel` | 0 |
-| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion` | 0…1 |
-| `ОжидатьЗавершения`, `WaitForCompletion` | 0…1 |
-| `ПолучитьСообщенияПользователю`, `GetUserMessages` | 0…1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Отменить`, `Cancel` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ОжидатьЗавершения`, `WaitForCompletion` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
+| `ПолучитьСообщенияПользователю`, `GetUserMessages` | — | [bsl-rt/src/background_jobs.rs](../../../crates/bsl-rt/src/background_jobs.rs) |
 
 ##### `СообщениеПользователю`
 
-| Свойство | Доступ |
-|---|---|
-| `Текст`, `Text` | чтение и запись |
-| `Поле`, `Field` | чтение и запись |
-| `КлючДанных`, `DataKey` | чтение и запись |
-| `ПутьКДанным`, `DataPath` | чтение и запись |
-| `ИдентификаторНазначения`, `TargetID` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Текст`, `Text` | чтение и запись | — | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
+| `Поле`, `Field` | чтение и запись | — | [bsl-rt/src/value/collections.rs](../../../crates/bsl-rt/src/value/collections.rs) |
+| `КлючДанных`, `DataKey` | чтение и запись | — | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
+| `ПутьКДанным`, `DataPath` | чтение и запись | — | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
+| `ИдентификаторНазначения`, `TargetID` | чтение и запись | — | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Сообщить`, `Message` | 0 |
-| `УстановитьДанные`, `SetData` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Сообщить`, `Message` | — | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
+| `УстановитьДанные`, `SetData` | — | [bsl-rt/src/user_message.rs](../../../crates/bsl-rt/src/user_message.rs) |
 
 ##### `ИнформацияОбОшибке`
 
-| Свойство | Доступ |
-|---|---|
-| `Описание`, `Description` | только чтение |
-| `ИмяМодуля`, `ModuleName` | только чтение |
-| `НомерСтроки`, `LineNumber` | только чтение |
-| `ИсходнаяСтрока`, `SourceLine` | только чтение |
-| `Код`, `Code` | только чтение |
-| `Причина`, `Cause` | только чтение |
-| `ДополнительнаяИнформация`, `AdditionalInformation` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Описание`, `Description` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `ИмяМодуля`, `ModuleName` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `НомерСтроки`, `LineNumber` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `ИсходнаяСтрока`, `SourceLine` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `Код`, `Code` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `Причина`, `Cause` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
+| `ДополнительнаяИнформация`, `AdditionalInformation` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЯвляетсяОшибкойКатегории`, `IsErrorOfCategory` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЯвляетсяОшибкойКатегории`, `IsErrorOfCategory` | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
 
 ##### `СписокЗначений`
 
-| Метод | Аргументы |
-|---|---:|
-| `ВыгрузитьЗначения`, `UnloadValues` | 0 |
-| `СортироватьПоПредставлению`, `SortByPresentation` | 0…1 |
-| `Количество`, `Count` | 0 |
-| `Добавить`, `Add` | 0…4 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Вставить`, `Insert` | 1…5 |
-| `Получить`, `Get` | 1 |
-| `Скопировать`, `Copy` | 0 |
-| `Сдвинуть`, `Move` | 2 |
-| `Индекс`, `IndexOf` | 1 |
-| `НайтиПоЗначению`, `FindByValue` | 1 |
-| `СортироватьПоЗначению`, `SortByValue` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ВыгрузитьЗначения`, `UnloadValues` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `СортироватьПоПредставлению`, `SortByPresentation` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Количество`, `Count` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Добавить`, `Add` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Удалить`, `Delete` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Очистить`, `Clear` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Вставить`, `Insert` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Получить`, `Get` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Скопировать`, `Copy` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Сдвинуть`, `Move` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Индекс`, `IndexOf` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `НайтиПоЗначению`, `FindByValue` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `СортироватьПоЗначению`, `SortByValue` | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
 
 ##### `ЭлементСпискаЗначений`
 
-| Свойство | Доступ |
-|---|---|
-| `Значение`, `Value` | только чтение |
-| `Представление`, `Presentation` | только чтение |
-| `Пометка`, `Check` | только чтение |
-| `Картинка`, `Picture` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Значение`, `Value` | только чтение | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Представление`, `Presentation` | только чтение | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Пометка`, `Check` | только чтение | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
+| `Картинка`, `Picture` | только чтение | — | [bsl-rt/src/value_list.rs](../../../crates/bsl-rt/src/value_list.rs) |
 
 ##### `КоллекцияИндексовТаблицыЗначений`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Добавить`, `Add` | 0…1 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-rt/src/value_table_indexes.rs](../../../crates/bsl-rt/src/value_table_indexes.rs) |
+| `Добавить`, `Add` | — | [bsl-rt/src/value_table_indexes.rs](../../../crates/bsl-rt/src/value_table_indexes.rs) |
+| `Удалить`, `Delete` | — | [bsl-rt/src/value_table_indexes.rs](../../../crates/bsl-rt/src/value_table_indexes.rs) |
+| `Очистить`, `Clear` | — | [bsl-rt/src/value_table_indexes.rs](../../../crates/bsl-rt/src/value_table_indexes.rs) |
 
 ##### `КвалификаторыСтроки`
 
-| Свойство | Доступ |
-|---|---|
-| `Длина`, `Length` | только чтение |
-| `ДопустимаяДлина`, `AllowedLength` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Длина`, `Length` | только чтение | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
+| `ДопустимаяДлина`, `AllowedLength` | только чтение | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
 
 ##### `КвалификаторыЧисла`
 
-| Свойство | Доступ |
-|---|---|
-| `Разрядность`, `Digits` | только чтение |
-| `РазрядностьДробнойЧасти`, `FractionDigits` | только чтение |
-| `ДопустимыйЗнак`, `AllowedSign` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Разрядность`, `Digits` | только чтение | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
+| `РазрядностьДробнойЧасти`, `FractionDigits` | только чтение | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
+| `ДопустимыйЗнак`, `AllowedSign` | только чтение | — | [bsl-rt/src/type_description.rs](../../../crates/bsl-rt/src/type_description.rs) |
 
-### `bsl-binbuf` 0.2.0
-
-#### Глобальные функции
-
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `ПобитовоеИ`, `BitwiseAnd` | функция | 2 |
-| `ПобитовоеИли`, `BitwiseOr` | функция | 2 |
-| `ПобитовоеНе`, `BitwiseNot` | функция | 1 |
-| `ПобитовоеИНе`, `BitwiseAndNot` | функция | 2 |
-| `ПобитовоеИсключительноеИли`, `BitwiseXor` | функция | 2 |
-| `ПобитовыйСдвигВлево`, `BitwiseShiftLeft` | функция | 2 |
-| `ПобитовыйСдвигВправо`, `BitwiseShiftRight` | функция | 2 |
-| `ПроверитьБит`, `CheckBit` | функция | 2 |
-| `ПроверитьПоБитовойМаске`, `CheckByBitMask` | функция | 2 |
-| `УстановитьБит`, `SetBit` | функция | 3 |
-| `ЧислоИзШестнадцатеричнойСтроки`, `NumberFromHexString` | функция | 1 |
-| `ЧислоИзДвоичнойСтроки`, `NumberFromBinaryString` | функция | 1 |
-
-#### Конструкторы
-
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `БуферДвоичныхДанных`, `BinaryDataBuffer` | 1…2 |
-
-#### Типы объектов
-
-Нет.
-
-### `bsl-crypto` 0.2.0
+### `bsl-binbuf` 0.3.0
 
 #### Глобальные функции
 
-Нет.
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `ПобитовоеИ`, `BitwiseAnd` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПобитовоеИли`, `BitwiseOr` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПобитовоеНе`, `BitwiseNot` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПобитовоеИНе`, `BitwiseAndNot` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПобитовоеИсключительноеИли`, `BitwiseXor` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПобитовыйСдвигВлево`, `BitwiseShiftLeft` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПобитовыйСдвигВправо`, `BitwiseShiftRight` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПроверитьБит`, `CheckBit` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ПроверитьПоБитовойМаске`, `CheckByBitMask` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `УстановитьБит`, `SetBit` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ЧислоИзШестнадцатеричнойСтроки`, `NumberFromHexString` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+| `ЧислоИзДвоичнойСтроки`, `NumberFromBinaryString` | функция | — | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ХешированиеДанных`, `DataHashing` | 1 |
-| `ТокенДоступа`, `AccessToken` — *объявлено без реализации* | 0, 2 |
-
-#### Типы объектов
-
-| Имя | Представление типа | Дополнительные имена |
+| Имя и псевдонимы | Описание | Реализация |
 |---|---|---|
-| `ХешированиеДанных` | `ХешированиеДанных` | `DataHashing` |
-| `ТокенДоступа` | `ТокенДоступа` | `AccessToken` |
+| `БуферДвоичныхДанных`, `BinaryDataBuffer` | Представление буфера временно живёт в `bsl-rt` (см. док рефакторинга: `ДвоичныеДанные` ссылается на буферы, а зависимость `bsl-rt -> bsl-binbuf` запрещена), но ТИП принадлежит этому компоненту — конструктор объявлен здесь и лишь делегирует представлению. | [bsl-binbuf/src/lib.rs](../../../crates/bsl-binbuf/src/lib.rs) |
+
+#### Типы объектов
+
+Нет.
+
+### `bsl-crypto` 0.3.0
+
+#### Глобальные функции
+
+Нет.
+
+#### Конструкторы
+
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ХешированиеДанных`, `DataHashing` | — | [bsl-crypto/src/lib.rs](../../../crates/bsl-crypto/src/lib.rs) |
+| `ТокенДоступа`, `AccessToken` — *объявлено без реализации* | — | [bsl-crypto/src/lib.rs](../../../crates/bsl-crypto/src/lib.rs) |
+
+#### Типы объектов
+
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ХешированиеДанных` | `ХешированиеДанных` | `DataHashing` | Версия компонента в заголовке байт-кода. | [bsl-crypto/src/lib.rs](../../../crates/bsl-crypto/src/lib.rs) |
+| `ТокенДоступа` | `ТокенДоступа` | `AccessToken` | Тип токена доступа, объявленный для компиляции исходного кода конфигурации. | [bsl-crypto/src/lib.rs](../../../crates/bsl-crypto/src/lib.rs) |
 
 #### Члены объектов
 
 ##### `ХешированиеДанных`
 
-| Свойство | Доступ |
-|---|---|
-| `ХешСумма`, `HashSum` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ХешСумма`, `HashSum` | только чтение | — | [bsl-crypto/src/lib.rs](../../../crates/bsl-crypto/src/lib.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Добавить`, `Add` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Добавить`, `Add` | — | [bsl-crypto/src/lib.rs](../../../crates/bsl-crypto/src/lib.rs) |
 
-### `bsl-http` 0.3.0
+### `bsl-http` 0.4.0
 
-Зависимости: `bsl-stream=0.2.0`.
+Зависимости: `bsl-stream=0.3.0`.
 
 #### Глобальные функции
 
@@ -630,196 +630,196 @@
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `СертификатыУдостоверяющихЦентровLinux`, `LinuxCertificationAuthorityCertificates` | 0 |
-| `HTTPЗапрос`, `HTTPRequest` | 0…2 |
-| `HTTPСоединение`, `HTTPConnection` | 1…8 |
-| `ИнтернетПрокси`, `InternetProxy` | 0…1 |
-| `СертификатыУдостоверяющихЦентровОС`, `CertificationAuthorityCertificatesOS` | 0 |
-| `ЗащищенноеСоединениеOpenSSL`, `OpenSSLSecureConnection` | 0…3 |
-| `СертификатыУдостоверяющихЦентровФайл`, `FileCertificationAuthorityCertificates` | 1 |
-| `СертификатКлиентаФайл`, `FileClientCertificate` | 1…2 |
-| `HTTPСервисОтвет`, `HTTPServiceResponse` — *объявлено без реализации* | 1…3 |
-| `СертификатКлиентаWindows`, `WindowsClientCertificate` — *объявлено без реализации* | 0…1 |
-| `СертификатыУдостоверяющихЦентровWindows`, `WindowsCertificationAuthorityCertificates` — *объявлено без реализации* | 0 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `СертификатыУдостоверяющихЦентровLinux`, `LinuxCertificationAuthorityCertificates` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `HTTPЗапрос`, `HTTPRequest` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `HTTPСоединение`, `HTTPConnection` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `ИнтернетПрокси`, `InternetProxy` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `СертификатыУдостоверяющихЦентровОС`, `CertificationAuthorityCertificatesOS` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `ЗащищенноеСоединениеOpenSSL`, `OpenSSLSecureConnection` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `СертификатыУдостоверяющихЦентровФайл`, `FileCertificationAuthorityCertificates` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `СертификатКлиентаФайл`, `FileClientCertificate` | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `HTTPСервисОтвет`, `HTTPServiceResponse` — *объявлено без реализации* | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `СертификатКлиентаWindows`, `WindowsClientCertificate` — *объявлено без реализации* | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
+| `СертификатыУдостоверяющихЦентровWindows`, `WindowsCertificationAuthorityCertificates` — *объявлено без реализации* | — | [bsl-http/src/lib.rs](../../../crates/bsl-http/src/lib.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `СертификатыУдостоверяющихЦентровLinux` | `СертификатыУдостоверяющихЦентровLinux` | `LinuxCertificationAuthorityCertificates` |
-| `HTTPЗапрос` | `HTTPЗапрос` | `HTTPRequest` |
-| `HTTPОтвет` | `HTTPОтвет` | `HTTPResponse` |
-| `HTTPСоединение` | `HTTPСоединение` | `HTTPConnection` |
-| `ИнтернетПрокси` | `ИнтернетПрокси` | `InternetProxy` |
-| `СертификатыУдостоверяющихЦентровОС` | `СертификатыУдостоверяющихЦентровОС` | `CertificationAuthorityCertificatesOS` |
-| `ЗащищенноеСоединениеOpenSSL` | `ЗащищенноеСоединениеOpenSSL` | `OpenSSLSecureConnection` |
-| `СертификатыУдостоверяющихЦентровФайл` | `СертификатыУдостоверяющихЦентровФайл` | `FileCertificationAuthorityCertificates` |
-| `СертификатКлиентаФайл` | `СертификатКлиентаФайл` | `FileClientCertificate` |
-| `СертификатКлиентаWindows` | `СертификатКлиентаWindows` | `WindowsClientCertificate` |
-| `СертификатыУдостоверяющихЦентровWindows` | `СертификатыУдостоверяющихЦентровWindows` | `WindowsCertificationAuthorityCertificates` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `СертификатыУдостоверяющихЦентровLinux` | `СертификатыУдостоверяющихЦентровLinux` | `LinuxCertificationAuthorityCertificates` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `HTTPЗапрос` | `HTTPЗапрос` | `HTTPRequest` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `HTTPОтвет` | `HTTPОтвет` | `HTTPResponse` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `HTTPСоединение` | `HTTPСоединение` | `HTTPConnection` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ИнтернетПрокси` | `ИнтернетПрокси` | `InternetProxy` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `СертификатыУдостоверяющихЦентровОС` | `СертификатыУдостоверяющихЦентровОС` | `CertificationAuthorityCertificatesOS` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ЗащищенноеСоединениеOpenSSL` | `ЗащищенноеСоединениеOpenSSL` | `OpenSSLSecureConnection` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `СертификатыУдостоверяющихЦентровФайл` | `СертификатыУдостоверяющихЦентровФайл` | `FileCertificationAuthorityCertificates` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `СертификатКлиентаФайл` | `СертификатКлиентаФайл` | `FileClientCertificate` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `СертификатКлиентаWindows` | `СертификатКлиентаWindows` | `WindowsClientCertificate` | Дескриптор платформенного Windows-сертификата. | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `СертификатыУдостоверяющихЦентровWindows` | `СертификатыУдостоверяющихЦентровWindows` | `WindowsCertificationAuthorityCertificates` | Дескриптор сертификатов удостоверяющих центров из хранилища Windows. | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
 #### Члены объектов
 
 ##### `HTTPЗапрос`
 
-| Свойство | Доступ |
-|---|---|
-| `АдресРесурса`, `ResourceAddress` | чтение и запись |
-| `Заголовки`, `Headers` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `АдресРесурса`, `ResourceAddress` | чтение и запись | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Заголовки`, `Headers` | чтение и запись | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьТелоИзСтроки`, `SetBodyFromString` | 1…3 |
-| `УстановитьТелоИзДвоичныхДанных`, `SetBodyFromBinaryData` | 1 |
-| `ПолучитьТелоКакДвоичныеДанные`, `GetBodyAsBinaryData` | 0 |
-| `ПолучитьТелоКакСтроку`, `GetBodyAsString` | 0 |
-| `ПолучитьТелоКакПоток`, `GetBodyAsStream` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьТелоИзСтроки`, `SetBodyFromString` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `УстановитьТелоИзДвоичныхДанных`, `SetBodyFromBinaryData` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьТелоКакДвоичныеДанные`, `GetBodyAsBinaryData` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьТелоКакСтроку`, `GetBodyAsString` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьТелоКакПоток`, `GetBodyAsStream` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
 ##### `HTTPОтвет`
 
-| Свойство | Доступ |
-|---|---|
-| `КодСостояния`, `StatusCode` | только чтение |
-| `Заголовки`, `Headers` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `КодСостояния`, `StatusCode` | только чтение | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Заголовки`, `Headers` | только чтение | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьТелоКакДвоичныеДанные`, `GetBodyAsBinaryData` | 0 |
-| `ПолучитьТелоКакСтроку`, `GetBodyAsString` | 0 |
-| `ПолучитьТелоКакПоток`, `GetBodyAsStream` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьТелоКакДвоичныеДанные`, `GetBodyAsBinaryData` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьТелоКакСтроку`, `GetBodyAsString` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьТелоКакПоток`, `GetBodyAsStream` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
 ##### `HTTPСоединение`
 
-| Метод | Аргументы |
-|---|---:|
-| `ВызватьHTTPМетод`, `CallHTTPMethod` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Получить`, `Get` | 1 |
-| `ПолучитьЗаголовки`, `Head` | 1 |
-| `Изменить`, `Patch` | 1 |
-| `ОтправитьДляОбработки`, `Post` | 1 |
-| `Записать`, `Put` | 1 |
-| `ВызватьHTTPМетодАсинх`, `CallHTTPMethodAsync` | 2 |
-| `УдалитьАсинх`, `DeleteAsync` | 1 |
-| `ПолучитьАсинх`, `GetAsync` | 1 |
-| `ПолучитьЗаголовкиАсинх`, `HeadAsync` | 1 |
-| `ИзменитьАсинх`, `PatchAsync` | 1 |
-| `ОтправитьДляОбработкиАсинх`, `PostAsync` | 1 |
-| `ЗаписатьАсинх`, `PutAsync` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ВызватьHTTPМетод`, `CallHTTPMethod` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Получить`, `Get` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьЗаголовки`, `Head` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Изменить`, `Patch` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ОтправитьДляОбработки`, `Post` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Записать`, `Put` | `ПоместитьВоВременноеХранилище`: запись по своему адресу — в локальную карту; по адресу вызывателя (в сеансе задания) — в staging; чужой адрес — ловимая ошибка, значения владельца целы. | [bsl-rt/src/temp_storage.rs](../../../crates/bsl-rt/src/temp_storage.rs) |
+| `ВызватьHTTPМетодАсинх`, `CallHTTPMethodAsync` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `УдалитьАсинх`, `DeleteAsync` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьАсинх`, `GetAsync` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ПолучитьЗаголовкиАсинх`, `HeadAsync` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ИзменитьАсинх`, `PatchAsync` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ОтправитьДляОбработкиАсинх`, `PostAsync` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `ЗаписатьАсинх`, `PutAsync` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
 ##### `ИнтернетПрокси`
 
-| Свойство | Доступ |
-|---|---|
-| `НеИспользоватьПроксиДляАдресов`, `BypassProxyForAddresses` | только чтение |
-| `НеИспользоватьПроксиДляЛокальныхАдресов`, `BypassProxyForLocalAddresses` | чтение и запись |
-| `Пользователь`, `User` | чтение и запись |
-| `Пароль`, `Password` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `НеИспользоватьПроксиДляАдресов`, `BypassProxyForAddresses` | только чтение | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `НеИспользоватьПроксиДляЛокальныхАдресов`, `BypassProxyForLocalAddresses` | чтение и запись | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Пользователь`, `User` | чтение и запись | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `Пароль`, `Password` | чтение и запись | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Установить`, `Set` | 3 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Установить`, `Set` | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
 ##### `ЗащищенноеСоединениеOpenSSL`
 
-| Свойство | Доступ |
-|---|---|
-| `СертификатКлиента`, `ClientCertificate` | только чтение |
-| `РежимПроверкиОтзываTLSСертификатаСервера`, `ServerTLSCertificateRevocationCheckMode` | только чтение |
-| `СертификатыУдостоверяющихЦентров`, `CertificationAuthorityCertificates` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `СертификатКлиента`, `ClientCertificate` | только чтение | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `РежимПроверкиОтзываTLSСертификатаСервера`, `ServerTLSCertificateRevocationCheckMode` | только чтение | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
+| `СертификатыУдостоверяющихЦентров`, `CertificationAuthorityCertificates` | только чтение | — | [bsl-http/src/objects.rs](../../../crates/bsl-http/src/objects.rs) |
 
-### `bsl-json` 0.2.0
+### `bsl-json` 0.3.0
 
 #### Глобальные функции
 
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `ПрочитатьJSON`, `ReadJSON` | функция | 1…9 |
-| `ЗаписатьJSON`, `WriteJSON` | процедура | 2…6 |
-| `ЗаписатьДатуJSON`, `WriteJSONDate` | функция | 2…3 |
-| `ПрочитатьДатуJSON`, `ReadJSONDate` | функция | 2 |
-| `ЗаписатьЗначениеJSON`, `WriteJSONValue` | функция | 1 |
-| `ПрочитатьЗначениеJSON`, `ReadJSONValue` | функция | 1 |
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `ПрочитатьJSON`, `ReadJSON` | функция | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `ЗаписатьJSON`, `WriteJSON` | процедура | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `ЗаписатьДатуJSON`, `WriteJSONDate` | функция | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `ПрочитатьДатуJSON`, `ReadJSONDate` | функция | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `ЗаписатьЗначениеJSON`, `WriteJSONValue` | функция | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `ПрочитатьЗначениеJSON`, `ReadJSONValue` | функция | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ЧтениеJSON`, `JSONReader` | 0 |
-| `ЗаписьJSON`, `JSONWriter` | 0 |
-| `ПараметрыЗаписиJSON`, `JSONWriterSettings` | 0…9 |
-| `НастройкиСериализацииJSON`, `JSONSerializerSettings` | 0 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ЧтениеJSON`, `JSONReader` | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `ЗаписьJSON`, `JSONWriter` | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `ПараметрыЗаписиJSON`, `JSONWriterSettings` | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
+| `НастройкиСериализацииJSON`, `JSONSerializerSettings` | — | [bsl-json/src/bridge.rs](../../../crates/bsl-json/src/bridge.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `ЧтениеJSON` | `Чтение JSON` | `JSONReader` |
-| `НастройкиСериализацииJSON` | `Настройки сериализации JSON` | `JSONSerializerSettings` |
-| `ПараметрыЗаписиJSON` | `Параметры записи JSON` | `JSONWriterSettings` |
-| `ЗаписьJSON` | `Запись JSON` | `JSONWriter` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ЧтениеJSON` | `Чтение JSON` | `JSONReader` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `НастройкиСериализацииJSON` | `Настройки сериализации JSON` | `JSONSerializerSettings` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ПараметрыЗаписиJSON` | `Параметры записи JSON` | `JSONWriterSettings` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЗаписьJSON` | `Запись JSON` | `JSONWriter` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
 
 #### Члены объектов
 
 ##### `ЧтениеJSON`
 
-| Свойство | Доступ |
-|---|---|
-| `ТипТекущегоЗначения`, `CurrentValueType` | только чтение |
-| `ТекущееЗначение`, `CurrentValue` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ТипТекущегоЗначения`, `CurrentValueType` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ТекущееЗначение`, `CurrentValue` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьСтроку`, `SetString` | 1 |
-| `ОткрытьФайл`, `OpenFile` | 1…2 |
-| `ОткрытьПоток`, `OpenStream` | 1…2 |
-| `Закрыть`, `Close` | 0 |
-| `Прочитать`, `Read` | 0 |
-| `Пропустить`, `Skip` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьСтроку`, `SetString` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ОткрытьФайл`, `OpenFile` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ОткрытьПоток`, `OpenStream` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `Закрыть`, `Close` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `Прочитать`, `Read` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `Пропустить`, `Skip` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
 
 ##### `НастройкиСериализацииJSON`
 
-| Свойство | Доступ |
-|---|---|
-| `ФорматСериализацииДаты`, `DateSerializationFormat` | чтение и запись |
-| `ВариантЗаписиДаты`, `DateWritingVariant` | чтение и запись |
-| `СериализовыватьМассивыКакОбъекты`, `SerializeArraysAsObjects` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ФорматСериализацииДаты`, `DateSerializationFormat` | чтение и запись | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ВариантЗаписиДаты`, `DateWritingVariant` | чтение и запись | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `СериализовыватьМассивыКакОбъекты`, `SerializeArraysAsObjects` | чтение и запись | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
 
 ##### `ПараметрыЗаписиJSON`
 
-| Свойство | Доступ |
-|---|---|
-| `ПереносСтрок`, `LineBreak` | только чтение |
-| `СимволыОтступа`, `IndentChars` | только чтение |
-| `ИспользоватьДвойныеКавычки`, `UseDoubleQuotes` | только чтение |
-| `ЭкранированиеСимволов`, `EscapeCharacters` | только чтение |
-| `ЭкранироватьУгловыеСкобки`, `EscapeAngleBrackets` | только чтение |
-| `ЭкранироватьРазделителиСтрок`, `EscapeLineSeparators` | только чтение |
-| `ЭкранироватьАмперсанд`, `EscapeAmpersand` | только чтение |
-| `ЭкранироватьОдинарныеКавычки`, `EscapeSingleQuotes` | только чтение |
-| `ЭкранироватьСлеш`, `EscapeSlash` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ПереносСтрок`, `LineBreak` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `СимволыОтступа`, `IndentChars` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ИспользоватьДвойныеКавычки`, `UseDoubleQuotes` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЭкранированиеСимволов`, `EscapeCharacters` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЭкранироватьУгловыеСкобки`, `EscapeAngleBrackets` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЭкранироватьРазделителиСтрок`, `EscapeLineSeparators` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЭкранироватьАмперсанд`, `EscapeAmpersand` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЭкранироватьОдинарныеКавычки`, `EscapeSingleQuotes` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЭкранироватьСлеш`, `EscapeSlash` | только чтение | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
 
 ##### `ЗаписьJSON`
 
-| Свойство | Доступ |
-|---|---|
-| `ПроверятьСтруктуру`, `CheckStructure` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ПроверятьСтруктуру`, `CheckStructure` | чтение и запись | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьСтроку`, `SetString` | 0…1 |
-| `ОткрытьФайл`, `OpenFile` | 1…2 |
-| `Закрыть`, `Close` | 0 |
-| `ЗаписатьНачалоОбъекта`, `WriteStartObject` | 0 |
-| `ЗаписатьКонецОбъекта`, `WriteEndObject` | 0 |
-| `ЗаписатьНачалоМассива`, `WriteStartArray` | 0 |
-| `ЗаписатьКонецМассива`, `WriteEndArray` | 0 |
-| `ЗаписатьИмяСвойства`, `WritePropertyName` | 1 |
-| `ЗаписатьЗначение`, `WriteValue` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьСтроку`, `SetString` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ОткрытьФайл`, `OpenFile` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `Закрыть`, `Close` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЗаписатьНачалоОбъекта`, `WriteStartObject` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЗаписатьКонецОбъекта`, `WriteEndObject` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЗаписатьНачалоМассива`, `WriteStartArray` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЗаписатьКонецМассива`, `WriteEndArray` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЗаписатьИмяСвойства`, `WritePropertyName` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
+| `ЗаписатьЗначение`, `WriteValue` | — | [bsl-json/src/objects.rs](../../../crates/bsl-json/src/objects.rs) |
 
-### `bsl-orm` 0.1.0
+### `bsl-orm` 0.2.0
 
 #### Глобальные свойства
 
@@ -860,268 +860,268 @@
 
 #### Глобальные функции
 
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `ПолучитьКритерииОтбораORM` | функция | 0 |
-| `WSСсылки`, `WSReferences` | функция | 0 |
-| `ПолучитьРазмерДанныхБазыДанных`, `GetDatabaseDataSize` | функция | 0…3 |
-| `УдалитьОбъекты`, `DeleteObjects` | процедура | 1…6 |
-| `ПолучитьДанныеВыбора`, `GetChoiceData` | функция | 2 |
-| `УстановитьСоставСтандартногоИнтерфейсаOData`, `SetStandardODataInterfaceContent` | процедура | 1 |
-| `ПолучитьСоставСтандартногоИнтерфейсаOData`, `GetStandardODataInterfaceContent` | функция | 0 |
-| `ПолноеИмяПользователя`, `UserFullName` | функция | 0 |
-| `УдалитьДанныеИнформационнойБазы`, `EraseInfoBaseData` | процедура | 0 |
-| `РазблокироватьДанныеДляРедактирования`, `UnlockDataForEdit` | процедура | 0…2 |
-| `ЗаблокироватьДанныеДляРедактирования`, `LockDataForEdit` | процедура | 1…3 |
-| `ПолучитьМетаданныеORM` | функция | 0 |
-| `ПолучитьСправочникиORM` | функция | 0 |
-| `ПолучитьРегистрыСведенийORM` | функция | 0 |
-| `ПолучитьКонстантыORM` | функция | 0 |
-| `РольДоступна`, `IsInRole` | функция | 1 |
-| `ПолучитьРасширенияКонфигурацииORM` | функция | 0 |
-| `ПолучитьПользователейИнформационнойБазыORM` | функция | 0 |
-| `ПолучитьПеречисленияORM` | функция | 0 |
-| `ПолучитьБиблиотекуКартинокORM` | функция | 0 |
-| `КонфигурацияИзменена`, `ConfigurationChanged` | функция | 0 |
-| `ПолучитьПланыОбменаORM` | функция | 0 |
-| `НачатьТранзакцию`, `BeginTransaction` | процедура | 0 |
-| `ЗафиксироватьТранзакцию`, `CommitTransaction` | процедура | 0 |
-| `ОтменитьТранзакцию`, `RollbackTransaction` | процедура | 0 |
-| `ПравоДоступа`, `AccessRight` | функция | 2…4 |
-| `ИмяПользователя`, `UserName` | функция | 0 |
-| `ПредопределенноеЗначение`, `PredefinedValue` | функция | 1 |
-| `МонопольныйРежим`, `ExclusiveMode` | функция | 0 |
-| `УстановитьМонопольныйРежим`, `SetExclusiveMode` | процедура | 1 |
-| `ПолучитьСервисыИнтеграцииORM` | функция | 0 |
-| `ПолучитьОбновлениеПредопределенныхДанныхИнформационнойБазы`, `GetInfoBasePredefinedData` | функция | 0 |
-| `УстановитьОбновлениеПредопределенныхДанныхИнформационнойБазы`, `SetInfoBasePredefinedDataUpdate` | процедура | 1 |
-| `ИнициализироватьПредопределенныеДанные`, `InitializePredefinedData` | процедура | 0 |
-| `ПолучитьФункциональнуюОпцию`, `GetFunctionalOption` | функция | 1…2 |
-| `ТранзакцияАктивна`, `TransactionActive` | функция | 0 |
-| `ТекущийЯзык`, `CurrentLanguage` | функция | 0 |
-| `НайтиПоСсылкам`, `FindByRef` | функция | 1…4 |
-| `ПолучитьДокументыORM` | функция | 0 |
-| `ПолучитьЖурналыДокументовORM` | функция | 0 |
-| `ПолучитьОтчетыORM` | функция | 0 |
-| `ПолучитьОбработкиORM` | функция | 0 |
-| `ПолучитьРегистрыНакопленияORM` | функция | 0 |
-| `ПолучитьРегистрыБухгалтерииORM` | функция | 0 |
-| `ПолучитьРегистрыРасчетаORM` | функция | 0 |
-| `ПолучитьПланыСчетовORM` | функция | 0 |
-| `ПолучитьПланыВидовХарактеристикORM` | функция | 0 |
-| `ПолучитьПланыВидовРасчетаORM` | функция | 0 |
-| `ПолучитьБизнесПроцессыORM` | функция | 0 |
-| `ПолучитьЗадачиORM` | функция | 0 |
-| `ПолучитьХранилищаНастроекORM` | функция | 0 |
-| `ПолучитьПоследовательностиORM` | функция | 0 |
-| `ПолучитьПолноеИмяПредопределенногоЗначения`, `GetPredefinedValueFullName` | функция | 1 |
-| `ПолучитьНавигационнуюСсылку`, `GetURL` | функция | 1…4 |
-| `ПолучитьПолитикиПаролейПользователейORM` | функция | 0 |
-| `ПолучитьМинимальнуюДлинуПаролейПользователей`, `GetUserPasswordMinLength` | функция | 0 |
-| `ПолучитьБлокировкуАутентификацииORM` | функция | 0 |
-| `ПолучитьПроверкуСложностиПаролейПользователей`, `GetUserPasswordStrengthCheck` | функция | 0 |
-| `ПолучитьМаксимальныйСрокДействияПаролейПользователей`, `GetUserPasswordMaxEffectivePeriod` | функция | 0 |
-| `ПолучитьМинимальныйСрокДействияПаролейПользователей`, `GetUserPasswordMinEffectivePeriod` | функция | 0 |
-| `ПолучитьОграничениеПовторенияПаролейПользователейСредиПоследних`, `GetUserPasswordReuseLimit` | функция | 0 |
-| `ПолучитьСрокПредупрежденияОбИстеченииСрокаДействияПаролейПользователей`, `GetUserPasswordExpirationNotificationPeriod` | функция | 0 |
-| `УстановитьПроверкуСложностиПаролейПользователей`, `SetUserPasswordStrengthCheck` | процедура | 1 |
-| `УстановитьМинимальнуюДлинуПаролейПользователей`, `SetUserPasswordMinLength` | процедура | 1 |
-| `УстановитьМаксимальныйСрокДействияПаролейПользователей`, `SetUserPasswordMaxEffectivePeriod` | процедура | 1 |
-| `УстановитьМинимальныйСрокДействияПаролейПользователей`, `SetUserPasswordMinEffectivePeriod` | процедура | 1 |
-| `УстановитьОграничениеПовторенияПаролейПользователейСредиПоследних`, `SetUserPasswordReuseLimit` | процедура | 1 |
-| `УстановитьСрокПредупрежденияОбИстеченииСрокаДействияПаролейПользователей`, `SetUserPasswordExpirationNotificationPeriod` | процедура | 1 |
-| `ПолучитьОбщийМакет`, `GetCommonTemplate` | функция | 1 |
-| `ВыполнитьПроверкуПравДоступа`, `VerifyAccessRights` | процедура | 2…3 |
-| `ПолучитьВнешниеОбработкиORM` | функция | 0 |
-| `ПолучитьВнешниеОтчетыORM` | функция | 0 |
-| `ПолучитьИсториюДанныхORM` | функция | 0 |
-| `ПолучитьШаблоныНастроекВторогоФактораАутентификацииORM` | функция | 0 |
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `ПолучитьКритерииОтбораORM` | функция | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `WSСсылки`, `WSReferences` | функция | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `ПолучитьРазмерДанныхБазыДанных`, `GetDatabaseDataSize` | функция | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `УдалитьОбъекты`, `DeleteObjects` | процедура | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `ПолучитьДанныеВыбора`, `GetChoiceData` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `УстановитьСоставСтандартногоИнтерфейсаOData`, `SetStandardODataInterfaceContent` | процедура | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ПолучитьСоставСтандартногоИнтерфейсаOData`, `GetStandardODataInterfaceContent` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ПолноеИмяПользователя`, `UserFullName` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УдалитьДанныеИнформационнойБазы`, `EraseInfoBaseData` | процедура | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `РазблокироватьДанныеДляРедактирования`, `UnlockDataForEdit` | процедура | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `ЗаблокироватьДанныеДляРедактирования`, `LockDataForEdit` | процедура | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `ПолучитьМетаданныеORM` | функция | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ПолучитьСправочникиORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьРегистрыСведенийORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьКонстантыORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `РольДоступна`, `IsInRole` | функция | — | [bsl-orm/src/access_rights.rs](../../../crates/bsl-orm/src/access_rights.rs) |
+| `ПолучитьРасширенияКонфигурацииORM` | функция | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `ПолучитьПользователейИнформационнойБазыORM` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьПеречисленияORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьБиблиотекуКартинокORM` | функция | — | [bsl-orm/src/picture_library.rs](../../../crates/bsl-orm/src/picture_library.rs) |
+| `КонфигурацияИзменена`, `ConfigurationChanged` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ПолучитьПланыОбменаORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `НачатьТранзакцию`, `BeginTransaction` | процедура | Начинает транзакцию на соединении текущего сеанса. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ЗафиксироватьТранзакцию`, `CommitTransaction` | процедура | Фиксирует текущую транзакцию соединения сеанса. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ОтменитьТранзакцию`, `RollbackTransaction` | процедура | Отменяет текущую транзакцию соединения сеанса. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ПравоДоступа`, `AccessRight` | функция | — | [bsl-orm/src/access_rights.rs](../../../crates/bsl-orm/src/access_rights.rs) |
+| `ИмяПользователя`, `UserName` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПредопределенноеЗначение`, `PredefinedValue` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `МонопольныйРежим`, `ExclusiveMode` | функция | Возвращает состояние монопольного режима текущего соединения. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `УстановитьМонопольныйРежим`, `SetExclusiveMode` | процедура | Изменяет монопольный режим текущего соединения. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ПолучитьСервисыИнтеграцииORM` | функция | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `ПолучитьОбновлениеПредопределенныхДанныхИнформационнойБазы`, `GetInfoBasePredefinedData` | функция | Возвращает режим обновления предопределённых данных информационной базы. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `УстановитьОбновлениеПредопределенныхДанныхИнформационнойБазы`, `SetInfoBasePredefinedDataUpdate` | процедура | Изменяет режим обновления предопределённых данных информационной базы. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ИнициализироватьПредопределенныеДанные`, `InitializePredefinedData` | процедура | Инициализирует предопределённые данные текущей области базы. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ПолучитьФункциональнуюОпцию`, `GetFunctionalOption` | функция | Возвращает значение функциональной опции для текущего сеанса. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ТранзакцияАктивна`, `TransactionActive` | функция | Возвращает состояние транзакции на соединении текущего сеанса. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ТекущийЯзык`, `CurrentLanguage` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `НайтиПоСсылкам`, `FindByRef` | функция | Ищет ссылки в доступных текущему пользователю данных. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ПолучитьДокументыORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьЖурналыДокументовORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьОтчетыORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьОбработкиORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьРегистрыНакопленияORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьРегистрыБухгалтерииORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьРегистрыРасчетаORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьПланыСчетовORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьПланыВидовХарактеристикORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьПланыВидовРасчетаORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьБизнесПроцессыORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьЗадачиORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьХранилищаНастроекORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьПоследовательностиORM` | функция | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьПолноеИмяПредопределенногоЗначения`, `GetPredefinedValueFullName` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ПолучитьНавигационнуюСсылку`, `GetURL` | функция | Строит навигационную ссылку для прикладного значения текущего сеанса. | [bsl-orm/src/data_access.rs](../../../crates/bsl-orm/src/data_access.rs) |
+| `ПолучитьПолитикиПаролейПользователейORM` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьМинимальнуюДлинуПаролейПользователей`, `GetUserPasswordMinLength` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьБлокировкуАутентификацииORM` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьПроверкуСложностиПаролейПользователей`, `GetUserPasswordStrengthCheck` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьМаксимальныйСрокДействияПаролейПользователей`, `GetUserPasswordMaxEffectivePeriod` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьМинимальныйСрокДействияПаролейПользователей`, `GetUserPasswordMinEffectivePeriod` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьОграничениеПовторенияПаролейПользователейСредиПоследних`, `GetUserPasswordReuseLimit` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьСрокПредупрежденияОбИстеченииСрокаДействияПаролейПользователей`, `GetUserPasswordExpirationNotificationPeriod` | функция | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УстановитьПроверкуСложностиПаролейПользователей`, `SetUserPasswordStrengthCheck` | процедура | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УстановитьМинимальнуюДлинуПаролейПользователей`, `SetUserPasswordMinLength` | процедура | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УстановитьМаксимальныйСрокДействияПаролейПользователей`, `SetUserPasswordMaxEffectivePeriod` | процедура | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УстановитьМинимальныйСрокДействияПаролейПользователей`, `SetUserPasswordMinEffectivePeriod` | процедура | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УстановитьОграничениеПовторенияПаролейПользователейСредиПоследних`, `SetUserPasswordReuseLimit` | процедура | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УстановитьСрокПредупрежденияОбИстеченииСрокаДействияПаролейПользователей`, `SetUserPasswordExpirationNotificationPeriod` | процедура | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолучитьОбщийМакет`, `GetCommonTemplate` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ВыполнитьПроверкуПравДоступа`, `VerifyAccessRights` | процедура | — | [bsl-orm/src/access_rights.rs](../../../crates/bsl-orm/src/access_rights.rs) |
+| `ПолучитьВнешниеОбработкиORM` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ПолучитьВнешниеОтчетыORM` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ПолучитьИсториюДанныхORM` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
+| `ПолучитьШаблоныНастроекВторогоФактораАутентификацииORM` | функция | — | [bsl-orm/src/globals.rs](../../../crates/bsl-orm/src/globals.rs) |
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `МоментВремениСУточнениемПериода`, `PointInTimeWithPeriodAdjustment` | 1…3 |
-| `НастройкаВторогоФактораАутентификации`, `SecondAuthenticationFactorSetting` | 0 |
-| `ОписаниеОбновленияКонфигурации`, `ConfigurationUpdateDescription` | 1 |
-| `ОбработкаРасшифровкиКомпоновкиДанных`, `DataCompositionDetailsProcess` | 2 |
-| `ПостроительЗапроса`, `QueryBuilder` | 0…1 |
-| `ОбъектМетаданныхКонфигурация`, `ConfigurationMetadataObject` | 1 |
-| `УдалениеОбъекта`, `ObjectDeletion` | 1 |
-| `ВыражениеСхемыЗапроса`, `QuerySchemaExpression` | 1 |
-| `ПользовательскиеНастройкиКомпоновкиДанных`, `DataCompositionUserSettings` | 0 |
-| `Граница`, `Boundary` | 1…2 |
-| `ПроцессорВыводаРезультатаКомпоновкиДанныхВТабличныйДокумент`, `DataCompositionResultSpreadsheetDocumentOutputProcessor` | 0 |
-| `СхемаКомпоновкиДанных`, `DataCompositionSchema` | 0 |
-| `СтандартныйПериод`, `StandardPeriod` | 0…2 |
-| `ОписаниеКонфигурации`, `ConfigurationDescription` | 1 |
-| `ОписаниеИсточникаДанных`, `DataSourceDescription` | 1 |
-| `ПостроительОтчета`, `ReportBuilder` | 0…1 |
-| `Запрос`, `Query` | 0…1 |
-| `СжатиеДанных`, `Deflation` | 0…1 |
-| `ХранилищеЗначения`, `ValueStorage` | 1…2 |
-| `БлокировкаДанных`, `DataLock` | 0 |
-| `МенеджерВременныхТаблиц`, `TempTablesManager` | 0 |
-| `СхемаЗапроса`, `QuerySchema` | 0 |
-| `ГенераторСлучайныхПаролей`, `RandomPasswordGenerator` | 0 |
-| `КомпоновщикМакетаКомпоновкиДанных`, `DataCompositionTemplateComposer` | 0 |
-| `ПроцессорКомпоновкиДанных`, `DataCompositionProcessor` | 0 |
-| `ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений`, `DataCompositionResultValueCollectionOutputProcessor` | 0 |
-| `КомпоновщикНастроекКомпоновкиДанных`, `DataCompositionSettingsComposer` | 0 |
-| `ИсточникДоступныхНастроекКомпоновкиДанных`, `DataCompositionAvailableSettingsSource` | 1…2 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `МоментВремениСУточнениемПериода`, `PointInTimeWithPeriodAdjustment` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `НастройкаВторогоФактораАутентификации`, `SecondAuthenticationFactorSetting` | — | [bsl-orm/src/query_boundary.rs](../../../crates/bsl-orm/src/query_boundary.rs) |
+| `ОписаниеОбновленияКонфигурации`, `ConfigurationUpdateDescription` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ОбработкаРасшифровкиКомпоновкиДанных`, `DataCompositionDetailsProcess` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ПостроительЗапроса`, `QueryBuilder` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ОбъектМетаданныхКонфигурация`, `ConfigurationMetadataObject` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `УдалениеОбъекта`, `ObjectDeletion` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ВыражениеСхемыЗапроса`, `QuerySchemaExpression` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ПользовательскиеНастройкиКомпоновкиДанных`, `DataCompositionUserSettings` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `Граница`, `Boundary` | — | [bsl-orm/src/query_boundary.rs](../../../crates/bsl-orm/src/query_boundary.rs) |
+| `ПроцессорВыводаРезультатаКомпоновкиДанныхВТабличныйДокумент`, `DataCompositionResultSpreadsheetDocumentOutputProcessor` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `СхемаКомпоновкиДанных`, `DataCompositionSchema` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `СтандартныйПериод`, `StandardPeriod` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ОписаниеКонфигурации`, `ConfigurationDescription` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ОписаниеИсточникаДанных`, `DataSourceDescription` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ПостроительОтчета`, `ReportBuilder` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `Запрос`, `Query` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `СжатиеДанных`, `Deflation` | — | [bsl-orm/src/value_storage.rs](../../../crates/bsl-orm/src/value_storage.rs) |
+| `ХранилищеЗначения`, `ValueStorage` | — | [bsl-orm/src/value_storage.rs](../../../crates/bsl-orm/src/value_storage.rs) |
+| `БлокировкаДанных`, `DataLock` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `МенеджерВременныхТаблиц`, `TempTablesManager` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `СхемаЗапроса`, `QuerySchema` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `ГенераторСлучайныхПаролей`, `RandomPasswordGenerator` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `КомпоновщикМакетаКомпоновкиДанных`, `DataCompositionTemplateComposer` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ПроцессорКомпоновкиДанных`, `DataCompositionProcessor` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений`, `DataCompositionResultValueCollectionOutputProcessor` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `КомпоновщикНастроекКомпоновкиДанных`, `DataCompositionSettingsComposer` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ИсточникДоступныхНастроекКомпоновкиДанных`, `DataCompositionAvailableSettingsSource` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `Граница` | `Граница` | `Boundary` |
-| `НастройкаВторогоФактораАутентификации` | `НастройкаВторогоФактораАутентификации` | `SecondAuthenticationFactorSetting` |
-| `ОбъектМетаданныхКонфигурация` | `ОбъектМетаданныхКонфигурация` | — |
-| `КоллекцияОбъектовМетаданных` | `КоллекцияОбъектовМетаданных` | — |
-| `ОбъектМетаданныхКонфигурации` | `Объект метаданных` | `ОбъектМетаданных`, `MetadataObject` |
-| `КоллекцияЗначенийСвойстваОбъектаМетаданных` | `КоллекцияЗначенийСвойстваОбъектаМетаданных` | — |
-| `ПеречислимыеСвойстваОбъектовМетаданных` | `ПеречислимыеСвойстваОбъектовМетаданных` | — |
-| `Metadata object enumerated property` | `Перечислимое свойство объектов метаданных` | — |
-| `МенеджерыОбъектов` | `МенеджерыОбъектов` | — |
-| `МенеджерОбъекта` | `МенеджерОбъекта` | — |
-| `ПеречислениеСсылка` | `Enumeration reference` | `EnumerationRef` |
-| `ТочкиМаршрутаБизнесПроцесса` | `Точки маршрута бизнес-процесса` | `BusinessProcessRoutePoints` |
-| `ТочкаМаршрутаБизнесПроцессаСсылка` | `Business process route point reference` | `BusinessProcessRoutePointRef` |
-| `СсылкаКонфигурации` | `СсылкаКонфигурации` | — |
-| `ОбъектСправочникаКонфигурации` | `ОбъектСправочникаКонфигурации` | — |
-| `ОбъектПланаВидовХарактеристикКонфигурации` | `ОбъектПланаВидовХарактеристикКонфигурации` | — |
-| `ДокументОбъект` | `Документ объект` | `DocumentObject` |
-| `БизнесПроцессОбъект` | `БизнесПроцессОбъект` | `BusinessProcessObject` |
-| `ОбработкаОбъект` | `Обработка объект` | `DataProcessorObject` |
-| `ОтчетОбъект` | `Отчет объект` | `ReportObject` |
-| `КоллекцияДвижений` | `Коллекция движений` | `RegisterRecordsCollection` |
-| `РегистрСведенийНаборЗаписей` | `Регистр сведений набор записей` | `InformationRegisterRecordSet` |
-| `ДокументТабличнаяЧасть` | `Документ табличная часть` | `DocumentTabularSection` |
-| `ДокументТабличнаяЧастьСтрока` | `Документ табличная часть строка` | `DocumentTabularSectionRow` |
-| `ПараметрыОбменаДанными` | `Параметры обмена данными` | `DataExchangeParameters` |
-| `НаборУзлов` | `Коллекция узлов` | `NodeSet` |
-| `БиблиотекаКартинок` | `БиблиотекаКартинок` | `PictureLib` |
-| `МенеджерРасширенийКонфигурации` | `МенеджерРасширенийКонфигурации` | — |
-| `МенеджерПользователейИнформационнойБазы` | `Менеджер пользователей` | `InfoBaseUsersManager` |
-| `ПользовательИнформационнойБазы` | `Пользователь информационной базы` | `InfoBaseUser` |
-| `МенеджерПолитикПаролейПользователей` | `Менеджер политик паролей пользователей` | `UserPasswordPolicyManager` |
-| `ПолитикаПаролейПользователей` | `Политика паролей пользователей` | `UserPasswordPolicy` |
-| `МенеджерБлокировкиАутентификацииПользователейИнформационнойБазы` | `Менеджер блокировки аутентификации пользователей информационной базы` | `InfoBaseUserAuthenticationLockManager` |
-| `НастройкиБлокировкиАутентификацииПользователейИнформационнойБазы` | `Настройки блокировки аутентификации пользователей информационной базы` | `InfoBaseUserAuthenticationLockSettings` |
-| `ГенераторСлучайныхПаролей` | `ГенераторСлучайныхПаролей` | `RandomPasswordGenerator` |
-| `МенеджерСервисовИнтеграции` | `Integration services manager` | `IntegrationServicesManager` |
-| `РасширениеКонфигурации` | `РасширениеКонфигурации` | — |
-| `ИнформацияОПроблемеПримененияРасширенияКонфигурации` | `ИнформацияОПроблемеПримененияРасширенияКонфигурации` | — |
-| `Запрос` | `Запрос` | `Query` |
-| `СхемаЗапроса` | `Схема запроса` | `QuerySchema` |
-| `КомпоновщикНастроекКомпоновкиДанных` | `Компоновщик настроек компоновки данных` | `DataCompositionSettingsComposer` |
-| `ИсточникДоступныхНастроекКомпоновкиДанных` | `Источник доступных настроек компоновки данных` | `DataCompositionAvailableSettingsSource` |
-| `ОбработкаРасшифровкиКомпоновкиДанных` | `Обработка расшифровки компноновки данных` | `DataCompositionDetailsProcess` |
-| `ОписаниеОбновленияКонфигурации` | `Описание обновления конфигурации` | `ConfigurationUpdateDescription` |
-| `КомпоновщикМакетаКомпоновкиДанных` | `Компоновщик макета компоновки данных` | `DataCompositionTemplateComposer` |
-| `ПроцессорКомпоновкиДанных` | `Процессор компоновки данных` | `DataCompositionProcessor` |
-| `ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений` | `Процессор вывода результата компоновки данных в коллекцию значений` | `DataCompositionResultValueCollectionOutputProcessor` |
-| `МенеджерВременныхТаблиц` | `Менеджер временных таблиц` | `TempTablesManager` |
-| `РезультатЗапроса` | `Результат запроса` | `QueryResult` |
-| `ВыборкаИзРезультатаЗапроса` | `Выборка из результата запроса` | `QueryResultSelection` |
-| `СправочникВыборка` | `Catalog selection` | `CatalogSelection` |
-| `СжатиеДанных` | `Сжатие данных` | `Deflation` |
-| `ХранилищеЗначения` | `Хранилище значения` | `ValueStorage` |
-| `БлокировкаДанных` | `Блокировка данных` | `DataLock` |
-| `ЭлементБлокировкиДанных` | `Элемент блокировки данных` | `DataLockItem` |
-| `СоставОбщегоРеквизита` | `Состав общего реквизита` | `CommonAttributeContent` |
-| `ЭлементСоставаОбщегоРеквизита` | `Элемент состава общего реквизита` | `CommonAttributeContentItem` |
-| `МоментВремениСУточнениемПериода` | `Момент времени с уточнением периода` | `PointInTimeWithPeriodAdjustment` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `Граница` | `Граница` | `Boundary` | — | [bsl-orm/src/query_boundary.rs](../../../crates/bsl-orm/src/query_boundary.rs) |
+| `НастройкаВторогоФактораАутентификации` | `НастройкаВторогоФактораАутентификации` | `SecondAuthenticationFactorSetting` | — | [bsl-orm/src/second_factor_setting.rs](../../../crates/bsl-orm/src/second_factor_setting.rs) |
+| `ОбъектМетаданныхКонфигурация` | `ОбъектМетаданныхКонфигурация` | — | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `КоллекцияОбъектовМетаданных` | `КоллекцияОбъектовМетаданных` | — | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ОбъектМетаданныхКонфигурации` | `Объект метаданных` | `ОбъектМетаданных`, `MetadataObject` | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `КоллекцияЗначенийСвойстваОбъектаМетаданных` | `КоллекцияЗначенийСвойстваОбъектаМетаданных` | — | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ПеречислимыеСвойстваОбъектовМетаданных` | `ПеречислимыеСвойстваОбъектовМетаданных` | — | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Metadata object enumerated property` | `Перечислимое свойство объектов метаданных` | — | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `МенеджерыОбъектов` | `МенеджерыОбъектов` | — | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `МенеджерОбъекта` | `МенеджерОбъекта` | — | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПеречислениеСсылка` | `Enumeration reference` | `EnumerationRef` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
+| `ТочкиМаршрутаБизнесПроцесса` | `Точки маршрута бизнес-процесса` | `BusinessProcessRoutePoints` | — | [bsl-orm/src/route_points.rs](../../../crates/bsl-orm/src/route_points.rs) |
+| `ТочкаМаршрутаБизнесПроцессаСсылка` | `Business process route point reference` | `BusinessProcessRoutePointRef` | — | [bsl-orm/src/route_points.rs](../../../crates/bsl-orm/src/route_points.rs) |
+| `СсылкаКонфигурации` | `СсылкаКонфигурации` | — | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
+| `ОбъектСправочникаКонфигурации` | `ОбъектСправочникаКонфигурации` | — | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ОбъектПланаВидовХарактеристикКонфигурации` | `ОбъектПланаВидовХарактеристикКонфигурации` | — | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `ДокументОбъект` | `Документ объект` | `DocumentObject` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `БизнесПроцессОбъект` | `БизнесПроцессОбъект` | `BusinessProcessObject` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `ОбработкаОбъект` | `Обработка объект` | `DataProcessorObject` | — | [bsl-orm/src/data_processor_object.rs](../../../crates/bsl-orm/src/data_processor_object.rs) |
+| `ОтчетОбъект` | `Отчет объект` | `ReportObject` | — | [bsl-orm/src/data_processor_object.rs](../../../crates/bsl-orm/src/data_processor_object.rs) |
+| `КоллекцияДвижений` | `Коллекция движений` | `RegisterRecordsCollection` | — | [bsl-orm/src/document_movements.rs](../../../crates/bsl-orm/src/document_movements.rs) |
+| `РегистрСведенийНаборЗаписей` | `Регистр сведений набор записей` | `InformationRegisterRecordSet` | — | [bsl-orm/src/document_movements.rs](../../../crates/bsl-orm/src/document_movements.rs) |
+| `ДокументТабличнаяЧасть` | `Документ табличная часть` | `DocumentTabularSection` | — | [bsl-orm/src/document_tabular_section.rs](../../../crates/bsl-orm/src/document_tabular_section.rs) |
+| `ДокументТабличнаяЧастьСтрока` | `Документ табличная часть строка` | `DocumentTabularSectionRow` | — | [bsl-orm/src/document_tabular_section.rs](../../../crates/bsl-orm/src/document_tabular_section.rs) |
+| `ПараметрыОбменаДанными` | `Параметры обмена данными` | `DataExchangeParameters` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `НаборУзлов` | `Коллекция узлов` | `NodeSet` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `БиблиотекаКартинок` | `БиблиотекаКартинок` | `PictureLib` | — | [bsl-orm/src/picture_library.rs](../../../crates/bsl-orm/src/picture_library.rs) |
+| `МенеджерРасширенийКонфигурации` | `МенеджерРасширенийКонфигурации` | — | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `МенеджерПользователейИнформационнойБазы` | `Менеджер пользователей` | `InfoBaseUsersManager` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПользовательИнформационнойБазы` | `Пользователь информационной базы` | `InfoBaseUser` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `МенеджерПолитикПаролейПользователей` | `Менеджер политик паролей пользователей` | `UserPasswordPolicyManager` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ПолитикаПаролейПользователей` | `Политика паролей пользователей` | `UserPasswordPolicy` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `МенеджерБлокировкиАутентификацииПользователейИнформационнойБазы` | `Менеджер блокировки аутентификации пользователей информационной базы` | `InfoBaseUserAuthenticationLockManager` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `НастройкиБлокировкиАутентификацииПользователейИнформационнойБазы` | `Настройки блокировки аутентификации пользователей информационной базы` | `InfoBaseUserAuthenticationLockSettings` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `ГенераторСлучайныхПаролей` | `ГенераторСлучайныхПаролей` | `RandomPasswordGenerator` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `МенеджерСервисовИнтеграции` | `Integration services manager` | `IntegrationServicesManager` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `РасширениеКонфигурации` | `РасширениеКонфигурации` | — | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `ИнформацияОПроблемеПримененияРасширенияКонфигурации` | `ИнформацияОПроблемеПримененияРасширенияКонфигурации` | — | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `Запрос` | `Запрос` | `Query` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `СхемаЗапроса` | `Схема запроса` | `QuerySchema` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `КомпоновщикНастроекКомпоновкиДанных` | `Компоновщик настроек компоновки данных` | `DataCompositionSettingsComposer` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ИсточникДоступныхНастроекКомпоновкиДанных` | `Источник доступных настроек компоновки данных` | `DataCompositionAvailableSettingsSource` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ОбработкаРасшифровкиКомпоновкиДанных` | `Обработка расшифровки компноновки данных` | `DataCompositionDetailsProcess` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ОписаниеОбновленияКонфигурации` | `Описание обновления конфигурации` | `ConfigurationUpdateDescription` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
+| `КомпоновщикМакетаКомпоновкиДанных` | `Компоновщик макета компоновки данных` | `DataCompositionTemplateComposer` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ПроцессорКомпоновкиДанных` | `Процессор компоновки данных` | `DataCompositionProcessor` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений` | `Процессор вывода результата компоновки данных в коллекцию значений` | `DataCompositionResultValueCollectionOutputProcessor` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `МенеджерВременныхТаблиц` | `Менеджер временных таблиц` | `TempTablesManager` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `РезультатЗапроса` | `Результат запроса` | `QueryResult` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `ВыборкаИзРезультатаЗапроса` | `Выборка из результата запроса` | `QueryResultSelection` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `СправочникВыборка` | `Catalog selection` | `CatalogSelection` | — | [bsl-orm/src/catalog_selection.rs](../../../crates/bsl-orm/src/catalog_selection.rs) |
+| `СжатиеДанных` | `Сжатие данных` | `Deflation` | — | [bsl-orm/src/value_storage.rs](../../../crates/bsl-orm/src/value_storage.rs) |
+| `ХранилищеЗначения` | `Хранилище значения` | `ValueStorage` | — | [bsl-orm/src/value_storage.rs](../../../crates/bsl-orm/src/value_storage.rs) |
+| `БлокировкаДанных` | `Блокировка данных` | `DataLock` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `ЭлементБлокировкиДанных` | `Элемент блокировки данных` | `DataLockItem` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `СоставОбщегоРеквизита` | `Состав общего реквизита` | `CommonAttributeContent` | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `ЭлементСоставаОбщегоРеквизита` | `Элемент состава общего реквизита` | `CommonAttributeContentItem` | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `МоментВремениСУточнениемПериода` | `Момент времени с уточнением периода` | `PointInTimeWithPeriodAdjustment` | — | [bsl-orm/src/unavailable_constructors.rs](../../../crates/bsl-orm/src/unavailable_constructors.rs) |
 
 #### Члены объектов
 
 ##### `Граница`
 
-| Свойство | Доступ |
-|---|---|
-| `Значение`, `Value` | только чтение |
-| `ВидГраницы`, `BoundaryType` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Значение`, `Value` | только чтение | — | [bsl-orm/src/query_boundary.rs](../../../crates/bsl-orm/src/query_boundary.rs) |
+| `ВидГраницы`, `BoundaryType` | только чтение | — | [bsl-orm/src/query_boundary.rs](../../../crates/bsl-orm/src/query_boundary.rs) |
 
 ##### `НастройкаВторогоФактораАутентификации`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяШаблонаНастройки`, `SettingTemplateName` | чтение и запись |
-| `Параметры`, `Parameters` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяШаблонаНастройки`, `SettingTemplateName` | чтение и запись | — | [bsl-orm/src/second_factor_setting.rs](../../../crates/bsl-orm/src/second_factor_setting.rs) |
+| `Параметры`, `Parameters` | чтение и запись | — | [bsl-orm/src/second_factor_setting.rs](../../../crates/bsl-orm/src/second_factor_setting.rs) |
 
 ##### `ОбъектМетаданныхКонфигурация`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Свойство | Доступ |
-|---|---|
-| `ОбщиеФормы`, `CommonForms` | только чтение |
-| `ОбщиеМакеты`, `CommonTemplates` | только чтение |
-| `ОсновнойИнтерфейс`, `DefaultInterface` | только чтение |
-| `ОбщиеРеквизиты`, `CommonAttributes` | только чтение |
-| `ОсновнойЯзык`, `DefaultLanguage` | только чтение |
-| `Подсистемы`, `Subsystems` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Версия`, `Version` | только чтение |
-| `ВариантВстроенногоЯзыка`, `ScriptVariant` | только чтение |
-| `РежимСовместимости`, `CompatibilityMode` | только чтение |
-| `ОсновныеРоли`, `DefaultRoles` | только чтение |
-| `СвойстваОбъектов`, `ObjectProperties` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ОбщиеФормы`, `CommonForms` | только чтение | — | [bsl-orm/src/file_source.rs](../../../crates/bsl-orm/src/file_source.rs) |
+| `ОбщиеМакеты`, `CommonTemplates` | только чтение | — | [bsl-orm/src/file_source.rs](../../../crates/bsl-orm/src/file_source.rs) |
+| `ОсновнойИнтерфейс`, `DefaultInterface` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ОбщиеРеквизиты`, `CommonAttributes` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ОсновнойЯзык`, `DefaultLanguage` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Подсистемы`, `Subsystems` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Версия`, `Version` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ВариантВстроенногоЯзыка`, `ScriptVariant` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `РежимСовместимости`, `CompatibilityMode` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ОсновныеРоли`, `DefaultRoles` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `СвойстваОбъектов`, `ObjectProperties` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `НайтиПоТипу`, `FindByType` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `НайтиПоТипу`, `FindByType` | — | [bsl-orm/src/metadata_find_by_type.rs](../../../crates/bsl-orm/src/metadata_find_by_type.rs) |
 
 ##### `КоллекцияОбъектовМетаданных`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Получить`, `Get` | 1 |
-| `Найти`, `Find` | 1 |
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Получить`, `Get` | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Найти`, `Find` | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Количество`, `Count` | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
 
 ##### `ОбъектМетаданныхКонфигурации`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Свойство | Доступ |
-|---|---|
-| `РазделениеДанных`, `DataSeparation` | только чтение |
-| `АвтоИспользование`, `AutoUse` | только чтение |
-| `УсловноеРазделение`, `ConditionalSeparation` | только чтение |
-| `Состав`, `Content` | только чтение |
-| `Реквизиты`, `Attributes` | только чтение |
-| `ЗаполнятьИзДанныхЗаполнения`, `FillFromFillingValue` | только чтение |
-| `ЗначениеЗаполнения`, `FillValue` | только чтение |
-| `КодЯзыка`, `LanguageCode` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Подсистемы`, `Subsystems` | только чтение |
-| `ВключатьВКомандныйИнтерфейс`, `IncludeInCommandInterface` | только чтение |
-| `Формы`, `Forms` | только чтение |
-| `Макеты`, `Templates` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `РазделениеДанных`, `DataSeparation` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `АвтоИспользование`, `AutoUse` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `УсловноеРазделение`, `ConditionalSeparation` | только чтение | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `Состав`, `Content` | только чтение | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `Реквизиты`, `Attributes` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ЗаполнятьИзДанныхЗаполнения`, `FillFromFillingValue` | только чтение | — | [bsl-orm/src/metadata_attributes.rs](../../../crates/bsl-orm/src/metadata_attributes.rs) |
+| `ЗначениеЗаполнения`, `FillValue` | только чтение | — | [bsl-orm/src/metadata_attributes.rs](../../../crates/bsl-orm/src/metadata_attributes.rs) |
+| `КодЯзыка`, `LanguageCode` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Подсистемы`, `Subsystems` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ВключатьВКомандныйИнтерфейс`, `IncludeInCommandInterface` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `Формы`, `Forms` | только чтение | — | [bsl-orm/src/file_source.rs](../../../crates/bsl-orm/src/file_source.rs) |
+| `Макеты`, `Templates` | только чтение | — | [bsl-orm/src/file_source.rs](../../../crates/bsl-orm/src/file_source.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолноеИмя`, `FullName` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолноеИмя`, `FullName` | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
 
 ##### `КоллекцияЗначенийСвойстваОбъектаМетаданных`
 
-| Метод | Аргументы |
-|---|---:|
-| `Содержит`, `Contains` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Содержит`, `Contains` | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
 
 ##### `ПеречислимыеСвойстваОбъектовМетаданных`
 
-| Свойство | Доступ |
-|---|---|
-| `НазначениеРасширенияКонфигурации`, `ConfigurationExtensionPurpose` | только чтение |
-| `РазделениеДанныхОбщегоРеквизита`, `CommonAttributeDataSeparation` | только чтение |
-| `АвтоИспользованиеОбщегоРеквизита`, `CommonAttributeAutoUse` | только чтение |
-| `ИспользованиеОбщегоРеквизита`, `CommonAttributeUse` | только чтение |
-| `ВариантВстроенногоЯзыка`, `ScriptVariant` | только чтение |
-| `РежимСовместимости`, `CompatibilityMode` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `НазначениеРасширенияКонфигурации`, `ConfigurationExtensionPurpose` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `РазделениеДанныхОбщегоРеквизита`, `CommonAttributeDataSeparation` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `АвтоИспользованиеОбщегоРеквизита`, `CommonAttributeAutoUse` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ИспользованиеОбщегоРеквизита`, `CommonAttributeUse` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `ВариантВстроенногоЯзыка`, `ScriptVariant` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
+| `РежимСовместимости`, `CompatibilityMode` | только чтение | — | [bsl-orm/src/metadata_values.rs](../../../crates/bsl-orm/src/metadata_values.rs) |
 
 ##### `МенеджерыОбъектов`
 
@@ -1129,237 +1129,237 @@
 
 ##### `МенеджерОбъекта`
 
-| Свойство | Доступ |
-|---|---|
-| `Имя`, `Name` | только чтение |
-| `ТочкиМаршрута`, `RoutePoints` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Имя`, `Name` | только чтение | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ТочкиМаршрута`, `RoutePoints` | только чтение | — | [bsl-orm/src/route_points.rs](../../../crates/bsl-orm/src/route_points.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `СоздатьУзел`, `CreateNode` | 0 |
-| `ЭтотУзел`, `ThisNode` | 0 |
-| `ПолучитьМакет`, `GetTemplate` | 0…1 |
-| `Загрузить`, `Load` | 1…4 |
-| `СоздатьБизнесПроцесс`, `CreateBusinessProcess` | 0 |
-| `Остатки`, `Balance` | 0…4 |
-| `Получить`, `Get` | 0 |
-| `Установить`, `Set` | 1 |
-| `СоздатьМенеджерЗначения`, `CreateValueManager` | 0 |
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
-| `Индекс`, `IndexOf` | 1 |
-| `ПустаяСсылка`, `EmptyRef` | 0 |
-| `ПолучитьСсылку`, `GetRef` | 0…1 |
-| `СоздатьЭлемент`, `CreateItem` | 0 |
-| `СоздатьГруппу`, `CreateFolder` | 0 |
-| `Выбрать`, `Select` | 0…4 |
-| `НайтиПоКоду`, `FindByCode` | 1…4 |
-| `НайтиПоНаименованию`, `FindByDescription` | 1…4 |
-| `СоздатьМенеджерЗаписи`, `CreateRecordManager` | 0 |
-| `СоздатьНаборЗаписей`, `CreateRecordSet` | 0 |
-| `ПолучитьМакет`, `GetTemplate` | 1 |
-| `СоздатьКлючЗаписи`, `CreateRecordKey` | 1 |
-| `Получить`, `Get` | 0…2 |
-| `СрезПервых`, `SliceFirst` | 0…2 |
-| `СрезПоследних`, `SliceLast` | 0…2 |
-| `Выбрать`, `Select` | 0…4 |
-| `ПолучитьПоследнее`, `GetLast` | 0…2 |
-| `ПолучитьМакет`, `GetTemplate` | 1 |
-| `Создать`, `Create` | 0 |
-| `НайтиПоРеквизиту`, `FindByAttribute` | 2 |
-| `СоздатьДокумент`, `CreateDocument` | 0 |
-| `ПолучитьМакет`, `GetTemplate` | 1 |
-| `Создать`, `Create` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `СоздатьУзел`, `CreateNode` | — | [bsl-orm/src/exchange_plan.rs](../../../crates/bsl-orm/src/exchange_plan.rs) |
+| `ЭтотУзел`, `ThisNode` | — | [bsl-orm/src/exchange_plan.rs](../../../crates/bsl-orm/src/exchange_plan.rs) |
+| `ПолучитьМакет`, `GetTemplate` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `Загрузить`, `Load` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `СоздатьБизнесПроцесс`, `CreateBusinessProcess` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Остатки`, `Balance` | — | [bsl-orm/src/accumulation_balance.rs](../../../crates/bsl-orm/src/accumulation_balance.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `СоздатьМенеджерЗначения`, `CreateValueManager` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Индекс`, `IndexOf` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПустаяСсылка`, `EmptyRef` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьСсылку`, `GetRef` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `СоздатьЭлемент`, `CreateItem` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `СоздатьГруппу`, `CreateFolder` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `Выбрать`, `Select` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `НайтиПоКоду`, `FindByCode` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `НайтиПоНаименованию`, `FindByDescription` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `СоздатьМенеджерЗаписи`, `CreateRecordManager` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `СоздатьНаборЗаписей`, `CreateRecordSet` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьМакет`, `GetTemplate` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `СоздатьКлючЗаписи`, `CreateRecordKey` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `СрезПервых`, `SliceFirst` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `СрезПоследних`, `SliceLast` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `Выбрать`, `Select` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьПоследнее`, `GetLast` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьМакет`, `GetTemplate` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `НайтиПоРеквизиту`, `FindByAttribute` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `СоздатьДокумент`, `CreateDocument` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `ПолучитьМакет`, `GetTemplate` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ПеречислениеСсылка`
 
-| Метод | Аргументы |
-|---|---:|
-| `Пустая`, `IsEmpty` | 0 |
-| `Метаданные`, `Metadata` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Пустая`, `IsEmpty` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
+| `Метаданные`, `Metadata` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
 
 ##### `ТочкиМаршрутаБизнесПроцесса`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `СсылкаКонфигурации`
 
-| Метод | Аргументы |
-|---|---:|
-| `Пустая`, `IsEmpty` | 0 |
-| `УникальныйИдентификатор`, `UUID` | 0 |
-| `Метаданные`, `Metadata` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Пустая`, `IsEmpty` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
+| `УникальныйИдентификатор`, `UUID` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
+| `Метаданные`, `Metadata` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
 
 ##### `ОбъектСправочникаКонфигурации`
 
-| Свойство | Доступ |
-|---|---|
-| `Предопределенный`, `Predefined` | только чтение |
-| `ИмяПредопределенныхДанных`, `PredefinedDataName` | чтение и запись |
-| `ПометкаУдаления`, `DeletionMark` | чтение и запись |
-| `ЭтоГруппа`, `IsFolder` | только чтение |
-| `Родитель`, `Parent` | чтение и запись |
-| `Владелец`, `Owner` | чтение и запись |
-| `Ссылка`, `Ref` | только чтение |
-| `Код`, `Code` | чтение и запись |
-| `Наименование`, `Description` | чтение и запись |
-| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение |
-| `ОбменДанными`, `DataExchange` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Предопределенный`, `Predefined` | только чтение | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ИмяПредопределенныхДанных`, `PredefinedDataName` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ПометкаУдаления`, `DeletionMark` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ЭтоГруппа`, `IsFolder` | только чтение | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Родитель`, `Parent` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Владелец`, `Owner` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Ссылка`, `Ref` | только чтение | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Код`, `Code` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Наименование`, `Description` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ОбменДанными`, `DataExchange` | только чтение | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьНовыйКод`, `SetNewCode` | 0…1 |
-| `Уровень`, `Level` | 0 |
-| `ПроверитьЗаполнение`, `CheckFilling` | 0 |
-| `Записать`, `Write` | 0 |
-| `Заблокировать`, `Lock` | 0 |
-| `ЭтоНовый`, `IsNew` | 0 |
-| `Метаданные`, `Metadata` | 0 |
-| `ПолучитьСсылкуНового`, `GetNewObjectRef` | 0 |
-| `УстановитьСсылкуНового`, `SetNewObjectRef` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьНовыйКод`, `SetNewCode` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Уровень`, `Level` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ПроверитьЗаполнение`, `CheckFilling` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Записать`, `Write` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Заблокировать`, `Lock` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ЭтоНовый`, `IsNew` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Метаданные`, `Metadata` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `ПолучитьСсылкуНового`, `GetNewObjectRef` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `УстановитьСсылкуНового`, `SetNewObjectRef` | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
 
 ##### `ОбъектПланаВидовХарактеристикКонфигурации`
 
-| Свойство | Доступ |
-|---|---|
-| `ПометкаУдаления`, `DeletionMark` | чтение и запись |
-| `Предопределенный`, `Predefined` | только чтение |
-| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение |
-| `ОбменДанными`, `DataExchange` | только чтение |
-| `Код`, `Code` | чтение и запись |
-| `Наименование`, `Description` | чтение и запись |
-| `ТипЗначения`, `ValueType` | чтение и запись |
-| `ЭтоГруппа`, `IsFolder` | только чтение |
-| `Ссылка`, `Ref` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ПометкаУдаления`, `DeletionMark` | чтение и запись | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `Предопределенный`, `Predefined` | только чтение | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `ОбменДанными`, `DataExchange` | только чтение | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `Код`, `Code` | чтение и запись | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `Наименование`, `Description` | чтение и запись | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `ТипЗначения`, `ValueType` | чтение и запись | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `ЭтоГруппа`, `IsFolder` | только чтение | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
+| `Ссылка`, `Ref` | только чтение | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЭтоНовый`, `IsNew` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЭтоНовый`, `IsNew` | — | [bsl-orm/src/characteristic_object.rs](../../../crates/bsl-orm/src/characteristic_object.rs) |
 
 ##### `ДокументОбъект`
 
-| Свойство | Доступ |
-|---|---|
-| `Движения`, `RegisterRecords` | только чтение |
-| `Номер`, `Number` | чтение и запись |
-| `Дата`, `Date` | чтение и запись |
-| `ПометкаУдаления`, `DeletionMark` | чтение и запись |
-| `Проведен`, `Posted` | чтение и запись |
-| `Ссылка`, `Ref` | только чтение |
-| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение |
-| `ОбменДанными`, `DataExchange` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Движения`, `RegisterRecords` | только чтение | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Номер`, `Number` | чтение и запись | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Дата`, `Date` | чтение и запись | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `ПометкаУдаления`, `DeletionMark` | чтение и запись | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Проведен`, `Posted` | чтение и запись | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Ссылка`, `Ref` | только чтение | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `ОбменДанными`, `DataExchange` | только чтение | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьМакет`, `GetTemplate` | 1 |
-| `Скопировать`, `Copy` | 0 |
-| `ПроверитьЗаполнение`, `CheckFilling` | 0 |
-| `МоментВремени`, `PointInTime` | 0 |
-| `Записать`, `Write` | 0…2 |
-| `УстановитьНовыйНомер`, `SetNewNumber` | 0…1 |
-| `ПолучитьСсылкуНового`, `GetNewObjectRef` | 0 |
-| `УстановитьСсылкуНового`, `SetNewObjectRef` | 1 |
-| `Заполнить`, `Fill` | 1 |
-| `ЭтоНовый`, `IsNew` | 0 |
-| `Модифицированность`, `Modified` | 0 |
-| `Заблокирован`, `IsLocked` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьМакет`, `GetTemplate` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Скопировать`, `Copy` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `ПроверитьЗаполнение`, `CheckFilling` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `МоментВремени`, `PointInTime` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Записать`, `Write` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `УстановитьНовыйНомер`, `SetNewNumber` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `ПолучитьСсылкуНового`, `GetNewObjectRef` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `УстановитьСсылкуНового`, `SetNewObjectRef` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Заполнить`, `Fill` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `ЭтоНовый`, `IsNew` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Модифицированность`, `Modified` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Заблокирован`, `IsLocked` | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
 
 ##### `БизнесПроцессОбъект`
 
-| Свойство | Доступ |
-|---|---|
-| `ОбменДанными`, `DataExchange` | только чтение |
-| `ВедущаяЗадача`, `HeadTask` | чтение и запись |
-| `Номер`, `Number` | чтение и запись |
-| `Дата`, `Date` | чтение и запись |
-| `ПометкаУдаления`, `DeletionMark` | чтение и запись |
-| `Стартован`, `Started` | чтение и запись |
-| `Завершен`, `Completed` | чтение и запись |
-| `Ссылка`, `Ref` | только чтение |
-| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ОбменДанными`, `DataExchange` | только чтение | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `ВедущаяЗадача`, `HeadTask` | чтение и запись | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Номер`, `Number` | чтение и запись | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `Дата`, `Date` | чтение и запись | — | [bsl-orm/src/document_object.rs](../../../crates/bsl-orm/src/document_object.rs) |
+| `ПометкаУдаления`, `DeletionMark` | чтение и запись | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Стартован`, `Started` | чтение и запись | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Завершен`, `Completed` | чтение и запись | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Ссылка`, `Ref` | только чтение | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьСсылкуНового`, `GetNewObjectRef` | 0 |
-| `УстановитьСсылкуНового`, `SetNewObjectRef` | 1 |
-| `Модифицированность`, `Modified` | 0 |
-| `Прочитать`, `Read` | 0 |
-| `Записать`, `Write` | 0 |
-| `ПроверитьЗаполнение`, `CheckFilling` | 0 |
-| `Заполнить`, `Fill` | 1 |
-| `ЭтоНовый`, `IsNew` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьСсылкуНового`, `GetNewObjectRef` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `УстановитьСсылкуНового`, `SetNewObjectRef` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Модифицированность`, `Modified` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Прочитать`, `Read` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Записать`, `Write` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `ПроверитьЗаполнение`, `CheckFilling` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `Заполнить`, `Fill` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
+| `ЭтоНовый`, `IsNew` | — | [bsl-orm/src/business_process_object.rs](../../../crates/bsl-orm/src/business_process_object.rs) |
 
 ##### `ОбработкаОбъект`
 
-| Метод | Аргументы |
-|---|---:|
-| `Метаданные`, `Metadata` | 0 |
-| `ПолучитьМакет`, `GetTemplate` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Метаданные`, `Metadata` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
+| `ПолучитьМакет`, `GetTemplate` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
 
 ##### `ОтчетОбъект`
 
-| Свойство | Доступ |
-|---|---|
-| `КомпоновщикНастроек`, `SettingsComposer` | только чтение |
-| `СхемаКомпоновкиДанных`, `DataCompositionSchema` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `КомпоновщикНастроек`, `SettingsComposer` | только чтение | — | [bsl-orm/src/data_processor_object.rs](../../../crates/bsl-orm/src/data_processor_object.rs) |
+| `СхемаКомпоновкиДанных`, `DataCompositionSchema` | чтение и запись | — | [bsl-orm/src/data_processor_object.rs](../../../crates/bsl-orm/src/data_processor_object.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Метаданные`, `Metadata` | 0 |
-| `ПолучитьМакет`, `GetTemplate` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Метаданные`, `Metadata` | — | [bsl-orm/src/references.rs](../../../crates/bsl-orm/src/references.rs) |
+| `ПолучитьМакет`, `GetTemplate` | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
 
 ##### `КоллекцияДвижений`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `РегистрСведенийНаборЗаписей`
 
-| Свойство | Доступ |
-|---|---|
-| `Записывать`, `Write` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Записывать`, `Write` | чтение и запись | — | [bsl-orm/src/document_movements.rs](../../../crates/bsl-orm/src/document_movements.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `ДокументТабличнаяЧасть`
 
-| Метод | Аргументы |
-|---|---:|
-| `Добавить`, `Add` | 0 |
-| `Количество`, `Count` | 0 |
-| `Выгрузить`, `Unload` | 1 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Добавить`, `Add` | — | [bsl-orm/src/document_tabular_section.rs](../../../crates/bsl-orm/src/document_tabular_section.rs) |
+| `Количество`, `Count` | — | [bsl-orm/src/document_tabular_section.rs](../../../crates/bsl-orm/src/document_tabular_section.rs) |
+| `Выгрузить`, `Unload` | — | [bsl-orm/src/document_tabular_section.rs](../../../crates/bsl-orm/src/document_tabular_section.rs) |
+| `Удалить`, `Delete` | — | [bsl-orm/src/document_tabular_section.rs](../../../crates/bsl-orm/src/document_tabular_section.rs) |
+| `Очистить`, `Clear` | — | [bsl-orm/src/document_tabular_section.rs](../../../crates/bsl-orm/src/document_tabular_section.rs) |
 
 ##### `ДокументТабличнаяЧастьСтрока`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Свойство | Доступ |
-|---|---|
-| `НомерСтроки`, `LineNumber` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `НомерСтроки`, `LineNumber` | только чтение | — | [bsl-rt/src/error_info.rs](../../../crates/bsl-rt/src/error_info.rs) |
 
 ##### `ПараметрыОбменаДанными`
 
-| Свойство | Доступ |
-|---|---|
-| `Загрузка`, `Load` | чтение и запись |
-| `Получатели`, `Recipients` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Загрузка`, `Load` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
+| `Получатели`, `Recipients` | только чтение | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
 
 ##### `НаборУзлов`
 
-| Свойство | Доступ |
-|---|---|
-| `АвтоЗаполнение`, `AutoFill` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `АвтоЗаполнение`, `AutoFill` | чтение и запись | — | [bsl-orm/src/catalog_object.rs](../../../crates/bsl-orm/src/catalog_object.rs) |
 
 ##### `БиблиотекаКартинок`
 
@@ -1367,191 +1367,191 @@
 
 ##### `МенеджерРасширенийКонфигурации`
 
-| Метод | Аргументы |
-|---|---:|
-| `Получить`, `Get` | 0…2 |
-| `ПолучитьИнформациюОПроблемахПримененияВСеансе`, `GetSessionApplicationIssuesInformation` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Получить`, `Get` | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `ПолучитьИнформациюОПроблемахПримененияВСеансе`, `GetSessionApplicationIssuesInformation` | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
 
 ##### `МенеджерПользователейИнформационнойБазы`
 
-| Метод | Аргументы |
-|---|---:|
-| `ТекущийПользователь`, `CurrentUser` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ТекущийПользователь`, `CurrentUser` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
 
 ##### `ПользовательИнформационнойБазы`
 
-| Свойство | Доступ |
-|---|---|
-| `Имя`, `Name` | только чтение |
-| `РазделениеДанных`, `DataSeparation` | только чтение |
-| `УникальныйИдентификатор`, `UUID` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Имя`, `Name` | только чтение | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `РазделениеДанных`, `DataSeparation` | только чтение | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УникальныйИдентификатор`, `UUID` | только чтение | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
 
 ##### `МенеджерПолитикПаролейПользователей`
 
-| Метод | Аргументы |
-|---|---:|
-| `НайтиПоИмени`, `FindByName` | 0…1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `НайтиПоИмени`, `FindByName` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
 
 ##### `ПолитикаПаролейПользователей`
 
-| Свойство | Доступ |
-|---|---|
-| `МинимальнаяДлинаПаролей`, `PasswordMinLength` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `МинимальнаяДлинаПаролей`, `PasswordMinLength` | только чтение | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
 
 ##### `МенеджерБлокировкиАутентификацииПользователейИнформационнойБазы`
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьНастройки`, `GetSettings` | 0 |
-| `УстановитьНастройки`, `SetSettings` | 0…1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьНастройки`, `GetSettings` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `УстановитьНастройки`, `SetSettings` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
 
 ##### `НастройкиБлокировкиАутентификацииПользователейИнформационнойБазы`
 
-| Свойство | Доступ |
-|---|---|
-| `ДлительностьБлокировки`, `LockDuration` | чтение и запись |
-| `МаксимальноеКоличествоНеуспешныхПопыток`, `MaxUnsuccessfulAttemptsCount` | чтение и запись |
-| `КодыДополненияИмениПользователя`, `UserNameAdditionCodes` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ДлительностьБлокировки`, `LockDuration` | чтение и запись | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `МаксимальноеКоличествоНеуспешныхПопыток`, `MaxUnsuccessfulAttemptsCount` | чтение и запись | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
+| `КодыДополненияИмениПользователя`, `UserNameAdditionCodes` | чтение и запись | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
 
 ##### `ГенераторСлучайныхПаролей`
 
-| Метод | Аргументы |
-|---|---:|
-| `СлучайныйПароль`, `RandomPassword` | 0…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `СлучайныйПароль`, `RandomPassword` | — | [bsl-orm/src/infobase_users.rs](../../../crates/bsl-orm/src/infobase_users.rs) |
 
 ##### `МенеджерСервисовИнтеграции`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `ВыполнитьОбработку`, `ExecuteProcessing` | 0 |
-| `ОстановитьОбработку`, `StopProcessing` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ВыполнитьОбработку`, `ExecuteProcessing` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `ОстановитьОбработку`, `StopProcessing` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
 
 ##### `РасширениеКонфигурации`
 
-| Свойство | Доступ |
-|---|---|
-| `Назначение`, `Purpose` | только чтение |
-| `УникальныйИдентификатор`, `UUID` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Версия`, `Version` | только чтение |
-| `ХешСумма`, `HashSum` | только чтение |
-| `БезопасныйРежим`, `SafeMode` | только чтение |
-| `ИспользуетсяВРаспределеннойИнформационнойБазе`, `UsedInDistributedInfoBase` | только чтение |
-| `Активно`, `Active` | только чтение |
-| `ОбластьДействия`, `Scope` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Назначение`, `Purpose` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `УникальныйИдентификатор`, `UUID` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `Версия`, `Version` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `ХешСумма`, `HashSum` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `БезопасныйРежим`, `SafeMode` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `ИспользуетсяВРаспределеннойИнформационнойБазе`, `UsedInDistributedInfoBase` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `Активно`, `Active` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `ОбластьДействия`, `Scope` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
 
 ##### `ИнформацияОПроблемеПримененияРасширенияКонфигурации`
 
-| Свойство | Доступ |
-|---|---|
-| `Расширение`, `Extension` | только чтение |
-| `Описание`, `Description` | только чтение |
-| `Важность`, `Severity` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Расширение`, `Extension` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `Описание`, `Description` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
+| `Важность`, `Severity` | только чтение | — | [bsl-orm/src/configuration_extension.rs](../../../crates/bsl-orm/src/configuration_extension.rs) |
 
 ##### `Запрос`
 
-| Свойство | Доступ |
-|---|---|
-| `Текст`, `Text` | чтение и запись |
-| `Параметры`, `Parameters` | только чтение |
-| `МенеджерВременныхТаблиц`, `TempTablesManager` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Текст`, `Text` | чтение и запись | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `Параметры`, `Parameters` | только чтение | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `МенеджерВременныхТаблиц`, `TempTablesManager` | чтение и запись | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьПараметр`, `SetParameter` | 2 |
-| `Выполнить`, `Execute` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьПараметр`, `SetParameter` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `Выполнить`, `Execute` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
 
 ##### `КомпоновщикМакетаКомпоновкиДанных`
 
-| Метод | Аргументы |
-|---|---:|
-| `Выполнить`, `Execute` | 2…7 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Выполнить`, `Execute` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
 
 ##### `ПроцессорКомпоновкиДанных`
 
-| Метод | Аргументы |
-|---|---:|
-| `Инициализировать`, `Initialize` | 1…6 |
-| `Сбросить`, `Reset` | 0 |
-| `Следующий`, `Next` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Инициализировать`, `Initialize` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `Сбросить`, `Reset` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `Следующий`, `Next` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
 
 ##### `ПроцессорВыводаРезультатаКомпоновкиДанныхВКоллекциюЗначений`
 
-| Свойство | Доступ |
-|---|---|
-| `ОтображатьПроцентВывода`, `ShowOutputPercent` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ОтображатьПроцентВывода`, `ShowOutputPercent` | чтение и запись | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьОбъект`, `SetObject` | 0…1 |
-| `Вывести`, `Output` | 1…2 |
-| `ВывестиЭлемент`, `OutputItem` | 1 |
-| `НачатьВывод`, `BeginOutput` | 0 |
-| `ЗакончитьВывод`, `EndOutput` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьОбъект`, `SetObject` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `Вывести`, `Output` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ВывестиЭлемент`, `OutputItem` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `НачатьВывод`, `BeginOutput` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
+| `ЗакончитьВывод`, `EndOutput` | — | [bsl-orm/src/data_composition.rs](../../../crates/bsl-orm/src/data_composition.rs) |
 
 ##### `МенеджерВременныхТаблиц`
 
-| Метод | Аргументы |
-|---|---:|
-| `Закрыть`, `Close` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Закрыть`, `Close` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
 
 ##### `РезультатЗапроса`
 
-| Метод | Аргументы |
-|---|---:|
-| `Пустой`, `IsEmpty` | 0 |
-| `Выбрать`, `Select` | 0…3 |
-| `Выгрузить`, `Unload` | 0…1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Пустой`, `IsEmpty` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `Выбрать`, `Select` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `Выгрузить`, `Unload` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
 
 ##### `ВыборкаИзРезультатаЗапроса`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Следующий`, `Next` | 0 |
-| `Получить`, `Get` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Следующий`, `Next` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
+| `Получить`, `Get` | — | [bsl-orm/src/query.rs](../../../crates/bsl-orm/src/query.rs) |
 
 ##### `СправочникВыборка`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Следующий`, `Next` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Следующий`, `Next` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
 
 ##### `ХранилищеЗначения`
 
-| Метод | Аргументы |
-|---|---:|
-| `Получить`, `Get` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Получить`, `Get` | — | [bsl-orm/src/value_storage.rs](../../../crates/bsl-orm/src/value_storage.rs) |
 
 ##### `БлокировкаДанных`
 
-| Метод | Аргументы |
-|---|---:|
-| `Добавить`, `Add` | 0…1 |
-| `Заблокировать`, `Lock` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Добавить`, `Add` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
+| `Заблокировать`, `Lock` | — | [bsl-orm/src/infobase.rs](../../../crates/bsl-orm/src/infobase.rs) |
 
 ##### `СоставОбщегоРеквизита`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Найти`, `Find` | 1 |
-| `Содержит`, `Contains` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `Найти`, `Find` | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `Содержит`, `Contains` | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
 
 ##### `ЭлементСоставаОбщегоРеквизита`
 
-| Свойство | Доступ |
-|---|---|
-| `Метаданные`, `Metadata` | только чтение |
-| `Использование`, `Use` | только чтение |
-| `УсловноеРазделение`, `ConditionalSeparation` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Метаданные`, `Metadata` | только чтение | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `Использование`, `Use` | только чтение | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
+| `УсловноеРазделение`, `ConditionalSeparation` | только чтение | — | [bsl-orm/src/common_attribute_content.rs](../../../crates/bsl-orm/src/common_attribute_content.rs) |
 
-### `bsl-pdf` 0.2.0
+### `bsl-pdf` 0.3.0
 
 #### Глобальные функции
 
@@ -1559,90 +1559,90 @@
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ДокументPDF`, `PDFDocument` | 0 |
-| `КоллекцияВложенийPDF`, `PDFAttachmentCollection` | 0 |
-| `ОписаниеОтображаемогоОбъектаPDF`, `PDFRepresentationObjectDescription` — *объявлено без реализации* | 0 |
-| `ЗаписьPDF`, `PDFWriter` — *объявлено без реализации* | 0…1 |
-| `ЧтениеPDF`, `PDFReader` — *объявлено без реализации* | 0…1 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ДокументPDF`, `PDFDocument` | — | [bsl-pdf/src/lib.rs](../../../crates/bsl-pdf/src/lib.rs) |
+| `КоллекцияВложенийPDF`, `PDFAttachmentCollection` | — | [bsl-pdf/src/lib.rs](../../../crates/bsl-pdf/src/lib.rs) |
+| `ОписаниеОтображаемогоОбъектаPDF`, `PDFRepresentationObjectDescription` — *объявлено без реализации* | — | [bsl-pdf/src/lib.rs](../../../crates/bsl-pdf/src/lib.rs) |
+| `ЗаписьPDF`, `PDFWriter` — *объявлено без реализации* | — | [bsl-pdf/src/lib.rs](../../../crates/bsl-pdf/src/lib.rs) |
+| `ЧтениеPDF`, `PDFReader` — *объявлено без реализации* | — | [bsl-pdf/src/lib.rs](../../../crates/bsl-pdf/src/lib.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `КоллекцияВложенийPDF` | `КоллекцияВложенийPDF` | `PDFAttachmentCollection` |
-| `ВложениеPDF` | `ВложениеPDF` | `PDFAttachment` |
-| `ДокументPDF` | `Документ PDF` | `PDFDocument` |
-| `КоллекцияСтраницPDF` | `КоллекцияСтраницPDF` | `PDFPagesCollection` |
-| `СтраницаPDF` | `СтраницаPDF` | `PDFPage` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `КоллекцияВложенийPDF` | `КоллекцияВложенийPDF` | `PDFAttachmentCollection` | — | [bsl-pdf/src/document/surface.rs](../../../crates/bsl-pdf/src/document/surface.rs) |
+| `ВложениеPDF` | `ВложениеPDF` | `PDFAttachment` | — | [bsl-pdf/src/document/surface.rs](../../../crates/bsl-pdf/src/document/surface.rs) |
+| `ДокументPDF` | `Документ PDF` | `PDFDocument` | — | [bsl-pdf/src/document/surface.rs](../../../crates/bsl-pdf/src/document/surface.rs) |
+| `КоллекцияСтраницPDF` | `КоллекцияСтраницPDF` | `PDFPagesCollection` | — | [bsl-pdf/src/document/surface.rs](../../../crates/bsl-pdf/src/document/surface.rs) |
+| `СтраницаPDF` | `СтраницаPDF` | `PDFPage` | — | [bsl-pdf/src/document/surface.rs](../../../crates/bsl-pdf/src/document/surface.rs) |
 
 #### Члены объектов
 
 ##### `КоллекцияВложенийPDF`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
-| `Найти`, `Find` | 1 |
-| `Добавить`, `Add` | 2…4 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Индекс`, `IndexOf` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Получить`, `Get` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Найти`, `Find` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Индекс`, `IndexOf` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
 
 ##### `ВложениеPDF`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяФайла`, `FileName` | чтение и запись |
-| `ТипСодержимого`, `MIMEType` | чтение и запись |
-| `Содержимое`, `Content` | чтение и запись |
-| `ТипСвязи`, `RelationshipType` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяФайла`, `FileName` | чтение и запись | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `ТипСодержимого`, `MIMEType` | чтение и запись | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Содержимое`, `Content` | чтение и запись | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `ТипСвязи`, `RelationshipType` | чтение и запись | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
 
 ##### `ДокументPDF`
 
-| Свойство | Доступ |
-|---|---|
-| `Вложения`, `Attachments` | только чтение |
-| `Страницы`, `Pages` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Вложения`, `Attachments` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Страницы`, `Pages` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Прочитать`, `Read` | 1…2 |
-| `Записать`, `Write` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Прочитать`, `Read` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Записать`, `Write` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
 
 ##### `КоллекцияСтраницPDF`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
-| `Индекс`, `IndexOf` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Получить`, `Get` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Индекс`, `IndexOf` | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
 
 ##### `СтраницаPDF`
 
-| Свойство | Доступ |
-|---|---|
-| `Номер`, `Number` | только чтение |
-| `Ширина`, `Width` | только чтение |
-| `Высота`, `Height` | только чтение |
-| `Ориентация`, `Orientation` | только чтение |
-| `ПолеСлева`, `LeftMargin` | только чтение |
-| `ПолеСправа`, `RightMargin` | только чтение |
-| `ПолеСверху`, `TopMargin` | только чтение |
-| `ПолеСнизу`, `BottomMargin` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Номер`, `Number` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Ширина`, `Width` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Высота`, `Height` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `Ориентация`, `Orientation` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `ПолеСлева`, `LeftMargin` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `ПолеСправа`, `RightMargin` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `ПолеСверху`, `TopMargin` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
+| `ПолеСнизу`, `BottomMargin` | только чтение | — | [bsl-pdf/src/document/objects.rs](../../../crates/bsl-pdf/src/document/objects.rs) |
 
-### `bsl-regexp` 0.2.0
+### `bsl-regexp` 0.3.0
 
 #### Глобальные функции
 
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `СтрНайтиПоРегулярномуВыражению`, `StrFindByRegularExpression` | функция | 2…7 |
-| `СтрНайтиВсеПоРегулярномуВыражению`, `StrFindAllByRegularExpression` | функция | 2…4 |
-| `СтрЗаменитьПоРегулярномуВыражению`, `StrReplaceByRegularExpression` | функция | 3…5 |
-| `СтрПодобнаПоРегулярномуВыражению`, `StrLikeByRegularExpression` | функция | 2…4 |
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `СтрНайтиПоРегулярномуВыражению`, `StrFindByRegularExpression` | функция | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `СтрНайтиВсеПоРегулярномуВыражению`, `StrFindAllByRegularExpression` | функция | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `СтрЗаменитьПоРегулярномуВыражению`, `StrReplaceByRegularExpression` | функция | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `СтрПодобнаПоРегулярномуВыражению`, `StrLikeByRegularExpression` | функция | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
 
 #### Конструкторы
 
@@ -1650,34 +1650,34 @@
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `ГруппаРезультатаПоискаПоРегулярномуВыражению` | `Группа результата поиска по регулярному выражению` | `ResultOfSearchByRegularExpressionGroup` |
-| `РезультатПоискаПоРегулярномуВыражению` | `Результат поиска по регулярному выражению` | `ResultOfSearchByRegularExpression` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ГруппаРезультатаПоискаПоРегулярномуВыражению` | `Группа результата поиска по регулярному выражению` | `ResultOfSearchByRegularExpressionGroup` | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `РезультатПоискаПоРегулярномуВыражению` | `Результат поиска по регулярному выражению` | `ResultOfSearchByRegularExpression` | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
 
 #### Члены объектов
 
 ##### `ГруппаРезультатаПоискаПоРегулярномуВыражению`
 
-| Свойство | Доступ |
-|---|---|
-| `Значение`, `Value` | только чтение |
-| `НачальнаяПозиция`, `StartIndex` | только чтение |
-| `Длина`, `Length` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Значение`, `Value` | только чтение | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `НачальнаяПозиция`, `StartIndex` | только чтение | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `Длина`, `Length` | только чтение | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
 
 ##### `РезультатПоискаПоРегулярномуВыражению`
 
-| Свойство | Доступ |
-|---|---|
-| `Значение`, `Value` | только чтение |
-| `НачальнаяПозиция`, `StartIndex` | только чтение |
-| `Длина`, `Length` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Значение`, `Value` | только чтение | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `НачальнаяПозиция`, `StartIndex` | только чтение | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
+| `Длина`, `Length` | только чтение | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьГруппы`, `GetGroups` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьГруппы`, `GetGroups` | — | [bsl-regexp/src/lib.rs](../../../crates/bsl-regexp/src/lib.rs) |
 
-### `bsl-session` 0.1.0
+### `bsl-session` 0.2.0
 
 #### Глобальные свойства
 
@@ -1702,128 +1702,128 @@
 
 #### Глобальные функции
 
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `КодЛокализацииИнформационнойБазы`, `InfoBaseLocaleCode` | функция | 0 |
-| `ТекущийВариантИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceCurrentVariant` | функция | 0 |
-| `ПолучитьБлокировкуСеансов`, `GetSessionsLock` | функция | 0 |
-| `УстановитьБлокировкуСеансов`, `SetSessionsLock` | процедура | 1 |
-| `ДополнительныеНастройкиАутентификации`, `AdditionalAuthenticationSettings` | функция | 0 |
-| `УстановитьНастройкиКлиентаЛицензирования`, `SetLicensingClientParameters` | процедура | 0…3 |
-| `ПолучитьДополнительныйПараметрКлиентаЛицензирования`, `GetLicensingClientAdditionalParameter` | функция | 0 |
-| `ПолучитьИдентификаторКонфигурации`, `GetConfigurationID` | функция | 0 |
-| `ПолучитьИмяКлиентаЛицензирования`, `GetLicensingClientName` | функция | 0 |
-| `ПолучитьРазделительПутиСервера`, `GetServerPathSeparator` | функция | 0 |
-| `ПолнотекстовыйПоиск`, `FullTextSearch` | функция | 0 |
-| `ПредставлениеКодаЛокализации`, `LocaleCodePresentation` | функция | 1 |
-| `ПолучитьДопустимыеКодыЛокализации`, `GetAvailableLocaleCodes` | функция | 0 |
-| `ПараметрыДоступа`, `AccessParameters` | функция | 3…4 |
-| `НайтиПомеченныеНаУдаление`, `FindMarkedForDeletion` | функция | 0…3 |
-| `ПолучитьИсториюРаботыПользователяСеанса` | функция | 0 |
-| `ПолучитьХранилищеВариантовОтчетовСеанса` | функция | 0 |
-| `ВыгрузитьЖурналРегистрации`, `UnloadEventLog` | процедура | 1…5 |
-| `ПолучитьНавигационнуюСсылкуИнформационнойБазы`, `GetInfoBaseURL` | функция | 0 |
-| `ПолучитьСкоростьКлиентскогоСоединения`, `GetClientConnectionSpeed` | функция | 0 |
-| `НомерСеансаИнформационнойБазы`, `InfoBaseSessionNumber` | функция | 0 |
-| `СистемаВзаимодействия`, `CollaborationSystem` | функция | 0 |
-| `РегламентныеЗадания`, `ScheduledJobs` | функция | 0 |
-| `ПолучитьСеансыИнформационнойБазы`, `GetInfoBaseSessions` | функция | 0 |
-| `ИмяКомпьютера`, `ComputerName` | функция | 0 |
-| `ПолучитьИнформациюЭкрановКлиента`, `GetClientDisplaysInformation` | функция | 0 |
-| `ПолучитьПараметрыСеанса` | функция | 0 |
-| `ТекущийРежимЗапуска`, `CurrentRunMode` | функция | 0 |
-| `СтрокаСоединенияИнформационнойБазы`, `InfoBaseConnectionString` | функция | 0 |
-| `ПолучитьТекущийСеансИнформационнойБазы`, `GetCurrentInfoBaseSession` | функция | 0 |
-| `НомерСоединенияИнформационнойБазы`, `InfoBaseConnectionNumber` | функция | 0 |
-| `УстановитьБезопасныйРежим`, `SetSafeMode` | процедура | 1 |
-| `БезопасныйРежим`, `SafeMode` | функция | 0 |
-| `УстановитьПривилегированныйРежим`, `SetPrivilegedMode` | процедура | 1 |
-| `ПривилегированныйРежим`, `PrivilegedMode` | функция | 0 |
-| `ПолучитьСоединенияИнформационнойБазы`, `GetInfoBaseConnections` | функция | 0 |
-| `УстановитьОтключениеБезопасногоРежима`, `SetSafeModeDisabled` | процедура | 1 |
-| `ОбновитьПовторноИспользуемыеЗначения`, `RefreshReusableValues` | процедура | 0 |
-| `ПолучитьОбработкуОшибокСеанса` | функция | 0 |
-| `КонфигурацияБазыДанныхИзмененаДинамически`, `DataBaseConfigurationChangedDynamically` | функция | 0 |
-| `ПолучитьОтключениеБезопасногоРежима`, `GetSafeModeDisabled` | функция | 0 |
-| `ЗаписьЖурналаРегистрации`, `WriteLogEvent` | процедура | 1…6 |
-| `ПолучитьХранилищеОбщихНастроек` | функция | 0 |
-| `ПолучитьХранилищеСистемныхНастроек` | функция | 0 |
-| `ПолучитьХранилищеНастроекДанныхФорм` | функция | 0 |
-| `ПолучитьСтандартноеХранилищеПользовательскихНастроекОтчетов`, `GetStandardReportsUserSettingsStorage` | функция | 0 |
-| `ПолучитьСтандартноеХранилищеПользовательскихНастроекДинамическихСписков`, `GetStandardDynamicListsUserSettingsStorage` | функция | 0 |
-| `УстановитьБезопасныйРежимРазделенияДанных`, `SetDataSeparationSafeMode` | процедура | 2 |
-| `БезопасныйРежимРазделенияДанных`, `DataSeparationSafeMode` | функция | 1 |
-| `ПодключитьВнешнююКомпоненту`, `AttachAddIn` | функция | 1…4 |
-| `ПолучитьИспользованиеСобытияЖурналаРегистрации`, `GetEventLogEventUse` | функция | 1 |
-| `УстановитьИспользованиеСобытияЖурналаРегистрации`, `SetEventLogEventUse` | процедура | 2 |
-| `ПолучитьИспользованиеЖурналаРегистрации`, `GetEventLogUsing` | функция | 0 |
-| `КлиентскоеПриложение`, `ClientApplication` | функция | 0 |
-| `ТекущийКодЛокализации`, `CurrentLocaleCode` | функция | 0 |
-| `ТекущийЯзыкСистемы`, `CurrentSystemLanguage` | функция | 0 |
-| `ПолучитьРежимВнешнихРесурсов`, `GetExternalResourcesMode` | функция | 0 |
-| `ОтправкаДоставляемыхУведомлений`, `DeliverableNotificationSend` | функция | 0 |
-| `СредстваКриптографии`, `CryptoTools` | функция | 0 |
-| `ПолучитьЧасовойПоясИнформационнойБазы`, `GetInfoBaseTimeZone` | функция | 0 |
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `КодЛокализацииИнформационнойБазы`, `InfoBaseLocaleCode` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ТекущийВариантИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceCurrentVariant` | функция | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ПолучитьБлокировкуСеансов`, `GetSessionsLock` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `УстановитьБлокировкуСеансов`, `SetSessionsLock` | процедура | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `ДополнительныеНастройкиАутентификации`, `AdditionalAuthenticationSettings` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `УстановитьНастройкиКлиентаЛицензирования`, `SetLicensingClientParameters` | процедура | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьДополнительныйПараметрКлиентаЛицензирования`, `GetLicensingClientAdditionalParameter` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьИдентификаторКонфигурации`, `GetConfigurationID` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьИмяКлиентаЛицензирования`, `GetLicensingClientName` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьРазделительПутиСервера`, `GetServerPathSeparator` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолнотекстовыйПоиск`, `FullTextSearch` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПредставлениеКодаЛокализации`, `LocaleCodePresentation` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьДопустимыеКодыЛокализации`, `GetAvailableLocaleCodes` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПараметрыДоступа`, `AccessParameters` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `НайтиПомеченныеНаУдаление`, `FindMarkedForDeletion` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьИсториюРаботыПользователяСеанса` | функция | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПолучитьХранилищеВариантовОтчетовСеанса` | функция | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ВыгрузитьЖурналРегистрации`, `UnloadEventLog` | процедура | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ПолучитьНавигационнуюСсылкуИнформационнойБазы`, `GetInfoBaseURL` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `ПолучитьСкоростьКлиентскогоСоединения`, `GetClientConnectionSpeed` | функция | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `НомерСеансаИнформационнойБазы`, `InfoBaseSessionNumber` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `СистемаВзаимодействия`, `CollaborationSystem` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `РегламентныеЗадания`, `ScheduledJobs` | функция | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ПолучитьСеансыИнформационнойБазы`, `GetInfoBaseSessions` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `ИмяКомпьютера`, `ComputerName` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьИнформациюЭкрановКлиента`, `GetClientDisplaysInformation` | функция | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ПолучитьПараметрыСеанса` | функция | — | [bsl-session/src/parameters.rs](../../../crates/bsl-session/src/parameters.rs) |
+| `ТекущийРежимЗапуска`, `CurrentRunMode` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `СтрокаСоединенияИнформационнойБазы`, `InfoBaseConnectionString` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `ПолучитьТекущийСеансИнформационнойБазы`, `GetCurrentInfoBaseSession` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `НомерСоединенияИнформационнойБазы`, `InfoBaseConnectionNumber` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `УстановитьБезопасныйРежим`, `SetSafeMode` | процедура | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `БезопасныйРежим`, `SafeMode` | функция | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `УстановитьПривилегированныйРежим`, `SetPrivilegedMode` | процедура | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `ПривилегированныйРежим`, `PrivilegedMode` | функция | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `ПолучитьСоединенияИнформационнойБазы`, `GetInfoBaseConnections` | функция | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `УстановитьОтключениеБезопасногоРежима`, `SetSafeModeDisabled` | процедура | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `ОбновитьПовторноИспользуемыеЗначения`, `RefreshReusableValues` | процедура | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьОбработкуОшибокСеанса` | функция | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
+| `КонфигурацияБазыДанныхИзмененаДинамически`, `DataBaseConfigurationChangedDynamically` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьОтключениеБезопасногоРежима`, `GetSafeModeDisabled` | функция | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `ЗаписьЖурналаРегистрации`, `WriteLogEvent` | процедура | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ПолучитьХранилищеОбщихНастроек` | функция | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПолучитьХранилищеСистемныхНастроек` | функция | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПолучитьХранилищеНастроекДанныхФорм` | функция | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПолучитьСтандартноеХранилищеПользовательскихНастроекОтчетов`, `GetStandardReportsUserSettingsStorage` | функция | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПолучитьСтандартноеХранилищеПользовательскихНастроекДинамическихСписков`, `GetStandardDynamicListsUserSettingsStorage` | функция | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `УстановитьБезопасныйРежимРазделенияДанных`, `SetDataSeparationSafeMode` | процедура | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `БезопасныйРежимРазделенияДанных`, `DataSeparationSafeMode` | функция | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `ПодключитьВнешнююКомпоненту`, `AttachAddIn` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьИспользованиеСобытияЖурналаРегистрации`, `GetEventLogEventUse` | функция | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `УстановитьИспользованиеСобытияЖурналаРегистрации`, `SetEventLogEventUse` | процедура | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ПолучитьИспользованиеЖурналаРегистрации`, `GetEventLogUsing` | функция | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `КлиентскоеПриложение`, `ClientApplication` | функция | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ТекущийКодЛокализации`, `CurrentLocaleCode` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ТекущийЯзыкСистемы`, `CurrentSystemLanguage` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьРежимВнешнихРесурсов`, `GetExternalResourcesMode` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ОтправкаДоставляемыхУведомлений`, `DeliverableNotificationSend` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `СредстваКриптографии`, `CryptoTools` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПолучитьЧасовойПоясИнформационнойБазы`, `GetInfoBaseTimeZone` | функция | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `АдминистрированиеСервера`, `ServerAdministration` | 0…2 |
-| `СовместноеИспользованиеПриложенийСистемыВзаимодействия`, `CollaborationSystemApplicationLinks` | 0 |
-| `КоллекцияИдентификаторовПриложенийСистемыВзаимодействия`, `CollaborationSystemApplicationIDCollection` | 0 |
-| `ИдентификаторСообщенияСистемыВзаимодействия`, `CollaborationSystemMessageID` | 1 |
-| `ИдентификаторПриложенияСистемыВзаимодействия`, `CollaborationSystemApplicationID` | 1 |
-| `ИнтернетПочтовоеСообщение`, `InternetMailMessage` | 0 |
-| `КонтекстОбсужденияСистемыВзаимодействия`, `CollaborationSystemConversationContext` | 1 |
-| `ИдентификаторОбсужденияСистемыВзаимодействия`, `CollaborationSystemConversationID` | 1 |
-| `ОтборОбсужденийСистемыВзаимодействия`, `CollaborationSystemConversationsFilter` | 0 |
-| `ОтборСообщенийСистемыВзаимодействия`, `CollaborationSystemMessagesFilter` | 0 |
-| `СистемнаяИнформация`, `SystemInfo` | 0 |
-| `НастройкиНачальнойСтраницы`, `HomePageSettings` | 0 |
-| `СоставФормНачальнойСтраницы`, `HomePageForms` | 0 |
-| `ОписаниеНастроек`, `SettingsDescription` | 0 |
-| `РасписаниеРегламентногоЗадания`, `JobSchedule` | 0 |
-| `ОписаниеЗащитыОтОпасныхДействий`, `UnsafeOperationProtectionDescription` | 0 |
-| `ИспользованиеСобытияЖурналаРегистрации`, `EventLogEventUse` | 0…2 |
-| `НастройкиКлиентскогоПриложения`, `ClientSettings` | 0 |
-| `НастройкиКомандногоИнтерфейса`, `CommandInterfaceSettings` | 0 |
-| `НастройкиИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceSettings` | 0 |
-| `НастройкиСоставаИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceContentSettings` | 0 |
-| `ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceContentSettingsGroup` | 0 |
-| `ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceContentSettingsItem` | 1 |
-| `ОписаниеИспользованияСобытияДоступЖурналаРегистрации`, `EventLogAccessEventUseDescription` | 0…1 |
-| `ЭлементПланировщика`, `PlannerItem` | 0 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `АдминистрированиеСервера`, `ServerAdministration` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `СовместноеИспользованиеПриложенийСистемыВзаимодействия`, `CollaborationSystemApplicationLinks` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `КоллекцияИдентификаторовПриложенийСистемыВзаимодействия`, `CollaborationSystemApplicationIDCollection` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ИдентификаторСообщенияСистемыВзаимодействия`, `CollaborationSystemMessageID` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ИдентификаторПриложенияСистемыВзаимодействия`, `CollaborationSystemApplicationID` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ИнтернетПочтовоеСообщение`, `InternetMailMessage` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `КонтекстОбсужденияСистемыВзаимодействия`, `CollaborationSystemConversationContext` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ИдентификаторОбсужденияСистемыВзаимодействия`, `CollaborationSystemConversationID` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ОтборОбсужденийСистемыВзаимодействия`, `CollaborationSystemConversationsFilter` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ОтборСообщенийСистемыВзаимодействия`, `CollaborationSystemMessagesFilter` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `СистемнаяИнформация`, `SystemInfo` | — | [bsl-session/src/system_information.rs](../../../crates/bsl-session/src/system_information.rs) |
+| `НастройкиНачальнойСтраницы`, `HomePageSettings` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `СоставФормНачальнойСтраницы`, `HomePageForms` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ОписаниеНастроек`, `SettingsDescription` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `РасписаниеРегламентногоЗадания`, `JobSchedule` | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ОписаниеЗащитыОтОпасныхДействий`, `UnsafeOperationProtectionDescription` | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `ИспользованиеСобытияЖурналаРегистрации`, `EventLogEventUse` | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `НастройкиКлиентскогоПриложения`, `ClientSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `НастройкиКомандногоИнтерфейса`, `CommandInterfaceSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `НастройкиИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `НастройкиСоставаИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceContentSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceContentSettingsGroup` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceContentSettingsItem` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ОписаниеИспользованияСобытияДоступЖурналаРегистрации`, `EventLogAccessEventUseDescription` | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ЭлементПланировщика`, `PlannerItem` | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `ИдентификаторОбсужденияСистемыВзаимодействия` | `ИдентификаторОбсужденияСистемыВзаимодействия` | `CollaborationSystemConversationID` |
-| `ПараметрыСеанса` | `ПараметрыСеанса` | — |
-| `СистемнаяИнформация` | `СистемнаяИнформация` | — |
-| `СеансИнформационнойБазы` | `Активный сеанс` | `InfoBaseSession` |
-| `СоединениеИнформационнойБазы` | `Активное соединение` | `InfoBaseConnection` |
-| `СтандартноеХранилищеНастроекМенеджер` | `Стандартное хранилище настроек` | `StandardSettingsStorageManager` |
-| `СтандартноеХранилищеНастроекВыборка` | `Standard settings storage Selected data` | `StandardSettingsStorageSelection` |
-| `НастройкиНачальнойСтраницы` | `Настройки начальной страницы` | `HomePageSettings` |
-| `СоставФормНачальнойСтраницы` | `Состав форм начальной страницы` | `HomePageForms` |
-| `МенеджерОбработкиОшибок` | `Менеджер обработки ошибок` | `ErrorProcessingManager` |
-| `НастройкиОбработкиОшибок` | `Настройки обработки ошибок на клиенте` | `ErrorProcessingSettings` |
-| `ОписаниеНастроек` | `Описание настройки` | `SettingsDescription` |
-| `РасписаниеРегламентногоЗадания` | `Расписание задания` | `JobSchedule` |
-| `ОписаниеЗащитыОтОпасныхДействий` | `Описание защиты от опасных действий` | `UnsafeOperationProtectionDescription` |
-| `ИспользованиеСобытияЖурналаРегистрации` | `Использование события журнала регистрации` | `EventLogEventUse` |
-| `ОписаниеИспользованияСобытияДоступЖурналаРегистрации` | `Описание использования события доступ журнала регистрации` | `EventLogAccessEventUseDescription` |
-| `НастройкиКлиентскогоПриложения` | `Настройки клиентского приложения` | `ClientSettings` |
-| `КлиентскоеПриложение` | `Клиентское приложение` | `ClientApplication` |
-| `НастройкиКомандногоИнтерфейса` | `Настройки командного интерфейса` | `CommandInterfaceSettings` |
-| `НастройкиИнтерфейсаКлиентскогоПриложения` | `Настройки панелей` | `ClientApplicationInterfaceSettings` |
-| `НастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettings` |
-| `ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Группа настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettingsGroup` |
-| `ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Элемент настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettingsItem` |
-| `ИнформацияЭкранаКлиента` | `ИнформацияЭкранаКлиента` | `ClientDisplayInformation` |
-| `ЭлементПланировщика` | `Элемент планировщика` | `PlannerItem` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ИдентификаторОбсужденияСистемыВзаимодействия` | `ИдентификаторОбсужденияСистемыВзаимодействия` | `CollaborationSystemConversationID` | — | [bsl-session/src/globals.rs](../../../crates/bsl-session/src/globals.rs) |
+| `ПараметрыСеанса` | `ПараметрыСеанса` | — | — | [bsl-session/src/parameters.rs](../../../crates/bsl-session/src/parameters.rs) |
+| `СистемнаяИнформация` | `СистемнаяИнформация` | — | — | [bsl-session/src/system_information.rs](../../../crates/bsl-session/src/system_information.rs) |
+| `СеансИнформационнойБазы` | `Активный сеанс` | `InfoBaseSession` | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `СоединениеИнформационнойБазы` | `Активное соединение` | `InfoBaseConnection` | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `СтандартноеХранилищеНастроекМенеджер` | `Стандартное хранилище настроек` | `StandardSettingsStorageManager` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `СтандартноеХранилищеНастроекВыборка` | `Standard settings storage Selected data` | `StandardSettingsStorageSelection` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `НастройкиНачальнойСтраницы` | `Настройки начальной страницы` | `HomePageSettings` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `СоставФормНачальнойСтраницы` | `Состав форм начальной страницы` | `HomePageForms` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `МенеджерОбработкиОшибок` | `Менеджер обработки ошибок` | `ErrorProcessingManager` | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
+| `НастройкиОбработкиОшибок` | `Настройки обработки ошибок на клиенте` | `ErrorProcessingSettings` | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
+| `ОписаниеНастроек` | `Описание настройки` | `SettingsDescription` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `РасписаниеРегламентногоЗадания` | `Расписание задания` | `JobSchedule` | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ОписаниеЗащитыОтОпасныхДействий` | `Описание защиты от опасных действий` | `UnsafeOperationProtectionDescription` | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
+| `ИспользованиеСобытияЖурналаРегистрации` | `Использование события журнала регистрации` | `EventLogEventUse` | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ОписаниеИспользованияСобытияДоступЖурналаРегистрации` | `Описание использования события доступ журнала регистрации` | `EventLogAccessEventUseDescription` | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `НастройкиКлиентскогоПриложения` | `Настройки клиентского приложения` | `ClientSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `КлиентскоеПриложение` | `Клиентское приложение` | `ClientApplication` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `НастройкиКомандногоИнтерфейса` | `Настройки командного интерфейса` | `CommandInterfaceSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `НастройкиИнтерфейсаКлиентскогоПриложения` | `Настройки панелей` | `ClientApplicationInterfaceSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `НастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettings` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Группа настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettingsGroup` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения` | `Элемент настройки состава интерфейса клиентского приложения` | `ClientApplicationInterfaceContentSettingsItem` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ИнформацияЭкранаКлиента` | `ИнформацияЭкранаКлиента` | `ClientDisplayInformation` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ЭлементПланировщика` | `Элемент планировщика` | `PlannerItem` | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
 
 #### Члены объектов
 
@@ -1831,212 +1831,212 @@
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Очистить`, `Clear` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Очистить`, `Clear` | — | [bsl-session/src/parameters.rs](../../../crates/bsl-session/src/parameters.rs) |
 
 ##### `СистемнаяИнформация`
 
-| Свойство | Доступ |
-|---|---|
-| `ВерсияПриложения`, `AppVersion` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ВерсияПриложения`, `AppVersion` | только чтение | — | [bsl-session/src/system_information.rs](../../../crates/bsl-session/src/system_information.rs) |
 
 ##### `СеансИнформационнойБазы`
 
-| Свойство | Доступ |
-|---|---|
-| `НомерСеанса`, `SessionNumber` | только чтение |
-| `НачалоСеанса`, `SessionStarted` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `НомерСеанса`, `SessionNumber` | только чтение | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `НачалоСеанса`, `SessionStarted` | только чтение | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьФоновоеЗадание`, `GetBackgroundJob` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьФоновоеЗадание`, `GetBackgroundJob` | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
 
 ##### `СоединениеИнформационнойБазы`
 
-| Свойство | Доступ |
-|---|---|
-| `НомерСоединения`, `ConnectionNumber` | только чтение |
-| `ИмяПриложения`, `ApplicationName` | только чтение |
-| `ИмяКомпьютера`, `ComputerName` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `НомерСоединения`, `ConnectionNumber` | только чтение | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `ИмяПриложения`, `ApplicationName` | только чтение | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
+| `ИмяКомпьютера`, `ComputerName` | только чтение | — | [bsl-session/src/infobase_sessions.rs](../../../crates/bsl-session/src/infobase_sessions.rs) |
 
 ##### `СтандартноеХранилищеНастроекМенеджер`
 
-| Метод | Аргументы |
-|---|---:|
-| `Загрузить`, `Load` | 1…4 |
-| `Сохранить`, `Save` | 3…5 |
-| `Выбрать`, `Select` | 0…1 |
-| `ПолучитьСписок`, `GetList` | 1…2 |
-| `ПолучитьОписание`, `GetDescription` | 1…3 |
-| `Удалить`, `Delete` | 3 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Загрузить`, `Load` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `Сохранить`, `Save` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `Выбрать`, `Select` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПолучитьОписание`, `GetDescription` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `Удалить`, `Delete` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
 
 ##### `СтандартноеХранилищеНастроекВыборка`
 
-| Свойство | Доступ |
-|---|---|
-| `КлючОбъекта`, `ObjectKey` | только чтение |
-| `КлючНастроек`, `SettingsKey` | только чтение |
-| `Пользователь`, `User` | только чтение |
-| `Настройки`, `Settings` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `КлючОбъекта`, `ObjectKey` | только чтение | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `КлючНастроек`, `SettingsKey` | только чтение | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `Пользователь`, `User` | только чтение | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `Настройки`, `Settings` | только чтение | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Следующий`, `Next` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Следующий`, `Next` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
 
 ##### `НастройкиНачальнойСтраницы`
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьСоставФорм`, `GetForms` | 0 |
-| `УстановитьСоставФорм`, `SetForms` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьСоставФорм`, `GetForms` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `УстановитьСоставФорм`, `SetForms` | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
 
 ##### `СоставФормНачальнойСтраницы`
 
-| Свойство | Доступ |
-|---|---|
-| `ЛеваяКолонка`, `LeftColumn` | только чтение |
-| `ПраваяКолонка`, `RightColumn` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ЛеваяКолонка`, `LeftColumn` | только чтение | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ПраваяКолонка`, `RightColumn` | только чтение | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
 
 ##### `МенеджерОбработкиОшибок`
 
-| Метод | Аргументы |
-|---|---:|
-| `КраткоеПредставлениеОшибки`, `BriefErrorDescription` | 1 |
-| `ПодробноеПредставлениеОшибки`, `DetailErrorDescription` | 1 |
-| `ПолучитьНастройкиПользователя`, `GetUserSettings` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `КраткоеПредставлениеОшибки`, `BriefErrorDescription` | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
+| `ПодробноеПредставлениеОшибки`, `DetailErrorDescription` | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
+| `ПолучитьНастройкиПользователя`, `GetUserSettings` | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
 
 ##### `НастройкиОбработкиОшибок`
 
-| Свойство | Доступ |
-|---|---|
-| `ОтправлятьОтчетНаКлиенте`, `SendReportOnClient` | только чтение |
-| `АдресСервисаОбработкиОшибок`, `ErrorProcessingServiceAddress` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ОтправлятьОтчетНаКлиенте`, `SendReportOnClient` | только чтение | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
+| `АдресСервисаОбработкиОшибок`, `ErrorProcessingServiceAddress` | только чтение | — | [bsl-session/src/error_processing.rs](../../../crates/bsl-session/src/error_processing.rs) |
 
 ##### `ОписаниеНастроек`
 
-| Свойство | Доступ |
-|---|---|
-| `КлючОбъекта`, `ObjectKey` | чтение и запись |
-| `КлючНастроек`, `SettingsKey` | чтение и запись |
-| `Пользователь`, `User` | чтение и запись |
-| `Представление`, `Presentation` | чтение и запись |
-| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `КлючОбъекта`, `ObjectKey` | чтение и запись | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `КлючНастроек`, `SettingsKey` | чтение и запись | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `Пользователь`, `User` | чтение и запись | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `Представление`, `Presentation` | чтение и запись | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
+| `ДополнительныеСвойства`, `AdditionalProperties` | только чтение | — | [bsl-session/src/client_settings.rs](../../../crates/bsl-session/src/client_settings.rs) |
 
 ##### `РасписаниеРегламентногоЗадания`
 
-| Свойство | Доступ |
-|---|---|
-| `ВремяЗавершения`, `CompletionTime` | чтение и запись |
-| `ВремяКонца`, `EndTime` | чтение и запись |
-| `ВремяНачала`, `BeginTime` | чтение и запись |
-| `ДатаКонца`, `EndDate` | чтение и запись |
-| `ДатаНачала`, `BeginDate` | чтение и запись |
-| `ДеньВМесяце`, `DayInMonth` | чтение и запись |
-| `ДеньНеделиВМесяце`, `WeekDayInMonth` | чтение и запись |
-| `ДетальныеРасписанияДня`, `DetailedDailySchedules` | чтение и запись |
-| `ДниНедели`, `WeekDays` | чтение и запись |
-| `ИнтервалЗавершения`, `CompletionInterval` | чтение и запись |
-| `Месяцы`, `Months` | чтение и запись |
-| `ПаузаПовтора`, `RepeatPause` | чтение и запись |
-| `ПериодНедель`, `WeeksPeriod` | чтение и запись |
-| `ПериодПовтораВТечениеДня`, `RepeatPeriodInDay` | чтение и запись |
-| `ПериодПовтораДней`, `DaysRepeatPeriod` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ВремяЗавершения`, `CompletionTime` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ВремяКонца`, `EndTime` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ВремяНачала`, `BeginTime` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ДатаКонца`, `EndDate` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ДатаНачала`, `BeginDate` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ДеньВМесяце`, `DayInMonth` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ДеньНеделиВМесяце`, `WeekDayInMonth` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ДетальныеРасписанияДня`, `DetailedDailySchedules` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ДниНедели`, `WeekDays` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ИнтервалЗавершения`, `CompletionInterval` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `Месяцы`, `Months` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ПаузаПовтора`, `RepeatPause` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ПериодНедель`, `WeeksPeriod` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ПериодПовтораВТечениеДня`, `RepeatPeriodInDay` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
+| `ПериодПовтораДней`, `DaysRepeatPeriod` | чтение и запись | — | [bsl-session/src/job_schedule.rs](../../../crates/bsl-session/src/job_schedule.rs) |
 
 ##### `ОписаниеЗащитыОтОпасныхДействий`
 
-| Свойство | Доступ |
-|---|---|
-| `ПредупреждатьОбОпасныхДействиях`, `UnsafeOperationWarnings` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ПредупреждатьОбОпасныхДействиях`, `UnsafeOperationWarnings` | чтение и запись | — | [bsl-session/src/safe_mode.rs](../../../crates/bsl-session/src/safe_mode.rs) |
 
 ##### `ИспользованиеСобытияЖурналаРегистрации`
 
-| Свойство | Доступ |
-|---|---|
-| `Использование`, `Use` | чтение и запись |
-| `ОписаниеИспользования`, `UseDescription` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Использование`, `Use` | чтение и запись | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ОписаниеИспользования`, `UseDescription` | чтение и запись | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
 
 ##### `ОписаниеИспользованияСобытияДоступЖурналаРегистрации`
 
-| Свойство | Доступ |
-|---|---|
-| `Объект`, `Object` | чтение и запись |
-| `ПоляДоступа`, `AccessFields` | чтение и запись |
-| `ПоляРегистрации`, `LoggedFields` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Объект`, `Object` | чтение и запись | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ПоляДоступа`, `AccessFields` | чтение и запись | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
+| `ПоляРегистрации`, `LoggedFields` | чтение и запись | — | [bsl-session/src/event_log.rs](../../../crates/bsl-session/src/event_log.rs) |
 
 ##### `НастройкиКлиентскогоПриложения`
 
-| Свойство | Доступ |
-|---|---|
-| `ОтображатьПанелиНавигацииИДействий`, `ShowNavigationAndActionsPanels` | чтение и запись |
-| `ОтображатьПанельРазделов`, `ShowSectionsPanel` | чтение и запись |
-| `РежимОткрытияФормПриложения`, `ApplicationFormsOpenningMode` | чтение и запись |
-| `ВариантИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceVariant` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ОтображатьПанелиНавигацииИДействий`, `ShowNavigationAndActionsPanels` | чтение и запись | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ОтображатьПанельРазделов`, `ShowSectionsPanel` | чтение и запись | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `РежимОткрытияФормПриложения`, `ApplicationFormsOpenningMode` | чтение и запись | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `ВариантИнтерфейсаКлиентскогоПриложения`, `ClientApplicationInterfaceVariant` | чтение и запись | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
 
 ##### `КлиентскоеПриложение`
 
-| Метод | Аргументы |
-|---|---:|
-| `ТипПриложения`, `ApplicationType` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ТипПриложения`, `ApplicationType` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
 
 ##### `НастройкиКомандногоИнтерфейса`
 
-| Свойство | Доступ |
-|---|---|
-| `ОтображениеПанелиРазделов`, `SectionsPanelRepresentation` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ОтображениеПанелиРазделов`, `SectionsPanelRepresentation` | чтение и запись | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
 
 ##### `НастройкиИнтерфейсаКлиентскогоПриложения`
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьСостав`, `GetContent` | 0 |
-| `УстановитьСостав`, `SetContent` | 0…1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьСостав`, `GetContent` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `УстановитьСостав`, `SetContent` | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
 
 ##### `НастройкиСоставаИнтерфейсаКлиентскогоПриложения`
 
-| Свойство | Доступ |
-|---|---|
-| `Верх`, `Top` | только чтение |
-| `Лево`, `Left` | только чтение |
-| `Низ`, `Bottom` | только чтение |
-| `Право`, `Right` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Верх`, `Top` | только чтение | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `Лево`, `Left` | только чтение | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `Низ`, `Bottom` | только чтение | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `Право`, `Right` | только чтение | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
 
 ##### `ГруппаНастройкиСоставаИнтерфейсаКлиентскогоПриложения`
 
-| Метод | Аргументы |
-|---|---:|
-| `Добавить`, `Add` | 1 |
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Добавить`, `Add` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `ЭлементНастройкиСоставаИнтерфейсаКлиентскогоПриложения`
 
-| Свойство | Доступ |
-|---|---|
-| `Имя`, `Name` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Имя`, `Name` | только чтение | — | [bsl-orm/src/managers.rs](../../../crates/bsl-orm/src/managers.rs) |
 
 ##### `ИнформацияЭкранаКлиента`
 
-| Свойство | Доступ |
-|---|---|
-| `Ширина`, `Width` | только чтение |
-| `Высота`, `Height` | только чтение |
-| `DPI` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Ширина`, `Width` | только чтение | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `Высота`, `Height` | только чтение | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
+| `DPI` | только чтение | — | [bsl-session/src/client_application.rs](../../../crates/bsl-session/src/client_application.rs) |
 
 ##### `ЭлементПланировщика`
 
-| Свойство | Доступ |
-|---|---|
-| `Значение`, `Value` | чтение и запись |
-| `Начало`, `Begin` | чтение и запись |
-| `Конец`, `End` | чтение и запись |
-| `Текст`, `Text` | чтение и запись |
-| `Подсказка`, `ToolTip` | чтение и запись |
-| `Удаленный`, `Deleted` | чтение и запись |
-| `Родитель`, `Parent` | только чтение |
-| `ЗначенияИзмерений`, `DimensionValues` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Значение`, `Value` | чтение и запись | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
+| `Начало`, `Begin` | чтение и запись | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
+| `Конец`, `End` | чтение и запись | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
+| `Текст`, `Text` | чтение и запись | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
+| `Подсказка`, `ToolTip` | чтение и запись | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
+| `Удаленный`, `Deleted` | чтение и запись | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
+| `Родитель`, `Parent` | только чтение | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
+| `ЗначенияИзмерений`, `DimensionValues` | только чтение | — | [bsl-session/src/planner_item.rs](../../../crates/bsl-session/src/planner_item.rs) |
 
-### `bsl-spreadsheet` 0.2.0
+### `bsl-spreadsheet` 0.3.0
 
 #### Глобальные функции
 
@@ -2044,26 +2044,26 @@
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ТабличныйДокумент`, `SpreadsheetDocument` | 0 |
-| `ГеографическаяСхема`, `GeographicalSchema` — *объявлено без реализации* | 0 |
-| `ГрафическаяСхема`, `GraphicalSchema` | 0 |
-| `Диаграмма`, `Chart` — *объявлено без реализации* | 0 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ТабличныйДокумент`, `SpreadsheetDocument` | — | [bsl-spreadsheet/src/lib.rs](../../../crates/bsl-spreadsheet/src/lib.rs) |
+| `ГеографическаяСхема`, `GeographicalSchema` — *объявлено без реализации* | — | [bsl-spreadsheet/src/lib.rs](../../../crates/bsl-spreadsheet/src/lib.rs) |
+| `ГрафическаяСхема`, `GraphicalSchema` | — | [bsl-spreadsheet/src/graphical_schema.rs](../../../crates/bsl-spreadsheet/src/graphical_schema.rs) |
+| `Диаграмма`, `Chart` — *объявлено без реализации* | — | [bsl-spreadsheet/src/lib.rs](../../../crates/bsl-spreadsheet/src/lib.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `ОбластьЯчеекТабличногоДокумента` | `Область ячеек табличного документа` | `SpreadsheetDocumentRange` |
-| `ТабличныйДокумент` | `Табличный документ` | `SpreadsheetDocument` |
-| `КоллекцияРисунковТабличногоДокумента` | `Коллекция рисунков табличного документа` | `SpreadsheetDocumentDrawingCollection` |
-| `РисунокТабличногоДокумента` | `Рисунок табличного документа` | `SpreadsheetDocumentDrawing` |
-| `ПараметрыМакетаТабличногоДокумента` | `Параметры макета табличного документа` | `SpreadsheetDocumentTemplateParameters` |
-| `ГеографическаяСхема` | `Поле географической схемы` | `GeographicalSchema` |
-| `ГрафическаяСхема` | `Графическая схема` | `GraphicalSchema` |
-| `ЭлементыГрафическойСхемы` | `Элементы графической схемы` | `GraphicalSchemaItems` |
-| `Диаграмма` | `Диаграмма` | `Chart` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ОбластьЯчеекТабличногоДокумента` | `Область ячеек табличного документа` | `SpreadsheetDocumentRange` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `ТабличныйДокумент` | `Табличный документ` | `SpreadsheetDocument` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `КоллекцияРисунковТабличногоДокумента` | `Коллекция рисунков табличного документа` | `SpreadsheetDocumentDrawingCollection` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `РисунокТабличногоДокумента` | `Рисунок табличного документа` | `SpreadsheetDocumentDrawing` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `ПараметрыМакетаТабличногоДокумента` | `Параметры макета табличного документа` | `SpreadsheetDocumentTemplateParameters` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `ГеографическаяСхема` | `Поле географической схемы` | `GeographicalSchema` | — | [bsl-spreadsheet/src/lib.rs](../../../crates/bsl-spreadsheet/src/lib.rs) |
+| `ГрафическаяСхема` | `Графическая схема` | `GraphicalSchema` | — | [bsl-spreadsheet/src/graphical_schema.rs](../../../crates/bsl-spreadsheet/src/graphical_schema.rs) |
+| `ЭлементыГрафическойСхемы` | `Элементы графической схемы` | `GraphicalSchemaItems` | — | [bsl-spreadsheet/src/graphical_schema.rs](../../../crates/bsl-spreadsheet/src/graphical_schema.rs) |
+| `Диаграмма` | `Диаграмма` | `Chart` | — | [bsl-spreadsheet/src/lib.rs](../../../crates/bsl-spreadsheet/src/lib.rs) |
 
 #### Члены объектов
 
@@ -2071,35 +2071,35 @@
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Область`, `Area` | 1…4 |
-| `Объединить`, `Merge` | 0 |
-| `Разъединить`, `Unmerge` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Область`, `Area` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Объединить`, `Merge` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Разъединить`, `Unmerge` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
 
 ##### `ТабличныйДокумент`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Область`, `Area` | 1…4 |
-| `Объединить`, `Merge` | 0…1 |
-| `Разъединить`, `Unmerge` | 0…1 |
-| `Записать`, `Write` | 1…2 |
-| `Прочитать`, `Read` | 1…2 |
-| `Вывести`, `Output` | 1…2 |
-| `ПолучитьОбласть`, `GetArea` | 1…4 |
-| `Очистить`, `Clear` | 0 |
-| `НачатьГруппуСтрок`, `StartRowGroup` | 0…2 |
-| `ЗакончитьГруппуСтрок`, `EndRowGroup` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Область`, `Area` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Объединить`, `Merge` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Разъединить`, `Unmerge` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Записать`, `Write` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Прочитать`, `Read` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Вывести`, `Output` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `ПолучитьОбласть`, `GetArea` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `НачатьГруппуСтрок`, `StartRowGroup` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `ЗакончитьГруппуСтрок`, `EndRowGroup` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
 
 ##### `КоллекцияРисунковТабличногоДокумента`
 
-| Метод | Аргументы |
-|---|---:|
-| `Добавить`, `Add` | 0…4 |
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Добавить`, `Add` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
+| `Количество`, `Count` | — | [bsl-spreadsheet/src/document/objects.rs](../../../crates/bsl-spreadsheet/src/document/objects.rs) |
 
 ##### `РисунокТабличногоДокумента`
 
@@ -2111,20 +2111,20 @@
 
 ##### `ГрафическаяСхема`
 
-| Свойство | Доступ |
-|---|---|
-| `ЭлементыГрафическойСхемы`, `GraphicalSchemaItems` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ЭлементыГрафическойСхемы`, `GraphicalSchemaItems` | только чтение | — | [bsl-spreadsheet/src/graphical_schema.rs](../../../crates/bsl-spreadsheet/src/graphical_schema.rs) |
 
 ##### `ЭлементыГрафическойСхемы`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Найти`, `Find` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-spreadsheet/src/graphical_schema.rs](../../../crates/bsl-spreadsheet/src/graphical_schema.rs) |
+| `Найти`, `Find` | — | [bsl-spreadsheet/src/graphical_schema.rs](../../../crates/bsl-spreadsheet/src/graphical_schema.rs) |
 
-### `bsl-stream` 0.2.0
+### `bsl-stream` 0.3.0
 
-Зависимости: `bsl-binbuf=0.2.0`.
+Зависимости: `bsl-binbuf=0.3.0`.
 
 #### Глобальные функции
 
@@ -2132,178 +2132,178 @@
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ПотокВПамяти`, `MemoryStream` | 0…1 |
-| `ФайловыйПоток`, `FileStream` | 2…3 |
-| `ЧтениеДанных`, `DataReader` | 1…4 |
-| `ЗаписьДанных`, `DataWriter` | 1…6 |
-| `ФайловыеПотоки`, `FileStreams` | 0 |
-| `ЧтениеТекста`, `TextReader` | 2 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ПотокВПамяти`, `MemoryStream` | — | [bsl-stream/src/lib.rs](../../../crates/bsl-stream/src/lib.rs) |
+| `ФайловыйПоток`, `FileStream` | — | [bsl-stream/src/lib.rs](../../../crates/bsl-stream/src/lib.rs) |
+| `ЧтениеДанных`, `DataReader` | — | [bsl-stream/src/lib.rs](../../../crates/bsl-stream/src/lib.rs) |
+| `ЗаписьДанных`, `DataWriter` | — | [bsl-stream/src/lib.rs](../../../crates/bsl-stream/src/lib.rs) |
+| `ФайловыеПотоки`, `FileStreams` | — | [bsl-stream/src/lib.rs](../../../crates/bsl-stream/src/lib.rs) |
+| `ЧтениеТекста`, `TextReader` | — | [bsl-stream/src/lib.rs](../../../crates/bsl-stream/src/lib.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `ЧтениеДанных` | `Чтение данных` | `DataReader` |
-| `РезультатЧтенияДанных` | `Результат чтения данных` | `ReadDataResult` |
-| `ЗаписьДанных` | `Запись данных` | `DataWriter` |
-| `Поток` | `Поток` | `Stream` |
-| `МенеджерФайловыхПотоков` | `Менеджер файловых потоков` | `FileStreamsManager` |
-| `ФайловыйПоток` | `Файловый поток` | `FileStream` |
-| `ПотокВПамяти` | `Файловый поток` | `MemoryStream` |
-| `ЧтениеТекста` | `ЧтениеТекста` | `TextReader` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ЧтениеДанных` | `Чтение данных` | `DataReader` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `РезультатЧтенияДанных` | `Результат чтения данных` | `ReadDataResult` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписьДанных` | `Запись данных` | `DataWriter` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `Поток` | `Поток` | `Stream` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `МенеджерФайловыхПотоков` | `Менеджер файловых потоков` | `FileStreamsManager` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ФайловыйПоток` | `Файловый поток` | `FileStream` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ПотокВПамяти` | `Файловый поток` | `MemoryStream` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ЧтениеТекста` | `ЧтениеТекста` | `TextReader` | — | [bsl-stream/src/textreader.rs](../../../crates/bsl-stream/src/textreader.rs) |
 
 #### Члены объектов
 
 ##### `ЧтениеДанных`
 
-| Свойство | Доступ |
-|---|---|
-| `ПорядокБайтов`, `ByteOrder` | чтение и запись |
-| `КодировкаТекста`, `TextEncoding` | чтение и запись |
-| `РазделительСтрок`, `LineSplitter` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ПорядокБайтов`, `ByteOrder` | чтение и запись | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `КодировкаТекста`, `TextEncoding` | чтение и запись | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `РазделительСтрок`, `LineSplitter` | чтение и запись | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Прочитать`, `Read` | 0…1 |
-| `Записать`, `Write` | 1 |
-| `Закрыть`, `Close` | 0 |
-| `Пропустить`, `Skip` | 0…1 |
-| `ПрочитатьЦелое16`, `ReadInt16` | 0…1 |
-| `ПрочитатьЦелое32`, `ReadInt32` | 0…1 |
-| `ПрочитатьЦелое64`, `ReadInt64` | 0…1 |
-| `ЗаписатьЦелое16`, `WriteInt16` | 1…2 |
-| `ЗаписатьЦелое32`, `WriteInt32` | 1…2 |
-| `ЗаписатьЦелое64`, `WriteInt64` | 1…2 |
-| `ПрочитатьБайт`, `ReadByte` | 0 |
-| `ПрочитатьВБуферДвоичныхДанных`, `ReadIntoBinaryDataBuffer` | 0…3 |
-| `ПрочитатьСимволы`, `ReadChars` | 0…2 |
-| `ПрочитатьСтроку`, `ReadLine` | 0…2 |
-| `ЗаписатьБайт`, `WriteByte` | 1 |
-| `ЗаписатьСимволы`, `WriteChars` | 1…2 |
-| `ЗаписатьСтроку`, `WriteLine` | 1…3 |
-| `ИсходныйПоток`, `SourceStream` | 0 |
-| `КопироватьВ`, `CopyTo` | 1…2 |
-| `ЗаписатьБуферДвоичныхДанных`, `WriteBinaryDataBuffer` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Прочитать`, `Read` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `Записать`, `Write` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `Закрыть`, `Close` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `Пропустить`, `Skip` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьЦелое16`, `ReadInt16` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьЦелое32`, `ReadInt32` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьЦелое64`, `ReadInt64` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьЦелое16`, `WriteInt16` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьЦелое32`, `WriteInt32` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьЦелое64`, `WriteInt64` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьБайт`, `ReadByte` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьВБуферДвоичныхДанных`, `ReadIntoBinaryDataBuffer` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьСимволы`, `ReadChars` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьСтроку`, `ReadLine` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьБайт`, `WriteByte` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьСимволы`, `WriteChars` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьСтроку`, `WriteLine` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ИсходныйПоток`, `SourceStream` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `КопироватьВ`, `CopyTo` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьБуферДвоичныхДанных`, `WriteBinaryDataBuffer` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
 
 ##### `РезультатЧтенияДанных`
 
-| Свойство | Доступ |
-|---|---|
-| `Размер`, `Size` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Размер`, `Size` | только чтение | `Размер` результата чтения — только на чтение. | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьДвоичныеДанные`, `GetBinaryData` | 0 |
-| `ПолучитьБуферДвоичныхДанных`, `GetBinaryDataBuffer` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьДвоичныеДанные`, `GetBinaryData` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПолучитьБуферДвоичныхДанных`, `GetBinaryDataBuffer` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
 
 ##### `ЗаписьДанных`
 
-| Свойство | Доступ |
-|---|---|
-| `ПорядокБайтов`, `ByteOrder` | чтение и запись |
-| `КодировкаТекста`, `TextEncoding` | чтение и запись |
-| `РазделительСтрок`, `LineSplitter` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ПорядокБайтов`, `ByteOrder` | чтение и запись | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `КодировкаТекста`, `TextEncoding` | чтение и запись | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `РазделительСтрок`, `LineSplitter` | чтение и запись | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Прочитать`, `Read` | 0…1 |
-| `Записать`, `Write` | 1 |
-| `Закрыть`, `Close` | 0 |
-| `Пропустить`, `Skip` | 0…1 |
-| `ПрочитатьЦелое16`, `ReadInt16` | 0…1 |
-| `ПрочитатьЦелое32`, `ReadInt32` | 0…1 |
-| `ПрочитатьЦелое64`, `ReadInt64` | 0…1 |
-| `ЗаписатьЦелое16`, `WriteInt16` | 1…2 |
-| `ЗаписатьЦелое32`, `WriteInt32` | 1…2 |
-| `ЗаписатьЦелое64`, `WriteInt64` | 1…2 |
-| `ПрочитатьБайт`, `ReadByte` | 0 |
-| `ПрочитатьВБуферДвоичныхДанных`, `ReadIntoBinaryDataBuffer` | 0…3 |
-| `ПрочитатьСимволы`, `ReadChars` | 0…2 |
-| `ПрочитатьСтроку`, `ReadLine` | 0…2 |
-| `ЗаписатьБайт`, `WriteByte` | 1 |
-| `ЗаписатьСимволы`, `WriteChars` | 1…2 |
-| `ЗаписатьСтроку`, `WriteLine` | 1…3 |
-| `ИсходныйПоток`, `SourceStream` | 0 |
-| `КопироватьВ`, `CopyTo` | 1…2 |
-| `ЗаписатьБуферДвоичныхДанных`, `WriteBinaryDataBuffer` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Прочитать`, `Read` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `Записать`, `Write` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `Закрыть`, `Close` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `Пропустить`, `Skip` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьЦелое16`, `ReadInt16` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьЦелое32`, `ReadInt32` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьЦелое64`, `ReadInt64` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьЦелое16`, `WriteInt16` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьЦелое32`, `WriteInt32` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьЦелое64`, `WriteInt64` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьБайт`, `ReadByte` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьВБуферДвоичныхДанных`, `ReadIntoBinaryDataBuffer` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьСимволы`, `ReadChars` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ПрочитатьСтроку`, `ReadLine` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьБайт`, `WriteByte` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьСимволы`, `WriteChars` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьСтроку`, `WriteLine` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ИсходныйПоток`, `SourceStream` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `КопироватьВ`, `CopyTo` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
+| `ЗаписатьБуферДвоичныхДанных`, `WriteBinaryDataBuffer` | — | [bsl-stream/src/datarw.rs](../../../crates/bsl-stream/src/datarw.rs) |
 
 ##### `Поток`
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьРазмер`, `SetSize` | 1 |
-| `Записать`, `Write` | 3 |
-| `Прочитать`, `Read` | 3 |
-| `Закрыть`, `Close` | 0 |
-| `Размер`, `Size` | 0 |
-| `ТекущаяПозиция`, `CurrentPosition` | 0 |
-| `Перейти`, `Seek` | 2 |
-| `КопироватьВ`, `CopyTo` | 1…2 |
-| `ЗакрытьИПолучитьДвоичныеДанные`, `CloseAndGetBinaryData` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьРазмер`, `SetSize` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Записать`, `Write` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Прочитать`, `Read` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Закрыть`, `Close` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Размер`, `Size` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ТекущаяПозиция`, `CurrentPosition` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Перейти`, `Seek` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `КопироватьВ`, `CopyTo` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ЗакрытьИПолучитьДвоичныеДанные`, `CloseAndGetBinaryData` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
 
 ##### `МенеджерФайловыхПотоков`
 
-| Метод | Аргументы |
-|---|---:|
-| `СоздатьВременныйФайлАсинх`, `CreateTempFileAsync` | 0…2 |
-| `СоздатьВременныйФайл`, `CreateTempFile` | 0…2 |
-| `Открыть`, `Open` | 2…3 |
-| `ОткрытьДляЧтения`, `OpenForRead` | 1 |
-| `ОткрытьДляЗаписи`, `OpenForWrite` | 1 |
-| `ОткрытьДляДописывания`, `OpenForAppend` | 1 |
-| `Создать`, `Create` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `СоздатьВременныйФайлАсинх`, `CreateTempFileAsync` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `СоздатьВременныйФайл`, `CreateTempFile` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Открыть`, `Open` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ОткрытьДляЧтения`, `OpenForRead` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ОткрытьДляЗаписи`, `OpenForWrite` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ОткрытьДляДописывания`, `OpenForAppend` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Создать`, `Create` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
 
 ##### `ФайловыйПоток`
 
-| Свойство | Доступ |
-|---|---|
-| `ДоступнаЗапись`, `CanWrite` | только чтение |
-| `ДоступноЧтение`, `CanRead` | только чтение |
-| `ДоступноИзменениеПозиции`, `CanSeek` | только чтение |
-| `ИмяФайла`, `FileName` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ДоступнаЗапись`, `CanWrite` | только чтение | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ДоступноЧтение`, `CanRead` | только чтение | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ДоступноИзменениеПозиции`, `CanSeek` | только чтение | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ИмяФайла`, `FileName` | только чтение | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьРазмер`, `SetSize` | 1 |
-| `Записать`, `Write` | 3 |
-| `Прочитать`, `Read` | 3 |
-| `Закрыть`, `Close` | 0 |
-| `Размер`, `Size` | 0 |
-| `ТекущаяПозиция`, `CurrentPosition` | 0 |
-| `Перейти`, `Seek` | 2 |
-| `КопироватьВ`, `CopyTo` | 1…2 |
-| `ЗакрытьИПолучитьДвоичныеДанные`, `CloseAndGetBinaryData` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьРазмер`, `SetSize` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Записать`, `Write` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Прочитать`, `Read` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Закрыть`, `Close` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Размер`, `Size` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ТекущаяПозиция`, `CurrentPosition` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Перейти`, `Seek` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `КопироватьВ`, `CopyTo` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ЗакрытьИПолучитьДвоичныеДанные`, `CloseAndGetBinaryData` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
 
 ##### `ПотокВПамяти`
 
-| Свойство | Доступ |
-|---|---|
-| `ДоступнаЗапись`, `CanWrite` | только чтение |
-| `ДоступноЧтение`, `CanRead` | только чтение |
-| `ДоступноИзменениеПозиции`, `CanSeek` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ДоступнаЗапись`, `CanWrite` | только чтение | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ДоступноЧтение`, `CanRead` | только чтение | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ДоступноИзменениеПозиции`, `CanSeek` | только чтение | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьРазмер`, `SetSize` | 1 |
-| `Записать`, `Write` | 3 |
-| `Прочитать`, `Read` | 3 |
-| `Закрыть`, `Close` | 0 |
-| `Размер`, `Size` | 0 |
-| `ТекущаяПозиция`, `CurrentPosition` | 0 |
-| `Перейти`, `Seek` | 2 |
-| `КопироватьВ`, `CopyTo` | 1…2 |
-| `ЗакрытьИПолучитьДвоичныеДанные`, `CloseAndGetBinaryData` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьРазмер`, `SetSize` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Записать`, `Write` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Прочитать`, `Read` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Закрыть`, `Close` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Размер`, `Size` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ТекущаяПозиция`, `CurrentPosition` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `Перейти`, `Seek` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `КопироватьВ`, `CopyTo` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
+| `ЗакрытьИПолучитьДвоичныеДанные`, `CloseAndGetBinaryData` | — | [bsl-stream/src/stream.rs](../../../crates/bsl-stream/src/stream.rs) |
 
 ##### `ЧтениеТекста`
 
-| Метод | Аргументы |
-|---|---:|
-| `Прочитать`, `Read` | 0 |
-| `Закрыть`, `Close` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Прочитать`, `Read` | — | [bsl-stream/src/textreader.rs](../../../crates/bsl-stream/src/textreader.rs) |
+| `Закрыть`, `Close` | — | [bsl-stream/src/textreader.rs](../../../crates/bsl-stream/src/textreader.rs) |
 
-### `bsl-textdoc` 0.2.0
+### `bsl-textdoc` 0.3.0
 
 #### Глобальные функции
 
@@ -2311,46 +2311,46 @@
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ТекстовыйДокумент`, `TextDocument` | 0 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ТекстовыйДокумент`, `TextDocument` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `ТекстовыйДокумент` | `Текстовый документ` | `TextDocument` |
-| `ПараметрыМакетаТекстовогоДокумента` | `Параметры макета текстового документа` | `TextTemplateParameters` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ТекстовыйДокумент` | `Текстовый документ` | `TextDocument` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `ПараметрыМакетаТекстовогоДокумента` | `Параметры макета текстового документа` | `TextTemplateParameters` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
 
 #### Члены объектов
 
 ##### `ТекстовыйДокумент`
 
-| Свойство | Доступ |
-|---|---|
-| `Параметры`, `Parameters` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Параметры`, `Parameters` | только чтение | Единственное свойство документа — коллекция параметров макета, только на чтение. | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьТекст`, `SetText` | 1 |
-| `ПолучитьТекст`, `GetText` | 0 |
-| `КоличествоСтрок`, `LineCount` | 0 |
-| `ПолучитьСтроку`, `GetLine` | 1 |
-| `ДобавитьСтроку`, `AddLine` | 1 |
-| `ВставитьСтроку`, `InsertLine` | 2 |
-| `ЗаменитьСтроку`, `ReplaceLine` | 2 |
-| `УдалитьСтроку`, `DeleteLine` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Прочитать`, `Read` | 1…2 |
-| `Записать`, `Write` | 1…2 |
-| `ПолучитьОбласть`, `GetArea` | 1 |
-| `Вывести`, `Output` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьТекст`, `SetText` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `ПолучитьТекст`, `GetText` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `КоличествоСтрок`, `LineCount` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `ПолучитьСтроку`, `GetLine` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `ДобавитьСтроку`, `AddLine` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `ВставитьСтроку`, `InsertLine` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `ЗаменитьСтроку`, `ReplaceLine` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `УдалитьСтроку`, `DeleteLine` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `Очистить`, `Clear` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `Прочитать`, `Read` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `Записать`, `Write` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `ПолучитьОбласть`, `GetArea` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
+| `Вывести`, `Output` | — | [bsl-textdoc/src/lib.rs](../../../crates/bsl-textdoc/src/lib.rs) |
 
 ##### `ПараметрыМакетаТекстовогоДокумента`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-### `bsl-xml` 0.2.0
+### `bsl-xml` 0.3.0
 
 #### Глобальные свойства
 
@@ -2361,261 +2361,261 @@
 
 #### Глобальные функции
 
-| Имя и псевдонимы | Вид | Аргументы |
-|---|---|---:|
-| `СоздатьФабрикуXDTO`, `CreateXDTOFactory` | функция | 1 |
-| `ФабрикаXDTO`, `XDTOFactory` | функция | 0 |
-| `XMLСтрока`, `XMLString` | функция | 1 |
-| `НайтиНедопустимыеСимволыXML`, `FindDisallowedXMLCharacters` | функция | 1 |
-| `XMLТипЗнч`, `XMLTypeOf` | функция | 1 |
-| `ПолучитьСериализаторXDTO` | функция | 0 |
-| `ПолучитьОбработкуСтрокиXML` | функция | 0 |
-| `XMLЗначение`, `XMLValue` | функция | 2 |
-| `ЗаписатьXML`, `WriteXML` — *объявлено без реализации* | процедура | 2…5 |
-| `ПрочитатьXML`, `ReadXML` — *объявлено без реализации* | функция | 1…2 |
-| `ВозможностьЧтенияXML`, `CanReadXML` — *объявлено без реализации* | функция | 1 |
-| `XMLТип`, `XMLType` — *объявлено без реализации* | функция | 1 |
-| `ИзXMLТипа`, `FromXMLType` | функция | 1…2 |
-| `ПолучитьXMLТип`, `GetXMLType` | функция | 1 |
+| Имя и псевдонимы | Вид | Описание | Реализация |
+|---|---|---|---|
+| `СоздатьФабрикуXDTO`, `CreateXDTOFactory` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ФабрикаXDTO`, `XDTOFactory` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `XMLСтрока`, `XMLString` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `НайтиНедопустимыеСимволыXML`, `FindDisallowedXMLCharacters` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПолучитьСериализаторXDTO` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПолучитьОбработкуСтрокиXML` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `XMLЗначение`, `XMLValue` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ЗаписатьXML`, `WriteXML` — *объявлено без реализации* | процедура | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПрочитатьXML`, `ReadXML` — *объявлено без реализации* | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` — *объявлено без реализации* | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `XMLТип`, `XMLType` — *объявлено без реализации* | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ИзXMLТипа`, `FromXMLType` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПолучитьXMLТип`, `GetXMLType` | функция | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ФабрикаXDTO`, `XDTOFactory` | 0…1 |
-| `СериализаторXDTO`, `XDTOSerializer` | 1 |
-| `ПостроительСхемXML`, `XMLSchemaBuilder` | 0 |
-| `СхемаXML`, `XMLSchema` | 0 |
-| `НаборСхемXML`, `XMLSchemaSet` | 0 |
-| `РасширенноеИмяXML` | 2 |
-| `ПостроительDOM`, `DOMBuilder` | 0 |
-| `ДокументDOM`, `DOMDocument` | 0 |
-| `ЗаписьDOM`, `DOMWriter` | 0 |
-| `РазыменовательПространствИменDOM`, `DOMNamespaceResolver` | 1 |
-| `ЧтениеXML`, `XMLReader` | 0 |
-| `ЗаписьXML`, `XMLWriter` | 0 |
-| `ПараметрыЗаписиXML`, `XMLWriterSettings` | 0…5 |
-| `ТипДанныхXML`, `XMLDataType` | 2 |
-| `ПараметрыЧтенияXML`, `XMLReaderSettings` — *объявлено без реализации* | 0…11 |
-| `ЗаписьFastInfoset`, `FastInfosetWriter` — *объявлено без реализации* | 0 |
-| `ЧтениеFastInfoset`, `FastInfosetReader` — *объявлено без реализации* | 0 |
-| `ПреобразованиеXSL`, `XSLTransform` — *объявлено без реализации* | 0 |
-| `ДокументHTML`, `HTMLDocument` | 0…1 |
-| `ЗаписьHTML`, `HTMLWriter` | 0 |
-| `ПреобразованиеККаноническомуXML`, `ConversionToCanonicalXML` | 0 |
-| `КаноническаяЗаписьXML`, `XMLCanonicalizingWriter` | 0 |
-| `КаноническийDOM`, `DOMCanonicalization` | 0 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ФабрикаXDTO`, `XDTOFactory` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `СериализаторXDTO`, `XDTOSerializer` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПостроительСхемXML`, `XMLSchemaBuilder` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `СхемаXML`, `XMLSchema` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `НаборСхемXML`, `XMLSchemaSet` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `РасширенноеИмяXML` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПостроительDOM`, `DOMBuilder` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ДокументDOM`, `DOMDocument` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ЗаписьDOM`, `DOMWriter` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `РазыменовательПространствИменDOM`, `DOMNamespaceResolver` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ЧтениеXML`, `XMLReader` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ЗаписьXML`, `XMLWriter` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПараметрыЗаписиXML`, `XMLWriterSettings` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ТипДанныхXML`, `XMLDataType` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПараметрыЧтенияXML`, `XMLReaderSettings` — *объявлено без реализации* | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ЗаписьFastInfoset`, `FastInfosetWriter` — *объявлено без реализации* | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ЧтениеFastInfoset`, `FastInfosetReader` — *объявлено без реализации* | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПреобразованиеXSL`, `XSLTransform` — *объявлено без реализации* | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ДокументHTML`, `HTMLDocument` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ЗаписьHTML`, `HTMLWriter` | — | [bsl-xml/src/lib.rs](../../../crates/bsl-xml/src/lib.rs) |
+| `ПреобразованиеККаноническомуXML`, `ConversionToCanonicalXML` | — | [bsl-xml/src/canonicalization.rs](../../../crates/bsl-xml/src/canonicalization.rs) |
+| `КаноническаяЗаписьXML`, `XMLCanonicalizingWriter` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
+| `КаноническийDOM`, `DOMCanonicalization` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `КаноническаяЗаписьXML` | `Каноническая Запись XML` | `XMLCanonicalizingWriter` |
-| `КаноническийDOM` | `Каноническая Запись Узла DOM` | `DOMCanonicalization` |
-| `ПреобразованиеККаноническомуXML` | `Каноническая Запись XML Документа DOM` | `ConversionToCanonicalXML` |
-| `ДокументHTML` | `Документ HTML` | `HTMLDocument` |
-| `ОпределениеТипаДокументаDOM` | `Определение типа документа DOM` | `DOMDocumentType` |
-| `ЗаписьHTML` | `Запись HTML` | `HTMLWriter` |
-| `ЭлементТелоHTML` | `Элемент тело HTML` | `HTMLBodyElement` |
-| `ЭлементРазметкаHTML` | `Элемент разметка HTML` | `HTMLHtmlElement` |
-| `ЭлементЗаголовокHTML` | `Элемент заголовок HTML` | `HTMLHeadElement` |
-| `ЭлементБлокHTML` | `Элемент блок HTML` | `HTMLDivElement` |
-| `ЭлементHTML` | `Элемент HTML` | `HTMLElement` |
-| `ТипДанныхXML` | `Тип данных XML` | `XMLDataType` |
-| `МенеджерОбработкиСтрокиXML` | `Менеджер обработки строки XML` | `XMLStringProcessingManager` |
-| `АннотацияXS` | `Аннотация XML Schema` | `XSAnnotation` |
-| `ИнформацияДляПриложенияXS` | `Информация для приложения XML Schema` | `XSAppInfo` |
-| `ОбъявлениеАтрибутаXS` | `Объявление атрибута XML Schema` | `XSAttributeDeclaration` |
-| `ИспользованиеАтрибутаXS` | `Использование атрибута XML Schema` | `XSAttributeUse` |
-| `ПостроительСхемXML` | `Построитель схем XML` | `XMLSchemaBuilder` |
-| `ОпределениеСоставногоТипаXS` | `Определение составного типа XML Schema` | `XSComplexTypeDefinition` |
-| `ДокументацияXS` | `Документация XML Schema` | `XSDocumentation` |
-| `АтрибутDOM` | `Атрибут DOM` | `DOMAttribute` |
-| `КоллекцияАтрибутовDOM` | `Коллекция атрибутов DOM` | `DOMAttributeMap` |
-| `ПостроительDOM` | `Построитель DOM` | `DOMBuilder` |
-| `СекцияCDATADOM` | `Секция CDATA DOM` | `DOMCDATASection` |
-| `КомментарийDOM` | `Комментарий  DOM` | `DOMComment` |
-| `ДокументDOM` | `Документ  DOM` | `DOMDocument` |
-| `СписокЭлементовDOM` | `Список элементов DOM` | `DOMElementList` |
-| `ЭлементDOM` | `Элемент DOM` | `DOMElement` |
-| `СсылкаНаСущностьDOM` | `Ссылка на сущность DOM` | `DOMEntityReference` |
-| `СписокУзловDOM` | `Список узлов DOM` | `DOMNodeList` |
-| `ИнструкцияОбработкиDOM` | `Инструкция обработки DOM` | `DOMProcessingInstruction` |
-| `ТекстDOM` | `Текст DOM` | `DOMText` |
-| `ЗаписьDOM` | `Запись DOM` | `DOMWriter` |
-| `ОбъявлениеЭлементаXS` | `Объявление элемента XML Schema` | `XSElementDeclaration` |
-| `РасширенноеИмяXML` | `Расширенное имя XML` | `XMLExpandedName` |
-| `ВыражениеXPath` | `Выражение DOM XPath` | `XPathExpression` |
-| `КоллекцияФасетовXDTO` | `Коллекция фасетов XDTO` | `XDTOFacetCollection` |
-| `ФасетПеречисленияXS` | `Фасет перечисления значения XML Schema` | `XSEnumerationFacet` |
-| `ФасетКоличестваРазрядовДробнойЧастиXS` | `Фасет количества разрядов дробной части значения XML Schema` | `XSFractionDigitsFacet` |
-| `ФасетДлиныXS` | `Фасет длины значения XML Schema` | `XSLengthFacet` |
-| `ФасетМаксимальногоИсключающегоЗначенияXS` | `Фасет максимального исключающего значения XML Schema` | `XSMaxExclusiveFacet` |
-| `ФасетМаксимальногоВключающегоЗначенияXS` | `Фасет максимального включающего значения XML Schema` | `XSMaxInclusiveFacet` |
-| `ФасетМаксимальнойДлиныXS` | `Фасет максимальной длины значения XML Schema` | `XSMaxLengthFacet` |
-| `ФасетМинимальногоИсключающегоЗначенияXS` | `Фасет минимального исключающего значения XML Schema` | `XSMinExclusiveFacet` |
-| `ФасетМинимальногоВключающегоЗначенияXS` | `Фасет минимального включающего значения XML Schema` | `XSMinInclusiveFacet` |
-| `ФасетМинимальнойДлиныXS` | `Фасет минимальной длины значения XML Schema` | `XSMinLengthFacet` |
-| `ФасетОбразцаXS` | `Фасет образца значения XML Schema` | `XSPatternFacet` |
-| `ФасетОбщегоКоличестваРазрядовXS` | `Фасет общего количества разрядов значения XML Schema` | `XSTotalDigitsFacet` |
-| `ФасетXDTO` | `Фасет XDTO` | `XDTOFacet` |
-| `ФасетПробельныхСимволовXS` | `Фасет пробельных символов XML Schema` | `XSWhitespaceFacet` |
-| `ФабрикаXDTO` | `Фабрика XDTO` | `XDTOFactory` |
-| `ФиксированныйСписокКомпонентXS` | `Фиксированный список компонент XML Schema` | `XSComponentFixedList` |
-| `КоллекцияИменованныхКомпонентXS` | `Коллекция именованных компонент XML Schema` | `XSNamedComponentMap` |
-| `СписокКомпонентXS` | `Список компонент XML Schema` | `XSComponentList` |
-| `СписокXDTO` | `Список XDTO` | `XDTOList` |
-| `ГруппаМоделиXS` | `Группа модели XML Schema` | `XSModelGroup` |
-| `СписокРасширенныхИменXML` | `Список расширенных имен XML` | `XMLExpandedNameList` |
-| `ОбъектXDTO` | `Объект XDTO` | `XDTODataObject` |
-| `ТипОбъектаXDTO` | `Тип объекта XDTO` | `XDTOObjectType` |
-| `ФрагментXS` | `Фрагмент XML Schema` | `XSParticle` |
-| `КоллекцияСвойствXDTO` | `Коллекция свойств XDTO` | `XDTOPropertyCollection` |
-| `СвойствоXDTO` | `Свойство XDTO` | `XDTOProperty` |
-| `ЧтениеXML` | `Чтение XML` | `XMLReader` |
-| `РазыменовательПространствИменDOM` | `Разыменователь пространств имен DOM XPath` | `DOMNamespaceResolver` |
-| `РезультатXPath` | `Результат DOM XPath` | `XPathResult` |
-| `НаборСхемXML` | `Набор схем XML` | `XMLSchemaSet` |
-| `СхемаXML` | `Схема XML` | `XMLSchema` |
-| `ПоследовательностьXDTO` | `Последовательность XDTO` | `XDTOSequence` |
-| `СериализаторXDTO` | `Сериализатор XDTO` | `XDTOSerializer` |
-| `ПараметрыЗаписиXML` | `Параметры записи XML` | `XMLWriterSettings` |
-| `ОпределениеПростогоТипаXS` | `Определение простого типа XML Schema` | `XSSimpleTypeDefinition` |
-| `ЗначениеXDTO` | `Значение XDTO` | `XDTODataValue` |
-| `ТипЗначенияXDTO` | `Тип значения XDTO` | `XDTOValueType` |
-| `ЗаписьXML` | `Запись XML` | `XMLWriter` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `КаноническаяЗаписьXML` | `Каноническая Запись XML` | `XMLCanonicalizingWriter` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
+| `КаноническийDOM` | `Каноническая Запись Узла DOM` | `DOMCanonicalization` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
+| `ПреобразованиеККаноническомуXML` | `Каноническая Запись XML Документа DOM` | `ConversionToCanonicalXML` | — | [bsl-xml/src/canonicalization.rs](../../../crates/bsl-xml/src/canonicalization.rs) |
+| `ДокументHTML` | `Документ HTML` | `HTMLDocument` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ОпределениеТипаДокументаDOM` | `Определение типа документа DOM` | `DOMDocumentType` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ЗаписьHTML` | `Запись HTML` | `HTMLWriter` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ЭлементТелоHTML` | `Элемент тело HTML` | `HTMLBodyElement` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ЭлементРазметкаHTML` | `Элемент разметка HTML` | `HTMLHtmlElement` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ЭлементЗаголовокHTML` | `Элемент заголовок HTML` | `HTMLHeadElement` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ЭлементБлокHTML` | `Элемент блок HTML` | `HTMLDivElement` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ЭлементHTML` | `Элемент HTML` | `HTMLElement` | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
+| `ТипДанныхXML` | `Тип данных XML` | `XMLDataType` | — | [bsl-xml/src/xml_data_type.rs](../../../crates/bsl-xml/src/xml_data_type.rs) |
+| `МенеджерОбработкиСтрокиXML` | `Менеджер обработки строки XML` | `XMLStringProcessingManager` | — | [bsl-xml/src/xml_string_processing.rs](../../../crates/bsl-xml/src/xml_string_processing.rs) |
+| `АннотацияXS` | `Аннотация XML Schema` | `XSAnnotation` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ИнформацияДляПриложенияXS` | `Информация для приложения XML Schema` | `XSAppInfo` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ОбъявлениеАтрибутаXS` | `Объявление атрибута XML Schema` | `XSAttributeDeclaration` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ИспользованиеАтрибутаXS` | `Использование атрибута XML Schema` | `XSAttributeUse` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ПостроительСхемXML` | `Построитель схем XML` | `XMLSchemaBuilder` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ОпределениеСоставногоТипаXS` | `Определение составного типа XML Schema` | `XSComplexTypeDefinition` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ДокументацияXS` | `Документация XML Schema` | `XSDocumentation` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `АтрибутDOM` | `Атрибут DOM` | `DOMAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `КоллекцияАтрибутовDOM` | `Коллекция атрибутов DOM` | `DOMAttributeMap` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПостроительDOM` | `Построитель DOM` | `DOMBuilder` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СекцияCDATADOM` | `Секция CDATA DOM` | `DOMCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `КомментарийDOM` | `Комментарий  DOM` | `DOMComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументDOM` | `Документ  DOM` | `DOMDocument` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СписокЭлементовDOM` | `Список элементов DOM` | `DOMElementList` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементDOM` | `Элемент DOM` | `DOMElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СсылкаНаСущностьDOM` | `Ссылка на сущность DOM` | `DOMEntityReference` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СписокУзловDOM` | `Список узлов DOM` | `DOMNodeList` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ИнструкцияОбработкиDOM` | `Инструкция обработки DOM` | `DOMProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстDOM` | `Текст DOM` | `DOMText` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаписьDOM` | `Запись DOM` | `DOMWriter` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ОбъявлениеЭлементаXS` | `Объявление элемента XML Schema` | `XSElementDeclaration` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `РасширенноеИмяXML` | `Расширенное имя XML` | `XMLExpandedName` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ВыражениеXPath` | `Выражение DOM XPath` | `XPathExpression` | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `КоллекцияФасетовXDTO` | `Коллекция фасетов XDTO` | `XDTOFacetCollection` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ФасетПеречисленияXS` | `Фасет перечисления значения XML Schema` | `XSEnumerationFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетКоличестваРазрядовДробнойЧастиXS` | `Фасет количества разрядов дробной части значения XML Schema` | `XSFractionDigitsFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетДлиныXS` | `Фасет длины значения XML Schema` | `XSLengthFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетМаксимальногоИсключающегоЗначенияXS` | `Фасет максимального исключающего значения XML Schema` | `XSMaxExclusiveFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетМаксимальногоВключающегоЗначенияXS` | `Фасет максимального включающего значения XML Schema` | `XSMaxInclusiveFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетМаксимальнойДлиныXS` | `Фасет максимальной длины значения XML Schema` | `XSMaxLengthFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетМинимальногоИсключающегоЗначенияXS` | `Фасет минимального исключающего значения XML Schema` | `XSMinExclusiveFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетМинимальногоВключающегоЗначенияXS` | `Фасет минимального включающего значения XML Schema` | `XSMinInclusiveFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетМинимальнойДлиныXS` | `Фасет минимальной длины значения XML Schema` | `XSMinLengthFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетОбразцаXS` | `Фасет образца значения XML Schema` | `XSPatternFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетОбщегоКоличестваРазрядовXS` | `Фасет общего количества разрядов значения XML Schema` | `XSTotalDigitsFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФасетXDTO` | `Фасет XDTO` | `XDTOFacet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ФасетПробельныхСимволовXS` | `Фасет пробельных символов XML Schema` | `XSWhitespaceFacet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ФабрикаXDTO` | `Фабрика XDTO` | `XDTOFactory` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ФиксированныйСписокКомпонентXS` | `Фиксированный список компонент XML Schema` | `XSComponentFixedList` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `КоллекцияИменованныхКомпонентXS` | `Коллекция именованных компонент XML Schema` | `XSNamedComponentMap` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `СписокКомпонентXS` | `Список компонент XML Schema` | `XSComponentList` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `СписокXDTO` | `Список XDTO` | `XDTOList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ГруппаМоделиXS` | `Группа модели XML Schema` | `XSModelGroup` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `СписокРасширенныхИменXML` | `Список расширенных имен XML` | `XMLExpandedNameList` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ОбъектXDTO` | `Объект XDTO` | `XDTODataObject` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ТипОбъектаXDTO` | `Тип объекта XDTO` | `XDTOObjectType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ФрагментXS` | `Фрагмент XML Schema` | `XSParticle` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `КоллекцияСвойствXDTO` | `Коллекция свойств XDTO` | `XDTOPropertyCollection` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `СвойствоXDTO` | `Свойство XDTO` | `XDTOProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЧтениеXML` | `Чтение XML` | `XMLReader` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `РазыменовательПространствИменDOM` | `Разыменователь пространств имен DOM XPath` | `DOMNamespaceResolver` | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `РезультатXPath` | `Результат DOM XPath` | `XPathResult` | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `НаборСхемXML` | `Набор схем XML` | `XMLSchemaSet` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `СхемаXML` | `Схема XML` | `XMLSchema` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ПоследовательностьXDTO` | `Последовательность XDTO` | `XDTOSequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `СериализаторXDTO` | `Сериализатор XDTO` | `XDTOSerializer` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПараметрыЗаписиXML` | `Параметры записи XML` | `XMLWriterSettings` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ОпределениеПростогоТипаXS` | `Определение простого типа XML Schema` | `XSSimpleTypeDefinition` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `ЗначениеXDTO` | `Значение XDTO` | `XDTODataValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ТипЗначенияXDTO` | `Тип значения XDTO` | `XDTOValueType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписьXML` | `Запись XML` | `XMLWriter` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
 
 #### Члены объектов
 
 ##### `КаноническаяЗаписьXML`
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьСтроку`, `SetString` | 0…1 |
-| `Закрыть`, `Close` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьСтроку`, `SetString` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
+| `Закрыть`, `Close` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
 
 ##### `КаноническийDOM`
 
-| Метод | Аргументы |
-|---|---:|
-| `Канонизировать`, `Canonicalize` | 2…3 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Канонизировать`, `Canonicalize` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
 
 ##### `ПреобразованиеККаноническомуXML`
 
-| Метод | Аргументы |
-|---|---:|
-| `КанонизироватьВСтроку`, `CanonicalizeToString` | 1…4 |
-| `КанонизироватьВФайл`, `CanonicalizeToFile` | 2…5 |
-| `КанонизироватьВПоток`, `CanonicalizeToStream` | 2…5 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `КанонизироватьВСтроку`, `CanonicalizeToString` | — | [bsl-xml/src/canonicalization.rs](../../../crates/bsl-xml/src/canonicalization.rs) |
+| `КанонизироватьВФайл`, `CanonicalizeToFile` | — | [bsl-xml/src/canonicalization.rs](../../../crates/bsl-xml/src/canonicalization.rs) |
+| `КанонизироватьВПоток`, `CanonicalizeToStream` | — | [bsl-xml/src/canonicalization.rs](../../../crates/bsl-xml/src/canonicalization.rs) |
 
 ##### `ДокументHTML`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `Тело`, `Body` | чтение и запись |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Тело`, `Body` | чтение и запись | — | [bsl-xml/src/dom/html.rs](../../../crates/bsl-xml/src/dom/html.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ОпределениеТипаДокументаDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ЗаписьHTML`
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьСтроку`, `SetString` | 0 |
-| `Закрыть`, `Close` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьСтроку`, `SetString` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
+| `Закрыть`, `Close` | — | [bsl-xml/src/legacy_canonicalization.rs](../../../crates/bsl-xml/src/legacy_canonicalization.rs) |
 
 ##### `ЭлементТелоHTML`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ДобавитьДочерний`, `AppendChild` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ЭлементРазметкаHTML`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ДобавитьДочерний`, `AppendChild` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ЭлементЗаголовокHTML`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ДобавитьДочерний`, `AppendChild` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ЭлементБлокHTML`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ДобавитьДочерний`, `AppendChild` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ЭлементHTML`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ДобавитьДочерний`, `AppendChild` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ТипДанныхXML`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяТипа`, `TypeName` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяТипа`, `TypeName` | только чтение | — | [bsl-xml/src/xml_data_type.rs](../../../crates/bsl-xml/src/xml_data_type.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/xml_data_type.rs](../../../crates/bsl-xml/src/xml_data_type.rs) |
 
 ##### `МенеджерОбработкиСтрокиXML`
 
-| Метод | Аргументы |
-|---|---:|
-| `НайтиНедопустимыеСимволыXML`, `FindDisallowedXMLCharacters` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `НайтиНедопустимыеСимволыXML`, `FindDisallowedXMLCharacters` | — | [bsl-xml/src/xml_string_processing.rs](../../../crates/bsl-xml/src/xml_string_processing.rs) |
 
 ##### `АннотацияXS`
 
@@ -2635,9 +2635,9 @@
 
 ##### `ПостроительСхемXML`
 
-| Метод | Аргументы |
-|---|---:|
-| `СоздатьСхемуXML`, `CreateXMLSchema` | 0…1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `СоздатьСхемуXML`, `CreateXMLSchema` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `ОпределениеСоставногоТипаXS`
 
@@ -2649,468 +2649,468 @@
 
 ##### `АтрибутDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `КоллекцияАтрибутовDOM`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Получить`, `Get` | `Получить(i)` — тот же путь, что `i` (измерено у списков DOM). | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ПостроительDOM`
 
-| Метод | Аргументы |
-|---|---:|
-| `Прочитать`, `Read` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Прочитать`, `Read` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `СекцияCDATADOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `КомментарийDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ДокументDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `СписокЭлементовDOM`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Получить`, `Get` | `Получить(i)` — тот же путь, что `i` (измерено у списков DOM). | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ЭлементDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `СсылкаНаСущностьDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `СписокУзловDOM`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Получить`, `Get` | `Получить(i)` — тот же путь, что `i` (измерено у списков DOM). | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ИнструкцияОбработкиDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ТекстDOM`
 
-| Свойство | Доступ |
-|---|---|
-| `ИмяУзла`, `NodeName` | чтение и запись |
-| `ТипУзла`, `NodeType` | только чтение |
-| `ЗначениеУзла`, `NodeValue` | чтение и запись |
-| `ТекстовоеСодержимое`, `TextContent` | чтение и запись |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
-| `РодительскийУзел`, `ParentNode` | только чтение |
-| `ДокументВладелец`, `OwnerDocument` | только чтение |
-| `ПервыйДочерний`, `FirstChild` | только чтение |
-| `ПоследнийДочерний`, `LastChild` | только чтение |
-| `СледующийСоседний`, `NextSibling` | только чтение |
-| `ПредыдущийСоседний`, `PreviousSibling` | только чтение |
-| `ДочерниеУзлы`, `ChildNodes` | только чтение |
-| `Атрибуты`, `Attributes` | только чтение |
-| `ЭлементДокумента`, `DocumentElement` | только чтение |
-| `ВерсияXML`, `XmlVersion` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | чтение и запись |
-| `ЭлементВладелец`, `OwnerElement` | только чтение |
-| `Данные`, `Data` | чтение и запись |
-| `Цель`, `Target` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ИмяУзла`, `NodeName` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗначениеУзла`, `NodeValue` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ТекстовоеСодержимое`, `TextContent` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `РодительскийУзел`, `ParentNode` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДокументВладелец`, `OwnerDocument` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПервыйДочерний`, `FirstChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПоследнийДочерний`, `LastChild` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СледующийСоседний`, `NextSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПредыдущийСоседний`, `PreviousSibling` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДочерниеУзлы`, `ChildNodes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Атрибуты`, `Attributes` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементДокумента`, `DocumentElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВерсияXML`, `XmlVersion` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Значение`, `Value` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЭлементВладелец`, `OwnerElement` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Данные`, `Data` | чтение и запись | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `Цель`, `Target` | только чтение | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ЕстьДочерниеУзлы`, `HasChildNodes` | 0 |
-| `ЕстьАтрибуты`, `HasAttributes` | 0 |
-| `ПолучитьАтрибут`, `GetAttribute` | 1…2 |
-| `ЕстьАтрибут`, `HasAttribute` | 1…2 |
-| `ПолучитьУзелАтрибута`, `GetAttributeNode` | 1…2 |
-| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | 1…2 |
-| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | 1 |
-| `СоздатьЭлемент`, `CreateElement` | 1…2 |
-| `СоздатьАтрибут`, `CreateAttribute` | 1…2 |
-| `СоздатьТекстовыйУзел`, `CreateTextNode` | 1 |
-| `СоздатьСекциюCDATA`, `CreateCDATASection` | 1 |
-| `СоздатьКомментарий`, `CreateComment` | 1 |
-| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | 2 |
-| `ДобавитьДочерний`, `AppendChild` | 1 |
-| `ВставитьПеред`, `InsertBefore` | 2 |
-| `УдалитьДочерний`, `RemoveChild` | 1 |
-| `ЗаменитьДочерний`, `ReplaceChild` | 2 |
-| `УстановитьАтрибут`, `SetAttribute` | 2…3 |
-| `УдалитьАтрибут`, `RemoveAttribute` | 1…2 |
-| `УстановитьУзелАтрибута`, `SetAttributeNode` | 1 |
-| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | 1 |
-| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | 3…4 |
-| `СоздатьВыражениеXPath`, `CreateXPathExpression` | 1…2 |
-| `СоздатьРазыменовательПИ`, `CreateNSResolver` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ЕстьДочерниеУзлы`, `HasChildNodes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибуты`, `HasAttributes` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьАтрибут`, `GetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЕстьАтрибут`, `HasAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьУзелАтрибута`, `GetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементыПоИмени`, `GetElementByTagName` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ПолучитьЭлементПоИдентификатору`, `GetElementById` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьЭлемент`, `CreateElement` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьАтрибут`, `CreateAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьТекстовыйУзел`, `CreateTextNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьСекциюCDATA`, `CreateCDATASection` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьКомментарий`, `CreateComment` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьИнструкциюОбработки`, `CreateProcessingInstruction` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ДобавитьДочерний`, `AppendChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВставитьПеред`, `InsertBefore` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьДочерний`, `RemoveChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ЗаменитьДочерний`, `ReplaceChild` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьАтрибут`, `SetAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьАтрибут`, `RemoveAttribute` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УстановитьУзелАтрибута`, `SetAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `УдалитьУзелАтрибута`, `RemoveAttributeNode` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `ВычислитьВыражениеXPath`, `EvaluateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьВыражениеXPath`, `CreateXPathExpression` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
+| `СоздатьРазыменовательПИ`, `CreateNSResolver` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ЗаписьDOM`
 
-| Метод | Аргументы |
-|---|---:|
-| `Записать`, `Write` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Записать`, `Write` | — | [bsl-xml/src/dom/objects.rs](../../../crates/bsl-xml/src/dom/objects.rs) |
 
 ##### `ОбъявлениеЭлементаXS`
 
@@ -3118,46 +3118,46 @@
 
 ##### `РасширенноеИмяXML`
 
-| Свойство | Доступ |
-|---|---|
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `ВыражениеXPath`
 
-| Метод | Аргументы |
-|---|---:|
-| `Вычислить`, `Evaluate` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Вычислить`, `Evaluate` | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
 
 ##### `КоллекцияФасетовXDTO`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ФасетПеречисленияXS`
 
@@ -3207,31 +3207,31 @@
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ФасетПробельныхСимволовXS`
 
@@ -3241,82 +3241,82 @@
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ФиксированныйСписокКомпонентXS`
 
-| Метод | Аргументы |
-|---|---:|
-| `Получить`, `Get` | 1…2 |
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Получить`, `Get` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `КоллекцияИменованныхКомпонентXS`
 
-| Метод | Аргументы |
-|---|---:|
-| `Получить`, `Get` | 1…2 |
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Получить`, `Get` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `СписокКомпонентXS`
 
-| Метод | Аргументы |
-|---|---:|
-| `Получить`, `Get` | 1…2 |
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Получить`, `Get` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `СписокXDTO`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ГруппаМоделиXS`
 
@@ -3324,69 +3324,69 @@
 
 ##### `СписокРасширенныхИменXML`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `ОбъектXDTO`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ТипОбъектаXDTO`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ФрагментXS`
 
@@ -3396,116 +3396,116 @@
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `СвойствоXDTO`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ЧтениеXML`
 
-| Свойство | Доступ |
-|---|---|
-| `ТипУзла`, `NodeType` | только чтение |
-| `Имя`, `Name` | только чтение |
-| `Значение`, `Value` | только чтение |
-| `ЛокальноеИмя`, `LocalName` | только чтение |
-| `Префикс`, `Prefix` | только чтение |
-| `URIПространстваИмен`, `NamespaceURI` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ТипУзла`, `NodeType` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Имя`, `Name` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Значение`, `Value` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЛокальноеИмя`, `LocalName` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Префикс`, `Prefix` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `URIПространстваИмен`, `NamespaceURI` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьСтроку`, `SetString` | 0…1 |
-| `ОткрытьФайл`, `OpenFile` | 1…2 |
-| `Прочитать`, `Read` | 0 |
-| `Пропустить`, `Skip` | 0 |
-| `ПрочитатьАтрибут`, `ReadAttribute` | 0 |
-| `КоличествоАтрибутов`, `AttributeCount` | 0 |
-| `ИмяАтрибута`, `AttributeName` | 0…1 |
-| `ЗначениеАтрибута`, `AttributeValue` | 0…1 |
-| `ПерейтиКСодержимому`, `MoveToContent` | 0 |
-| `Закрыть`, `Close` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьСтроку`, `SetString` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ОткрытьФайл`, `OpenFile` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Прочитать`, `Read` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Пропустить`, `Skip` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ПрочитатьАтрибут`, `ReadAttribute` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `КоличествоАтрибутов`, `AttributeCount` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ИмяАтрибута`, `AttributeName` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗначениеАтрибута`, `AttributeValue` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ПерейтиКСодержимому`, `MoveToContent` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Закрыть`, `Close` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
 
 ##### `РазыменовательПространствИменDOM`
 
-| Метод | Аргументы |
-|---|---:|
-| `НайтиURIПространстваИмен`, `LookupNamespaceURI` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `НайтиURIПространстваИмен`, `LookupNamespaceURI` | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
 
 ##### `РезультатXPath`
 
-| Свойство | Доступ |
-|---|---|
-| `ТипРезультата`, `ResultType` | только чтение |
-| `ЧисловоеЗначение`, `NumberValue` | только чтение |
-| `СтроковоеЗначение`, `StringValue` | только чтение |
-| `БулевоЗначение`, `BooleanValue` | только чтение |
-| `РазмерСнимка`, `SnapshotLength` | только чтение |
-| `НеверноеСостояниеИтератора`, `InvalidIteratorState` | только чтение |
-| `SingleNodeValue` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `ТипРезультата`, `ResultType` | только чтение | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `ЧисловоеЗначение`, `NumberValue` | только чтение | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `СтроковоеЗначение`, `StringValue` | только чтение | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `БулевоЗначение`, `BooleanValue` | только чтение | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `РазмерСнимка`, `SnapshotLength` | только чтение | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `НеверноеСостояниеИтератора`, `InvalidIteratorState` | только чтение | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `SingleNodeValue` | только чтение | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `ПолучитьСледующий`, `IterateNext` | 0 |
-| `ЭлементСнимка`, `SnapshotItem` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `ПолучитьСледующий`, `IterateNext` | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
+| `ЭлементСнимка`, `SnapshotItem` | — | [bsl-xml/src/xpath.rs](../../../crates/bsl-xml/src/xpath.rs) |
 
 ##### `НаборСхемXML`
 
-| Метод | Аргументы |
-|---|---:|
-| `Добавить`, `Add` | 1 |
-| `Получить`, `Get` | 1 |
-| `Количество`, `Count` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Добавить`, `Add` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xsd/objects.rs](../../../crates/bsl-xml/src/xsd/objects.rs) |
 
 ##### `СхемаXML`
 
@@ -3515,72 +3515,72 @@
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `СериализаторXDTO`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
-| `ИзXMLТипа`, `FromXMLType` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ИзXMLТипа`, `FromXMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ПараметрыЗаписиXML`
 
-| Свойство | Доступ |
-|---|---|
-| `Кодировка`, `Encoding` | только чтение |
-| `Версия`, `Version` | только чтение |
-| `Отступ`, `Indent` | только чтение |
-| `ОтступАтрибутов`, `IndentAttributes` | только чтение |
-| `СимволыОтступа`, `IndentChars` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Кодировка`, `Encoding` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Версия`, `Version` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Отступ`, `Indent` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ОтступАтрибутов`, `IndentAttributes` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `СимволыОтступа`, `IndentChars` | только чтение | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
 
 ##### `ОпределениеПростогоТипаXS`
 
@@ -3590,80 +3590,80 @@
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ТипЗначенияXDTO`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Тип`, `Type` | 0…2 |
-| `Создать`, `Create` | 1…2 |
-| `ПрочитатьXML`, `ReadXML` | 1…2 |
-| `ЗаписатьXML`, `WriteXML` | 2…4 |
-| `Получить`, `Get` | 1 |
-| `Установить`, `Set` | 2 |
-| `Добавить`, `Add` | 1…2 |
-| `Вставить`, `Insert` | 2 |
-| `Удалить`, `Delete` | 1 |
-| `Очистить`, `Clear` | 0 |
-| `Количество`, `Count` | 0 |
-| `ПолучитьСписок`, `GetList` | 1 |
-| `Установлено`, `IsSet` | 1 |
-| `Сбросить`, `Unset` | 1 |
-| `Проверить`, `Validate` | 0 |
-| `Свойства`, `Properties` | 0 |
-| `Владелец`, `Owner` | 0 |
-| `Последовательность`, `Sequence` | 0 |
-| `ПолучитьЗначение`, `GetValue` | 1 |
-| `ПолучитьСвойство`, `GetProperty` | 1 |
-| `XMLТип`, `XMLType` | 0 |
-| `XMLТипЗнч`, `XMLTypeOf` | 1 |
-| `ВозможностьЧтенияXML`, `CanReadXML` | 1 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Тип`, `Type` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Создать`, `Create` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПрочитатьXML`, `ReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ЗаписатьXML`, `WriteXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Получить`, `Get` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установить`, `Set` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Вставить`, `Insert` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Удалить`, `Delete` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Очистить`, `Clear` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Количество`, `Count` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСписок`, `GetList` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Установлено`, `IsSet` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Сбросить`, `Unset` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Проверить`, `Validate` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Свойства`, `Properties` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Владелец`, `Owner` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `Последовательность`, `Sequence` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьЗначение`, `GetValue` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ПолучитьСвойство`, `GetProperty` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТип`, `XMLType` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `XMLТипЗнч`, `XMLTypeOf` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
+| `ВозможностьЧтенияXML`, `CanReadXML` | — | [bsl-xml/src/xdto/objects.rs](../../../crates/bsl-xml/src/xdto/objects.rs) |
 
 ##### `ЗаписьXML`
 
-| Метод | Аргументы |
-|---|---:|
-| `УстановитьСтроку`, `SetString` | 0…1 |
-| `ОткрытьФайл`, `OpenFile` | 1…2 |
-| `ЗаписатьОбъявлениеXML`, `WriteXMLDeclaration` | 0 |
-| `ЗаписатьНачалоЭлемента`, `WriteStartElement` | 1…3 |
-| `ЗаписатьКонецЭлемента`, `WriteEndElement` | 0 |
-| `ЗаписатьАтрибут`, `WriteAttribute` | 2…3 |
-| `ЗаписатьТекст`, `WriteText` | 1 |
-| `ЗаписатьКомментарий`, `WriteComment` | 1 |
-| `ЗаписатьСекциюCDATA`, `WriteCDATASection` | 1 |
-| `ЗаписатьИнструкциюОбработки`, `WriteProcessingInstruction` | 2 |
-| `ЗаписатьБезОбработки`, `WriteRaw` | 1 |
-| `Закрыть`, `Close` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `УстановитьСтроку`, `SetString` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ОткрытьФайл`, `OpenFile` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьОбъявлениеXML`, `WriteXMLDeclaration` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьНачалоЭлемента`, `WriteStartElement` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьКонецЭлемента`, `WriteEndElement` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьАтрибут`, `WriteAttribute` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьТекст`, `WriteText` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьКомментарий`, `WriteComment` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьСекциюCDATA`, `WriteCDATASection` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьИнструкциюОбработки`, `WriteProcessingInstruction` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `ЗаписатьБезОбработки`, `WriteRaw` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
+| `Закрыть`, `Close` | — | [bsl-xml/src/xml.rs](../../../crates/bsl-xml/src/xml.rs) |
 
-### `bsl-zip` 0.2.0
+### `bsl-zip` 0.3.0
 
 #### Глобальные функции
 
@@ -3671,108 +3671,108 @@
 
 #### Конструкторы
 
-| Имя и псевдонимы | Аргументы |
-|---|---:|
-| `ЧтениеZipФайла`, `ZipFileReader` | 0…2 |
-| `ЧтениеФайлаАрхива`, `ArchiveFileReader` | 0…3 |
-| `ЗаписьZipФайла`, `ZipFileWriter` | 0…7 |
-| `ЗаписьФайлаАрхива`, `ArchiveFileWriter` | 0…8 |
+| Имя и псевдонимы | Описание | Реализация |
+|---|---|---|
+| `ЧтениеZipФайла`, `ZipFileReader` | — | [bsl-zip/src/lib.rs](../../../crates/bsl-zip/src/lib.rs) |
+| `ЧтениеФайлаАрхива`, `ArchiveFileReader` | — | [bsl-zip/src/lib.rs](../../../crates/bsl-zip/src/lib.rs) |
+| `ЗаписьZipФайла`, `ZipFileWriter` | — | [bsl-zip/src/lib.rs](../../../crates/bsl-zip/src/lib.rs) |
+| `ЗаписьФайлаАрхива`, `ArchiveFileWriter` | — | [bsl-zip/src/lib.rs](../../../crates/bsl-zip/src/lib.rs) |
 
 #### Типы объектов
 
-| Имя | Представление типа | Дополнительные имена |
-|---|---|---|
-| `ЭлементыФайлаАрхива` | `Элементы файла архива` | `ArchiveFileEntries` |
-| `ЭлементФайлаАрхива` | `Элемент файла архива` | `ArchiveFileEntry` |
-| `ЧтениеФайлаАрхива` | `Чтение файла архива` | `ArchiveFileReader` |
-| `ЗаписьФайлаАрхива` | `Запись файла архива` | `ArchiveFileWriter` |
-| `ЭлементыZipФайла` | `Элементы ZIP файла` | `ZipFileEntries` |
-| `ЭлементZipФайла` | `Элемент ZIP файла` | `ZipFileEntry` |
-| `ЧтениеZipФайла` | `Чтение ZIP файла` | `ZipFileReader` |
-| `ЗаписьZipФайла` | `Запись ZIP файла` | `ZipFileWriter` |
+| Имя | Представление типа | Дополнительные имена | Описание | Реализация |
+|---|---|---|---|---|
+| `ЭлементыФайлаАрхива` | `Элементы файла архива` | `ArchiveFileEntries` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
+| `ЭлементФайлаАрхива` | `Элемент файла архива` | `ArchiveFileEntry` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
+| `ЧтениеФайлаАрхива` | `Чтение файла архива` | `ArchiveFileReader` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
+| `ЗаписьФайлаАрхива` | `Запись файла архива` | `ArchiveFileWriter` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
+| `ЭлементыZipФайла` | `Элементы ZIP файла` | `ZipFileEntries` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
+| `ЭлементZipФайла` | `Элемент ZIP файла` | `ZipFileEntry` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
+| `ЧтениеZipФайла` | `Чтение ZIP файла` | `ZipFileReader` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
+| `ЗаписьZipФайла` | `Запись ZIP файла` | `ZipFileWriter` | — | [bsl-zip/src/archive/reader.rs](../../../crates/bsl-zip/src/archive/reader.rs) |
 
 #### Члены объектов
 
 ##### `ЭлементыФайлаАрхива`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
-| `Найти`, `Find` | 1 |
-| `Извлечь`, `Extract` | 2…4 |
-| `ИзвлечьВсе`, `ExtractAll` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Получить`, `Get` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Найти`, `Find` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Извлечь`, `Extract` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ИзвлечьВсе`, `ExtractAll` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
 ##### `ЭлементФайлаАрхива`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Извлечь`, `Extract` | 2…4 |
-| `ИзвлечьВсе`, `ExtractAll` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Извлечь`, `Extract` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ИзвлечьВсе`, `ExtractAll` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
 ##### `ЧтениеФайлаАрхива`
 
-| Свойство | Доступ |
-|---|---|
-| `Элементы`, `Items` | только чтение |
-| `Комментарий`, `Comment` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Элементы`, `Items` | только чтение | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Комментарий`, `Comment` | только чтение | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Открыть`, `Open` | 1…2 |
-| `Закрыть`, `Close` | 0 |
-| `Извлечь`, `Extract` | 2…4 |
-| `ИзвлечьВсе`, `ExtractAll` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Открыть`, `Open` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Закрыть`, `Close` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Извлечь`, `Extract` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ИзвлечьВсе`, `ExtractAll` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
 ##### `ЗаписьФайлаАрхива`
 
-| Метод | Аргументы |
-|---|---:|
-| `Открыть`, `Open` | 1…7 |
-| `Добавить`, `Add` | 1…3 |
-| `Записать`, `Write` | 0 |
-| `ПолучитьДвоичныеДанные`, `GetBinaryData` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Открыть`, `Open` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Записать`, `Write` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ПолучитьДвоичныеДанные`, `GetBinaryData` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
 ##### `ЭлементыZipФайла`
 
-| Метод | Аргументы |
-|---|---:|
-| `Количество`, `Count` | 0 |
-| `Получить`, `Get` | 1 |
-| `Найти`, `Find` | 1 |
-| `Извлечь`, `Extract` | 2…4 |
-| `ИзвлечьВсе`, `ExtractAll` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Количество`, `Count` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Получить`, `Get` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Найти`, `Find` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Извлечь`, `Extract` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ИзвлечьВсе`, `ExtractAll` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
 ##### `ЭлементZipФайла`
 
 Свойства зависят от экземпляра; ниже перечислена только статическая часть.
 
-| Метод | Аргументы |
-|---|---:|
-| `Извлечь`, `Extract` | 2…4 |
-| `ИзвлечьВсе`, `ExtractAll` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Извлечь`, `Extract` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ИзвлечьВсе`, `ExtractAll` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
 ##### `ЧтениеZipФайла`
 
-| Свойство | Доступ |
-|---|---|
-| `Элементы`, `Items` | только чтение |
-| `Комментарий`, `Comment` | только чтение |
+| Свойство | Доступ | Описание | Реализация |
+|---|---|---|---|
+| `Элементы`, `Items` | только чтение | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Комментарий`, `Comment` | только чтение | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
-| Метод | Аргументы |
-|---|---:|
-| `Открыть`, `Open` | 1…2 |
-| `Закрыть`, `Close` | 0 |
-| `Извлечь`, `Extract` | 2…4 |
-| `ИзвлечьВсе`, `ExtractAll` | 1…2 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Открыть`, `Open` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Закрыть`, `Close` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Извлечь`, `Extract` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ИзвлечьВсе`, `ExtractAll` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
 
 ##### `ЗаписьZipФайла`
 
-| Метод | Аргументы |
-|---|---:|
-| `Открыть`, `Open` | 1…7 |
-| `Добавить`, `Add` | 1…3 |
-| `Записать`, `Write` | 0 |
-| `ПолучитьДвоичныеДанные`, `GetBinaryData` | 0 |
+| Метод | Описание | Реализация |
+|---|---|---|
+| `Открыть`, `Open` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Добавить`, `Add` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `Записать`, `Write` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |
+| `ПолучитьДвоичныеДанные`, `GetBinaryData` | — | [bsl-zip/src/archive/objects.rs](../../../crates/bsl-zip/src/archive/objects.rs) |

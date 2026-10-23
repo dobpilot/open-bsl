@@ -10,6 +10,7 @@
 //! скрипту и исполняется целиком.
 
 mod api_reference;
+mod api_reference_sources;
 mod bytecode;
 mod complete;
 mod config_db;
