@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Catalog xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="b7608864-b9ec-42d9-abb2-e7d7b0bdd348">
+  <producedTypes>
+    <objectType typeId="1c2c8b9e-6412-4570-8b90-70c43a1e722d" valueTypeId="3acb34ae-fbfc-4c4a-96b1-bf31aa32826f"/>
+    <refType typeId="1a0d55aa-a24a-4fee-8318-9edb6209ebc1" valueTypeId="8e6b9e91-f6d0-44d1-bf6e-81c63d7a00c2"/>
+    <selectionType typeId="ee764d6d-bea8-4f37-bd3e-3644260ffb32" valueTypeId="81719e72-9e9e-484a-a5af-870404cf6a7b"/>
+    <listType typeId="ec0339aa-3f00-4ada-8e89-0910125f50fa" valueTypeId="70b215cc-3bf5-40a5-a037-6134a2d2ee8c"/>
+    <managerType typeId="3054c74c-1d3e-4518-ba47-9f9ec85a9c95" valueTypeId="60c82354-9095-4c65-9886-1a6d472136ec"/>
+  </producedTypes>
+  <name>Расш1_Справочник1</name>
+  <useStandardCommands>true</useStandardCommands>
+  <inputByString>Catalog.Расш1_Справочник1.StandardAttribute.Description</inputByString>
+  <inputByString>Catalog.Расш1_Справочник1.StandardAttribute.Code</inputByString>
+  <fullTextSearchOnInputByString>DontUse</fullTextSearchOnInputByString>
+  <createOnInput>Use</createOnInput>
+  <dataLockControlMode>Managed</dataLockControlMode>
+  <fullTextSearch>Use</fullTextSearch>
+  <levelCount>2</levelCount>
+  <foldersOnTop>true</foldersOnTop>
+  <codeLength>9</codeLength>
+  <descriptionLength>25</descriptionLength>
+  <codeType>String</codeType>
+  <codeAllowedLength>Variable</codeAllowedLength>
+  <checkUnique>true</checkUnique>
+  <autonumbering>true</autonumbering>
+  <defaultPresentation>AsDescription</defaultPresentation>
+  <editType>InDialog</editType>
+  <choiceMode>BothWays</choiceMode>
+</mdclass:Catalog>

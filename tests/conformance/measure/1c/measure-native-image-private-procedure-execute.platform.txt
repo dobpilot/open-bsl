@@ -1,0 +1,2 @@
+image.private-procedure-execute.result=12
+image.private-procedure-execute.argument=12

@@ -1,0 +1,7 @@
+{
+  "source": "docs/research/fixtures/approved-sdk-production-integration-1016/settings-storage-runtime-error-classes-1017/run-final-startup.py",
+  "sha256": "ebade06e2caa276500c1c4b5f781c2d2b3e0cc886ad8312f126fb66e99a0ca2f",
+  "changes": [
+    "Result destination, labels and SDK0.9.23 candidate binary path; database commands, users, acceptance script and restrictions retained."
+  ]
+}

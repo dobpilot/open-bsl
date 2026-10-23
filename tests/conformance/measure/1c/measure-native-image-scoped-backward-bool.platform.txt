@@ -1,0 +1,5 @@
+image.scoped_bool.true=1
+image.scoped_bool.false=0
+image.scoped_bool.private.value=7
+image.scoped_bool.private.argument=5
+image.scoped_bool.done=1

@@ -1,0 +1,1 @@
+predefined.uninitialized.error={DataProcessor.Замеры.Form.Форма.Form(32)}: Error getting value of context attribute (Основной): Catalog.ЗамерВременныхТаблиц.Основной. The predefined item is not found in the infobase data

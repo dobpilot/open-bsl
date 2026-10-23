@@ -1,0 +1,3 @@
+image.native.remaining.59.result=0
+image.native.remaining.100.result=0
+image.native.remaining.109.result=0

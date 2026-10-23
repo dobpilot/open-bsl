@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental baseline control, not compiler evidence",
+  "base": "native-image-private-variable-trace.image",
+  "change": "Only the unusual parameter descriptor changes 1338/0 to known reference 5/-1. Native receipt completes with result=12, argument=12, count=1, inner=12. This verifies the array observation mechanism independently of the unknown descriptor.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-variable-trace-baseline.image": {
+      "bytes": 468,
+      "sha256": "bb5d1b26e97ec16d56ce41f6a8213309a1cbdf9dd5faaa8e45f5b5aab19fff94"
+    },
+    "native-image-private-variable-trace-baseline.Module.bin": {
+      "bytes": 1773,
+      "sha256": "0fe6076b4afc714889572ab32203b2ccd64c9a88eb784deed42e8def4963276f"
+    },
+    "measure-native-image-private-variable-trace-baseline.bsl": {
+      "bytes": 1087,
+      "sha256": "3798a8dde24eab7a8a9ea9a13efbc4b2be4dc868a462fc487a26092c4af1b1d2"
+    },
+    "measure-native-image-private-variable-trace-baseline.platform.txt": {
+      "bytes": 191,
+      "sha256": "022945d7974af0e1cfcd36b6bf0c7ad2b496c70e5c650a69fc98f59c8a941221"
+    }
+  }
+}

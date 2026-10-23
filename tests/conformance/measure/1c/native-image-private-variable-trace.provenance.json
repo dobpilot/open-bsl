@@ -1,0 +1,27 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental control; incomplete native observation, not a successful oracle",
+  "base": "native-image-private-variable-flag.image",
+  "change": "Add a normal reference array parameter and append the unusual parameter through opcode 52. Caller printed 5/5/count=0; platform did not terminate within 60 seconds and timeout stopped the owned process. No platform.txt is accepted.",
+  "exit_status": 1,
+  "timeout_seconds": 60,
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-variable-trace.image": {
+      "bytes": 470,
+      "sha256": "f73c93c68f5351592aa328f03338c42ec37f716bab454e0724085c131ef10806"
+    },
+    "native-image-private-variable-trace.Module.bin": {
+      "bytes": 1773,
+      "sha256": "8efac5f10b5621bda90853a23ddfe5cbd0cd42c1ceb0e2830f7f5c05de28b19b"
+    },
+    "measure-native-image-private-variable-trace.bsl": {
+      "bytes": 1042,
+      "sha256": "35d5691d4393b969880c1a8b960bf4c81a73d2a255658afd2943ab099bb68c2f"
+    },
+    "measure-native-image-private-variable-trace.partial.txt": {
+      "bytes": 115,
+      "sha256": "991fb38f13d92311ff2ff6db76c074fdbda6d38370acaddc04aad844404f721d"
+    }
+  }
+}

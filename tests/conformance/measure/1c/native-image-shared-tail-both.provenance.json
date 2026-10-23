@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "native-image-shared-tail.image",
+  "change": "Add an independent exported function executing Пустая() at the shared private flag-2 entry. Final receipt follows correction of its independent return jump to the ordinary line marker. Both shared-tail inputs preserve 5.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-shared-tail-both.image": {
+      "bytes": 421,
+      "sha256": "477a61987a5b60714c09987c2fbafe700e4aa667d11c43627eca44f7ac2b1470"
+    },
+    "native-image-shared-tail-both.Module.bin": {
+      "bytes": 1773,
+      "sha256": "acfeb79f5620d68e8dd68b70fdc1afe2587a29c09bdfb8ba215a10d76a3f48c0"
+    },
+    "measure-native-image-shared-tail-both.bsl": {
+      "bytes": 1207,
+      "sha256": "00680c223e6e06635e297efceeab1d6af258b15d8192e184bf71f21d4cdbc826"
+    },
+    "measure-native-image-shared-tail-both.platform.txt": {
+      "bytes": 128,
+      "sha256": "5e7b14e7f16e6b2f5f069537848053ba4b4392416d03cf018df4e28dc95c8eb1"
+    }
+  }
+}

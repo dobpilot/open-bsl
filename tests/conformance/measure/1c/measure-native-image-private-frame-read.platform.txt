@@ -1,0 +1,13 @@
+image.private-frame-read.slot0.type=Number
+image.private-frame-read.slot0.value=7
+image.private-frame-read.slot0.argument=5
+image.private-frame-read.slot1.type=Number
+image.private-frame-read.slot1.value=7
+image.private-frame-read.slot1.argument=5
+image.private-frame-read.slot2.type=Number
+image.private-frame-read.slot2.value=7
+image.private-frame-read.slot2.argument=5
+image.private-frame-read.slot3.type=Number
+image.private-frame-read.slot3.value=7
+image.private-frame-read.slot3.argument=5
+image.private-frame-read.done=1

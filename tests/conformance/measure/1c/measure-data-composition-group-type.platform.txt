@@ -1,0 +1,6 @@
+ROOT	EnumDataCompositionGroupType
+TYPE	DataCompositionGroupType
+HIERARCHY	Hierarchy
+HIERARCHY_ONLY	Hierarchy only
+ITEMS	Elements
+ALIASES	PASS

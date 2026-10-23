@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" version="2.20">
+	<Document uuid="a56e6d01-4c72-5747-bf84-fa9486ca155f">
+		<InternalInfo>
+			<xr:GeneratedType name="DocumentObject.ЗамерЧужогоДокумента" category="Object">
+				<xr:TypeId>14d7118a-1a38-5543-886e-efe77490d246</xr:TypeId>
+				<xr:ValueId>74a25d07-c233-5ec6-958e-148382b335cb</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentRef.ЗамерЧужогоДокумента" category="Ref">
+				<xr:TypeId>1029172e-c547-59d7-a8ec-65cce3be3e32</xr:TypeId>
+				<xr:ValueId>8fec9441-d53c-5f4a-87b6-d9bcd55eaed9</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentSelection.ЗамерЧужогоДокумента" category="Selection">
+				<xr:TypeId>5432a456-feea-5338-b614-18c4ee38f085</xr:TypeId>
+				<xr:ValueId>ad3e4add-ad49-58df-be96-5946ab64ac5c</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentList.ЗамерЧужогоДокумента" category="List">
+				<xr:TypeId>ab1c68cb-2388-5fb2-a99c-0e1ab16c497a</xr:TypeId>
+				<xr:ValueId>6a4293ae-b8d0-5b3f-ab33-3db8622cf823</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentManager.ЗамерЧужогоДокумента" category="Manager">
+				<xr:TypeId>da0faf0c-4fbf-571f-9a78-6bd1772586c2</xr:TypeId>
+				<xr:ValueId>8a51746b-ab23-5b92-af20-53e1a3508796</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<Name>ЗамерЧужогоДокумента</Name>
+			<Synonym>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Проба документа</v8:content>
+				</v8:item>
+			</Synonym>
+			<Comment/>
+			<NumberType>String</NumberType>
+			<NumberLength>9</NumberLength>
+			<NumberAllowedLength>Variable</NumberAllowedLength>
+			<NumberPeriodicity>Nonperiodical</NumberPeriodicity>
+			<CheckUnique>true</CheckUnique>
+			<Autonumbering>true</Autonumbering>
+		</Properties>
+		<ChildObjects/>
+	</Document>
+</MetaDataObject>

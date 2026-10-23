@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental scoped unreachable-target control, completed native seven-line receipt",
+  "scope": "Same three declarations and callable bodies as scoped-foreach-frame. Add one jump at command62 to command34, after every declaration terminal, followed by module End63. This targets the middle of a public expression; reachability is to be verified against the native receipt, not assumed for production.",
+  "files": {
+    "native-image-scoped-foreach-dead-target.image": {
+      "bytes": 1115,
+      "sha256": "4b70989ef08ead9421450111ce47ed3a5a7cd5694663f75aef2920fb848e2146"
+    },
+    "native-image-scoped-foreach-dead-target.Module.bin": {
+      "bytes": 2376,
+      "sha256": "769d32a4b65eb99d51b2ec2444ce7ad95638a70ceee8662748c7af6baada3582"
+    },
+    "measure-native-image-scoped-foreach-dead-target.bsl": {
+      "bytes": 1407,
+      "sha256": "9334510431e152b7f7152ecdb4a6e3c41c9801c81582abe7d2bcbe13b8e6c927"
+    },
+    "measure-native-image-scoped-foreach-dead-target.platform.txt": {
+      "bytes": 241,
+      "sha256": "fae1a97d77626b232ec082c386e8a8654123fdada630f9806edae3a95ce2da75"
+    }
+  },
+  "native_receipt_complete": true
+}

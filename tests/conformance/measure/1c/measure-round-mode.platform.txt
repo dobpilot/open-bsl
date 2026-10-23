@@ -1,0 +1,5 @@
+VALUE	Round 15 to 10	RoundMode
+VALUE	Round 15 to 20	RoundMode
+DOWN	1
+UP	2
+ALIASES	Yes

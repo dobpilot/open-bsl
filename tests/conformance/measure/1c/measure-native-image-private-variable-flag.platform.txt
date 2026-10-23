@@ -1,0 +1,2 @@
+image.private-variable-flag.result=5
+image.private-variable-flag.argument=5

@@ -1,0 +1,11 @@
+file.begin	button-shape-representation-1
+BUTTON.SHAPE.AUTO	Auto
+BUTTON.SHAPE.ALWAYS	Always
+BUTTON.SHAPE.NONE	None
+BUTTON.SHAPE.WHEN_ACTIVE	When active
+BUTTON.SHAPE.TYPE	ButtonShapeRepresentation
+BUTTON.SHAPE.ALIAS.AUTO	Yes
+BUTTON.SHAPE.ALIAS.ALWAYS	Yes
+BUTTON.SHAPE.ALIAS.NONE	Yes
+BUTTON.SHAPE.ALIAS.WHEN_ACTIVE	Yes
+file.end	button-shape-representation-1

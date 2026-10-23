@@ -1,0 +1,12 @@
+business.property.body.number.read-error	0
+business.property.body.number.assign-error	1
+business.property.after.number.assign-error	0
+business.property.body.deletion-mark.read-error	0
+business.property.body.deletion-mark.assign-error	1
+business.property.after.deletion-mark.assign-error	0
+business.property.body.started.read-error	0
+business.property.body.started.assign-error	1
+business.property.after.started.assign-error	0
+business.property.body.completed.read-error	0
+business.property.body.completed.assign-error	1
+business.property.after.completed.assign-error	0

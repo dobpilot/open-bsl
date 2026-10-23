@@ -1,0 +1,8 @@
+legacy.contract.close-new	
+legacy.contract.set-default	
+legacy.contract.close-twice	
+legacy.contract.english	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+legacy.contract.element	<z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>
+legacy.contract.xpath-result	<z:e xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z"></z:e>
+legacy.contract.twice	<rejected>
+legacy.contract.unopened	<rejected>

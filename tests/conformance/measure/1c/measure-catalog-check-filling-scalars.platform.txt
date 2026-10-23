@@ -1,0 +1,6 @@
+catalog.scalars.empty=FALSE
+catalog.scalars.input=FALSE:5:Description:ПроверяемаяСтрока:ПроверяемоеЧисло:ПроверяемоеБулево:ПроверяемаяДата
+catalog.scalars.empty.field=ПроверяемоеЧисло
+catalog.scalars.empty.field=ПроверяемаяДата
+catalog.scalars.false=TRUE
+catalog.scalars.true=TRUE

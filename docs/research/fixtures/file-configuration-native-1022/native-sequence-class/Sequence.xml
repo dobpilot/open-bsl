@@ -1,0 +1,185 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi" xmlns:ent="http://v8.1c.ru/8.1/data/enterprise" xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform" xmlns:style="http://v8.1c.ru/8.1/data/ui/style" xmlns:sys="http://v8.1c.ru/8.1/data/ui/fonts/system" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" xmlns:web="http://v8.1c.ru/8.1/data/ui/colors/web" xmlns:win="http://v8.1c.ru/8.1/data/ui/colors/windows" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xpr="http://v8.1c.ru/8.3/xcf/predef" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.20">
+	<Sequence uuid="4390326e-700d-4708-bc07-83b90394bc0e">
+		<InternalInfo>
+			<xr:GeneratedType name="SequenceRecord.ДокументыОрганизаций" category="Record">
+				<xr:TypeId>b0876bc5-b4ba-4a39-a540-b15f0bafabc1</xr:TypeId>
+				<xr:ValueId>b6c9d946-9c2b-4602-badb-16f867834e63</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="SequenceManager.ДокументыОрганизаций" category="Manager">
+				<xr:TypeId>d3e1ba90-b501-4761-b7ce-ebcf45c398d2</xr:TypeId>
+				<xr:ValueId>5a924609-6e28-48ec-8e9d-8b0c814f6eb9</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="SequenceRecordSet.ДокументыОрганизаций" category="RecordSet">
+				<xr:TypeId>2707fb8a-b576-423c-b8f8-d0c37012b48f</xr:TypeId>
+				<xr:ValueId>8e6b919a-b7da-45ca-9845-1aa2a5099335</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<Name>ДокументыОрганизаций</Name>
+			<Synonym>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Документы организаций</v8:content>
+				</v8:item>
+			</Synonym>
+			<Comment/>
+			<MoveBoundaryOnPosting>DontMove</MoveBoundaryOnPosting>
+			<Documents>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвансовыйОтчет</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоМПЗВходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоМПЗИсходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоОСВходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоОСИсходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоПрочееВходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоПрочееИсходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоРасчетыВходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АвизоРасчетыИсходящее</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.АктОбОказанииПроизводственныхУслуг</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВводНачальныхОстатков</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВозвратМатериаловИзЭксплуатации</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВозвратТоваровОтПокупателя</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВозвратТоваровПоставщику</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВыработкаМатериалов</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВыработкаНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВыдачаДенежныхДокументов</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВыработкаОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ГТДИмпорт</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ЗаписьКнигиУчетаДоходовИРасходовИП</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ЗаписьКУДиР</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеГрафиковАмортизацииОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеПараметровНачисленияАмортизацииОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеСостоянияОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеСпециальногоКоэффициентаНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеСпециальногоКоэффициентаОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеСпособовОтраженияРасходовПоАмортизацииНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеСпособовОтраженияРасходовПоАмортизацииОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.КомплектацияНоменклатуры</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.КорректировкаДолга</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.КорректировкаПоступления</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.КорректировкаРеализации</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.МодернизацияОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.НачислениеЗарплаты</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОказаниеУслуг</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОприходованиеТоваров</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтражениеЗарплатыВБухучете</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтражениеЗарплатыВУчете</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтражениеНачисленияНДС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтражениеНДСКВычету</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтчетКомиссионераОПродажах</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтчетКомитентуОПродажах</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтчетОРозничныхПродажах</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтчетПроизводстваЗаСмену</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПередачаНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПередачаМатериаловВЭксплуатацию</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПередачаОборудованияВМонтаж</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПередачаОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПередачаТоваров</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПеремещениеОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПеремещениеТоваров</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПереоценкаТоваровВРознице</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПодготовкаКПередачеОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПоступлениеДенежныхДокументов</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПоступлениеДопРасходов</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПоступлениеИзПереработки</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПоступлениеНаРасчетныйСчет</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПоступлениеНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПоступлениеТоваровУслуг</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПринятиеКУчетуНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПринятиеКУчетуОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПриходныйКассовыйОрдер</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РасходныйКассовыйОрдер</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РеализацияОтгруженныхТоваров</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РеализацияТоваровУслуг</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РеализацияУслугПоПереработке</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РегистрацияОплатыОсновныхСредствДляИП</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РегистрацияОплатыОсновныхСредствДляУСН</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СписаниеДепонированнойЗарплаты</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СписаниеМатериаловИзЭксплуатации</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СписаниеНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СписаниеОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СписаниеСРасчетногоСчета</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СписаниеТоваров</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СчетФактураВыданный</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СчетФактураПолученный</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ТребованиеНакладная</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.УстановкаЦенНоменклатуры</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОперацияБух</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОплатаПлатежнойКартой</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.Отпуск</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.БольничныйЛист</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ЗаявлениеОВвозеТоваров</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПоступлениеВАренду</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеОтраженияРасходовПоАренднымПлатежамОС</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.НачислениеОценочныхОбязательствПоОтпускам</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВыкупПредметовЛизинга</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.НачислениеПеней</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РасходыПредпринимателя</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОтчетОператораСистемыПлатон</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПередачаОСВАренду</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВозвратОСОтАрендатора</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПередачаЗадолженностиНаФакторинг</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.РасходыНаОнлайнКассыУменьшающиеНалоги</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПутевойЛист</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИзменениеУсловийАренды</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПереводОСВМалоценноеОборудование</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ВыплатыСамозанятым</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.УсловияОплатыПоступления</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОбесценениеВнеоборотныхАктивов</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.УведомлениеОбИсчисленныхСуммахНалогов</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОперацияПоЕдиномуНалоговомуСчету</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПрекращениеАренды</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ЗаявлениеОЗачетеВСчетПредстоящейОбязанности</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СведенияОбУплатеНалогов</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.УведомлениеОбУменьшенииНалогаПоПатенту</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОперацияСПатентом</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИнвентаризацияНЗП</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ПересортицаТоваров</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.НачалоСтадииРазработокНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.СчетНаОплатуПокупателю</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.НачислениеТуристическогоНалога</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ОперацияСИнвестиционнымВычетом</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.ИнвентаризацияНМА</xr:Item>
+				<xr:Item xsi:type="xr:MDObjectRef">Document.Премия</xr:Item>
+			</Documents>
+			<RegisterRecords/>
+			<DataLockControlMode>Managed</DataLockControlMode>
+		</Properties>
+		<ChildObjects>
+			<Dimension uuid="2d3c3e51-59c0-4184-9a81-4ee34b8b4323">
+				<Properties>
+					<Name>Организация</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Организация</v8:content>
+						</v8:item>
+					</Synonym>
+					<Comment/>
+					<Type>
+						<v8:Type>cfg:CatalogRef.Организации</v8:Type>
+					</Type>
+					<DocumentMap/>
+					<RegisterRecordsMap/>
+				</Properties>
+			</Dimension>
+			<Dimension uuid="b99ddc1f-d546-413f-a8e7-a312b3daa238">
+				<Properties>
+					<Name>СостояниеПроведения</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Состояние проведения</v8:content>
+						</v8:item>
+					</Synonym>
+					<Comment/>
+					<Type>
+						<v8:Type>cfg:EnumRef.СостоянияПроведенияВПоследовательности</v8:Type>
+					</Type>
+					<DocumentMap/>
+					<RegisterRecordsMap/>
+				</Properties>
+			</Dimension>
+		</ChildObjects>
+	</Sequence>
+</MetaDataObject>

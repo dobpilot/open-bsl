@@ -1,0 +1,12 @@
+image.native.counted_limit.0.counter=0
+image.native.counted_limit.0.sum=10
+image.native.counted_limit.0.count=0
+image.native.counted_limit.0.direct=1
+image.native.counted_limit.1.counter=1
+image.native.counted_limit.1.sum=10
+image.native.counted_limit.1.count=2
+image.native.counted_limit.1.direct=1
+image.native.counted_limit.3.counter=3
+image.native.counted_limit.3.sum=13
+image.native.counted_limit.3.count=6
+image.native.counted_limit.3.direct=1

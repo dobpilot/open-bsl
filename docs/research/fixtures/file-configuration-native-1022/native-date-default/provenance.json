@@ -1,0 +1,9 @@
+{
+  "source": "demo SDK read-only acquisition, native dump 1C 8.3.27.2342",
+  "attribute": "73d8b319-9bea-4638-a602-23c12f37c227",
+  "mapping": "Config {\"D\"} -> XML DateFractions=DateTime",
+  "files_sha256": {
+    "Catalog.xml": "209d08c212fcf33107d040c065012fead51a2f8bd874eac4050b901f63d707c1",
+    "config.deflate": "964bae81e6f7428b71eb297be121d37060abd4180fe351d260db7367bd06e2c1"
+  }
+}

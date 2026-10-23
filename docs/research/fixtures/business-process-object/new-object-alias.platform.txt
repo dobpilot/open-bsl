@@ -1,0 +1,6 @@
+business.new.alias.type	1
+business.new.distinct	1
+business.new.date.empty	1
+business.new.number.string	1
+business.new.additional.structure	1
+business.new.additional.isolated	0

@@ -1,0 +1,10 @@
+image.native.jump_true.statement.negative=22
+image.native.jump_true.statement.zero=11
+image.native.jump_true.statement.positive=11
+image.native.jump_true.expression.negative=22
+image.native.jump_true.expression.zero=11
+image.native.jump_true.expression.positive=11
+image.native.jump_true.reference.negative=22
+image.native.jump_true.reference.positive=11
+image.native.jump_true.lazy.false=42
+image.native.jump_true.lazy.true_error=1

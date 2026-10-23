@@ -1,0 +1,4 @@
+image.private-variable-trace-baseline.result=12
+image.private-variable-trace-baseline.argument=12
+image.private-variable-trace-baseline.count=1
+image.private-variable-trace-baseline.inner=12

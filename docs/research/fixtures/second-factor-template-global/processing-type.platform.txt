@@ -1,0 +1,6 @@
+twofactor.processing.dont-use.string	НеИспользовать
+twofactor.processing.type	ТипОбработкиНастроекВторогоФактораАутентификации
+twofactor.processing.dont-use.alias	1
+twofactor.processing.use-next.string	ИспользоватьСледующуюПриОшибке
+twofactor.processing.use-next.alias	1
+twofactor.processing.distinct	1

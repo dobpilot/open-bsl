@@ -1,0 +1,4 @@
+image.native.date_creation.73.result=0
+image.native.date_creation.73.reference=2025
+image.native.date_creation.74.result=0
+image.native.date_creation.74.reference=2025

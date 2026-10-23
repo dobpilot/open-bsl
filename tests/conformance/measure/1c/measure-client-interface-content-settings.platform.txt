@@ -1,0 +1,17 @@
+file.begin	client-interface-content-settings-1
+CLIENT.INTERFACE.SETTINGS.TYPE	Panel settings
+CLIENT.INTERFACE.CONTENT.TYPE	Client application interface composition settings
+CLIENT.INTERFACE.GROUP.TYPE	Client application interface composition settings group
+CLIENT.INTERFACE.ITEM.TYPE	Client application interface composition settings item
+CLIENT.INTERFACE.ITEM.NAME	ПанельРазделов
+CLIENT.INTERFACE.CONTENT.TOP.TYPE	Client application interface composition settings group
+CLIENT.INTERFACE.CONTENT.LEFT.TYPE	Client application interface composition settings group
+CLIENT.INTERFACE.CONTENT.BOTTOM.TYPE	Client application interface composition settings group
+CLIENT.INTERFACE.CONTENT.RIGHT.TYPE	Client application interface composition settings group
+CLIENT.INTERFACE.CONTENT.LEFT.DEFAULT_COUNT	0
+CLIENT.INTERFACE.GROUP.COUNT	1
+CLIENT.INTERFACE.GROUP.GET.NAME	ПанельРазделов
+CLIENT.INTERFACE.CONTENT.LEFT.COUNT	1
+CLIENT.INTERFACE.SETTINGS.SET_GET	OK
+CLIENT.INTERFACE.ENGLISH	OK
+file.end	client-interface-content-settings-1

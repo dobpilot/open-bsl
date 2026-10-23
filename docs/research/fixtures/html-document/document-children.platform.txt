@@ -1,0 +1,8 @@
+html.child.name	html
+html.child.type	DOM document type definition
+html.child.kind	Document type definition
+html.child.parent	Yes
+html.child.name	html
+html.child.type	HTML Marking element
+html.child.kind	Item
+html.child.parent	Yes

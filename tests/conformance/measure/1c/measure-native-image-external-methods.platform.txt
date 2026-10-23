@@ -1,0 +1,3 @@
+image.native.external.result=готово
+image.native.external.target=12
+image.native.external.source=12

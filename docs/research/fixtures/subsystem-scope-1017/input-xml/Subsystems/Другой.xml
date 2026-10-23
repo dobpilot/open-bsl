@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" version="2.20">
+<Subsystem uuid="35d7eb0a-d268-4ef0-a781-d7b4f3f33323"><Properties>
+<Name>Другой</Name><Synonym/><Comment/><IncludeHelpInContents>false</IncludeHelpInContents>
+<IncludeInCommandInterface>false</IncludeInCommandInterface><UseOneCommand>false</UseOneCommand>
+<Explanation/><Picture/><Content/>
+</Properties><ChildObjects></ChildObjects></Subsystem></MetaDataObject>

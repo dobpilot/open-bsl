@@ -1,0 +1,9 @@
+DOCX	DOCX	RepresentableDocumentBatchFileType
+HTML4	HTML4	RepresentableDocumentBatchFileType
+HTML5	HTML5	RepresentableDocumentBatchFileType
+ODS	ODS	RepresentableDocumentBatchFileType
+PDF	PDF	RepresentableDocumentBatchFileType
+TXT	TXT	RepresentableDocumentBatchFileType
+XLS	XLS	RepresentableDocumentBatchFileType
+XLSX	XLSX	RepresentableDocumentBatchFileType
+ALIAS	Yes

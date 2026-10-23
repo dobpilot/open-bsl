@@ -1,0 +1,4 @@
+AUTO	Auto	PASS
+LEFT	Left	PASS
+RIGHT	Right	PASS
+TYPE	FormButtonPictureLocation

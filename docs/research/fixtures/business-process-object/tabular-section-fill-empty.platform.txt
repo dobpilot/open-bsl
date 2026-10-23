@@ -1,0 +1,5 @@
+business.section.fill-empty.count	1
+business.section.fill-empty.text	сохранить
+business.section.fill-empty.flag	1
+business.section.fill-empty.number	1
+business.section.fill-empty.is-new	1

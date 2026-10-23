@@ -1,0 +1,8 @@
+file.begin	metadata-full-name-russian-script-1
+METADATA_FULL_NAME.SCRIPT_VARIANT	Русский
+METADATA_FULL_NAME.COMMON_RUSSIAN	ОбщийРеквизит.НаименованиеЯзык1
+METADATA_FULL_NAME.COMMON_ENGLISH	ОбщийРеквизит.НаименованиеЯзык1
+METADATA_FULL_NAME.CATALOG_RUSSIAN	Справочник.ЗамерВременныхТаблиц
+METADATA_FULL_NAME.CATALOG_ENGLISH	Справочник.ЗамерВременныхТаблиц
+METADATA_FULL_NAME.OWNER	Справочник.ВладелецПробы
+file.end	metadata-full-name-russian-script-1

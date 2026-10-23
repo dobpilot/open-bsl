@@ -1,0 +1,3 @@
+catalog.reference.display.empty=[]
+catalog.reference.display.missing=[<Object not found> (53:abcd0123456789ab4321123412345678)]
+catalog.reference.metadata.name=ЗамерВременныхТаблиц

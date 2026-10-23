@@ -1,0 +1,4 @@
+business.check.arity.default	1
+business.check.arity.1.error	1
+business.check.arity.2.error	1
+business.check.arity.after-errors	1

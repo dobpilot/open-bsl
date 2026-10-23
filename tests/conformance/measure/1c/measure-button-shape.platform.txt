@@ -1,0 +1,4 @@
+AUTO	Auto	PASS
+USUAL	Standard	PASS
+OVAL	Rounded	PASS
+TYPE	ButtonShape

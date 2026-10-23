@@ -19,6 +19,9 @@
 М("PREDEFINED.EMPTY.EN.PATH", Проба("PredefinedValue(""DataProcessor.Замеры.EmptyRef"") = ПредопределенноеЗначение(""Обработка.Замеры.ПустаяСсылка"")"));
 М("PREDEFINED.SYSTEM.RU.TYPE", Проба("ТипЗнч(ПредопределенноеЗначение(""ОтправкаЭлементаДанных.Авто""))"));
 М("PREDEFINED.SYSTEM.RU.STRING", Проба("Строка(ПредопределенноеЗначение(""ОтправкаЭлементаДанных.Авто""))"));
+М("PREDEFINED.FULL_NAME.SYSTEM.RU", Проба("ПолучитьПолноеИмяПредопределенногоЗначения(ПредопределенноеЗначение(""ОтправкаЭлементаДанных.Авто""))"));
+М("PREDEFINED.FULL_NAME.SYSTEM.EN", Проба("GetPredefinedValueFullName(PredefinedValue(""DataItemSend.Auto""))"));
+М("PREDEFINED.FULL_NAME.UNSUPPORTED", Проба("ПолучитьПолноеИмяПредопределенногоЗначения(1)"));
 М("PREDEFINED.UNKNOWN", Проба("ПредопределенноеЗначение(""Справочник.НетТакого.НетТакого"")"));
 М("PREDEFINED.NON_STRING", Проба("ПредопределенноеЗначение(1)"));
 М("file.end", "predefined-value-1");

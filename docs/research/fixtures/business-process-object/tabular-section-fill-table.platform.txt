@@ -1,0 +1,5 @@
+business.section.fill-table.fresh.count	0
+business.section.fill-table.existing.count	1
+business.section.fill-table.existing.text	старая
+business.section.fill-table.existing.flag	0
+business.section.fill-table.source.count	1

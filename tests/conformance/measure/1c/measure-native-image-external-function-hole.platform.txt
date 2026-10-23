@@ -1,0 +1,3 @@
+image.native.external_function_hole.address_type=1
+image.native.external_function_hole.undefined=1
+image.native.external_function_hole.direct=1

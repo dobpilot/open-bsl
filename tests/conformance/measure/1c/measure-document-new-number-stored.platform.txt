@@ -1,0 +1,4 @@
+document.number.stored.before=[000000002]
+document.number.stored.after=[000000002]
+document.number.stored.reference=filled
+document.number.stored.next=[000000003]

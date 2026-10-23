@@ -1,0 +1,11 @@
+graphical.type	Графическая схема
+graphical.presentation	Графическая схема
+graphical.alias-type	1
+graphical.distinct	1
+graphical.items.type	Элементы графической схемы
+graphical.items.presentation	Элементы графической схемы
+graphical.items.count	0
+graphical.items.alias	0
+graphical.items.find	1
+graphical.items.iteration	0
+graphical.items.readonly	rejected

@@ -1,0 +1,37 @@
+{
+  "status": "passed",
+  "cases": [
+    {
+      "database": "demo",
+      "kind": "ThinClient",
+      "receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/cli-demo-explicit-subjects-1018-result.json",
+      "seconds": 151.98,
+      "process_exit_code": 0,
+      "canary_passed": true,
+      "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+      "sdk_version": "0.9.23"
+    },
+    {
+      "database": "buh",
+      "kind": "ThinClient",
+      "receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/cli-buh-explicit-subjects-1018-result.json",
+      "seconds": 775.24,
+      "process_exit_code": 0,
+      "canary_passed": true,
+      "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+      "sdk_version": "0.9.23"
+    },
+    {
+      "database": "unf",
+      "kind": "ThinClient",
+      "receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/cli-unf-explicit-subjects-1018-result.json",
+      "seconds": 520.07,
+      "process_exit_code": 0,
+      "canary_passed": true,
+      "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+      "sdk_version": "0.9.23"
+    }
+  ],
+  "scope": "Latest SDK0.9.23/host explicit catalog-subject and Document reference changes; unchanged original startup and acceptance script. ThinClient only, not refreshed WebClient/BackgroundJob proof.",
+  "full_goal_complete": false
+}

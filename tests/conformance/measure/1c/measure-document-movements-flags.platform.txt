@@ -1,0 +1,5 @@
+document.movements.body.flag.set=accepted
+document.movements.body.flag.saved=Да
+document.movements.body.flag.current=Да
+document.movements.body.set.identity=Да
+document.movements.flag.english.setter=Нет

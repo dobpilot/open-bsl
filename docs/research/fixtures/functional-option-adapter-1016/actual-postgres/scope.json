@@ -1,0 +1,6 @@
+{
+  "scope": "Actual constant functional-option access through BSL and DatabaseDataAccess on own disposable PostgreSQL. Native metadata and privilege flags; synthetic physical schema and denied role; no DEMO/BUH/UNF access",
+  "port": 60251,
+  "work": "/tmp/open-bsl-local-postgres-1016-1r91yqe4",
+  "test_exit_code": 0
+}

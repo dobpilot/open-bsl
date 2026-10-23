@@ -1,0 +1,3 @@
+image.native.method.empty=0
+image.native.method.filled=2
+image.native.method.argument=2

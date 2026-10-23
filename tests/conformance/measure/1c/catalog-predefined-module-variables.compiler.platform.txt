@@ -1,0 +1,4 @@
+{Catalog.ЗамерВременныхТаблиц.ManagerModule(1,1)}: Common module contains only procedure and function definitions
+<<?>>Перем Основной; (Verification: Server)
+{Catalog.ЗамерВременныхТаблиц.ManagerModule(11,13)}: Logical end of module source text encountered
+КонецФункции<<?>> (Verification: Server)

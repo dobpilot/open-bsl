@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-local-function",
+  "change": "Replace private arithmetic with five NOPs; private function only returns parameter. Descriptor is 1338/0. No original code is executed.",
+  "files": {
+    "native-image-private-return-unusual.image": {
+      "bytes": 378,
+      "sha256": "7b5d76fcbc5d7852a7e3f7ef83e014cf4a3097338f9073e46d60c526b1fa51c8"
+    },
+    "native-image-private-return-unusual.Module.bin": {
+      "bytes": 1773,
+      "sha256": "91e4ecddfaf427db7f53e6788a753b01f91ebd19766d5048b18707fc1f545174"
+    },
+    "measure-native-image-private-return-unusual.bsl": {
+      "bytes": 741,
+      "sha256": "bf834c08b6dc794baea1f2df7ca0b5092bfeb4f1863a41c83b1148ad5872f3a7"
+    },
+    "measure-native-image-private-return-unusual.platform.txt": {
+      "bytes": 154,
+      "sha256": "8ec6a9b9ba1e798a8bfe21fcbd938cff8f3e027c15ff97edd7dc0dad390f88dc"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-return-unusual-1009-v1-ib"
+}

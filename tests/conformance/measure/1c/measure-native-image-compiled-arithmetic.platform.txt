@@ -1,0 +1,3 @@
+image.arithmetic=14
+image.reference=6
+image.default=12

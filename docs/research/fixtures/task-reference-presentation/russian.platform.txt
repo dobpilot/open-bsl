@@ -1,0 +1,3 @@
+task.presentation.type=Русская задача
+task.presentation.primary=ru
+task.presentation.alias=1

@@ -1,0 +1,9 @@
+image.native.expression_snapshot.3.value=6
+image.native.expression_snapshot.3.argument=13
+image.native.expression_snapshot.3.direct=1
+image.native.expression_snapshot.0.value=3
+image.native.expression_snapshot.0.argument=10
+image.native.expression_snapshot.0.direct=1
+image.native.expression_snapshot.-5.value=-2
+image.native.expression_snapshot.-5.argument=5
+image.native.expression_snapshot.-5.direct=1

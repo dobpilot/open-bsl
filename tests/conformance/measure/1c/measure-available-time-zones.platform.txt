@@ -1,0 +1,5 @@
+ARITY_0	OK:Array
+ARITY_1	ERROR:{DataProcessor.Замеры.Form.Форма.Form(42)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,32)}: Too many actual parameters (ПолучитьДопустимыеЧасовыеПояса)
+ALIAS	OK:Array
+COUNT_POSITIVE	Yes
+MOSCOW	Yes

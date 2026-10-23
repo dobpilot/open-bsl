@@ -1,0 +1,10 @@
+native.int.1=12;number=1
+native.int.2=-12;number=1
+native.int.3=;number=1
+native.int.4=12345678901234567890;number=1
+native.int.5=1;number=1
+native.int.6=12;number=1
+native.int.7=ERROR
+native.int.8=ERROR
+native.int.9=ERROR
+native.int.reference=-12

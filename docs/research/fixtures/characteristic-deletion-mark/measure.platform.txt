@@ -1,0 +1,6 @@
+characteristic.deletion.body	0|write-error
+characteristic.deletion.initial	0
+characteristic.deletion.alias	1
+characteristic.deletion.own	0
+characteristic.deletion.number	1
+characteristic.deletion.other	0

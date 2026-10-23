@@ -1,0 +1,3 @@
+document.number.numeric.handler.first=42
+document.number.numeric.handler.prefix=42
+document.number.numeric.handler.calls=2

@@ -1,0 +1,7 @@
+file.begin	special-settings-storages-1
+SETTINGS.REPORTS.TYPE	Standard settings storage
+SETTINGS.DYNAMIC.TYPE	Standard settings storage
+SETTINGS.SPECIAL.ENGLISH	OK
+SETTINGS.GET_LIST.MISSING	Value list|0
+SETTINGS.GET_DESCRIPTION.MISSING	ERROR
+file.end	special-settings-storages-1

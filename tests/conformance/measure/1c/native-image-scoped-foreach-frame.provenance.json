@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental frame-scoped foreach control, complete native receipt",
+  "scope": "Public one-parameter ordinary four-slot frame jumps over a private four-slot constant-alias frame to a foreach body. Private entry2 precedes public iterator region; its slot3 flags3027 differs from public ordinary iterator. All three declarations remain; driver executes public loop with nonempty/empty arrays and private read through a wrapper. No original application body is used.",
+  "files": {
+    "native-image-scoped-foreach-frame.image": {
+      "bytes": 1107,
+      "sha256": "8e93ebf5b6a3f2518b7c8d9c1353f284ffeb25e0f0a3b8a25882f5243d0e6834"
+    },
+    "native-image-scoped-foreach-frame.Module.bin": {
+      "bytes": 2368,
+      "sha256": "a71a6e76f3803b2a0a536d438b727448d822a64b390c2b7a44936c9752467898"
+    },
+    "measure-native-image-scoped-foreach-frame.bsl": {
+      "bytes": 1407,
+      "sha256": "9334510431e152b7f7152ecdb4a6e3c41c9801c81582abe7d2bcbe13b8e6c927"
+    },
+    "measure-native-image-scoped-foreach-frame.platform.txt": {
+      "bytes": 241,
+      "sha256": "fae1a97d77626b232ec082c386e8a8654123fdada630f9806edae3a95ce2da75"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 7,
+    "log": "target/diagnostics/native-scoped-foreach-frame-1010.log"
+  }
+}

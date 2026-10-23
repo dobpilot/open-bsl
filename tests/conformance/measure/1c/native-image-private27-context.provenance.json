@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "complete measured private27 contextual module",
+  "scope": "Measured string Const0, declared Var18, four actual slots, 27 private zero labels; adds Metadata global and NStr33/2 external declaration. All five declarations retained.",
+  "files": {
+    "native-image-private27-context.image": {
+      "bytes": 1670,
+      "sha256": "3dbf2e43782d755dcde893f964539d905b1b8611b24ce59e49b1fddf9e4cae48"
+    },
+    "native-image-private27-context.Module.bin": {
+      "bytes": 2931,
+      "sha256": "38a9713ba29480f7e26e97336b596665ed4667b94bdbcc37234c0e1f6033aa8b"
+    },
+    "measure-native-image-private27-context.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-private27-context.platform.txt": {
+      "bytes": 388,
+      "sha256": "0778faa991f77a467b21dfa473a7bd64808eaec2dd3ffa46c2ce42c7fd4f39e9"
+    }
+  },
+  "measurement": "All nine native receipt lines match the retained string-frame18 baseline byte for byte; global Metadata and external NStr33/2 added, all five declarations retained."
+}

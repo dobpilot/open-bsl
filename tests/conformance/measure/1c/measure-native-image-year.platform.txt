@@ -1,0 +1,2 @@
+image.native.year.january=2025
+image.native.year.leap=2023

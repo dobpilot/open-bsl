@@ -1,0 +1,14 @@
+document.context.body.exchange.type=Undefined
+document.context.body.load.read=rejected
+document.context.body.load.write=rejected
+document.context.body.auto.read=rejected
+document.context.body.auto.write=rejected
+document.context.body.additional.count=0
+document.context.body.additional.insert=accepted
+document.context.body.additional.replace=rejected
+document.context.body.exchange.replace=rejected
+document.context.loading=No
+document.context.autofill=Yes
+document.context.additional=17
+document.context.first=Yes:No:23
+document.context.second=No:Yes:17

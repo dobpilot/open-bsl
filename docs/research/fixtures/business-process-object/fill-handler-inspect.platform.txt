@@ -1,0 +1,12 @@
+business.fill.handler.before.count	0
+business.fill.handler.count	1
+business.fill.handler.standard	1
+business.fill.handler.text.undefined	1
+business.fill.handler.text.string	0
+business.fill.handler.data.structure	1
+business.fill.handler.data.undefined	0
+business.fill.handler.caller.mutated	1
+business.fill.handler.caller.reassigned	0
+business.fill.handler.date	20261006123456
+business.fill.handler.other.count	0
+business.fill.handler.repeated.count	2

@@ -1,0 +1,11 @@
+document.copy.type	Document Object: ЗамерДокумента
+document.copy.new	1
+document.copy.ref.empty	1
+document.copy.number	[]
+document.copy.date.equal	0
+document.copy.attribute	own
+document.copy.deletion	0
+document.copy.module	5
+document.copy.additional	0
+document.copy.original	own
+document.copy.alias.attribute	own

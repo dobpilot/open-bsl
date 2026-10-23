@@ -1,0 +1,7 @@
+﻿enum.type=SpreadsheetDocumentDetailUse
+enum.none.presentation=No processing
+enum.cell.presentation=Cell
+enum.aliases=YES
+enum.type.lookup=YES
+enum.distinct=YES
+completed=YES

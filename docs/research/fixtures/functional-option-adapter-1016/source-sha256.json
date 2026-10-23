@@ -1,0 +1,10 @@
+[
+  {
+    "path": "crates/bsl-config-db/src/local_functional_option_tests.rs",
+    "sha256": "f6390fe169e53a2112f8fc22a29def7c326dbc38b27518628a9acf4a558af880"
+  },
+  {
+    "path": "crates/bsl-config-db/src/data_access.rs",
+    "sha256": "fa9720a920c73330bcec15dbe626007c0d977c99943227ba8a5a7fa98c753eb6"
+  }
+]

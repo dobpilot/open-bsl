@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed supplemental outside-loop trampoline control",
+  "scope": "All three declarations preserved. Back-edge38 jumps9; command9 jumps19, the iterator check. Public entry label10 skips trampoline during initialization. Public nonempty/empty loops and private caller observed.",
+  "files": {
+    "native-image-scoped-foreach-outside-trampoline.image": {
+      "bytes": 1115,
+      "sha256": "080877265efa0b221fc07b9b0414b5c2af7998219211bf163b29899d73b89873"
+    },
+    "native-image-scoped-foreach-outside-trampoline.Module.bin": {
+      "bytes": 2376,
+      "sha256": "9085588365f8e173bd2d162af947f8ada7ad5a6421c833fe7a04eada06f1908e"
+    },
+    "measure-native-image-scoped-foreach-outside-trampoline.bsl": {
+      "bytes": 1407,
+      "sha256": "9334510431e152b7f7152ecdb4a6e3c41c9801c81582abe7d2bcbe13b8e6c927"
+    },
+    "measure-native-image-scoped-foreach-outside-trampoline.platform.txt": {
+      "bytes": 241,
+      "sha256": "fae1a97d77626b232ec082c386e8a8654123fdada630f9806edae3a95ce2da75"
+    }
+  },
+  "native_receipt_complete": true
+}

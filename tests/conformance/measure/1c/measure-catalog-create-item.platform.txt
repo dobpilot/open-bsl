@@ -1,0 +1,13 @@
+catalog.create.type=Yes
+catalog.create.new=Yes
+catalog.create.ref.empty=Yes
+catalog.create.code=[]
+catalog.create.description=[]
+catalog.create.metadata=ЗамерВременныхТаблиц
+catalog.ref.empty.metadata=ЗамерВременныхТаблиц
+catalog.ref.generated.version=1
+catalog.create.extra=rejected
+catalog.ref.generated.uuid=72c19f9a-bcf5-11f1-9d0b-02d78b8d8e99
+catalog.ref.generated.uuid=72c19f9b-bcf5-11f1-9d0b-02d78b8d8e99
+catalog.ref.generated.uuid=72c19f9c-bcf5-11f1-9d0b-02d78b8d8e99
+catalog.ref.generated.uuid=72c19f9d-bcf5-11f1-9d0b-02d78b8d8e99

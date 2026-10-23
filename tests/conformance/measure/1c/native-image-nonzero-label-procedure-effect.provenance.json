@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental flags2 control, completed but route observation unavailable",
+  "scope": "Private flags2 procedure, four measured descriptors and no DefPrm; label4 target32. Every candidate path emits a distinct external Message: zero, nonzero or fallthrough. Public and private wrapper return ordinary caller argument5. Paired images differ only in the private label target. No original application code is executed.",
+  "files": {
+    "native-image-nonzero-label-procedure-effect.image": {
+      "bytes": 1184,
+      "sha256": "e5b77c310544f6d79273a7c649030826144bf19e5c5ec82e259699728432e395"
+    },
+    "native-image-nonzero-label-procedure-effect.Module.bin": {
+      "bytes": 2445,
+      "sha256": "8b13a8467f50db7ccafa59124349a492894c50a9223e509fd3027a736e5fe4ac"
+    },
+    "measure-native-image-nonzero-label-procedure-effect.bsl": {
+      "bytes": 1333,
+      "sha256": "a8e83232882557551896ccadcde804876181dbe7148b0ab1951b33dac4ddbf40"
+    },
+    "measure-native-image-nonzero-label-procedure-effect.platform.txt": {
+      "bytes": 305,
+      "sha256": "d3ba0500517f9ad183ddda540cfb59107d7522480b3a305c1cd4c997bcc77372"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-nonzero-procedure-effect-1010-v1",
+    "interpretation": "Both caller arguments and return values are5. Route Message calls from native bytecode are not captured by the text-driver rewrite, so this receipt cannot distinguish internal routes."
+  }
+}

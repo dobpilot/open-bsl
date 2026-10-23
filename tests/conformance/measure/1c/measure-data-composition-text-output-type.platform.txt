@@ -1,0 +1,6 @@
+ROOT	EnumDataCompositionTextOutputType
+TYPE	DataCompositionTextOutputType
+AUTO	Auto
+OUTPUT	Output
+DONT	Do not output
+ALIASES	PASS

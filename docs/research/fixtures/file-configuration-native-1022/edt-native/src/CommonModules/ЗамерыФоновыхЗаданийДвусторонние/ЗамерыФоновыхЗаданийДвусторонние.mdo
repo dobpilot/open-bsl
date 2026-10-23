@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:CommonModule xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="8d3a1e6b-7a5c-4d9f-8b62-2e3c1d0f5a12">
+  <name>ЗамерыФоновыхЗаданийДвусторонние</name>
+  <server>true</server>
+</mdclass:CommonModule>

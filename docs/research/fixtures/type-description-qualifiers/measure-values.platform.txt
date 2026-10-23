@@ -1,0 +1,11 @@
+string.length	12
+string.allowed	variable
+number.digits	38
+number.fraction	2
+number.sign	any
+string.presentation	Строка
+number.presentation	Число
+string.number.digits	0
+number.string.length	0
+string.assignment	error
+string.alias	12

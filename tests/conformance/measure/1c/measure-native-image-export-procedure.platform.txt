@@ -1,0 +1,3 @@
+image.native.export.result=12
+image.native.export.argument=12
+image.native.export.external=19

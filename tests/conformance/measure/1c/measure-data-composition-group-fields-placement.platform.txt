@@ -1,0 +1,6 @@
+ROOT	EnumDataCompositionGroupFieldsPlacement
+TYPE	DataCompositionGroupFieldsPlacement
+TOGETHER	Together
+SEPARATELY	Separately
+SEPARATELY_TOTALS	Separately and only in totals
+ALIASES	PASS

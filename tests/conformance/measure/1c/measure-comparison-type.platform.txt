@@ -1,0 +1,20 @@
+Greater	PASS|Greater than
+GreaterOrEqual	PASS|Greater than or equal to
+InHierarchy	PASS|In group
+InList	PASS|In list
+InListByHierarchy	PASS|In list group
+Interval	PASS|Range (>, <)
+IntervalIncludingBounds	PASS|Range (>=, <=)
+IntervalIncludingLowerBound	PASS|Range (>=, <)
+IntervalIncludingUpperBound	PASS|Range (>, <=)
+Less	PASS|Less than
+LessOrEqual	PASS|Less than or equal to
+NotInHierarchy	PASS|Not in group
+NotInList	PASS|Not in list
+NotInListByHierarchy	PASS|Not in list group
+NotEqual	PASS|Not equal to
+NotContains	PASS|Does not contain
+Equal	PASS|Equal to
+Contains	PASS|Contains
+ROOT	EnumComparisonType
+TYPE	ComparisonType

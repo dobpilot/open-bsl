@@ -1,0 +1,21 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "complete native original wrapper baseline",
+  "scope": "Existing SDK parser and shared diagnostic serializer verify exact original Value tree restoration after removing seven appended commands/one exported wrapper and restoring the two count headers. Wrapper returns argument0 and calls no original method. Original Proc37 entry6746 stays outside6737 actual commands. Named-module binding scaffolds reused; all original-derived images/containers remain private diagnostics.",
+  "original_image_sha256": "e6b12a9ff23c3ae6d5a800e77b2cd76e43680eff664a33fbcbabb39065987824",
+  "modified_image_sha256": "36ceaa88a983783bc61a40f1ae3d5a936a596946bbcc16425b3886555e5f3ffe",
+  "wrapper_entry": 6730,
+  "commands": 6737,
+  "procedures": 40,
+  "files": {
+    "measure-native-image-original-wrapper-baseline.bsl": {
+      "bytes": 1053,
+      "sha256": "06506313a68f807568bfa0bc94bd022b0d81f41a22684298db9696552115ad31"
+    },
+    "measure-native-image-original-wrapper-baseline.platform.txt": {
+      "bytes": 211,
+      "sha256": "005bae68a49c837d6f622ae2612b36ce5f2ad76a48a85aaceb17de3faa98b31e"
+    }
+  },
+  "measurement": "All five lines complete: value5, arguments5/6/9, done. Shared SDK Value serializer roundtrip/restoration checks pass; wrapper calls no original method."
+}

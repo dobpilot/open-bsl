@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "incomplete original private-frame call control",
+  "scope": "All39 original declarations, original constants/globals and commands retained; one exported three-argument wrapper and12 commands appended. Wrapper invokes original Proc38 using opcode19. Generic Value roundtrip/restoration checked. Original Proc37 entry6746 remains outside6742 actual commands. Runs in disposable object/configuration with binding scaffolds, not full original application environment. Private original-derived images/containers stay in diagnostics.",
+  "original_image_sha256": "e6b12a9ff23c3ae6d5a800e77b2cd76e43680eff664a33fbcbabb39065987824",
+  "modified_image_sha256": "a0de1357c1448e73e89806297d081f3d0a6329e444da6d160e3dbd4d3722c2be",
+  "commands": 6742,
+  "procedures": 40,
+  "target_procedure": 38,
+  "files": {
+    "measure-native-image-original-private38-call.bsl": {
+      "bytes": 1101,
+      "sha256": "4c01b75b41a531528282232182c90c36d1da14b7f38939e2e759942cdf97064b"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "native_exit_code": 139,
+    "runner_exit_code": 1,
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-original-private38-call-1010.log",
+    "observed": "Only before-call marker, no returned value or catchable BSL error.",
+    "interpretation": "Failure observed with all original declarations/commands retained plus wrapper in disposable binding-scaffold environment. Not a complete original-configuration execution oracle; no successful stub or platform-equivalent BSL error inferred."
+  }
+}

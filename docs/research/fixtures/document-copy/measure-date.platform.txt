@@ -1,0 +1,3 @@
+document.copy.date.filled	0
+document.copy.date.empty	1
+document.copy.date.current.interval	0

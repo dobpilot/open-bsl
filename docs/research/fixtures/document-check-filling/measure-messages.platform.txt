@@ -1,0 +1,5 @@
+document.check.messages.empty	0
+document.check.messages.empty.item	Date|"Date" is a required field.
+document.check.messages.empty.item	Запасы|No rows entered into the list "Запасы"
+document.check.messages.row	0
+document.check.messages.row.item	Запасы[0].НомерВариантаКП|"НомерВариантаКП" is required in row 1 of the "Запасы" list.

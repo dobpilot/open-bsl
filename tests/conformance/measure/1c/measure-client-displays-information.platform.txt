@@ -1,0 +1,6 @@
+TYPE	Fixed value array
+COUNT	1
+ITEM_TYPE	ClientDisplayInformation
+WIDTH_TYPE	Number
+HEIGHT_TYPE	Number
+DPI_TYPE	Number

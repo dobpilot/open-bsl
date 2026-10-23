@@ -1,0 +1,4 @@
+document.check.own.empty	0
+document.check.own.trace	1|Date;Заполняемый;
+document.check.own.filled	1
+document.check.own.clear	1

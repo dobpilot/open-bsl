@@ -1,0 +1,9 @@
+object.outside.length	0
+object.body.outside.length	0
+object.body.inside.length	0
+object.inside.length	0
+object.own.matches	Yes
+caller.after.own.matches	Yes
+caller.object.error.matches	Yes
+caller.restored.matches	Yes
+after.caller.length	0

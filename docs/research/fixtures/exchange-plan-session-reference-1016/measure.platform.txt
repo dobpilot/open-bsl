@@ -1,0 +1,14 @@
+exchange.control=START
+exchange.empty.type=ЗамерОбмена
+exchange.empty.ru_type=YES
+exchange.empty.en_type=YES
+exchange.empty.alias=YES
+exchange.empty.is_empty=YES
+exchange.empty.is_filled=NO
+exchange.empty.uuid=00000000-0000-0000-0000-000000000000
+exchange.empty.presentation=[]
+exchange.empty.owner=ЗамерОбмена
+exchange.empty.different_plan=NO
+exchange.empty.different_type=NO
+exchange.empty.implicit=YES
+exchange.empty.bad_arity=YES

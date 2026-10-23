@@ -1,0 +1,3 @@
+TYPE	String
+NONEMPTY	Yes
+ALIASES_EQUAL	Yes

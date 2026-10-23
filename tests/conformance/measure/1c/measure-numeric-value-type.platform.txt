@@ -1,0 +1,4 @@
+VALUE	Cardinal	NumericValueType
+VALUE	Ordinal	NumericValueType
+CARDINAL_ALIAS	Yes
+ORDINAL_ALIAS	Yes

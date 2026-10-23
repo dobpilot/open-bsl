@@ -1,0 +1,7 @@
+image.nonzero-label-private-frame.public.type=Number
+image.nonzero-label-private-frame.public.value=5
+image.nonzero-label-private-frame.public.argument=5
+image.nonzero-label-private-frame.private.type=Undefined
+image.nonzero-label-private-frame.private.value=
+image.nonzero-label-private-frame.private.argument=5
+image.nonzero-label-private-frame.done=1

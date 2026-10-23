@@ -1,0 +1,7 @@
+image.private-alias-write.call1.type=Number
+image.private-alias-write.call1.value=14
+image.private-alias-write.call1.argument=5
+image.private-alias-write.call2.type=Number
+image.private-alias-write.call2.value=14
+image.private-alias-write.call2.argument=5
+image.private-alias-write.done=1

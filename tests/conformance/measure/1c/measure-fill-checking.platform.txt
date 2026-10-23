@@ -1,0 +1,5 @@
+ROOT	EnumFillChecking
+TYPE	FillChecking
+ERROR	Yes
+DONT	No
+ALIASES	PASS

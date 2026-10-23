@@ -1,0 +1,13 @@
+file.begin	command-interface-settings-1
+COMMAND.SETTINGS.TYPE	Command interface settings
+COMMAND.SETTINGS.DEFAULT	Icon and text
+COMMAND.SETTINGS.MUTATED	Icon and text
+COMMAND.SECTIONS.PICTURE	Icon
+COMMAND.SECTIONS.PICTURE_TEXT	Icon and text
+COMMAND.SECTIONS.PICTURE_TOP_TEXT	Text below icon
+COMMAND.SECTIONS.PICTURE_LEFT_TEXT	Text to the right of icon
+COMMAND.SECTIONS.TEXT	Text
+COMMAND.SECTIONS.TYPE	SectionsPanelRepresentation
+COMMAND.SETTINGS.ENGLISH	OK
+COMMAND.SETTINGS.BAD.ENUM	ERROR
+file.end	command-interface-settings-1

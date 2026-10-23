@@ -1,0 +1,4 @@
+image.native.unreachable.true=42
+image.native.unreachable.false=11
+image.native.unreachable.next=22
+image.native.unreachable.jump=42

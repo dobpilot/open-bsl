@@ -1,0 +1,5 @@
+business.read-module.before.counter	1
+business.read-module.new.ru.counter	2
+business.read-module.new.ru.extra	after
+business.read-module.new.en.counter	3
+business.read-module.new.en.extra	again

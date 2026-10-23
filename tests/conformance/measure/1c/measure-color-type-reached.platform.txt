@@ -1,0 +1,6 @@
+ABSOLUTE	Absolute	PASS
+STYLE	Style element	PASS
+WEB	Web color	PASS
+WINDOWS	Windows color	PASS
+AUTO	Auto color	PASS
+TYPE	ColorType

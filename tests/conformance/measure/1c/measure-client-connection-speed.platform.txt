@@ -1,0 +1,8 @@
+LOW	PASS
+NORMAL	PASS
+LOW_TEXT	Low
+NORMAL_TEXT	Normal
+ROOT	EnumClientConnectionSpeed
+TYPE	ClientConnectionSpeed
+ALIAS	PASS
+CURRENT	NORMAL

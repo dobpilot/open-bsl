@@ -1,0 +1,35 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_date": "2026-10-07",
+  "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+  "metadata_provenance": "fill-enabled.provenance.json",
+  "object_module": "empty; reset by the native runner",
+  "operation": "Own control only: dated object saved twice and read back; separate empty-date failure and excess-arity controls",
+  "observations": "12 complete dated-write lines; 6 complete empty-date lines; 4 isolated excess-arity lines with a valid date and native Too many actual parameters; no ORM persistence replay claimed",
+  "files": {
+    "write.bsl": {
+      "bytes": 3225,
+      "sha256": "edfa11e8aabc44e2135b28e599ae34703677cc055ace9485721b9331b4f6ea9c"
+    },
+    "write.platform.txt": {
+      "bytes": 394,
+      "sha256": "dcba4b500fb8f663d8c794ebe88d6e0a4d90a6f10b9986b06f652c6605fbd036"
+    },
+    "write-empty-date.bsl": {
+      "bytes": 3157,
+      "sha256": "a4682679519e9c5b6682a8877173ce3184bad2fa0f1c04ddb4aa084fbe30c654"
+    },
+    "write-empty-date.platform.txt": {
+      "bytes": 349,
+      "sha256": "82e6f42cbe89363982b7b572f2aaf9de8c1ebdd24cd1b8e450c7c3d45df78bd6"
+    },
+    "write-arity.bsl": {
+      "bytes": 1230,
+      "sha256": "0b23fc726dabc7943b8af0e629ed245a0fe74853dcfc8c0bc61cf72b4467aa17"
+    },
+    "write-arity.platform.txt": {
+      "bytes": 318,
+      "sha256": "f41cdeef8e6b0ce61ff8f3b11bace78b55eb51aa75b9e5c2dd6480679162efb2"
+    }
+  }
+}

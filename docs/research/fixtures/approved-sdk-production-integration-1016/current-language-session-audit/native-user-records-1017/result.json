@@ -1,0 +1,47 @@
+{
+  "platform": "8.3.27.2342",
+  "sdk_version": "0.9.21",
+  "postgres": "Postgres Pro Enterprise 18.6",
+  "source_native_profiles": "../native-selected-language-1017/result.json",
+  "transfer": "native ibcmd infobase dump of owned file base; native restore into disposable PostgreSQL",
+  "checks": [
+    {
+      "check": "initdb",
+      "exit_code": 0
+    },
+    {
+      "check": "start",
+      "exit_code": 0
+    },
+    {
+      "check": "restore",
+      "exit_code": 0
+    },
+    {
+      "check": "columns",
+      "exit_code": 0
+    },
+    {
+      "check": "users",
+      "exit_code": 0
+    },
+    {
+      "check": "stop",
+      "exit_code": 0
+    }
+  ],
+  "sdk_decode_probe_exit_code": 0,
+  "named_records_checked": 4,
+  "native_full_names_match_existing_sdk_decode": true,
+  "measured_user_record_field_count": 38,
+  "language_field_zero_based": 6,
+  "known_no_selection": "00000000-0000-0000-0000-000000000000",
+  "english": "220d033d-4a5f-45ed-926b-af14b6cf30bc",
+  "russian": "855375b9-327b-53fa-b11c-6454c2c7a1a6",
+  "other_record_forms_not_measured": true,
+  "production_database_access": false,
+  "temporary_postgres_stopped_and_removed": true,
+  "sdk_changed": false,
+  "runtime_changed": false,
+  "sdk_decoder_sha256": "a69e48707d56e9aadccc180004468a5b40a8b426bee39c89b903cf87a8ecaa45"
+}

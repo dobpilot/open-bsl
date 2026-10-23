@@ -1,0 +1,7 @@
+file.begin	table-representation-1
+TABLE.REPRESENTATION.LIST	List
+TABLE.REPRESENTATION.HIERARCHICAL_LIST	Hierarchical list
+TABLE.REPRESENTATION.TREE	Tree
+TABLE.REPRESENTATION.TYPE	TableRepresentation
+TABLE.REPRESENTATION.ENGLISH	OK
+file.end	table-representation-1

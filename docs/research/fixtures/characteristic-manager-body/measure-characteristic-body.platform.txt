@@ -1,0 +1,4 @@
+characteristic.body.receipt=code=;description=;types=0;write=ERROR;new=ERROR;
+characteristic.body.types.after=4
+characteristic.body.new.after=1
+characteristic.body.description.after=

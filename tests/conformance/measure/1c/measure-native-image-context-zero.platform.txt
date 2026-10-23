@@ -1,0 +1,3 @@
+image.native.context.zero.before=2
+image.native.context.zero.result=0
+image.native.context.zero.after=0

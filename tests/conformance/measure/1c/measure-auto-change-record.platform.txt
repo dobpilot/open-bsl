@@ -1,0 +1,6 @@
+file.begin	auto-change-record-1
+AUTO.CHANGE.RECORD.DENY	Disable
+AUTO.CHANGE.RECORD.ALLOW	Enable
+AUTO.CHANGE.RECORD.TYPE	AutoChangeRecord
+AUTO.CHANGE.RECORD.ENGLISH	OK
+file.end	auto-change-record-1

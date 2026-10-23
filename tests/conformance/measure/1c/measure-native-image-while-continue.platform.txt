@@ -1,0 +1,16 @@
+image.native.while_continue.5.counter=0
+image.native.while_continue.5.visited=5
+image.native.while_continue.5.sum=12
+image.native.while_continue.5.direct=1
+image.native.while_continue.3.counter=0
+image.native.while_continue.3.visited=3
+image.native.while_continue.3.sum=3
+image.native.while_continue.3.direct=1
+image.native.while_continue.2.counter=0
+image.native.while_continue.2.visited=2
+image.native.while_continue.2.sum=3
+image.native.while_continue.2.direct=1
+image.native.while_continue.0.counter=0
+image.native.while_continue.0.visited=0
+image.native.while_continue.0.sum=0
+image.native.while_continue.0.direct=1

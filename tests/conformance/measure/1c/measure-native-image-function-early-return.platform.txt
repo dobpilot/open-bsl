@@ -1,0 +1,6 @@
+image.native.function_early_return.outer.result=12
+image.native.function_early_return.outer.direct=1
+image.native.function_early_return.inner.result=-3
+image.native.function_early_return.inner.direct=1
+image.native.function_early_return.division.result=4
+image.native.function_early_return.division.direct=1

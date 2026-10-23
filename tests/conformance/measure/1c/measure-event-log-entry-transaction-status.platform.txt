@@ -1,0 +1,5 @@
+COMMITTED	Committed	EventLogEntryTransactionStatus
+UNFINISHED	Not completed	EventLogEntryTransactionStatus
+NONE	No transaction	EventLogEntryTransactionStatus
+ROLLED	Rolled back	EventLogEntryTransactionStatus
+ALIAS	Yes

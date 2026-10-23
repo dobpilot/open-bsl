@@ -1,0 +1,11 @@
+document.assignment.disabled.number.text=accepted:String:[123456789012]
+document.assignment.disabled.number.numeric=accepted:String:[17]
+document.assignment.disabled.number.undefined=accepted:String:[]
+document.assignment.disabled.number.null=accepted:String:[]
+document.assignment.disabled.number.boolean=accepted:String:[Yes]
+document.assignment.disabled.date.native=accepted:Yes
+document.assignment.disabled.date.string=accepted:Yes
+document.assignment.disabled.date.undefined=accepted:Yes
+document.assignment.disabled.date.null=accepted:Yes
+document.assignment.disabled.deletion.true=accepted:Yes
+document.assignment.disabled.posted.true=accepted:Yes

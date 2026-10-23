@@ -1,0 +1,2 @@
+image.native.procedure.shared_loop.stop=10
+image.native.procedure.shared_loop.continue=3

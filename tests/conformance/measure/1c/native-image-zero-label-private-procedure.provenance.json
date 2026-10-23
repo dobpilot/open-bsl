@@ -1,0 +1,27 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental finite zero-label procedure control, completed native receipt",
+  "scope": "Public ordinary frame jumps at pc24 to32. Private four-slot flags2 procedure without DefPrm has zero target in label4 at pc24. The wrapper calls it as a procedure and returns the unchanged ordinary caller argument. Falling through pc24 would return sentinel Const[1]=23. Both entries terminate; no original application code is executed. No original application body is executed; this measures only the finite pure-prefix entry.",
+  "files": {
+    "native-image-zero-label-private-procedure.image": {
+      "bytes": 978,
+      "sha256": "90faea0d5f71787137091ff914ee401f8ac7b5fa830f4edf5effe60b5548b123"
+    },
+    "native-image-zero-label-private-procedure.Module.bin": {
+      "bytes": 2239,
+      "sha256": "3f7e4e8744df4b9827385483312bd4ebfe6a4d0f7864c842fa8d3adcecbe54cc"
+    },
+    "measure-native-image-zero-label-private-procedure.bsl": {
+      "bytes": 1505,
+      "sha256": "704430a91056ee089b05c201648b2b1dd857ea0dad2ba39ab638c705d0e4479a"
+    },
+    "measure-native-image-zero-label-private-procedure.platform.txt": {
+      "bytes": 359,
+      "sha256": "b3654b1dc46889ff3f2ff8b4a78ab58ff1db7e09afd5ebbff45035dcc615d679"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-zero-label-procedure-1010-v1"
+  }
+}

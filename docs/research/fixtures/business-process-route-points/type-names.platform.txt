@@ -1,0 +1,2 @@
+route.points.type.russian	Yes
+route.points.type.english	Yes

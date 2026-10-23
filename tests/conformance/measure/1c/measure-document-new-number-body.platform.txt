@@ -1,0 +1,2 @@
+document.number.body=rejected
+document.number.body.after=[000000001]

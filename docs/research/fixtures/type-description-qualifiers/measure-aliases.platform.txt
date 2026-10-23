@@ -1,0 +1,7 @@
+number.alias.digits	12
+number.alias.fraction	3
+number.alias.sign	any
+string.alias.length	7
+string.alias.allowed	fixed
+number.alias.assignment	error
+number.alias.unchanged	12

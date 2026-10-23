@@ -1,0 +1,4 @@
+image.native.index.read=7
+image.native.index.write=12
+image.native.index.argument=12
+image.native.index.out_of_bounds=1

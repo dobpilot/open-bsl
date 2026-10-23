@@ -1,0 +1,3 @@
+parent_marker	executed
+argument_marker	executed
+compiler	{CommonModule.ЗамерыТранзитивногоДочернего.Module(6,10)}: Переменная не определена (СовсемНеизвестноеИмя)

@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental ordinary object-module initializer control, complete native receipt",
+  "scope": "Ordinary twelve-slot descriptors unchanged from object-baseline. Only module entry changes from absent sentinel to explicit End command14. Numeric Const0=7, three parameters, no original application body/global environment.",
+  "files": {
+    "native-image-twelve-frame-object-initializer.image": {
+      "bytes": 1496,
+      "sha256": "986f5236b6d73a0356a3ecb0c6f371edf9979281a303caca0bb635056123b638"
+    },
+    "native-image-twelve-frame-object-initializer.Module.bin": {
+      "bytes": 2757,
+      "sha256": "e520b02249721a08f11e99281d72f5aeb9a4136c8756be6c55241fdd38809e87"
+    },
+    "measure-native-image-twelve-frame-object-initializer.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "measure-native-image-twelve-frame-object-initializer.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-object-initializer.log"
+  }
+}

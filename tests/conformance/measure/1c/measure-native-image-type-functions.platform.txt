@@ -1,0 +1,16 @@
+image.native.type.number.equal=1
+image.native.type.number.value=1
+image.native.type.string.equal=1
+image.native.type.string.value=1
+image.native.type.boolean.equal=1
+image.native.type.boolean.value=1
+image.native.type.date.equal=1
+image.native.type.date.value=1
+image.native.type.undefined.equal=1
+image.native.type.undefined.value=1
+image.native.type.array.equal=1
+image.native.type.array.value=1
+image.native.type.case=1
+image.native.type.alias=1
+image.native.type.result_type=1
+image.native.type.unknown=1

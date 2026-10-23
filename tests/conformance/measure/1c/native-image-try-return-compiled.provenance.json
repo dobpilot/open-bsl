@@ -1,0 +1,36 @@
+{
+  "platform": "8.3.27.2342",
+  "module_resource": "f0d54940-82ea-4392-a3b5-2af94c9a7e00.0",
+  "method": "Designer Distribution options excludes source for ЗамерыТранзитивногоРодителя; UpdateDBCfg; CreateDistributionFiles -cffile",
+  "container_reader_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-try-return-control-module.bsl": {
+      "bytes": 1186,
+      "sha256": "0f7545bb80fb22f61cde40939c775c0822f9ae50928824846b89c89f2862eaac"
+    },
+    "native-image-try-return-compiled.Module.bin": {
+      "bytes": 2077,
+      "sha256": "810c1ada0fb619bda81c6a1181899679a818a7e6ff2ed614be174bdcbe7c30c5"
+    },
+    "native-image-try-return-compiled.image": {
+      "bytes": 1304,
+      "sha256": "22947e647902cebefc0245cf7a6a0638dc85621dcdea01e22f791ae3c8132862"
+    },
+    "measure-native-image-try-return-common.bsl": {
+      "bytes": 1779,
+      "sha256": "3deb7ce13466724bce0d0ce37aaa4a6c07e946fa79350d7d9272f0b7ad3fe174"
+    },
+    "measure-native-image-try-return-common.platform.txt": {
+      "bytes": 141,
+      "sha256": "e549fe507c7c4dbede1626dc845652f520ae8fde5bddb04a713e0288b1249a76"
+    },
+    "measure-native-image-try-return-compiled.bsl": {
+      "bytes": 1779,
+      "sha256": "3deb7ce13466724bce0d0ce37aaa4a6c07e946fa79350d7d9272f0b7ad3fe174"
+    },
+    "measure-native-image-try-return-compiled.platform.txt": {
+      "bytes": 141,
+      "sha256": "e549fe507c7c4dbede1626dc845652f520ae8fde5bddb04a713e0288b1249a76"
+    }
+  }
+}

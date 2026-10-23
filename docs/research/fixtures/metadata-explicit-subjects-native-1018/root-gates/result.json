@@ -1,0 +1,52 @@
+{
+  "status": "passed",
+  "tests": {
+    "passed": 3903,
+    "failed": 0,
+    "ignored": 1
+  },
+  "gates": [
+    {
+      "check": "fmt",
+      "exit_code": 0
+    },
+    {
+      "check": "clippy",
+      "exit_code": 0
+    },
+    {
+      "check": "workspace-tests",
+      "exit_code": 0
+    },
+    {
+      "check": "doc",
+      "exit_code": 0
+    },
+    {
+      "check": "consumer",
+      "exit_code": 0
+    },
+    {
+      "check": "rt-tree",
+      "exit_code": 0
+    },
+    {
+      "check": "vm-tree",
+      "exit_code": 0
+    },
+    {
+      "check": "openspec",
+      "exit_code": 0
+    }
+  ],
+  "frozen_source_and_native_inputs": {
+    "unchanged": true,
+    "files": 1322
+  },
+  "normal_dependency_trees_unchanged": {
+    "rt": true,
+    "vm": true
+  },
+  "scope": "SDK0.9.23 + host explicit catalog-role/user support + document-reference fix; actual database controls recorded separately",
+  "full_goal_complete": false
+}

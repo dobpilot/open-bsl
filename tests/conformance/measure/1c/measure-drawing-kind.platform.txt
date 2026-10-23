@@ -1,0 +1,16 @@
+GEOGRAPHICAL_SCHEMA	Geographical schema
+GROUP	Folder
+DENDROGRAM	Dendrogram
+CHART	Chart
+GANTT_CHART	Gantt chart
+PICTURE	Picture
+OBJECT	Object
+COMMENT	Comment
+LINE	Line
+RECTANGLE	Rectangle
+PIVOT_CHART	Pivot chart
+TEXT	Text
+ELLIPSE	Ellipse
+TYPE	SpreadsheetDocumentDrawingType
+RECTANGLE_TYPE	SpreadsheetDocumentDrawingType
+ALIAS	PASS

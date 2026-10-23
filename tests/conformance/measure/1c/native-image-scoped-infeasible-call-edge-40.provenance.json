@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental infeasible call-edge control, completed native receipt",
+  "scope": "Wrapper entry52 has literal True/JmpFalse or False/JmpTrue targeting its own CallLoc56. The fallthrough loads its argument and ArgNum first. All three declarations remain; public foreach and private caller results are observed.",
+  "files": {
+    "native-image-scoped-infeasible-call-edge-40.image": {
+      "bytes": 1115,
+      "sha256": "158eca6b1692c257f7d79f46089e67a56f89aa796f11babb3f955d594be97d75"
+    },
+    "native-image-scoped-infeasible-call-edge-40.Module.bin": {
+      "bytes": 2376,
+      "sha256": "766b43e3368a1c90a4fc671662e268014cb13382261b2123e984bb7161815b2a"
+    },
+    "measure-native-image-scoped-infeasible-call-edge-40.bsl": {
+      "bytes": 1407,
+      "sha256": "9334510431e152b7f7152ecdb4a6e3c41c9801c81582abe7d2bcbe13b8e6c927"
+    },
+    "measure-native-image-scoped-infeasible-call-edge-40.platform.txt": {
+      "bytes": 241,
+      "sha256": "fae1a97d77626b232ec082c386e8a8654123fdada630f9806edae3a95ce2da75"
+    }
+  },
+  "native_receipt_complete": true
+}

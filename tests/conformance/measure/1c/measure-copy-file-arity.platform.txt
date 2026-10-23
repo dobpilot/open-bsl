@@ -1,0 +1,7 @@
+file.begin	copy-file-arity-1
+COPY.FILE.ZERO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (КопироватьФайл)
+COPY.FILE.ONE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (КопироватьФайл)
+COPY.FILE.TWO	{<Unknown module>(1)}: Error calling context method (CopyFile): Error copying files: Invalid file path. The schema is not registered
+COPY.FILE.THREE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,44)}: Too many actual parameters (КопироватьФайл)
+COPY.FILE.ENGLISH	{<Unknown module>(1)}: Error calling context method (CopyFile): Error copying files: Invalid file path. The schema is not registered
+file.end	copy-file-arity-1

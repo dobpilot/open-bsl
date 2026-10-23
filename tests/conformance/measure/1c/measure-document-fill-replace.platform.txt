@@ -1,0 +1,4 @@
+document.fill.replace.replace=[replacement]:[default]:[original]
+document.fill.replace.mutate=[mutation]:[default]:[mutation]
+document.fill.replace.undefined=[default]:[default]:[original]
+document.fill.replace.empty=[default]:[default]:[original]

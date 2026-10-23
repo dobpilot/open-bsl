@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.19">
+	<CommonModule uuid="d1f68982-23dc-53ae-a206-cbd4c8dca516">
+		<Properties>
+			<Name>ОбщегоНазначенияКлиентСервер</Name>
+			<Synonym/>
+			<Comment/>
+			<Global>false</Global>
+			<ClientManagedApplication>false</ClientManagedApplication>
+			<Server>true</Server>
+			<ExternalConnection>false</ExternalConnection>
+			<ClientOrdinaryApplication>false</ClientOrdinaryApplication>
+			<ServerCall>true</ServerCall>
+			<Privileged>false</Privileged>
+			<ReturnValuesReuse>DontUse</ReturnValuesReuse>
+		</Properties>
+	</CommonModule>
+</MetaDataObject>

@@ -1,0 +1,8 @@
+VALUE	Auto	ErrorMessageDisplayVariant
+VALUE	Message about error for user 	ErrorMessageDisplayVariant
+VALUE	Short error presentation 	ErrorMessageDisplayVariant
+VALUE	Detailed error presentation 	ErrorMessageDisplayVariant
+AUTO_ALIAS	Yes
+USER_ALIAS	Yes
+BRIEF_ALIAS	Yes
+DETAIL_ALIAS	Yes

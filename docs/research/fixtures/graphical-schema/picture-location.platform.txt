@@ -1,0 +1,14 @@
+graphical.picture.top.text	Верх
+graphical.picture.top.alias	1
+graphical.picture.left.text	Лево
+graphical.picture.left.alias	1
+graphical.picture.bottom.text	Низ
+graphical.picture.bottom.alias	1
+graphical.picture.right.text	Право
+graphical.picture.right.alias	1
+graphical.picture.center.text	Центр
+graphical.picture.center.alias	1
+graphical.picture.type	ПоложениеКартинкиЭлементаГрафическойСхемы
+graphical.picture.type.alias	1
+graphical.picture.global.text	ПеречислениеПоложениеКартинкиЭлементаГрафическойСхемы
+graphical.picture.global.type	ПеречислениеПоложениеКартинкиЭлементаГрафическойСхемы

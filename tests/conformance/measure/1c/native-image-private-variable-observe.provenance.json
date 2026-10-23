@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental observation attempt, not an internal-value oracle",
+  "base": "native-image-private-variable-flag.image",
+  "change": "Add private opcode 52 with Сообщить(Аргумент) after increment. The form-local receipt writer does not intercept this common-module message; the receipt contains only caller results. Absence of an internal line proves nothing about execution.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-variable-observe.image": {
+      "bytes": 408,
+      "sha256": "ef4aff6c63cf324d14c58d911e78b596a12e62970a341a5e610f45d12b64e809"
+    },
+    "native-image-private-variable-observe.Module.bin": {
+      "bytes": 1773,
+      "sha256": "5d2f7e16758c9f0acc3ede093966191f416f6a9d1dd340c8bd2b41cf0bd6459b"
+    },
+    "measure-native-image-private-variable-observe.bsl": {
+      "bytes": 592,
+      "sha256": "b176a1c94fcc7b806452818ffcd4bdb7e509ada643ed434b579e12673faf4833"
+    },
+    "measure-native-image-private-variable-observe.platform.txt": {
+      "bytes": 82,
+      "sha256": "0dd40dec7eace2c8eafb5d08196bb029d4269cbcb8efdd11aed726ebb9f8673a"
+    }
+  }
+}

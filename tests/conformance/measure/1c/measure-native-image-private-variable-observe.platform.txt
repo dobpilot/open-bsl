@@ -1,0 +1,2 @@
+image.private-variable-observe.result=5
+image.private-variable-observe.argument=5

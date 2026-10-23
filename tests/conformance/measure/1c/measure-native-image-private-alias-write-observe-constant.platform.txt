@@ -1,0 +1,7 @@
+image.private-alias-write-observe-constant.call1.type=Number
+image.private-alias-write-observe-constant.call1.value=21
+image.private-alias-write-observe-constant.call1.argument=5
+image.private-alias-write-observe-constant.call2.type=Number
+image.private-alias-write-observe-constant.call2.value=21
+image.private-alias-write-observe-constant.call2.argument=5
+image.private-alias-write-observe-constant.done=1

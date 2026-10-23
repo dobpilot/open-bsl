@@ -1,0 +1,9 @@
+graphical.find.omitted	rejected
+graphical.find.omitted.error	{Обработка.Замеры.Форма.Форма.Форма(36)}: Недостаточно фактических параметров
+graphical.find.omitted.undefined	0
+graphical.find.undefined	rejected
+graphical.find.undefined.error	{Обработка.Замеры.Форма.Форма.Форма(42)}: Ошибка при вызове метода контекста (Найти): Несоответствие типов (параметр номер '1')
+graphical.find.undefined.result	0
+graphical.find.number	rejected
+graphical.find.number.error	{Обработка.Замеры.Форма.Форма.Форма(48)}: Ошибка при вызове метода контекста (Найти): Несоответствие типов (параметр номер '1')
+graphical.find.number.unchanged	1

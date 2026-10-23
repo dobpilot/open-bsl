@@ -1,0 +1,103 @@
+{
+  "source_cf": "tests/conformance/measure/1c/functional-option-source-rights-native/control.cf",
+  "source_cf_sha256": "472c3d4541ff65ac1b7f8b6d6103bfbc0c89cb77366db60dcc30d70eae87ab20",
+  "container_index": 1,
+  "container_count": 2,
+  "extraction": "Existing local saby-integration/v8unpack container_reader.extract(deflate=False, recursive=False), then SDK parse_config_descriptors validates all 15 XML top-level owner resources.",
+  "warning": "SDK single-container lookup only saw the first auxiliary container. That partial extraction was not used as the runtime fixture.",
+  "resources": [
+    {
+      "resource": "16670938-c0e7-4391-a109-7c6c5f7dd736",
+      "sha256": "f5248105002c3cac8ea732314febd2644bf50382f5636bdc3830dc727824225d"
+    },
+    {
+      "resource": "2b0af05a-e55c-4b6c-bc77-b16c85012909",
+      "sha256": "d07025a5bfb39bc06ef1c7b9e2909aca9ba71a0565a51a6095b6e49db9f4b625"
+    },
+    {
+      "resource": "3cfbfd8c-c47e-4185-8f69-d581cf8cedec",
+      "sha256": "2fc1b311e41ebe07da92287d79182a9b5c073c0708ada2dd20a74d1ec0da14db"
+    },
+    {
+      "resource": "6029a3bd-ccbb-445c-83ff-650802a245d1",
+      "sha256": "4a54684987e588eb0dc76476c122bc1fa888c8635f48243ae1a5ff5a7e74d71a"
+    },
+    {
+      "resource": "87c6ea4c-6187-4c3f-92ac-b691c1007e3e",
+      "sha256": "3f1fa4580050c426476cd48922926cab1c6689172e5cebfdd18217d19c1e9051"
+    },
+    {
+      "resource": "9893e2d6-f3f8-4d73-bb06-19bf26d216ab",
+      "sha256": "960a13a07b01bca664397fe93ee85be2be11e10eda77082b0638f4fb4717ed02"
+    },
+    {
+      "resource": "a11dfe2b-ef68-4701-9977-08fb0e680ee1",
+      "sha256": "0b75c56939d2d1bad7bae07ea69194f33f6bc5875fbfdbb91cddee107082e56b"
+    },
+    {
+      "resource": "a12e740b-47ae-4eca-9ea0-2a7e49a23b99",
+      "sha256": "27299cbd5af522a169066478c806e47c0e29a189a588a0dafd7df764882c5288"
+    },
+    {
+      "resource": "a7177622-2cb3-5bfd-a0d7-1ae7a4a9f4d5",
+      "sha256": "f06d9c759f71b3383912af1751b3b2b6fd0b8bd9981c32b8967f35a0bb513dc9"
+    },
+    {
+      "resource": "a92c00f8-e76e-4b95-8cf4-c1b4f46b93bd",
+      "sha256": "ac57b2e128c49ab5371066901dbe541fd89d33c03ad6005a06379ca7852027c0"
+    },
+    {
+      "resource": "ae8541a3-7d32-419d-be2a-71ff2cce2566",
+      "sha256": "5185007d36292430fa67ed8210921a4b11da90dd6fddf3572cf255fa51f87bb7"
+    },
+    {
+      "resource": "b85d58d3-d62e-42e7-ab34-7f8415132c87",
+      "sha256": "743edb266255b82195dca9657641f4dc799f2742c7ef7a8a91a6635519baf3ff"
+    },
+    {
+      "resource": "c34d5785-6f04-45c7-9555-088544ddc489",
+      "sha256": "ea09ef0f68fc93cd60aa3ebc1ec1f91cda5d666889b0ed996deeaf7e7f79a107"
+    },
+    {
+      "resource": "c39d0c75-e346-419c-86d8-c0586e51d328",
+      "sha256": "63650581a3e2218863c1cd39267440885099e601e08ce1659f8d2383a4b55801"
+    },
+    {
+      "resource": "e96435f0-5710-4af3-ab74-d9ffa8359456",
+      "sha256": "54f7cc6d127ad98a3c205a2b79b9ee2fe916ffc6099ee18b7edab78677fe9b0e"
+    }
+  ],
+  "role_rights_resources": [
+    {
+      "role": "FunctionalAdmin",
+      "resource": "3cfbfd8c-c47e-4185-8f69-d581cf8cedec.0",
+      "retained_file": "crates/bsl-config-db/tests/fixtures/functional-options/source-rights-native/3cfbfd8c-c47e-4185-8f69-d581cf8cedec.rights.deflate",
+      "sha256": "bb0f6e9fa7223df7b3a22e8b3c48c1e6926eafa9d65bd6476e5f4b58a851fa7d"
+    },
+    {
+      "role": "FunctionalDenied",
+      "resource": "ae8541a3-7d32-419d-be2a-71ff2cce2566.0",
+      "retained_file": "crates/bsl-config-db/tests/fixtures/functional-options/source-rights-native/ae8541a3-7d32-419d-be2a-71ff2cce2566.rights.deflate",
+      "sha256": "4345feb7be9dee5e6a07d4d54c836bb192f55679239871a29f3127b997464096"
+    }
+  ],
+  "role_validation": {
+    "sdk": "0.9.21",
+    "owners_checked": [
+      "Catalog.ЗамерВременныхТаблиц",
+      "InformationRegister.ОпцииПробы",
+      "Constant.ЗначениеОпцииПробы"
+    ],
+    "FunctionalAdmin_Read": [
+      true,
+      true,
+      true
+    ],
+    "FunctionalDenied_Read": [
+      false,
+      false,
+      false
+    ],
+    "scope": "SDK decodes original compressed role resources and returns their grants. Actual Session/backend test still uses explicit synthetic profiles until its next update."
+  }
+}

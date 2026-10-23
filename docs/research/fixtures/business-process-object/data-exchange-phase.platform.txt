@@ -1,0 +1,4 @@
+business.exchange-module.initialization	rejected|rejected|rejected|rejected
+business.exchange-module.load	0
+business.exchange-module.autofill	1
+business.exchange-module.modified	0

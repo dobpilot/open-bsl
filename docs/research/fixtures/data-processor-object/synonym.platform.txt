@@ -1,0 +1,6 @@
+synonym.object.type	Обработка объект: Замеры
+synonym.section.type	Обработка табличная часть: СтрокиПробы
+synonym.row.type	Обработка табличная часть строка: СтрокиПробы
+synonym.owner.name	Замеры
+synonym.type.ru	Да
+synonym.type.en	Да

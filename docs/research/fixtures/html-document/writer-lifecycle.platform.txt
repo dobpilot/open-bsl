@@ -1,0 +1,8 @@
+html.writer.close.initial	Undefined:
+html.writer.close.empty.type	String
+html.writer.close.empty.length	0
+html.writer.close.repeated	Undefined:
+html.writer.write.repeated	ошибка
+html.writer.write.repeated.output	<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"><html></html>
+html.writer.reset.open	успех
+html.writer.reset.output	

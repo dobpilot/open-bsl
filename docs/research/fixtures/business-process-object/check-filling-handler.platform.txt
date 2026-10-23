@@ -1,0 +1,5 @@
+business.check.handler.result	1
+business.check.handler.input	0|1|ТекстПробы
+business.check.handler.other	не вызван
+business.check.handler.assigned	1
+business.check.handler.assigned-input	0|1|ТекстПробы

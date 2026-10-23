@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" version="2.20">
+    <SettingsStorage uuid="e37c984f-9b13-43a9-842b-8cf374fdc902">
+        <InternalInfo>
+            <xr:GeneratedType name="SettingsStorageManager.ЗамерХранилища" category="Manager">
+                <xr:TypeId>8ff02e9a-1af7-421d-ac14-b5a39e7d7838</xr:TypeId>
+                <xr:ValueId>ca61d051-112e-48f1-9a03-9f296fc3a718</xr:ValueId>
+            </xr:GeneratedType>
+        </InternalInfo>
+        <Properties>
+            <Name>ЗамерХранилища</Name>
+            <Synonym />
+            <Comment />
+        </Properties>
+        <ChildObjects />
+    </SettingsStorage>
+</MetaDataObject>

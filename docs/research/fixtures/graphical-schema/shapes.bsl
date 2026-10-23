@@ -1,0 +1,36 @@
+Попытка
+    Сообщить("graphical.shapes.block.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.Блок));
+    Сообщить("graphical.shapes.block.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.Блок = GraphicalSchemaShapes.Block, "1", "0"));
+    Сообщить("graphical.shapes.document.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.Документ));
+    Сообщить("graphical.shapes.document.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.Документ = GraphicalSchemaShapes.Document, "1", "0"));
+    Сообщить("graphical.shapes.none.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.Нет));
+    Сообщить("graphical.shapes.none.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.Нет = GraphicalSchemaShapes.None, "1", "0"));
+    Сообщить("graphical.shapes.folder.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.Папка));
+    Сообщить("graphical.shapes.folder.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.Папка = GraphicalSchemaShapes.Folder, "1", "0"));
+    Сообщить("graphical.shapes.verticalbrackets.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СкобкиВертикальные));
+    Сообщить("graphical.shapes.verticalbrackets.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СкобкиВертикальные = GraphicalSchemaShapes.VerticalBrackets, "1", "0"));
+    Сообщить("graphical.shapes.horizontalbrackets.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СкобкиГоризонтальные));
+    Сообщить("graphical.shapes.horizontalbrackets.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СкобкиГоризонтальные = GraphicalSchemaShapes.HorizontalBrackets, "1", "0"));
+    Сообщить("graphical.shapes.uparrow.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СтрелкаВверх));
+    Сообщить("graphical.shapes.uparrow.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СтрелкаВверх = GraphicalSchemaShapes.UpArrow, "1", "0"));
+    Сообщить("graphical.shapes.updownarrow.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СтрелкаВверхВниз));
+    Сообщить("graphical.shapes.updownarrow.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СтрелкаВверхВниз = GraphicalSchemaShapes.UpDownArrow, "1", "0"));
+    Сообщить("graphical.shapes.leftarrow.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СтрелкаВлево));
+    Сообщить("graphical.shapes.leftarrow.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СтрелкаВлево = GraphicalSchemaShapes.LeftArrow, "1", "0"));
+    Сообщить("graphical.shapes.leftrightarrow.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СтрелкаВлевоВправо));
+    Сообщить("graphical.shapes.leftrightarrow.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СтрелкаВлевоВправо = GraphicalSchemaShapes.LeftRightArrow, "1", "0"));
+    Сообщить("graphical.shapes.downarrow.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СтрелкаВниз));
+    Сообщить("graphical.shapes.downarrow.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СтрелкаВниз = GraphicalSchemaShapes.DownArrow, "1", "0"));
+    Сообщить("graphical.shapes.rightarrow.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.СтрелкаВправо));
+    Сообщить("graphical.shapes.rightarrow.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.СтрелкаВправо = GraphicalSchemaShapes.RightArrow, "1", "0"));
+    Сообщить("graphical.shapes.file.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.Файл));
+    Сообщить("graphical.shapes.file.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.Файл = GraphicalSchemaShapes.File, "1", "0"));
+    Сообщить("graphical.shapes.ellipse.text" + Символ(9) + Строка(ФигурыГрафическойСхемы.Эллипс));
+    Сообщить("graphical.shapes.ellipse.alias" + Символ(9) + ?(ФигурыГрафическойСхемы.Эллипс = GraphicalSchemaShapes.Ellipse, "1", "0"));
+    Сообщить("graphical.shapes.type" + Символ(9) + Строка(ТипЗнч(ФигурыГрафическойСхемы.Блок)));
+    Сообщить("graphical.shapes.type.alias" + Символ(9) + ?(Тип("ФигурыГрафическойСхемы") = Тип("GraphicalSchemaShapes"), "1", "0"));
+    Сообщить("graphical.shapes.global.text" + Символ(9) + Строка(ФигурыГрафическойСхемы));
+    Сообщить("graphical.shapes.global.type" + Символ(9) + Строка(ТипЗнч(ФигурыГрафическойСхемы)));
+Исключение
+    Сообщить("graphical.shapes.error" + Символ(9) + ОписаниеОшибки());
+КонецПопытки;

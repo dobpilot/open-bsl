@@ -1,0 +1,15 @@
+{
+  "producer": "1C 8.3.27.2342 / EDT 2026.1.3+25",
+  "module": "ЕдиныйНалоговыйСчетИнтеграция",
+  "same_bytes": true,
+  "files": {
+    "target/diagnostics/buh-native-config-1015/native-xml/CommonModules/ЕдиныйНалоговыйСчетИнтеграция/Ext/Module.bin": {
+      "sha256": "38bd09aa862494439cb3618ed90c5019be3a9a4937dbe50582c02eb336a30fd3",
+      "length": 78579
+    },
+    "target/diagnostics/file-source-edt-1022/buh-workspace/BUH/src/CommonModules/ЕдиныйНалоговыйСчетИнтеграция/Module.bsl": {
+      "sha256": "38bd09aa862494439cb3618ed90c5019be3a9a4937dbe50582c02eb336a30fd3",
+      "length": 78579
+    }
+  }
+}

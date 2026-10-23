@@ -1,0 +1,8 @@
+folder.create.hierarchical.body.read=NO
+folder.create.hierarchical.body.write=rejected
+folder.create.hierarchical.bare=YES
+folder.create.hierarchical.qualified=YES
+folder.create.hierarchical.alias=YES
+folder.create.hierarchical.type=YES
+folder.create.hierarchical.write=rejected
+folder.create.hierarchical.after=YES

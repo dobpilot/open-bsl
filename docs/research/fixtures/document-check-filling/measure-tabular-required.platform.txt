@@ -1,0 +1,6 @@
+document.check.required-table.empty	0
+document.check.required-table.empty.trace	1|Date;Запасы;Запасы.НомерВариантаКП;
+document.check.required-table.row.empty	0
+document.check.required-table.row.trace	2|Date;Запасы;Запасы.НомерВариантаКП;
+document.check.required-table.row.filled	1
+document.check.required-table.clear	1

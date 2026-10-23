@@ -1,0 +1,38 @@
+Попытка
+    Сообщить("graphical.connectorlinetype.none.text" + Символ(9) + Строка(ТипСоединительнойЛинии.НетЛинии));
+    Сообщить("graphical.connectorlinetype.none.alias" + Символ(9) + ?(ТипСоединительнойЛинии.НетЛинии = ConnectorLineType.None, "1", "0"));
+    Сообщить("graphical.connectorlinetype.dashed.text" + Символ(9) + Строка(ТипСоединительнойЛинии.Пунктир));
+    Сообщить("graphical.connectorlinetype.dashed.alias" + Символ(9) + ?(ТипСоединительнойЛинии.Пунктир = ConnectorLineType.Dashed, "1", "0"));
+    Сообщить("graphical.connectorlinetype.dashdotted.text" + Символ(9) + Строка(ТипСоединительнойЛинии.ПунктирТочка));
+    Сообщить("graphical.connectorlinetype.dashdotted.alias" + Символ(9) + ?(ТипСоединительнойЛинии.ПунктирТочка = ConnectorLineType.DashDotted, "1", "0"));
+    Сообщить("graphical.connectorlinetype.dashdotteddotted.text" + Символ(9) + Строка(ТипСоединительнойЛинии.ПунктирТочкаТочка));
+    Сообщить("graphical.connectorlinetype.dashdotteddotted.alias" + Символ(9) + ?(ТипСоединительнойЛинии.ПунктирТочкаТочка = ConnectorLineType.DashDottedDotted, "1", "0"));
+    Сообщить("graphical.connectorlinetype.solid.text" + Символ(9) + Строка(ТипСоединительнойЛинии.Сплошная));
+    Сообщить("graphical.connectorlinetype.solid.alias" + Символ(9) + ?(ТипСоединительнойЛинии.Сплошная = ConnectorLineType.Solid, "1", "0"));
+    Сообщить("graphical.connectorlinetype.dotted.text" + Символ(9) + Строка(ТипСоединительнойЛинии.Точечная));
+    Сообщить("graphical.connectorlinetype.dotted.alias" + Символ(9) + ?(ТипСоединительнойЛинии.Точечная = ConnectorLineType.Dotted, "1", "0"));
+    Сообщить("graphical.connectorlinetype.type" + Символ(9) + Строка(ТипЗнч(ТипСоединительнойЛинии.НетЛинии)));
+    Сообщить("graphical.connectorlinetype.type.alias" + Символ(9) + ?(Тип("ТипСоединительнойЛинии") = Тип("ConnectorLineType"), "1", "0"));
+    Сообщить("graphical.connectorlinetype.global.text" + Символ(9) + Строка(ТипСоединительнойЛинии));
+    Сообщить("graphical.connectorlinetype.global.type" + Символ(9) + Строка(ТипЗнч(ТипСоединительнойЛинии)));
+    Сообщить("graphical.connectortextlocation.firstsegment.text" + Символ(9) + Строка(ПоложениеТекстаСоединительнойЛинии.ПервыйСегмент));
+    Сообщить("graphical.connectortextlocation.firstsegment.alias" + Символ(9) + ?(ПоложениеТекстаСоединительнойЛинии.ПервыйСегмент = ConnectorTextLocation.FirstSegment, "1", "0"));
+    Сообщить("graphical.connectortextlocation.middle.text" + Символ(9) + Строка(ПоложениеТекстаСоединительнойЛинии.СерединаЛинии));
+    Сообщить("graphical.connectortextlocation.middle.alias" + Символ(9) + ?(ПоложениеТекстаСоединительнойЛинии.СерединаЛинии = ConnectorTextLocation.Middle, "1", "0"));
+    Сообщить("graphical.connectortextlocation.type" + Символ(9) + Строка(ТипЗнч(ПоложениеТекстаСоединительнойЛинии.ПервыйСегмент)));
+    Сообщить("graphical.connectortextlocation.type.alias" + Символ(9) + ?(Тип("ПоложениеТекстаСоединительнойЛинии") = Тип("ConnectorTextLocation"), "1", "0"));
+    Сообщить("graphical.connectortextlocation.global.text" + Символ(9) + Строка(ПоложениеТекстаСоединительнойЛинии));
+    Сообщить("graphical.connectortextlocation.global.type" + Символ(9) + Строка(ТипЗнч(ПоложениеТекстаСоединительнойЛинии)));
+    Сообщить("graphical.arrowstyle.filled.text" + Символ(9) + Строка(СтильСтрелки.Заполненная));
+    Сообщить("graphical.arrowstyle.filled.alias" + Символ(9) + ?(СтильСтрелки.Заполненная = ArrowStyle.Filled, "1", "0"));
+    Сообщить("graphical.arrowstyle.blank.text" + Символ(9) + Строка(СтильСтрелки.Незаполненная));
+    Сообщить("graphical.arrowstyle.blank.alias" + Символ(9) + ?(СтильСтрелки.Незаполненная = ArrowStyle.Blank, "1", "0"));
+    Сообщить("graphical.arrowstyle.none.text" + Символ(9) + Строка(СтильСтрелки.Нет));
+    Сообщить("graphical.arrowstyle.none.alias" + Символ(9) + ?(СтильСтрелки.Нет = ArrowStyle.None, "1", "0"));
+    Сообщить("graphical.arrowstyle.type" + Символ(9) + Строка(ТипЗнч(СтильСтрелки.Заполненная)));
+    Сообщить("graphical.arrowstyle.type.alias" + Символ(9) + ?(Тип("СтильСтрелки") = Тип("ArrowStyle"), "1", "0"));
+    Сообщить("graphical.arrowstyle.global.text" + Символ(9) + Строка(СтильСтрелки));
+    Сообщить("graphical.arrowstyle.global.type" + Символ(9) + Строка(ТипЗнч(СтильСтрелки)));
+Исключение
+    Сообщить("graphical.line-enums.error" + Символ(9) + ОписаниеОшибки());
+КонецПопытки;

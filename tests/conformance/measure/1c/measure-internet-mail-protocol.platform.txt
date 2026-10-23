@@ -1,0 +1,6 @@
+ROOT	EnumInternetMailProtocol
+TYPE	InternetMailProtocol
+IMAP	IMAP
+POP3	POP3
+SMTP	SMTP
+ALIASES	PASS

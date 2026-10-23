@@ -1,0 +1,9 @@
+image.native.context.write=12
+image.native.context.object=12
+image.native.context.input=12
+image.native.context.found=1
+image.native.context.output=12
+image.native.context.four.name=КодПробы
+image.native.context.four.count=1
+image.native.context.four.title=ЗаголовокПробы
+image.native.context.four.width=20

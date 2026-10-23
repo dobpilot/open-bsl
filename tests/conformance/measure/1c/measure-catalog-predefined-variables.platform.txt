@@ -1,0 +1,4 @@
+predefined.local.first=17
+predefined.local=19
+predefined.local.after=17
+predefined.qualified.type=YES

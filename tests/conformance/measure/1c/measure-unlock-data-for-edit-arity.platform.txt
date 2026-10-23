@@ -1,0 +1,7 @@
+file.begin	unlock-data-for-edit-arity-1
+UNLOCK.EDIT.ZERO	OK
+UNLOCK.EDIT.ONE	OK
+UNLOCK.EDIT.TWO	OK
+UNLOCK.EDIT.THREE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,67)}: Too many actual parameters (РазблокироватьДанныеДляРедактирования)
+UNLOCK.EDIT.ENGLISH	OK
+file.end	unlock-data-for-edit-arity-1

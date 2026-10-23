@@ -1,0 +1,6 @@
+twofactor.reject.structure.undefined	1
+twofactor.reject.structure.map	0
+twofactor.reject.source.retained	43
+twofactor.reject.number.undefined	1
+twofactor.reject.number.map	0
+twofactor.reject.name.ordinary	1

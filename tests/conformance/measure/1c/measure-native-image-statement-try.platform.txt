@@ -1,0 +1,6 @@
+image.native.statement_try.normal.trace=12
+image.native.statement_try.normal.description=
+image.native.statement_try.normal.direct=1
+image.native.statement_try.failure.trace=13
+image.native.statement_try.failure.description=проба
+image.native.statement_try.failure.direct=1

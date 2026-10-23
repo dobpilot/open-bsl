@@ -1,0 +1,42 @@
+canonical.extended.empty-element.КаноническийXML	<r></r>
+canonical.extended.empty-element.КаноническийXMLСКомментариями	<r></r>
+canonical.extended.empty-element.ИсключающийКаноническийXML	<r></r>
+canonical.extended.empty-element.ИсключающийКаноническийXMLСКомментариями	<r></r>
+canonical.extended.empty-element.КаноническийXML1_1	<r></r>
+canonical.extended.empty-element.КаноническийXML1_1СКомментариями	<r></r>
+canonical.extended.attribute-escapes.КаноническийXML	<r a="&#x9;&#xA;&#xD;&quot;&amp;&lt;">&#xD;&amp;&lt;&gt;</r>
+canonical.extended.attribute-escapes.КаноническийXMLСКомментариями	<r a="&#x9;&#xA;&#xD;&quot;&amp;&lt;">&#xD;&amp;&lt;&gt;</r>
+canonical.extended.attribute-escapes.ИсключающийКаноническийXML	<r a="&#x9;&#xA;&#xD;&quot;&amp;&lt;">&#xD;&amp;&lt;&gt;</r>
+canonical.extended.attribute-escapes.ИсключающийКаноническийXMLСКомментариями	<r a="&#x9;&#xA;&#xD;&quot;&amp;&lt;">&#xD;&amp;&lt;&gt;</r>
+canonical.extended.attribute-escapes.КаноническийXML1_1	<r a="&#x9;&#xA;&#xD;&quot;&amp;&lt;">&#xD;&amp;&lt;&gt;</r>
+canonical.extended.attribute-escapes.КаноническийXML1_1СКомментариями	<r a="&#x9;&#xA;&#xD;&quot;&amp;&lt;">&#xD;&amp;&lt;&gt;</r>
+canonical.extended.namespace-reset.КаноническийXML	<r xmlns="urn:r" xmlns:p="urn:p"><a xmlns=""><p:b xmlns:p="urn:q"></p:b></a></r>
+canonical.extended.namespace-reset.КаноническийXMLСКомментариями	<r xmlns="urn:r" xmlns:p="urn:p"><a xmlns=""><p:b xmlns:p="urn:q"></p:b></a></r>
+canonical.extended.namespace-reset.ИсключающийКаноническийXML	<r xmlns="urn:r"><a xmlns=""><p:b xmlns:p="urn:q"></p:b></a></r>
+canonical.extended.namespace-reset.ИсключающийКаноническийXMLСКомментариями	<r xmlns="urn:r"><a xmlns=""><p:b xmlns:p="urn:q"></p:b></a></r>
+canonical.extended.namespace-reset.КаноническийXML1_1	<r xmlns="urn:r" xmlns:p="urn:p"><a xmlns=""><p:b xmlns:p="urn:q"></p:b></a></r>
+canonical.extended.namespace-reset.КаноническийXML1_1СКомментариями	<r xmlns="urn:r" xmlns:p="urn:p"><a xmlns=""><p:b xmlns:p="urn:q"></p:b></a></r>
+canonical.extended.processing-instructions.КаноническийXML	<?before data?>\n<r><?inside data?></r>\n<?after data?>
+canonical.extended.processing-instructions.КаноническийXMLСКомментариями	<?before data?>\n<r><?inside data?><!--c--></r>\n<?after data?>
+canonical.extended.processing-instructions.ИсключающийКаноническийXML	<?before data?>\n<r><?inside data?></r>\n<?after data?>
+canonical.extended.processing-instructions.ИсключающийКаноническийXMLСКомментариями	<?before data?>\n<r><?inside data?><!--c--></r>\n<?after data?>
+canonical.extended.processing-instructions.КаноническийXML1_1	<?before data?>\n<r><?inside data?></r>\n<?after data?>
+canonical.extended.processing-instructions.КаноническийXML1_1СКомментариями	<?before data?>\n<r><?inside data?><!--c--></r>\n<?after data?>
+canonical.extended.subset-xml-attributes.КаноническийXML	<p:e xmlns:p="urn:p" a="1" xml:base="../b/" xml:id="outer" xml:lang="ru"></p:e>
+canonical.extended.subset-xml-attributes.КаноническийXMLСКомментариями	<p:e xmlns:p="urn:p" a="1" xml:base="../b/" xml:id="outer" xml:lang="ru"></p:e>
+canonical.extended.subset-xml-attributes.ИсключающийКаноническийXML	<p:e xmlns:p="urn:p" a="1" xml:base="../b/"></p:e>
+canonical.extended.subset-xml-attributes.ИсключающийКаноническийXMLСКомментариями	<p:e xmlns:p="urn:p" a="1" xml:base="../b/"></p:e>
+canonical.extended.subset-xml-attributes.КаноническийXML1_1	<p:e xmlns:p="urn:p" a="1" xml:base="http://example.test/b/" xml:lang="ru"></p:e>
+canonical.extended.subset-xml-attributes.КаноническийXML1_1СКомментариями	<p:e xmlns:p="urn:p" a="1" xml:base="http://example.test/b/" xml:lang="ru"></p:e>
+canonical.extended.all-nodes.КаноническийXML	<r xmlns:p="urn:p"><p:e a="1"></p:e></r>
+canonical.extended.all-nodes.КаноническийXMLСКомментариями	<r xmlns:p="urn:p"><p:e a="1"></p:e></r>
+canonical.extended.all-nodes.ИсключающийКаноническийXML	<r><p:e xmlns:p="urn:p" a="1"></p:e></r>
+canonical.extended.all-nodes.ИсключающийКаноническийXMLСКомментариями	<r><p:e xmlns:p="urn:p" a="1"></p:e></r>
+canonical.extended.all-nodes.КаноническийXML1_1	<r xmlns:p="urn:p"><p:e a="1"></p:e></r>
+canonical.extended.all-nodes.КаноническийXML1_1СКомментариями	<r xmlns:p="urn:p"><p:e a="1"></p:e></r>
+canonical.extended.relative-namespace.КаноническийXML	<rejected>
+canonical.extended.relative-namespace.КаноническийXMLСКомментариями	<rejected>
+canonical.extended.relative-namespace.ИсключающийКаноническийXML	<rejected>
+canonical.extended.relative-namespace.ИсключающийКаноническийXMLСКомментариями	<rejected>
+canonical.extended.relative-namespace.КаноническийXML1_1	<rejected>
+canonical.extended.relative-namespace.КаноническийXML1_1СКомментариями	<rejected>

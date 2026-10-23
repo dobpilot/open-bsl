@@ -1,0 +1,2 @@
+image.native.undefined=1
+image.native.undefined.type=1

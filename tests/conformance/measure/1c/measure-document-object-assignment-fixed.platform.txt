@@ -1,0 +1,15 @@
+document.assignment.fixed.number.text=accepted:String:[123456789]
+document.assignment.fixed.number.numeric=accepted:String:[17       ]
+document.assignment.fixed.number.undefined=accepted:String:[         ]
+document.assignment.fixed.number.null=accepted:String:[         ]
+document.assignment.fixed.number.boolean=accepted:String:[Yes      ]
+document.assignment.fixed.date.native=accepted:Yes
+document.assignment.fixed.date.string=accepted:Yes
+document.assignment.fixed.date.undefined=accepted:Yes
+document.assignment.fixed.date.null=accepted:Yes
+document.assignment.fixed.deletion.true=accepted:Yes
+document.assignment.fixed.posted.true=accepted:Yes
+document.assignment.fixed.number.initial=accepted:String:[         ]
+document.assignment.fixed.number.short=accepted:String:[abc      ]
+document.assignment.fixed.number.spaces=accepted:String:[  abc    ]
+document.assignment.fixed.number.empty=accepted:String:[         ]

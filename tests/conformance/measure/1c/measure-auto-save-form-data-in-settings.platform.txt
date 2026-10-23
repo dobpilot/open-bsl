@@ -1,0 +1,4 @@
+USE	Use	AutoSaveFormDataInSettings
+DONT_USE	Do not use	AutoSaveFormDataInSettings
+USE_ALIAS	Yes
+DONT_USE_ALIAS	Yes

@@ -1,0 +1,7 @@
+image.label-procedure-effect.entry=public
+image.label-procedure-effect.public.value=5
+image.label-procedure-effect.public.argument=5
+image.label-procedure-effect.entry=private
+image.label-procedure-effect.private.value=5
+image.label-procedure-effect.private.argument=5
+image.label-procedure-effect.done=1

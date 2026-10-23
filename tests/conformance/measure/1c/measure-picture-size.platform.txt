@@ -1,0 +1,11 @@
+ROOT	EnumPictureSize
+TYPE	PictureSize
+AUTO	Automatic size
+AUTO_IGNORE	Automatic size without scale
+FONT	By font size
+PROPORTIONAL	Proportional
+STRETCH	Stretch
+REAL	Actual size
+REAL_IGNORE	Actual size (no scaling)
+TILE	Tile
+ALIASES	PASS

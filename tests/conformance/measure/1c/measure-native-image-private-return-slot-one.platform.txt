@@ -1,0 +1,4 @@
+image.private-return-slot-one.type=Number
+image.private-return-slot-one.value=23
+image.private-return-slot-one.argument=5
+image.private-return-slot-one.done=1

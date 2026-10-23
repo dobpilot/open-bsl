@@ -1,0 +1,8 @@
+document.fill.attributes.three.undefined.before=[]:[]
+document.fill.attributes.three.undefined.after=[]:[]:[handler]:[handler]
+document.fill.attributes.three.empty.before=[]:[]
+document.fill.attributes.three.empty.after=[]:[]:[handler]:[handler]
+document.fill.attributes.three.values.before=[]:[]
+document.fill.attributes.three.values.after=[]:[]:[handler]:[handler]
+document.fill.attributes.three.disabled.before=[]:[]
+document.fill.attributes.three.disabled.after=[]:[]:[handler]:[handler]

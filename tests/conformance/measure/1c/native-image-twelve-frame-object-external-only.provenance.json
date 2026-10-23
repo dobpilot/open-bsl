@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental ordinary-flags external-slot control, complete native receipt",
+  "scope": "external-only: three-parameter twelve-slot empty frame, absent private DefPrm, initializer14, Const0=N7. external-only retains ordinary flags and changes every private external slot to0; flags-only retains original flags and changes every private external slot to-1. Original global environment absent.",
+  "files": {
+    "native-image-twelve-frame-object-external-only.image": {
+      "bytes": 1456,
+      "sha256": "5951131d1df7761a9edf998ef59bb288d48bdd17e3fa4515aa74f5adcc93e1ac"
+    },
+    "native-image-twelve-frame-object-external-only.Module.bin": {
+      "bytes": 2717,
+      "sha256": "cd470220795a6d40d107054ed56a49d7bf5d09c3dcbe20f731de95afb350eb3f"
+    },
+    "measure-native-image-twelve-frame-object-external-only.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "measure-native-image-twelve-frame-object-external-only.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-object-external-only.log"
+  }
+}

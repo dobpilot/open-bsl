@@ -1,0 +1,21 @@
+file.begin	functional-option-source-rights-1
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_USER	FunctionalDenied
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_CATALOG_READ	No
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_REGISTER_READ	No
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_CATALOG_NORMAL	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Error getting functional option value "ОпцияСправочникаОбычная".
+No access: object: 'Catalog.ЗамерВременныхТаблиц'; right: 'Read'
+Table: 'Reference53', SDBL command: 'SELECT'.
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_CATALOG_PRIVILEGED	Boolean:Yes
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_CATALOG_NORMAL_AFTER	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Error getting functional option value "ОпцияСправочникаОбычная".
+No access: object: 'Catalog.ЗамерВременныхТаблиц'; right: 'Read'
+Table: 'Reference53', SDBL command: 'SELECT'.
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_REGISTER_NORMAL	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Error getting functional option value "ОпцияРегистраОбычная".
+No access: object: 'InformationRegister.ОпцииПробы'; right: 'Read'
+Table: 'InfoRg59', SDBL command: 'SELECT'.
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_REGISTER_PRIVILEGED	Boolean:Yes
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_REGISTER_NORMAL_AFTER	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Error getting functional option value "ОпцияРегистраОбычная".
+No access: object: 'InformationRegister.ОпцииПробы'; right: 'Read'
+Table: 'InfoRg59', SDBL command: 'SELECT'.
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_CATALOG_READ_AFTER	No
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_REGISTER_READ_AFTER	No
+file.end	functional-option-source-rights-1

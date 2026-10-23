@@ -1,0 +1,8 @@
+business.section.handler.first.count	1
+business.section.handler.first.text	обработчик
+business.section.handler.first.flag	1
+business.section.handler.first.calls	1
+business.section.handler.repeat.count	2
+business.section.handler.repeat.calls	2
+business.section.handler.other.count	0
+business.section.handler.other.calls	0

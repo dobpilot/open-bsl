@@ -1,0 +1,4 @@
+image.shared-try-body.result=12
+image.shared-try-body.argument=12
+image.shared-try-body.private-result=12
+image.shared-try-body.private-argument=12

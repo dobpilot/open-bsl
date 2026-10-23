@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "native-image-private-procedure-flag2.Module.bin container info",
+  "change": "Public reference-parameter function returns its argument; jump at 4 targets shared End at 6, crossing private flag-2 zero-parameter entry 5. Private entry is not called by this driver.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-shared-tail.image": {
+      "bytes": 228,
+      "sha256": "cffc2b63e7870790405294b1cc45bba6d7af619be29576dd629d7d08ac33b034"
+    },
+    "native-image-shared-tail.Module.bin": {
+      "bytes": 1773,
+      "sha256": "3e5eafdc534fead4d0541fc8fbf44d4267e0d541e757c5b73dd438e4ccccbb29"
+    },
+    "measure-native-image-shared-tail.bsl": {
+      "bytes": 573,
+      "sha256": "be4dc87fc8276a8f95cc1bd217889f31b8c79cbf590215b0763d22f4ba316da9"
+    },
+    "measure-native-image-shared-tail.platform.txt": {
+      "bytes": 56,
+      "sha256": "80b65c3fe58c396b107a66b8573bf6d3a95ac1cc6190ae3b4c4bc0ca2599eb2b"
+    }
+  }
+}

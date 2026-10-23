@@ -1,0 +1,5 @@
+business.section.type.ru	1
+business.section.type.en	1
+business.section.row.type.ru	1
+business.section.row.type.en	1
+business.section.type.distinct	1

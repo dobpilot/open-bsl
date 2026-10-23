@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Catalog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:core="http://g5.1c.ru/v8/dt/mcore" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" xmlns:mdclassExtension="http://g5.1c.ru/v8/dt/metadata/mdclass/extension" uuid="e1945025-1979-4ad7-8f06-3cf53c99530a" extendedConfigurationObject="6a386de9-b78e-47cb-a7e8-864b52022b24">
+  <producedTypes>
+    <objectType typeId="740d6feb-87ab-4139-89d6-bb11c9eb6b54" valueTypeId="22a391ee-a1b5-4543-ab7a-6d54199ab9cd"/>
+    <refType typeId="5b29ef5e-badd-4a4d-95ea-d8c3a9023446" valueTypeId="62f00efc-c780-4c9d-b2ca-7a215414c701"/>
+    <selectionType typeId="9b37e55a-4516-4365-9b06-fe3b669afce6" valueTypeId="ad61ebfc-2d70-470b-b4fe-9832d9300edb"/>
+    <listType typeId="0bf74069-a0af-4f7e-9690-e43bb7eee27e" valueTypeId="f1d34f1b-7939-4281-b8fd-3b966a26a679"/>
+    <managerType typeId="65e7eaa9-a775-456c-a5e2-7baa74e946ed" valueTypeId="050f9998-f770-4150-9fb1-fcda6897a3cf"/>
+  </producedTypes>
+  <name>СтавкиНДС</name>
+  <objectBelonging>Adopted</objectBelonging>
+  <extension xsi:type="mdclassExtension:CatalogExtension">
+    <extendedConfigurationObject>Checked</extendedConfigurationObject>
+  </extension>
+  <attributes uuid="37eb19fc-c750-4054-b67e-689b0ed8380c" extendedConfigurationObject="9a871782-6f75-4078-a8f2-a33d9dcb8c7f">
+    <name>Ставка</name>
+    <objectBelonging>Adopted</objectBelonging>
+    <extension xsi:type="mdclassExtension:BasicFeatureExtension">
+      <extendedConfigurationObject>Checked</extendedConfigurationObject>
+      <typeExtension>
+        <types>
+          <state>Checked</state>
+          <type>Number</type>
+        </types>
+        <numberQualifiers>
+          <precision>5</precision>
+          <scale>2</scale>
+          <nonNegative>true</nonNegative>
+        </numberQualifiers>
+      </typeExtension>
+    </extension>
+  </attributes>
+  <attributes uuid="7d8d7de3-4c7c-45da-82fa-7f097d38a173">
+    <name>Расш1_Реквизит1</name>
+    <extension xsi:type="mdclassExtension:BasicFeatureExtension">
+      <choiceForm>Extended</choiceForm>
+    </extension>
+    <type>
+      <types>String</types>
+      <stringQualifiers>
+        <length>10</length>
+      </stringQualifiers>
+    </type>
+    <minValue xsi:type="core:UndefinedValue"/>
+    <maxValue xsi:type="core:UndefinedValue"/>
+    <fillValue xsi:type="core:StringValue"/>
+    <fullTextSearch>Use</fullTextSearch>
+    <dataHistory>Use</dataHistory>
+  </attributes>
+  <attributes uuid="180244b5-76e0-4ddd-961b-64744192d653">
+    <name>Расш1_Реквизит2</name>
+    <extension xsi:type="mdclassExtension:BasicFeatureExtension">
+      <choiceForm>Extended</choiceForm>
+    </extension>
+    <type>
+      <types>Number</types>
+      <numberQualifiers>
+        <precision>10</precision>
+      </numberQualifiers>
+    </type>
+    <minValue xsi:type="core:UndefinedValue"/>
+    <maxValue xsi:type="core:UndefinedValue"/>
+    <fillValue xsi:type="core:UndefinedValue"/>
+    <fullTextSearch>Use</fullTextSearch>
+    <dataHistory>Use</dataHistory>
+  </attributes>
+  <attributes uuid="3c3de8c8-d5ec-41ab-bfc1-232e8dca8efd">
+    <name>Расш1_Реквизит3</name>
+    <extension xsi:type="mdclassExtension:BasicFeatureExtension">
+      <choiceForm>Extended</choiceForm>
+    </extension>
+    <type>
+      <types>CatalogRef.Расш1_Справочник1</types>
+    </type>
+    <minValue xsi:type="core:UndefinedValue"/>
+    <maxValue xsi:type="core:UndefinedValue"/>
+    <fillValue xsi:type="core:UndefinedValue"/>
+    <fullTextSearch>Use</fullTextSearch>
+    <dataHistory>Use</dataHistory>
+  </attributes>
+</mdclass:Catalog>

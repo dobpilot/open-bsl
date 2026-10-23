@@ -1,0 +1,4 @@
+AUTO	Auto	PASS
+USE	Use	PASS
+DONT_USE	Do not use	PASS
+TYPE	ThroughAlign

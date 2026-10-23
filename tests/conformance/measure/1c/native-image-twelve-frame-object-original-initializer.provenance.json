@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental original-descriptor object-module control, failed; no oracle",
+  "scope": "Explicit empty initializer at14, same driver as ordinary object initializer baseline. Original twelve descriptor flags/external_slot0 and absent DefPrm; numeric Const0=7, no original body or original nine globals.",
+  "files": {
+    "native-image-twelve-frame-object-original-initializer.image": {
+      "bytes": 1487,
+      "sha256": "33dbc5db81879df565f0370ab24c49a416f8c3f322559c71ee4d345eb2067219"
+    },
+    "native-image-twelve-frame-object-original-initializer.Module.bin": {
+      "bytes": 2748,
+      "sha256": "4313a641575b8223f5368f32ca32a411407a90fa8f17669985b9c8da7e3b7368"
+    },
+    "measure-native-image-twelve-frame-object-original-initializer.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-original-initializer.log",
+    "interpretation": "Object baseline with the same explicit initializer succeeds. Original descriptor table/no defaults fails under numeric Const0=7 and no original globals; original module frame semantics remain undetermined."
+  }
+}

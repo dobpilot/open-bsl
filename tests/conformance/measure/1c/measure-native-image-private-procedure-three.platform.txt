@@ -1,0 +1,4 @@
+image.private-procedure-three.result=12
+image.private-procedure-three.first=12
+image.private-procedure-three.second=6
+image.private-procedure-three.third=7

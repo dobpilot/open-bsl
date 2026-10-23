@@ -1,0 +1,15 @@
+﻿right.user=RootProbeAdmin
+right.current=YES
+right.self=YES
+right.role.deny=NO
+right.administration=YES
+right.inapplicable=ERROR:{DataProcessor.Замеры.Form.Форма.Form(39)}: Error calling context method (AccessRight): Cannot apply the Чтение right to Configuration.Configuration
+right.unknown=ERROR:{DataProcessor.Замеры.Form.Форма.Form(42)}: Error calling context method (AccessRight): The right specified doesn't exist: UnknownProbeRight
+right.privileged.current=YES
+right.privileged.role.deny=NO
+right.privileged.self=YES
+right.privileged.administration=YES
+right.privileged.inapplicable=ERROR:{DataProcessor.Замеры.Form.Форма.Form(54)}: Error calling context method (AccessRight): Cannot apply the Чтение right to Configuration.Configuration
+right.privileged.unknown=ERROR:{DataProcessor.Замеры.Form.Форма.Form(57)}: Error calling context method (AccessRight): The right specified doesn't exist: UnknownProbeRight
+
+completed=YES

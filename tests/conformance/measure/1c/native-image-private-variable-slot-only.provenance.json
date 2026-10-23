@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-private-procedure-flag2.image",
+  "change": "Only private reference variable external slot minus one to zero, flag remains 5. Successful native result and argument are both 12.",
+  "exit_status": 0,
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-variable-slot-only.image": {
+      "bytes": 349,
+      "sha256": "888c6c1493988d35ca9cecc807b461cda89619dc890da5809980ac8b5ef6b445"
+    },
+    "native-image-private-variable-slot-only.Module.bin": {
+      "bytes": 1773,
+      "sha256": "eb46a710fcf4fee13f4b839ea8bb03dab40afeec795871f4cce7cd314128f4a4"
+    },
+    "measure-native-image-private-variable-slot-only.bsl": {
+      "bytes": 598,
+      "sha256": "778c92acb5c33259f5fc4f61d6e06f0d7baad19f678a89f2da6ce7c6208e3bae"
+    },
+    "measure-native-image-private-variable-slot-only.platform.txt": {
+      "bytes": 88,
+      "sha256": "3ce24d011bfaf926fe3b03214f850d8cd31210450f447f537b907c7a7d3e5bbd"
+    }
+  }
+}

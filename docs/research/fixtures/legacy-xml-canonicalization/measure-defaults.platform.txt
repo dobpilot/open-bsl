@@ -1,0 +1,6 @@
+legacy.default.default	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+legacy.default.undefined	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+legacy.default.numeric	<rejected>
+legacy.scalar.number	<rejected>
+legacy.scalar.boolean	<rejected>
+legacy.scalar.string	<rejected>

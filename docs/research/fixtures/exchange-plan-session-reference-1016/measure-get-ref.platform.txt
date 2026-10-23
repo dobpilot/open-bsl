@@ -1,0 +1,11 @@
+exchange.get_ref.uuid=539c38a6-9e4a-4d51-ad18-5040b97d7348
+exchange.get_ref.type=YES
+exchange.get_ref.alias=YES
+exchange.get_ref.empty=NO
+exchange.get_ref.filled=YES
+exchange.get_ref.zero=YES
+exchange.get_ref.new_filled=YES
+exchange.get_ref.new_distinct=YES
+exchange.get_ref.new_types=YES
+exchange.get_ref.bad_type=YES
+exchange.get_ref.bad_arity=YES

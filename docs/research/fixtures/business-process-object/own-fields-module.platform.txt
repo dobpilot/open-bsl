@@ -1,0 +1,6 @@
+business.fields.body.text.read.error	0
+business.fields.body.text.assign.error	1
+business.fields.body.flag.read.error	0
+business.fields.body.flag.assign.error	1
+business.fields.body.text.after-create	
+business.fields.body.flag.after-create	0

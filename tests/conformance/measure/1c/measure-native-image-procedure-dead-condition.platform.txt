@@ -1,0 +1,2 @@
+image.native.procedure.early_return.stop=10
+image.native.procedure.early_return.continue=20

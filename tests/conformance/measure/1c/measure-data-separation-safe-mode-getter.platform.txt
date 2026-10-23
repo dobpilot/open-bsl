@@ -1,0 +1,6 @@
+file.begin	data-separation-safe-mode-getter-1
+DATA.SAFE.ZERO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (БезопасныйРежимРазделенияДанных)
+DATA.SAFE.UNKNOWN	{<Unknown module>(1)}: Error calling context method (DataSeparationSafeMode): Wrong separator name НеизвестныйРазделитель
+DATA.SAFE.TWO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,59)}: Too many actual parameters (БезопасныйРежимРазделенияДанных)
+DATA.SAFE.ENGLISH	{<Unknown module>(1)}: Error calling context method (DataSeparationSafeMode): Wrong separator name UnknownSeparator
+file.end	data-separation-safe-mode-getter-1

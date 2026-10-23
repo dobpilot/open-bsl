@@ -1,0 +1,6 @@
+find.parent.omitted=filled
+find.parent.undefined=filled
+find.parent.empty=empty
+find.parent.group=filled
+find.parent.number=rejected
+find.parent.null=rejected

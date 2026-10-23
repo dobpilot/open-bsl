@@ -1,0 +1,3 @@
+image.native.reference.enter=1
+image.native.reference.result=12
+image.native.reference.argument=12

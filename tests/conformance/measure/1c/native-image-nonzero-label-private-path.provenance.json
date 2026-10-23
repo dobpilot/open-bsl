@@ -1,0 +1,27 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental three-path label control, completed native receipt",
+  "scope": "Public ordinary frame returns caller argument5. The private flags1 four-slot frame without DefPrm has label4 target32. Address0 selects a distinct return11; address32 returns7; fallthrough returns23. The paired images differ only in the private label target. No original application code is executed; flags2 procedures remain outside this routing measurement.",
+  "files": {
+    "native-image-nonzero-label-private-path.image": {
+      "bytes": 1008,
+      "sha256": "40e7687318331c20f15efc991ed07725ac291d1cad77d8f60a8d1bafa5340cf4"
+    },
+    "native-image-nonzero-label-private-path.Module.bin": {
+      "bytes": 2269,
+      "sha256": "772b533cd7d73b012516edc53652e994177c01606ac9870449043e93c73e1569"
+    },
+    "measure-native-image-nonzero-label-private-path.bsl": {
+      "bytes": 1469,
+      "sha256": "b307b0d8b56b9d147def54a611be885f46e1c742b9e5d944e6e20e569f880502"
+    },
+    "measure-native-image-nonzero-label-private-path.platform.txt": {
+      "bytes": 331,
+      "sha256": "3169da4c13e8c665348e9dffa15a4afeb41a3eebb0b9a59a26a2637c01d1968d"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-nonzero-label-path-1010-v1"
+  }
+}

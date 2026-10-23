@@ -1,0 +1,5 @@
+ROOT	EnumDataCompositionSettingsRefreshMethod
+TYPE	DataCompositionSettingsRefreshMethod
+FULL	Full
+CHECK	Check accessibility
+ALIASES	PASS

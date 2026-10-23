@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental single-bit frame entry control, complete native receipt",
+  "scope": "Only flag in slot6 changes5117->5109 (bit8 cleared) relative to failed slot-six. Other eleven descriptors ordinary, all external_slot0, parameter_count3/noDefPrm, empty body/initializer14/N7 unchanged. This is a synthetic flag comparison, not correction of the original declaration.",
+  "files": {
+    "native-image-twelve-frame-object-slot-six-clear-eight.image": {
+      "bytes": 1459,
+      "sha256": "cb627cf08fa95f5706159731cb455be4e1667effdfb8bb048278d1088f111312"
+    },
+    "native-image-twelve-frame-object-slot-six-clear-eight.Module.bin": {
+      "bytes": 2720,
+      "sha256": "ccb5c6fe81b993523acd92fdc0370ed905f0e1aced2dd7639f0c0f1a721aa5eb"
+    },
+    "measure-native-image-twelve-frame-object-slot-six-clear-eight.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "measure-native-image-twelve-frame-object-slot-six-clear-eight.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-object-slot-six-clear-eight.log"
+  }
+}

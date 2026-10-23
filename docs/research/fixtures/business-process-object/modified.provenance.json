@@ -1,0 +1,73 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_date": "2026-10-07",
+  "controls": [
+    {
+      "script": "modified.bsl",
+      "lines": 21,
+      "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+      "metadata_provenance": "fill-enabled.provenance.json",
+      "object_module": "empty"
+    },
+    {
+      "script": "modified-section.bsl",
+      "lines": 10,
+      "infobase": "/tmp/open-bsl-business-process-sections-1006-ib",
+      "metadata_provenance": "tabular-section.provenance.json",
+      "object_module": "empty"
+    },
+    {
+      "script": "modified-module.bsl",
+      "lines": 4,
+      "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+      "metadata_provenance": "fill-enabled.provenance.json",
+      "object_module": "modified-module-object.bsl"
+    },
+    {
+      "script": "modified-failure.bsl",
+      "lines": 7,
+      "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+      "metadata_provenance": "fill-enabled.provenance.json",
+      "object_module": "empty"
+    }
+  ],
+  "observations": "All 42 complete native lines replay through acquired BP attribute/section metadata. The failure-named probe did not fail: array assignment and filling were accepted, and this actual result is retained. Extra-property mutations do not mark the object; assignments of equal values do; Read replaces the modification generation so previous section aliases cannot dirty it. The task relation in the replay uses an explicit synthetic SchemaStorage fixture matching the separately observed SDK schema shape; it is not claimed to be extracted native SchemaStorage bytes.",
+  "files": {
+    "modified.bsl": {
+      "bytes": 5930,
+      "sha256": "90827a14ca2049e4ee6ae7b5f805c2ca86b9bf2f7e34c4b729148d93452b0850"
+    },
+    "modified.platform.txt": {
+      "bytes": 664,
+      "sha256": "b99ec866c65dfb6b3ee423a2aa3139ca7e9fd642b06448e91a540d6c34a6df8c"
+    },
+    "modified-section.bsl": {
+      "bytes": 2985,
+      "sha256": "0b9e1e0836d28dd40f1f671445d13dd3ad2738117fe55fe86f9094abfa295f59"
+    },
+    "modified-section.platform.txt": {
+      "bytes": 361,
+      "sha256": "e8111e25524b50b59fc4d017796dcf24960b7f239cc78c2d002913459ee5a11a"
+    },
+    "modified-module.bsl": {
+      "bytes": 1194,
+      "sha256": "3b162e733ceab4bd0400e148c295246608c4a9f87a4cc07d13e9f0e760ac8884"
+    },
+    "modified-module.platform.txt": {
+      "bytes": 156,
+      "sha256": "c3293ffdec226fa42807e06f82c0fa5af47fcd02ef63e18dc47a94a03dfc70ae"
+    },
+    "modified-failure.bsl": {
+      "bytes": 2171,
+      "sha256": "4bd1db1125d69fecd2a0bdecef4844c4dff86ee959c89856a54f2f76f2e16133"
+    },
+    "modified-failure.platform.txt": {
+      "bytes": 276,
+      "sha256": "682e4cdaab24298ebb9f2e642f9cea03b4d94c9311aa85e75b6ce9eb9a85b8fa"
+    },
+    "modified-module-object.bsl": {
+      "bytes": 876,
+      "sha256": "fb087e9be9975ee9bedadcea615fdc019981c1d7f1c7098ebb133a2575e3bbd1"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+text-template.xdto=<TextDocument xmlns="http://v8.1c.ru/8.1/data/txtedt" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<content>Контроль &amp; &lt;тег&gt;
+Вторая строка</content>
+</TextDocument>

@@ -1,0 +1,14 @@
+[
+  {
+    "database": "demo",
+    "exit_code": 0
+  },
+  {
+    "database": "buh",
+    "exit_code": 0
+  },
+  {
+    "database": "unf",
+    "exit_code": 0
+  }
+]

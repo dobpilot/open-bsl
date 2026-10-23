@@ -1,0 +1,8 @@
+image.native.short_circuit32.and.false.result=0
+image.native.short_circuit32.and.false.counter=0
+image.native.short_circuit32.and.true.result=1
+image.native.short_circuit32.and.true.counter=1
+image.native.short_circuit32.or.false.result=1
+image.native.short_circuit32.or.false.counter=1
+image.native.short_circuit32.or.true.result=1
+image.native.short_circuit32.or.true.counter=0

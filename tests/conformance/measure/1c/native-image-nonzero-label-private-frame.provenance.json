@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental finite nonzero-label control, completed native receipt",
+  "scope": "Public ordinary frame jumps at pc24 to32. Private four-slot flags1 frame without DefPrm jumps at same pc24 to32. Only its label target changes from the zero-label control. Falling through pc24 would return sentinel Const[1]=23. Both entries terminate; no original application code is executed. This does not establish original flags2 procedure behavior.",
+  "files": {
+    "native-image-nonzero-label-private-frame.image": {
+      "bytes": 979,
+      "sha256": "fcc4513ae78d561478c98ed3558d4a9fabe77eee2b93f06dfe6a92f1feb2a0c7"
+    },
+    "native-image-nonzero-label-private-frame.Module.bin": {
+      "bytes": 2240,
+      "sha256": "4dc967876c87dc99b52a4e59a3ab9bb50ff04f51f52e93782274091b1b53a6da"
+    },
+    "measure-native-image-nonzero-label-private-frame.bsl": {
+      "bytes": 1496,
+      "sha256": "1fea40e95025837adcfc5745a17432847f398cff29e4d87c50783f4308911e7a"
+    },
+    "measure-native-image-nonzero-label-private-frame.platform.txt": {
+      "bytes": 354,
+      "sha256": "56b48dc635dcc94856df2454ae829834e440483de7db8ee98cd5da52e2dd5ad9"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-nonzero-label-private-1010-v1"
+  },
+  "interpretation": "Non-discriminating control: wrapper reads an uninitialized local instead of returning the private result. The Undefined receipt is not evidence about private jump behavior; do not use as a label-semantic oracle."
+}

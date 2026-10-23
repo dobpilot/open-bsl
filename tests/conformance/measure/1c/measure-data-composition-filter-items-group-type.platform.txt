@@ -1,0 +1,4 @@
+AND	AND group	PASS
+OR	OR group	PASS
+NOT	NOT group	PASS
+TYPE	DataCompositionFilterItemsGroupType

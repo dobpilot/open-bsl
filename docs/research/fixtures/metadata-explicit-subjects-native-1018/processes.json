@@ -1,0 +1,22 @@
+[
+  {
+    "label": "dump",
+    "exit_code": 0,
+    "seconds": 7.52
+  },
+  {
+    "label": "load",
+    "exit_code": 0,
+    "seconds": 1.52
+  },
+  {
+    "label": "admin",
+    "exit_code": 0,
+    "seconds": 1.47
+  },
+  {
+    "label": "deny",
+    "exit_code": 0,
+    "seconds": 1.52
+  }
+]

@@ -1,0 +1,9 @@
+business.new-ref-invalid.task	rejected
+business.new-ref-invalid.task.unchanged	1
+business.new-ref-invalid.string	rejected
+business.new-ref-invalid.string.unchanged	1
+business.new-ref-invalid.number	rejected
+business.new-ref-invalid.number.unchanged	1
+business.new-ref-invalid.generated.ru	1
+business.new-ref-invalid.generated.en	1
+business.new-ref-invalid.empty.aliases	1

@@ -1,0 +1,10 @@
+{
+  "source": "BUH original Config resources + complete native XML export, see buh-business-process-attributes/full-config-native-receipts.json",
+  "platform": "1C 8.3.27.2342",
+  "class_guid": "bc587f20-35d9-11d6-a3c7-0050bae0a776",
+  "object_guid": "4390326e-700d-4708-bc07-83b90394bc0e",
+  "files_sha256": {
+    "configuration.deflate": "5937531752f4fa8cde2ffdefa5194e22c35bbef9a728d817209a237d0c6ce89a",
+    "Sequence.xml": "62b7c690438f77c1cba6283a4af34afaf69e661312261ebe4d585f8142d14898"
+  }
+}

@@ -1,0 +1,5 @@
+ROOT	EnumBoundaryType
+TYPE	BoundaryType
+INCLUDING	Including
+EXCLUDING	Excluding
+ALIASES	PASS

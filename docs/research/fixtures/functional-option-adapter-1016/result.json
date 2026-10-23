@@ -1,0 +1,16 @@
+{
+  "actual_postgres_passed": true,
+  "privileged_reads": 4,
+  "ordinary_denials": 4,
+  "observed_sql_data_reads": 4,
+  "native_receipt": "tests/conformance/measure/1c/measure-functional-option-rights.platform.txt",
+  "scope": "Native constant metadata and privilege flags; synthetic physical schema and role with Read=false. Direct and ordinary option reads denied before and after both aliases of privileged option. Other functional-option sources and broader RLS are not certified.",
+  "initial_attempt": "Failed in the new harness assertion because SDK permission diagnostics are English, not Russian. The raw denied result was correct; the assertion was made specific to the actual denied principal. Existing tests were not edited.",
+  "root_gates": "all_passed",
+  "root_test_totals": {
+    "passed": 3805,
+    "failed": 0,
+    "ignored": 1,
+    "result_blocks": 577
+  }
+}

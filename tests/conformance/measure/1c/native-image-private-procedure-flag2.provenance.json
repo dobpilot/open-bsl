@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-local-call.image",
+  "change": "Only private procedure flags changed from 0 to 2; instructions and reference parameter unchanged",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-procedure-flag2.image": {
+      "bytes": 350,
+      "sha256": "f3cc9fe278b84c3cea39fa1256d5de3f7d50fe95a962483b4746d8c170f745b6"
+    },
+    "native-image-private-procedure-flag2.Module.bin": {
+      "bytes": 1773,
+      "sha256": "637fabfb4dbe63c47eb7217333e147e05aa7f210e9a2ec39e488fdebe6c404ff"
+    },
+    "measure-native-image-private-procedure-flag2.bsl": {
+      "bytes": 589,
+      "sha256": "2011e4bef2924a9dd8cf6b969a4c84993bf4906ff3e588ce80c36e66987d408d"
+    },
+    "measure-native-image-private-procedure-flag2.platform.txt": {
+      "bytes": 82,
+      "sha256": "8054f915e944a848172b20fdb85221ce6e7dc749f286a8909919fe3db9e1eb20"
+    }
+  }
+}

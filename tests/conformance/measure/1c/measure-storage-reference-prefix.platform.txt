@@ -1,0 +1,14 @@
+storage.prefix.source={"#",f4f1e787-e5b3-59af-ae48-c43f0c92e2c3,53:abcd0123456789ab4321123412345678}
+storage.prefix.0=Yes:Yes
+storage.prefix.8=Yes:Yes
+storage.prefix.53=Yes:Yes
+storage.prefix.54=Yes:Yes
+storage.prefix.999999=Yes:Yes
+storage.prefix.-1=Yes:Yes
+storage.prefix.text=ERROR
+storage.prefix.=ERROR
+storage.prefix.4294967296=Yes:Yes
+storage.prefix.+1=Yes:Yes
+storage.prefix.1.5=ERROR
+storage.prefix.1e2=ERROR
+storage.prefix.00053=Yes:Yes

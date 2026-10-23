@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental original-descriptor context control, incomplete timeout; no oracle",
+  "scope": "Original twelve flags/external_slot0, parameter count3/noDefPrm, actual first S constant and nine exact global descriptors. Private body remains empty, explicit initializer14; original application code and referenced configuration common modules are absent. This preserves descriptors, not full linked configuration environment.",
+  "files": {
+    "native-image-twelve-frame-object-context.image": {
+      "bytes": 1920,
+      "sha256": "bc1933c3886df9de5bcb11bc726773cf8429eaae63ff7edd8c206766bd02d75a"
+    },
+    "native-image-twelve-frame-object-context.Module.bin": {
+      "bytes": 3181,
+      "sha256": "fb6ba88e6c13e45702228b3b1cdaae8413e771d73839b7d52a0a1f8349973e7b"
+    },
+    "measure-native-image-twelve-frame-object-context.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "timeout",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-context.log",
+    "interpretation": "No complete output. Referenced configuration common modules are absent; this is not a fully linked original environment."
+  }
+}

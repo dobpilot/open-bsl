@@ -1,0 +1,8 @@
+document.fill.whitespace.undefined.before=[]:[]
+document.fill.whitespace.undefined.after=[]:[]:[ ]:[default]
+document.fill.whitespace.empty.before=[]:[]
+document.fill.whitespace.empty.after=[]:[]:[ ]:[default]
+document.fill.whitespace.values.before=[]:[]
+document.fill.whitespace.values.after=[]:[]:[ ]:[default]
+document.fill.whitespace.disabled.before=[]:[]
+document.fill.whitespace.disabled.after=[]:[]:[ ]:[]

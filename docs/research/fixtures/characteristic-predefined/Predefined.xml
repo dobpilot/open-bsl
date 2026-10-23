@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PredefinedData xmlns="http://v8.1c.ru/8.3/xcf/predef" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="ChartOfCharacteristicTypesPredefinedItems" version="2.20">
+    <Item id="9b6065e7-092d-4be9-bed8-5b580763721c">
+        <Name>Основной</Name>
+        <Code>MAIN</Code>
+        <Description>Основной</Description>
+        <IsFolder>false</IsFolder>
+        <Type><v8:Type>xs:string</v8:Type></Type>
+    </Item>
+</PredefinedData>

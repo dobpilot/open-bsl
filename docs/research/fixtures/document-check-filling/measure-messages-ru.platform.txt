@@ -1,0 +1,5 @@
+document.check.messages-ru.empty	0
+document.check.messages-ru.empty.item	Date|Поле "Дата" не заполнено
+document.check.messages-ru.empty.item	Запасы|Не введено ни одной строки в список "Запасы"
+document.check.messages-ru.row	0
+document.check.messages-ru.row.item	Запасы[0].НомерВариантаКП|Не заполнена колонка "НомерВариантаКП" в строке 1 списка "Запасы"

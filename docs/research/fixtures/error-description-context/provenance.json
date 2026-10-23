@@ -1,0 +1,20 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_on": "2026-10-07",
+  "source": "native platform runs in an isolated file infobase; async runs on client, other controls on server",
+  "files": {
+    "ObjectModule.bsl": "0c5017f2848f54e1b4d438269a7a3de87d96f9068954296db93f58c2e0902190",
+    "async.bsl": "41005b247d35384e0907c88ed4c03cd75f562a160faf710c7d62e74b6e8e5813",
+    "async.platform.txt": "bbbda5baeb9488963e7cf27d67d63f18a576a76640e2bfd69401396a99faa645",
+    "dynamic.bsl": "bf79b16e99aac94d43f96951ceda0cb3a5d634adc33ceb20de089e1043538d9b",
+    "dynamic.platform.txt": "b89c2672d2de895a64e41226a11a347d49152a313ef07479c0c08181099827de",
+    "instance.bsl": "7cee10d0244b9c7a9c86e74964ac4dee28d0a6ab1982918f472c924b5991f465",
+    "instance.platform.txt": "92aa99769a1c1e9cabbcf2fba6509c99cda0dc0f37c7ec9c32713a23f694bb77",
+    "measure.bsl": "36bfbe183a8944f6e9dcd440fb49e7ca53a45182d0e37c4db25a92fb250f6673",
+    "measure.platform.txt": "069740953067fc0b01eb39a4f34d5b901154e1f89e295660a29d863e07488295",
+    "nonlocal-exits.bsl": "7db6218cee187b4116db0dc52c3ff1ea163567bee2b51344daee50152ed2d091",
+    "nonlocal-exits.platform.txt": "0aec0e4010edcae064ce438279ab0640919d5ace06881df74960000959a08522",
+    "presentation.bsl": "c2898cf2ab2508538ef139e3463c7faacbaabd5684b65da4fcff12d7aa63f7ab",
+    "presentation.platform.txt": "b105e0f72296dc93b3f2a333909aaf575c095d16485829a8268ae018f88399f5"
+  }
+}

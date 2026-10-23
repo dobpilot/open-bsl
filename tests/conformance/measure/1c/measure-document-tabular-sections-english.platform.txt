@@ -1,0 +1,13 @@
+document.section.type=Документ табличная часть: Запасы
+document.section.initial=0
+document.section.row.type=Документ табличная часть строка: Запасы
+document.section.row.initial=1:Нет:0
+document.section.unload=Да:1:3
+document.section.unload.column=LineNumber
+document.section.unload.column=ТипНоменклатурыЗапас
+document.section.unload.column=НомерВариантаКП
+document.section.unload.row=1:2
+document.section.unload.copy=2
+document.section.isolation=0
+document.section.delete=2:1
+document.section.clear=0

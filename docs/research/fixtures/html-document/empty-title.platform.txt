@@ -1,0 +1,2 @@
+html.empty.title.children	0
+html.empty.title.output	<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"><html></html>

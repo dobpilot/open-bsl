@@ -1,0 +1,2 @@
+document.storage.preserve.string=String:[existing]
+document.storage.preserve.undefined=Undefined:[]

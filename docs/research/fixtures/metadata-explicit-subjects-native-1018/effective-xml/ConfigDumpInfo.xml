@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ConfigDumpInfo xmlns="http://v8.1c.ru/8.3/xcf/dumpinfo" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" format="Hierarchical" version="2.20">
+	<ConfigVersions>
+		<Metadata name="Catalog.ВладелецПробы" id="1316b080-3b2c-501b-ace3-a1234a3fedd1" configVersion="76ae56bd44a24c46a6fc6b98bdc5520100000000">
+			<Metadata name="Catalog.ВладелецПробы.Attribute.ИскомоеЗначение" id="26069638-d009-5163-a17d-f3603d8cd655"/>
+		</Metadata>
+		<Metadata name="Configuration.Configuration" id="26c30ece-33b5-498a-b409-a91a046ba66b" configVersion="2de45b7c14e1ce4aa7b052e7d999493400000000"/>
+		<Metadata name="Configuration.Configuration.ManagedApplicationModule" id="e2267f2f-daf0-49f2-b383-c9bc3ebe5df0.6" configVersion="927c7bb4bb779444a3b75e144701863100000000"/>
+		<Metadata name="Constant.РежимПеречисленияПробы" id="927c63c3-0958-497d-addd-b1f0af4b6b8d" configVersion="b0c92b16ebd09340b1f3ee417913a69000000000"/>
+		<Metadata name="DataProcessor.Замеры" id="ff92317d-71e7-4664-a13a-18bd31fd3701" configVersion="375b5c484509eb41809e87f7a5ed96c000000000"/>
+		<Metadata name="DataProcessor.Замеры.Form.Форма" id="8081de47-60ab-4047-8c98-1e22e2725431" configVersion="d6ec83368efd2b42ab6271e8489ee09e00000000"/>
+		<Metadata name="DataProcessor.Замеры.Form.Форма.Form" id="8081de47-60ab-4047-8c98-1e22e2725431.0" configVersion="78217fbb6daad54988651d572d83e15700000000"/>
+		<Metadata name="DataProcessor.Замеры.ObjectModule" id="ff92317d-71e7-4664-a13a-18bd31fd3701.0" configVersion="3ca6f6301ac0104fb0989ea95f01a9d300000000"/>
+		<Metadata name="Enum.EnumLegacyProbe" id="c143f002-c8de-45ef-8272-ca10ec452db4" configVersion="161a3c4690b46445a95c33199a0dd30d00000000">
+			<Metadata name="Enum.EnumLegacyProbe.EnumValue.Second" id="0a6c66ba-3403-4eae-bad0-66ce551f7082"/>
+			<Metadata name="Enum.EnumLegacyProbe.EnumValue.First" id="40ae3f99-8ef0-4819-8dff-e6701aab4cf4"/>
+		</Metadata>
+		<Metadata name="Language.English" id="63db5aee-c386-4dc8-ade0-98e46bbd7dc1" configVersion="43bfbcab2579a145a76ac2f3cf93c1b700000000"/>
+		<Metadata name="Role.RootAllow" id="9d3bec1a-c27a-4d3b-94e1-45dd6c85cf81" configVersion="98f8808423114c458b5bea7787be4a7300000000"/>
+		<Metadata name="Role.RootAllow.Rights" id="9d3bec1a-c27a-4d3b-94e1-45dd6c85cf81.0" configVersion="9b60177d2686bd48981fa53edab69a1900000000"/>
+		<Metadata name="Role.RootDeny" id="114a9841-1e1b-487a-8340-d833179eb15f" configVersion="a1db3fcb72497549a67936a237490f4200000000"/>
+		<Metadata name="Role.RootDeny.Rights" id="114a9841-1e1b-487a-8340-d833179eb15f.0" configVersion="272ed53089d3ea48ba1f709da26b5b6b00000000"/>
+		<Metadata name="Role.RootExtensionsOnly" id="ed972275-0811-47fd-87ba-35829f3b2a8c" configVersion="8ce374dd33a0cd4bb3b2bd2696d4bb9d00000000"/>
+		<Metadata name="Role.RootExtensionsOnly.Rights" id="ed972275-0811-47fd-87ba-35829f3b2a8c.0" configVersion="30fecd1cafbe3f4cb576bbddcb7e72e800000000"/>
+		<Metadata name="Role.RootExternalProcessorOnly" id="7a97c40f-71ea-432b-905e-51a2c514ea45" configVersion="189e6cb382da3846a4af8c3f05daaef800000000"/>
+		<Metadata name="Role.RootExternalProcessorOnly.Rights" id="7a97c40f-71ea-432b-905e-51a2c514ea45.0" configVersion="28368eec666c3047add73999d97556e400000000"/>
+		<Metadata name="Role.RootExternalReportOnly" id="66c98cca-f7c2-483c-b3ae-36c18a8e5e69" configVersion="5abe385581550c488739d9f2aaa5ffb500000000"/>
+		<Metadata name="Role.RootExternalReportOnly.Rights" id="66c98cca-f7c2-483c-b3ae-36c18a8e5e69.0" configVersion="60a146a211123941aba65ce8ec24ac1c00000000"/>
+		<Metadata name="Role.RootSaveOnly" id="b1df1c9b-a628-4963-8ed3-fb0f314688b9" configVersion="2f1ffb0805813b4a9a59fbe9290e932400000000"/>
+		<Metadata name="Role.RootSaveOnly.Rights" id="b1df1c9b-a628-4963-8ed3-fb0f314688b9.0" configVersion="ba5c370c05f15848a751b5015ea6cb8900000000"/>
+	</ConfigVersions>
+</ConfigDumpInfo>

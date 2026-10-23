@@ -1,0 +1,4 @@
+business.check.alias.ru	1
+business.check.alias.en	1
+business.check.alias.ru-folded	1
+business.check.alias.en-folded	1

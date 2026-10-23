@@ -1,0 +1,22 @@
+html.document.node.name	#document
+html.document.parent.undefined	1
+html.document.children	2
+html.root.parent.document	1
+html.body.parent.root	1
+html.text.parent.body	1
+html.text.owner.document	1
+html.child.name	html
+html.child.type	DOM document type definition
+html.child.kind	1:0
+html.child.parent	1
+html.child.name	html
+html.child.type	HTML Marking element
+html.child.kind	0:1
+html.child.parent	1
+html.type.document	1
+html.type.body	1
+html.type.html	HTML Marking element
+html.type.head	HTML Title element
+html.type.title	HTML element
+html.type.div	HTML Block element
+html.type.br	HTML element

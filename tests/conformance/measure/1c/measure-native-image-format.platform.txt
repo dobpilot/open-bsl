@@ -1,0 +1,10 @@
+image.native.format.date=29.02.2024
+image.native.format.time=12:34:56
+image.native.format.number=1234567.89
+image.native.format.grouped=1234567.89
+image.native.format.grouped.direct=1234567.89
+image.native.format.true=да
+image.native.format.false=нет
+image.native.format.string=body
+image.native.format.undefined=
+image.native.format.source_undefined=1

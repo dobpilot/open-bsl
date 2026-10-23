@@ -1,0 +1,11 @@
+business.exchange.load.default	0
+business.exchange.autofill.default	1
+business.exchange.alias.load	1
+business.exchange.modified	0
+business.exchange.read.load	1
+business.exchange.read.autofill	0
+business.exchange.read.alias.load	0
+business.exchange.read.alias.autofill	1
+business.exchange.other.load	0
+business.exchange.other.autofill	1
+business.exchange.readonly	rejected

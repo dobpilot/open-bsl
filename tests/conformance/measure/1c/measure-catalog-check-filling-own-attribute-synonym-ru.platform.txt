@@ -1,0 +1,8 @@
+catalog.own.language=en
+catalog.own.system_language=ru
+catalog.own.body=EMPTY:ERROR
+catalog.own.empty=FALSE
+catalog.own.input=FALSE:2:Description:ПроверяемаяСтрока
+catalog.own.message=Поле "Own attribute title" не заполнено
+catalog.own.field=ПроверяемаяСтрока
+catalog.own.filled=TRUE

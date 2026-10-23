@@ -1,0 +1,6 @@
+ROOT	EnumSpreadsheetDocumentShiftType
+TYPE	SpreadsheetDocumentShiftType
+NONE	No shift
+VERTICAL	Vertically
+HORIZONTAL	Horizontally
+ALIASES	PASS

@@ -1,0 +1,47 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_date": "2026-10-07",
+  "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+  "metadata_provenance": "fill-enabled.provenance.json",
+  "help_documents": [
+    "platform-syntax-help:syntax-context:objects/catalog125/catalog702/object707/methods/GetNewObjectRef2286.html",
+    "platform-syntax-help:syntax-context:objects/catalog125/catalog702/object707/methods/SetNewObjectRef1893.html"
+  ],
+  "observations": "13 qualified + 6 module + 9 invalid/factory native lines. Pending reference starts typed and empty; assignment does not change Ref or Modified and survives Read. Empty owner reference is accepted; Undefined, task reference, string and number are rejected without replacing the pending reference. Both methods reject initialization calls. Manager GetRef accepts an explicit UUID or no argument; both EmptyRef aliases agree. All 28 lines are replayed successfully through the runtime adapter using SDK-acquired metadata and an explicit synthetic SchemaStorage task binding.",
+  "files": {
+    "new-reference.bsl": {
+      "bytes": 4263,
+      "sha256": "c64051f9dc643994038d09ff9e93f61cd8f9887d6b3583a4babb613691547f61"
+    },
+    "new-reference.platform.txt": {
+      "bytes": 440,
+      "sha256": "69ec9634bf36e4a2816656ec54c6836cff7aaa4c665d460818d123486037ff66"
+    },
+    "new-reference-module.bsl": {
+      "bytes": 1844,
+      "sha256": "bb2227a05345c1f688dc2be163975505bd7cb0ce6100bb02c145064d8c9d1556"
+    },
+    "new-reference-module.platform.txt": {
+      "bytes": 248,
+      "sha256": "0f9bfcf0c681fea9346535b906f5538ad03a3996657a910beaacaa8ed4f7eee4"
+    },
+    "new-reference-module-object.bsl": {
+      "bytes": 1412,
+      "sha256": "c2816fe0961737ff21ca6f6a3a647b69f1302b70228ffef2987417a0c63df150"
+    },
+    "new-reference-invalid.bsl": {
+      "bytes": 3161,
+      "sha256": "679c446649730528a3c4ca16e2c13ffeb87078f373c5f7d0b74362997a130940"
+    },
+    "new-reference-invalid.platform.txt": {
+      "bytes": 372,
+      "sha256": "69ec6029b26a0596f83b5ebe45e8a7d160633940f6b4abb9603d88dfd7602eff"
+    }
+  },
+  "runtime_replay": {
+    "lines": 28,
+    "result": "passed",
+    "test": "native_business_process_pending_reference_and_factories_match",
+    "schema_storage": "explicit synthetic task binding; not extracted from the native infobase"
+  }
+}

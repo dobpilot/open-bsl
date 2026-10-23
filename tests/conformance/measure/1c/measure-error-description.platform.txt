@@ -1,0 +1,10 @@
+file.begin	error-description-1
+ERROR.DESCRIPTION.OUTSIDE	
+ERROR.DESCRIPTION.ENGLISH	
+ERROR.DESCRIPTION.ONE	<ошибка>
+ERROR.DESCRIPTION.INSIDE	{DataProcessor.Замеры.Form.Форма.Form(53)}: маркер ошибки
+ERROR.DESCRIPTION.AFTER	
+ERROR.DESCRIPTION.OUTER.BEFORE	{DataProcessor.Замеры.Form.Форма.Form(59)}: внешняя ошибка
+ERROR.DESCRIPTION.INNER	{DataProcessor.Замеры.Form.Форма.Form(63)}: внутренняя ошибка
+ERROR.DESCRIPTION.OUTER.AFTER	{DataProcessor.Замеры.Form.Форма.Form(59)}: внешняя ошибка
+file.end	error-description-1

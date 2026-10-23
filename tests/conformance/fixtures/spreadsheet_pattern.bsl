@@ -1,0 +1,10 @@
+Сообщить("alias=" + Строка(?(ТипУзораТабличногоДокумента.БезУзора = SpreadsheetDocumentPatternType.WithoutPattern, "YES", "NO")));
+Сообщить("mixed=" + Строка(?(типузоратабличногодокумента.безузора = spreadsheetdocumentpatterntype.withoutpattern, "YES", "NO")));
+Сообщить("presentation=" + Строка(Строка(ТипУзораТабличногоДокумента.БезУзора)));
+Сообщить("value.type=" + Строка(ТипЗнч(SpreadsheetDocumentPatternType.WithoutPattern)));
+Сообщить("lookup.ru=" + Строка(Тип("ТипУзораТабличногоДокумента")));
+Сообщить("lookup.en=" + Строка(Тип("SpreadsheetDocumentPatternType")));
+Сообщить("enum.type=" + Строка(ТипЗнч(ТипУзораТабличногоДокумента)));
+Сообщить("enum.presentation=" + Строка(Строка(ТипУзораТабличногоДокумента)));
+Сообщить("self.equal=" + Строка(?(SpreadsheetDocumentPatternType.WithoutPattern = SpreadsheetDocumentPatternType.WithoutPattern, "YES", "NO")));
+Сообщить("completed=YES");

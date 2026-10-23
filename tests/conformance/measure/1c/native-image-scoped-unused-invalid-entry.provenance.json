@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed native loading control with uncalled invalid-entry declaration",
+  "scope": "Whole baseline three callable declarations untouched. Fourth uncalled flags3 declaration has three parameters, entry79 beyond63 commands, original Proc37 variable flags and declared116/actual24 count, external_slot0, missing defaults and50zero labels. This tests loading only, not calling or permission to omit the declaration.",
+  "files": {
+    "native-image-scoped-unused-invalid-entry.image": {
+      "bytes": 2630,
+      "sha256": "305c0354b87f78681166503c75ef56548e2618ad431128fe412d13414b547648"
+    },
+    "native-image-scoped-unused-invalid-entry.Module.bin": {
+      "bytes": 3891,
+      "sha256": "0b9bf2923fb5e0afd049f2f99df58b1c645affed0df2a6d21da1919ff60cfaef"
+    },
+    "measure-native-image-scoped-unused-invalid-entry.bsl": {
+      "bytes": 1407,
+      "sha256": "9334510431e152b7f7152ecdb4a6e3c41c9801c81582abe7d2bcbe13b8e6c927"
+    },
+    "measure-native-image-scoped-unused-invalid-entry.platform.txt": {
+      "bytes": 241,
+      "sha256": "fae1a97d77626b232ec082c386e8a8654123fdada630f9806edae3a95ce2da75"
+    }
+  },
+  "native_receipt_complete": true
+}

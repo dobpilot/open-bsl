@@ -1,0 +1,7 @@
+catalog.check.body=ERROR
+catalog.check.empty=FALSE
+catalog.check.code_only=FALSE
+catalog.check.description_only=TRUE
+catalog.check.filled=TRUE
+catalog.check.alias=TRUE
+catalog.check.arity=ERROR

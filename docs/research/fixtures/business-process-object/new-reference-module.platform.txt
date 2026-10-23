@@ -1,0 +1,6 @@
+business.new-ref-module.initialization	rejected|rejected
+business.new-ref-module.after.filled	0
+business.new-ref-module.own.assigned	1
+business.new-ref-module.modified	0
+business.new-ref-module.read.same	1
+business.new-ref-module.reference.empty	1

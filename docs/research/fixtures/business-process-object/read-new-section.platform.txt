@@ -1,0 +1,8 @@
+business.read-section.object.count	0
+business.read-section.alias.count	1
+business.read-section.old.text	row
+business.read-section.alias.add.object.count	0
+business.read-section.alias.add.number	2
+business.read-section.repeat.object.count	0
+business.read-section.repeat.alias.count	2
+business.read-section.clear.old.text	invalid

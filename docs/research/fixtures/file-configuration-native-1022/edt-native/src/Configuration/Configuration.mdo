@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Configuration xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="844357d3-1338-41f3-8138-b7d44e709992">
+  <name>Configuration</name>
+  <containedObjects classId="9cd510cd-abfc-11d4-9434-004095e12fc7" objectId="efca70f3-7466-4c01-b12b-f3d7cf96a7a5"/>
+  <containedObjects classId="9fcd25a0-4822-11d4-9414-008048da11f9" objectId="00d4adbc-fa64-4ef4-a6c4-0b5e2195747c"/>
+  <containedObjects classId="e3687481-0a87-462c-a166-9f34594f9bba" objectId="c3de3ef2-69ea-4867-8e5d-11e7b1d6a099"/>
+  <containedObjects classId="9de14907-ec23-4a07-96f0-85521cb6b53b" objectId="30ff326f-f85e-4c1c-ad68-fed5bfa6f6f9"/>
+  <containedObjects classId="51f2d5d8-ea4d-4064-8892-82951750031e" objectId="a840e8ac-290c-4cb9-ad9b-c0084b4eca76"/>
+  <containedObjects classId="e68182ea-4237-4383-967f-90c1e3370bc7" objectId="3de0eb04-9b2b-4ee8-916b-b6c113258c8e"/>
+  <containedObjects classId="fb282519-d103-4dd3-bc12-cb271d631dfc" objectId="7dc8acea-4664-44c1-a428-c3650a879121"/>
+  <configurationExtensionCompatibilityMode>8.3.27</configurationExtensionCompatibilityMode>
+  <defaultRunMode>ManagedApplication</defaultRunMode>
+  <usePurposes>PersonalComputer</usePurposes>
+  <usedMobileApplicationFunctionalities>
+    <functionality>
+      <use>true</use>
+    </functionality>
+    <functionality>
+      <functionality>OSBackup</functionality>
+      <use>true</use>
+    </functionality>
+  </usedMobileApplicationFunctionalities>
+  <defaultLanguage>Language.English</defaultLanguage>
+  <dataLockControlMode>Managed</dataLockControlMode>
+  <objectAutonumerationMode>NotAutoFree</objectAutonumerationMode>
+  <modalityUseMode>DontUse</modalityUseMode>
+  <synchronousPlatformExtensionAndAddInCallUseMode>DontUse</synchronousPlatformExtensionAndAddInCallUseMode>
+  <compatibilityMode>8.3.27</compatibilityMode>
+  <languages uuid="7a0b6c77-d103-4bfc-a161-3eec2be3798a">
+    <name>English</name>
+    <synonym>
+      <key>en</key>
+      <value>English</value>
+    </synonym>
+    <languageCode>en</languageCode>
+  </languages>
+  <commonTemplates>CommonTemplate.ТекстФайла</commonTemplates>
+  <commonTemplates>CommonTemplate.ТаблицаФайла</commonTemplates>
+  <commonModules>CommonModule.ЗамерыФоновыхЗаданийДвусторонние</commonModules>
+  <commonModules>CommonModule.ЗамерыФоновыхЗаданий</commonModules>
+  <commonModules>CommonModule.ЗамерыФоновыйСосед</commonModules>
+  <commonModules>CommonModule.ЗамерыСамоссылкиМодуля</commonModules>
+  <commonModules>CommonModule.ЗамерыЛенивойАрности</commonModules>
+  <commonModules>CommonModule.ЗамерыЗначенияМодуля</commonModules>
+  <commonModules>CommonModule.ЗамерыДинамическогоМодуля</commonModules>
+  <dataProcessors>DataProcessor.Замеры</dataProcessors>
+</mdclass:Configuration>

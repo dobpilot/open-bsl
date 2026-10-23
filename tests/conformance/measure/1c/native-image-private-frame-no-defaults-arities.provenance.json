@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental control, unsuccessful native run",
+  "change": "Four independent public wrappers call four private functions. Each private function has the four original descriptor flags 1338/0,1459/0,3091/0,3027/0 and only returns a distinct slot; each private declaration omits DefPrm. Slots 0/1 are called with zero actual arguments, slots 2/3 with two actual arguments. All arithmetic is NOP. Const[0] is 7; caller argument is 5. No original code is executed.",
+  "files": {
+    "native-image-private-frame-no-defaults-arities.image": {
+      "bytes": 1498,
+      "sha256": "b3b3b0512928c11b00f3f93ac64b2f648fa607302543e67dbdf178758fdd2e41"
+    },
+    "native-image-private-frame-no-defaults-arities.Module.bin": {
+      "bytes": 2759,
+      "sha256": "a00f2e396584caf95f9927a53da9839349afc36558aa171cf2f2c5ae5db62a7d"
+    },
+    "measure-native-image-private-frame-no-defaults-arities.bsl": {
+      "bytes": 2960,
+      "sha256": "0b6976d4da12efb2fb2d9ad4a5c6b469ddf6d6a01107e5105749a615126edc23"
+    }
+  },
+  "measurement": {
+    "exit_code": 1,
+    "infobase": "/tmp/bsl-private-arity-1009-v2",
+    "outcome": "Enterprise terminated with SIGSEGV before a complete receipt; this is not a BSL arity oracle. The preceding CREATEINFOBASE attempt failed with a working-directory lock."
+  }
+}

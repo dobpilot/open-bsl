@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental twelve-slot entry control, native process failure; no oracle",
+  "scope": "Same empty-body twelve-slot control, with one global Metadata descriptor added at index0. Const[0] remains numeric7. This is not the full original module context; no original body is executed.",
+  "files": {
+    "native-image-twelve-frame-entry-metadata.image": {
+      "bytes": 1525,
+      "sha256": "9a890a3aa1c7199bf6ab8266d7278dd486d01b3a9a81fb3fbba8f76da13d321a"
+    },
+    "native-image-twelve-frame-entry-metadata.Module.bin": {
+      "bytes": 2786,
+      "sha256": "b1fd1826cf8f654fca7250653055a3eb073019d595824f73be8ce46d23eb99ff"
+    },
+    "measure-native-image-twelve-frame-entry-metadata.bsl": {
+      "bytes": 922,
+      "sha256": "4892f2f2e08276c9c80886e736496c592f58846d56e93fb8b96afdeab00f29be"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-entry-metadata.log",
+    "interpretation": "The synthetic empty-body control does not preserve the original module environment. Failure does not establish the semantics or validity of the original frame."
+  }
+}

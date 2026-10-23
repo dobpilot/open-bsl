@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "complete native scoped initializer control",
+  "scope": "Retains all ordinary-shared-context declarations, variables, constants and23 method commands. Appends21 reachable original initializer instructions with branch/handler/short-circuit targets rebased; only infeasible original6659->2412 target maps to0. Initializer entry23, separate initializer/module End markers. Tests initializer and complete public/private method observations, not unsupported original private frames.",
+  "original_image_sha256": "e6b12a9ff23c3ae6d5a800e77b2cd76e43680eff664a33fbcbabb39065987824",
+  "files": {
+    "native-image-scoped-initializer.image": {
+      "bytes": 690,
+      "sha256": "a983776354ef5c82408691a41ba98b569a2a68df8702192777053b5aaf6bfc60"
+    },
+    "native-image-scoped-initializer.Module.bin": {
+      "bytes": 1951,
+      "sha256": "07696d76b847c6d54037a7ddbce83065004a66b5324a52a3c9ca581ae12be661"
+    },
+    "measure-native-image-scoped-initializer.bsl": {
+      "bytes": 1089,
+      "sha256": "48fd4bc839c227b80cd324a3d3d323325d98f7344573934fc38f09a804889c00"
+    },
+    "measure-native-image-scoped-initializer.platform.txt": {
+      "bytes": 156,
+      "sha256": "7b35d0c53003d0c84bf43f6e32d77712fab476f03f30953633a6f186e66d742f"
+    }
+  },
+  "measurement": "All four lines equal ordinary-shared-context baseline; module initializer executes before ordinary exports without changing result12, reference12 or private visibility refusal."
+}

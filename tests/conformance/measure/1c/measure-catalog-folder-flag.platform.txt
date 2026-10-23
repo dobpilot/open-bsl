@@ -1,0 +1,8 @@
+folder.body.read=NO
+folder.body.write=rejected
+folder.bare=NO
+folder.qualified=NO
+folder.alias=YES
+folder.type=YES
+folder.write=rejected
+folder.after=NO

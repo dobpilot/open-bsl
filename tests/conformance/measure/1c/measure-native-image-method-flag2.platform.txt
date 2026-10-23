@@ -1,0 +1,5 @@
+image.native.method_flag2.local.promise=1
+image.native.method_flag2.local.reference=15
+image.native.method_flag2.export_procedure.reference=14
+image.native.method_flag2.export_function.promise=1
+image.native.method_flag2.export_function.reference=18

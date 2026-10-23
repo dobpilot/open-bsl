@@ -1,0 +1,3 @@
+DONT	Do not change	LinkedValueChangeMode
+CLEAR	Clear	LinkedValueChangeMode
+ALIAS	Yes

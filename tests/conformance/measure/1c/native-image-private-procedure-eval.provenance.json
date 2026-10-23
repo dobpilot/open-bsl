@@ -1,0 +1,33 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-assembled supplemental native control, not compiler evidence",
+  "base": "native-image-private-procedure-flag2.image",
+  "change": "Public function invokes private procedure through opcode 109; full compilation diagnostic and caught outcome recorded separately",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-procedure-eval.image": {
+      "bytes": 399,
+      "sha256": "be6cc3ebf576f365eb1b985396cf1548af10a28fe7d510bd1e793d3abae95514"
+    },
+    "native-image-private-procedure-eval.Module.bin": {
+      "bytes": 1773,
+      "sha256": "e562c05b99275ab49fa53e55fa142f74cbdf156cfdc735dbab61fe2f00d4bde9"
+    },
+    "measure-native-image-private-procedure-eval.bsl": {
+      "bytes": 728,
+      "sha256": "06d1faec6fa1f9d3231a854d7f1b287c77f5047947f4a58365acc74ef719bbaa"
+    },
+    "measure-native-image-private-procedure-eval.platform.txt": {
+      "bytes": 259,
+      "sha256": "1d52f5650a146004515908637bb1d52ab99e4263c8131fa293ff2845b9831a5e"
+    },
+    "measure-native-image-private-procedure-eval-outcome.bsl": {
+      "bytes": 761,
+      "sha256": "a9763ef5aef17eac2f2778c9de358e5393160d88ac57dce0e449e44389cfac3f"
+    },
+    "measure-native-image-private-procedure-eval-outcome.platform.txt": {
+      "bytes": 80,
+      "sha256": "031b8c816f3e68e07d8942309701772b3a85eedcb3a82b089afb1763c8c07d52"
+    }
+  }
+}

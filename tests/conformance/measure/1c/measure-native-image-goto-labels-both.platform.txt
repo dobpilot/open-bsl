@@ -1,0 +1,2 @@
+image.native.goto_labels.both.first=42
+image.native.goto_labels.both.second=22

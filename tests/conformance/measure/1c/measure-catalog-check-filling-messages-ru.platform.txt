@@ -1,0 +1,5 @@
+catalog.messages.result=FALSE
+catalog.messages.count=1
+catalog.messages.text=Поле "Наименование" не заполнено
+catalog.messages.field=Description
+catalog.messages.path=

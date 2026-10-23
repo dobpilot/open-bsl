@@ -1,0 +1,10 @@
+Сообщить("alias=" + Строка(?(РасположениеОбластиПостроенияДиаграммы.УказываетсяРасположение = ChartPlotAreaPlacement.UseCoordinates, "YES", "NO")));
+Сообщить("mixed=" + Строка(?(расположениеобластипостроениядиаграммы.указываетсярасположение = chartplotareaplacement.usecoordinates, "YES", "NO")));
+Сообщить("presentation=" + Строка(Строка(РасположениеОбластиПостроенияДиаграммы.УказываетсяРасположение)));
+Сообщить("value.type=" + Строка(ТипЗнч(ChartPlotAreaPlacement.UseCoordinates)));
+Сообщить("lookup.ru=" + Строка(Тип("РасположениеОбластиПостроенияДиаграммы")));
+Сообщить("lookup.en=" + Строка(Тип("ChartPlotAreaPlacement")));
+Сообщить("enum.type=" + Строка(ТипЗнч(РасположениеОбластиПостроенияДиаграммы)));
+Сообщить("enum.presentation=" + Строка(Строка(РасположениеОбластиПостроенияДиаграммы)));
+Сообщить("self.equal=" + Строка(?(ChartPlotAreaPlacement.UseCoordinates = ChartPlotAreaPlacement.UseCoordinates, "YES", "NO")));
+Сообщить("completed=YES");

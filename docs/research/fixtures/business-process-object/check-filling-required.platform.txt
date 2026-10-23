@@ -1,0 +1,6 @@
+business.check.required.empty	0
+business.check.required.assigned	1
+business.check.required.other-empty	0
+business.check.required.flag-false	0
+business.check.required.flag-true-check	1
+business.check.required.reset	0

@@ -1,0 +1,39 @@
+{
+  "platform": "8.3.27.2342",
+  "infobase": "/tmp/open-bsl-xml-canonicalization-operation-1011-ib",
+  "observations": "Original UNF uses XMLCanonicalizingWriter and DOMCanonicalization. Native full-document control accepts the four legacy algorithms and rejects both Canonical XML 1.1 algorithms. Vendor Canonicalize page omits parameters; arity and lifecycle require further native controls. Completed guarded lifecycle control: Close new/closed and default empty writer return empty string; English aliases work; element includes its attributes and used namespace; XPathResult limits selected nodes; repeated canonicalization and unopened writer reject. Earlier lifecycle timeout is excluded from successful receipts. Isolated arity control: constructors zero arguments, SetString zero or one, Canonicalize two or three; sequential arity controls are retained separately and excluded because lifecycle contaminated them. Default and explicit Undefined use Canonical XML; numeric algorithm rejects; Number, Boolean and String XPathResult reject in the legacy workflow.",
+  "files": {
+    "measure.bsl": {
+      "bytes": 2314,
+      "sha256": "49621b03a4f1dbf20e8c3f39640630dbdf80302182165e0b455dfde2d5ac6675"
+    },
+    "measure.platform.txt": {
+      "bytes": 1010,
+      "sha256": "1a422b89df2aa64acd83398e0a2829952ef932754b29ce989a6b860b717bfd25"
+    },
+    "measure-contract.bsl": {
+      "bytes": 6018,
+      "sha256": "7b9391362d02c78b7095f0bd6fea4c039c28c8e3555c8bd0d0503c060f3e46e3"
+    },
+    "measure-contract.platform.txt": {
+      "bytes": 461,
+      "sha256": "ffb47682259a8c6edaa62094f41b7a2aef12eaf2e310b10984a9eeca89eac700"
+    },
+    "measure-arity.bsl": {
+      "bytes": 5936,
+      "sha256": "f5972d556a72b9f97737719e2f14fc67ca27f939f93f104d6d3e6293ef2e75d8"
+    },
+    "measure-arity.platform.txt": {
+      "bytes": 342,
+      "sha256": "944cd479ac0cc7c58196fd3f444131b838339a1af00dbc5d474458b2dff30557"
+    },
+    "measure-defaults.bsl": {
+      "bytes": 5462,
+      "sha256": "caa27823c69b4efc79fbd19112e227c17a6e8ff09fe558b7ab8a6ffb741f34e5"
+    },
+    "measure-defaults.platform.txt": {
+      "bytes": 423,
+      "sha256": "3f526ddae0b8a8baf8f80debaed737ae9a593689826e8ca763343e4f146f1d96"
+    }
+  }
+}

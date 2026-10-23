@@ -1,0 +1,14 @@
+formatted.ANSITXT.presentation	ANSITXT
+formatted.ANSITXT.type	FormattedDocumentFileType
+formatted.ANSITXT.alias	1
+formatted.HTML.presentation	HTML
+formatted.HTML.type	FormattedDocumentFileType
+formatted.HTML.alias	1
+formatted.PDF.presentation	PDF
+formatted.PDF.type	FormattedDocumentFileType
+formatted.PDF.alias	1
+formatted.TXT.presentation	TXT
+formatted.TXT.type	FormattedDocumentFileType
+formatted.TXT.alias	1
+formatted.bare.type	EnumFormattedDocumentFileType
+formatted.lookup.alias	1

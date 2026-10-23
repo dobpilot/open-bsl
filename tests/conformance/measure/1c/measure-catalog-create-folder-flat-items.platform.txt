@@ -1,0 +1,1 @@
+folder.create.flat_items.error={<Unknown module>(1)}: Error calling context method (CreateFolder): This catalog cannot contain groups!

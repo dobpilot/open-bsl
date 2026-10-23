@@ -1,0 +1,28 @@
+isolated-startup exit: 0 seconds: 1.32
+warning: skipped 2 unreadable Config resources: 172561c5-c3bf-4b95-850c-618fd89e947a.7: metadata offset 0: metadata is not valid UTF-8; 3ad08f4a-6202-4099-b6cc-bc116e6731a0.7: metadata offset 0: metadata is not valid UTF-8
+exchange.sdk.id=d4becac6-bf5f-4947-a734-c702d399d5fc; name=Some("ИнтегрированныеСистемы")
+exchange.sdk.id=b5c14196-5850-49a2-8f8a-1153f5f81e31; name=Some("МиграцияПриложений")
+exchange.sdk.id=9f4f6a62-7400-4692-a061-ca0c31e5056d; name=Some("ОбменБухгалтерияПредприятияДокументооборот20")
+exchange.sdk.id=0ce4c8a4-b20b-4550-bee3-f677e9ec64e9; name=Some("ОбменСообщениями")
+exchange.sdk.id=1749de6a-4b52-479d-8c11-b0b8482b216c; name=Some("ОбменУправлениеПредприятиемДокументооборот20")
+exchange.sdk.id=ef0bfd02-f6ae-485c-a013-3f61f3d17f8a; name=Some("ОбменУправлениеПроизводственнымПредприятиемДокументооборот20")
+exchange.sdk.id=e5afd547-6cd3-4238-938a-f5f82707ab05; name=Some("ОбменУправлениеТорговлейДокументооборот20")
+exchange.sdk.id=de623629-0dbd-4a2d-ab46-13adcfc0ed31; name=Some("ОбменУправлениеХолдингомДокументооборот20")
+exchange.sdk.id=3fc019d1-aec8-4835-96c5-3bbf43da0b94; name=Some("ОбновлениеИнформационнойБазы")
+exchange.sdk.id=d8114e12-8e86-4131-a67a-7fa177060f86; name=Some("СинхронизацияДанныхЧерезУниверсальныйФормат")
+exchange.sdk.id=2e34a025-50b5-496e-a8a8-08a87d513bae; name=Some("СинхронизацияКалендарей")
+exchange.sdk.id=7eaab0aa-cc89-42f7-902a-02540785e1db; name=Some("ОбменНСИСАрхивом")
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=d4becac6-bf5f-4947-a734-c702d399d5fc; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=b5c14196-5850-49a2-8f8a-1153f5f81e31; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=9f4f6a62-7400-4692-a061-ca0c31e5056d; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=0ce4c8a4-b20b-4550-bee3-f677e9ec64e9; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=1749de6a-4b52-479d-8c11-b0b8482b216c; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=ef0bfd02-f6ae-485c-a013-3f61f3d17f8a; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=e5afd547-6cd3-4238-938a-f5f82707ab05; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=de623629-0dbd-4a2d-ab46-13adcfc0ed31; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=3fc019d1-aec8-4835-96c5-3bbf43da0b94; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=d8114e12-8e86-4131-a67a-7fa177060f86; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=2e34a025-50b5-496e-a8a8-08a87d513bae; direct_items=14
+exchange.root.class=857c4a91-e5f4-4fac-86ec-787626f1c108; object=7eaab0aa-cc89-42f7-902a-02540785e1db; direct_items=14
+readonly.exchange_root=ok; startup_not_executed=true
+

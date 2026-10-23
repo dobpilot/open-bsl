@@ -1,0 +1,7 @@
+selection.type=YES
+selection.type.alias=YES
+selection.before.ref=accepted:
+selection.next=NO
+selection.next.again=NO
+selection.after.ref=accepted:
+selection.defaults=NO

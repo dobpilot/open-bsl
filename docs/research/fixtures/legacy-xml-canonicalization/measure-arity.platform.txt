@@ -1,0 +1,9 @@
+legacy.arity.dom-ctor-arg	rejected
+legacy.arity.writer-ctor-arg	rejected
+legacy.arity.canonicalize-zero	rejected
+legacy.arity.canonicalize-one	rejected
+legacy.arity.set-default	accepted
+legacy.arity.set-algorithm	accepted
+legacy.arity.canonicalize-two	accepted
+legacy.arity.canonicalize-three	accepted
+legacy.arity.canonicalize-four	rejected

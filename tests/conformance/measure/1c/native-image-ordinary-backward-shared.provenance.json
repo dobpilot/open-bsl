@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "complete native ordinary backward shared-label control",
+  "scope": "Only second ordinary function label target changes11 to3, before its entry8. Both declarations and independent label tables retained; driver calls both functions. This is the exact mutation currently rejected by the old outside-method negative test.",
+  "files": {
+    "native-image-ordinary-backward-shared.image": {
+      "bytes": 428,
+      "sha256": "37e154d5674896902612a9755ef2b1375a78901ebd33bd49f820153d19da0dea"
+    },
+    "native-image-ordinary-backward-shared.Module.bin": {
+      "bytes": 1773,
+      "sha256": "e207d93d0c5a526e7025fd2eddca98e55198bd8e428de0ac0ff38a36f6429afc"
+    },
+    "measure-native-image-ordinary-backward-shared.bsl": {
+      "bytes": 644,
+      "sha256": "d74eee6a542c5921fb2cf7002485661bd884bd993e87a9676f38f3a4784d4d01"
+    },
+    "measure-native-image-ordinary-backward-shared.platform.txt": {
+      "bytes": 79,
+      "sha256": "7bd56d288d7468aa727e222c56f7714823130444da13ab2136be499401e7c99c"
+    }
+  },
+  "measurement": "Both exported functions return42; two-line receipt complete on8.3.27.2342. The second label target3 is before entry8; this disproves the existing negative expectation for that exact mutation."
+}

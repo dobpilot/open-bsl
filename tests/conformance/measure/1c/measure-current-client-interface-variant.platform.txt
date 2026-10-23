@@ -1,0 +1,8 @@
+CURRENT	Taxi:ClientApplicationInterfaceVariant
+TAXI	Taxi:ClientApplicationInterfaceVariant
+VERSION_8_2	Version 8.2:ClientApplicationInterfaceVariant
+TAXI_ALIAS	Yes
+BACKGROUND	ClientApplicationInterfaceVariant:Taxi
+FUNCTION_ALIAS	ERROR
+SHORT_ALIAS	ERROR
+DOCUMENTED_ALIAS	Yes

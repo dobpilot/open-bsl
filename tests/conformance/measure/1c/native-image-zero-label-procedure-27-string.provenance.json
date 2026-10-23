@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed native string-alias private frame with27 zero labels",
+  "scope": "Private flags2 label table grows5 to27 zero entries and Const0 changes numeric7 to synthetic string СтрокаКадра. This isolates original Proc36 constant type with the previously measured frame. All instructions, callable declarations, native message-queue observations and caller arguments unchanged. Does not establish support for original procedure body or malformed declarations.",
+  "files": {
+    "native-image-zero-label-procedure-27-string.image": {
+      "bytes": 1620,
+      "sha256": "9852ca77937664b7662c52bc9d74c2ede41cd82af8df994310adc643ac21aee0"
+    },
+    "native-image-zero-label-procedure-27-string.Module.bin": {
+      "bytes": 2881,
+      "sha256": "212e8a7d58d5d851ccd91b900d27a3ce60ab179591fcdf719f1614349c50ada5"
+    },
+    "measure-native-image-zero-label-procedure-27-string.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-zero-label-procedure-27-string.platform.txt": {
+      "bytes": 388,
+      "sha256": "0778faa991f77a467b21dfa473a7bd64808eaec2dd3ffa46c2ce42c7fd4f39e9"
+    }
+  },
+  "native_receipt_complete": true
+}

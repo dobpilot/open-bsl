@@ -1,0 +1,2 @@
+image.shared-tail.result=5
+image.shared-tail.argument=5

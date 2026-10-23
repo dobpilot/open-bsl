@@ -1,0 +1,12 @@
+image.native.string_replace.repeat.result=XcXc
+image.native.string_replace.repeat.source=abcabc
+image.native.string_replace.overlap.result=Xa
+image.native.string_replace.overlap.source=aaa
+image.native.string_replace.unicode.result=явАбв
+image.native.string_replace.unicode.source=абвАбв
+image.native.string_replace.absent.result=abc
+image.native.string_replace.absent.source=abc
+image.native.string_replace.delete.result=cc
+image.native.string_replace.delete.source=abcabc
+image.native.string_replace.empty.result=abc
+image.native.string_replace.empty.source=abc

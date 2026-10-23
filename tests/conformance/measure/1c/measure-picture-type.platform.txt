@@ -1,0 +1,4 @@
+ABSOLUTE	Absolute	PictureType
+LIBRARY	From library	PictureType
+EMPTY	Empty	PictureType
+ALIAS	Yes

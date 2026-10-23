@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental scoped unreachable-target control, completed native seven-line receipt",
+  "scope": "Same three declarations and bodies as scoped-foreach-frame. Unreachable command62 targets command11 inside public setup expression, followed by module End63. Original resources are not modified.",
+  "files": {
+    "native-image-scoped-foreach-expression-target.image": {
+      "bytes": 1115,
+      "sha256": "a274888c7b7a31a5aced46d81e9a6f09e048d6d2e4513d994f62b1a4e7faf79a"
+    },
+    "native-image-scoped-foreach-expression-target.Module.bin": {
+      "bytes": 2376,
+      "sha256": "a79a58f591acffcb14ad5b8b1dbc3fa12b87994392407309216516d51f981b83"
+    },
+    "measure-native-image-scoped-foreach-expression-target.bsl": {
+      "bytes": 1407,
+      "sha256": "9334510431e152b7f7152ecdb4a6e3c41c9801c81582abe7d2bcbe13b8e6c927"
+    },
+    "measure-native-image-scoped-foreach-expression-target.platform.txt": {
+      "bytes": 241,
+      "sha256": "fae1a97d77626b232ec082c386e8a8654123fdada630f9806edae3a95ce2da75"
+    }
+  },
+  "native_receipt_complete": true
+}

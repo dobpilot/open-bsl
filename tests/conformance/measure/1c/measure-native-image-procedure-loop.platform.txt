@@ -1,0 +1,6 @@
+image.native.procedure_loop.iterate.sum=5
+image.native.procedure_loop.iterate.passes=3
+image.native.procedure_loop.empty.sum=0
+image.native.procedure_loop.empty.passes=0
+image.native.procedure_loop.skip.sum=99
+image.native.procedure_loop.skip.passes=0

@@ -1,0 +1,19 @@
+route.points.count	10
+route.points.same	Yes
+route.points.different	Yes
+route.points.type	Замер бизнес процесса(route point)
+route.points.text	Действие1
+route.points.filled	Yes
+route.points.member	Действие1
+route.points.member	Действие2
+route.points.member	Условие1
+route.points.member	Старт
+route.points.member	Завершение
+route.points.member	Выбор варианта1
+route.points.member	Разделение1
+route.points.member	Слияние1
+route.points.member	Обработка1
+route.points.member	Вложенный процесс1
+route.points.iteration	10
+route.points.write	ok
+route.points.missing	error

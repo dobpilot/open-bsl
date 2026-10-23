@@ -1,0 +1,5 @@
+document.number.numeric.initial=0
+document.number.numeric.first=1
+document.number.numeric.again=2
+document.number.numeric.prefix=accepted
+document.number.numeric.retained=3

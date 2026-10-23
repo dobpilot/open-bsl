@@ -1,0 +1,7 @@
+image.scoped_return.nonempty.true=1
+image.scoped_return.nonempty.count=3
+image.scoped_return.empty.undefined=1
+image.scoped_return.empty.count=0
+image.scoped_return.private.value=7
+image.scoped_return.private.argument=5
+image.scoped_return.done=1

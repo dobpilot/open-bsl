@@ -1,0 +1,7 @@
+{
+  "producer": "1C:EDT 2026.1.3+25",
+  "input": "target/diagnostics/file-source-edt-1022/demo/native-xml",
+  "source_database": "demo, SDK read-only acquisition",
+  "receipts": "target/diagnostics/file-source-edt-1022/demo/receipts.json",
+  "file_sha256": "2b4fc594a9c5def93f00df8a11da11ff44534c2beb77c38a79a85383400d6978"
+}

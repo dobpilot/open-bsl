@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed native string-alias private frame declared18 with27 labels",
+  "scope": "Private flags2 label table grows5 to27 zero entries and Const0 changes numeric7 to synthetic string СтрокаКадра. Private Var header declared18 with four actual descriptors, additionally matching original Proc36 frame size. Callable routes remain unchanged. All instructions, callable declarations, native message-queue observations and caller arguments unchanged. Does not establish support for original procedure body or malformed declarations.",
+  "files": {
+    "native-image-zero-label-procedure-27-string-frame18.image": {
+      "bytes": 1621,
+      "sha256": "d522cc5853f906ea65f06640d13f9c18b2c592238ca38fe34eb3c042b0fb17d3"
+    },
+    "native-image-zero-label-procedure-27-string-frame18.Module.bin": {
+      "bytes": 2882,
+      "sha256": "18aa55fd3dea2e5f10ea27080653d78b5886d4002e717150a84da5e6a7de8146"
+    },
+    "measure-native-image-zero-label-procedure-27-string-frame18.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-zero-label-procedure-27-string-frame18.platform.txt": {
+      "bytes": 388,
+      "sha256": "0778faa991f77a467b21dfa473a7bd64808eaec2dd3ffa46c2ce42c7fd4f39e9"
+    }
+  },
+  "native_receipt_complete": true
+}

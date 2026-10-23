@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "change": "Four independent public wrappers call four private functions. Each private function has the four original descriptor flags 1338/0,1459/0,3091/0,3027/0 and only returns a distinct slot. All arithmetic is NOP. Const[0] is 7; caller argument is 5. No original code is executed.",
+  "files": {
+    "native-image-private-frame-read.image": {
+      "bytes": 1558,
+      "sha256": "6af35f26c6ee4b471afe5b9d26cb3cc07da304089687c3e8b90cb74dee79200d"
+    },
+    "native-image-private-frame-read.Module.bin": {
+      "bytes": 2819,
+      "sha256": "5f0bf7bd9a35721423ab67e7dc28ab9b32cc57639a57a062cbdf64b05b75b24d"
+    },
+    "measure-native-image-private-frame-read.bsl": {
+      "bytes": 2705,
+      "sha256": "4be8fb81dfc53063cb7a6a910769213d0bfb4025281012a078c72bf6691d97fe"
+    },
+    "measure-native-image-private-frame-read.platform.txt": {
+      "bytes": 528,
+      "sha256": "e7e6e6729b6fa96af15d0ef5b36685e72c19154f7b342b6e2c264e303ad6c4c3"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-frame-read-1009-v1-ib"
+}

@@ -1,0 +1,9 @@
+ROOT	EnumChartLineType
+TYPE	ChartLineType
+NONE	None
+DASHED	Dashed
+DASH_DOT	DashDotted
+DASH_DOT_DOT	DotDashDotted
+SOLID	Solid
+DOTTED	Dotted
+ALIASES	PASS

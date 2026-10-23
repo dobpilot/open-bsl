@@ -1,0 +1,10 @@
+ROOT	EnumDataCompositionDetailsProcessingAction
+TYPE	DataCompositionDetailsProcessingAction
+NONE	None
+OPEN	Open value 
+FILTER	Filter
+APPEARANCE	Apply appearance
+DRILL	Drill down
+GROUP	Group
+ORDER	Order
+ALIASES	PASS

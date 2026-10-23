@@ -1,0 +1,8 @@
+file.begin	lock-data-for-edit-arity-1
+LOCK.EDIT.ZERO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ЗаблокироватьДанныеДляРедактирования)
+LOCK.EDIT.ONE	{<Unknown module>(1)}: Error calling context method (LockDataForEdit): Type mismatch (parameter number '1')
+LOCK.EDIT.TWO	{<Unknown module>(1)}: Error calling context method (LockDataForEdit): Type mismatch (parameter number '1')
+LOCK.EDIT.THREE	{<Unknown module>(1)}: Error calling context method (LockDataForEdit): Type mismatch (parameter number '1')
+LOCK.EDIT.FOUR	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,80)}: Too many actual parameters (ЗаблокироватьДанныеДляРедактирования)
+LOCK.EDIT.ENGLISH	{<Unknown module>(1)}: Error calling context method (LockDataForEdit): Type mismatch (parameter number '1')
+file.end	lock-data-for-edit-arity-1

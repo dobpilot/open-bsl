@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed private procedure27 zero-label native control",
+  "scope": "Only private flags2 label table grows5 to27 allzero entries, matching original Proc36 label cardinality. All instructions, callable declarations, native message-queue observations and caller arguments unchanged. Does not establish support for original procedure body or malformed declarations.",
+  "files": {
+    "native-image-zero-label-procedure-27.image": {
+      "bytes": 1597,
+      "sha256": "8da0e2c2c53141b256a67af8f91e40579bc8030239012d8aae4012edefc09c00"
+    },
+    "native-image-zero-label-procedure-27.Module.bin": {
+      "bytes": 2858,
+      "sha256": "cc29badb8b0e0175a442c1b54ef89128c22f3cd7633f04cc405287d105715d64"
+    },
+    "measure-native-image-zero-label-procedure-27.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-zero-label-procedure-27.platform.txt": {
+      "bytes": 388,
+      "sha256": "0778faa991f77a467b21dfa473a7bd64808eaec2dd3ffa46c2ce42c7fd4f39e9"
+    }
+  },
+  "native_receipt_complete": true
+}

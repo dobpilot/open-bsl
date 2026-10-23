@@ -1,0 +1,14 @@
+document.movements.body=Коллекция движений:1
+document.movements.body.identity=Да
+document.movements.type=Коллекция движений
+document.movements.count=1:1
+document.movements.alias=Да
+document.movements.isolation=Нет
+document.movements.write=rejected
+document.movements.set.type=Регистр сведений набор записей: РасписаниеЗагрузкиРесурсов
+document.movements.set.initial=0:Нет
+document.movements.set.english=0:Нет
+document.movements.set.identity=Да
+document.movements.set.write.flag=Да
+document.movements.set.isolation=Нет
+document.movements.iteration=1

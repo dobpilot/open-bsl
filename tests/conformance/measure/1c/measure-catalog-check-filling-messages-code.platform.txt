@@ -1,0 +1,5 @@
+catalog.messages.result=FALSE
+catalog.messages.count=1
+catalog.messages.text="Code" is a required field.
+catalog.messages.field=Code
+catalog.messages.path=

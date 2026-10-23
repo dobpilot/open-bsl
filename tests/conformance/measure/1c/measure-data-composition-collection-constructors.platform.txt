@@ -1,0 +1,16 @@
+HEADER_0	OK
+HEADER_1	ERROR
+HEADER_EN	OK
+HEADER_TYPE	Header type of data composition template of value collection area
+TEMPLATE_0	OK
+TEMPLATE_1	ERROR
+TEMPLATE_EN	OK
+TEMPLATE_TYPE	Data composition template
+PROCESSOR_0	OK
+PROCESSOR_1	ERROR
+PROCESSOR_EN	OK
+PROCESSOR_TYPE	Data composition processor
+OUTPUT_0	OK
+OUTPUT_1	ERROR
+OUTPUT_EN	OK
+OUTPUT_TYPE	Processor of output of data composition result in values collection

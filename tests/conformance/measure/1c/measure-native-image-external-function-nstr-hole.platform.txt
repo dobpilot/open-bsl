@@ -1,0 +1,2 @@
+image.native.external_function_nstr_hole.value=контроль
+image.native.external_function_nstr_hole.direct=1

@@ -1,0 +1,14 @@
+archive.paths.1	Восстанавливать пути
+archive.paths.2	Не восстанавливать пути
+archive.paths.3	ArchiveFileRestoreFilePathsMode
+archive.paths.4	ArchiveFileRestoreFilePathsMode
+archive.paths.5	Да
+archive.paths.6	Да
+archive.paths.7	Нет
+archive.paths.8	Нет
+archive.paths.9	Нет
+archive.paths.10	ERROR
+archive.paths.11	EnumArchiveFileRestoreFilePathsMode
+archive.paths.12	Да
+archive.paths.13	Да
+archive.paths.14	Да

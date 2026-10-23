@@ -1,0 +1,57 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental scaffold-linked descriptor control failed; no oracle",
+  "scope": "Exact context image bytes reused. Four referenced common module names are declared as empty modules in the fresh test configuration, solely to test binding. No original application implementation or bodies are executed; full original environment is not claimed.",
+  "files": {
+    "native-image-twelve-frame-object-linked-context.image": {
+      "bytes": 1920,
+      "sha256": "bc1933c3886df9de5bcb11bc726773cf8429eaae63ff7edd8c206766bd02d75a"
+    },
+    "native-image-twelve-frame-object-linked-context.Module.bin": {
+      "bytes": 3181,
+      "sha256": "fb6ba88e6c13e45702228b3b1cdaae8413e771d73839b7d52a0a1f8349973e7b"
+    },
+    "measure-native-image-twelve-frame-object-linked-context.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "native-frame-context/CommonModules/ЕдиныйНалоговыйСчетИнтеграция/Ext/Module.bsl": {
+      "bytes": 168,
+      "sha256": "649acc730ba9f26f236fed65dcf75fe23717fb58435f823baf139fe54b928add"
+    },
+    "native-frame-context/CommonModules/ЕдиныйНалоговыйСчетИнтеграция.xml": {
+      "bytes": 780,
+      "sha256": "8f9bd234f211645f989c7d0e9923dceb6da931ed5a504be04787f90c051e96d5"
+    },
+    "native-frame-context/CommonModules/ОбщегоНазначения/Ext/Module.bsl": {
+      "bytes": 168,
+      "sha256": "649acc730ba9f26f236fed65dcf75fe23717fb58435f823baf139fe54b928add"
+    },
+    "native-frame-context/CommonModules/ОбщегоНазначения.xml": {
+      "bytes": 754,
+      "sha256": "14103504d25e8f5c4a101d55ff4f6b8cf26b192ee12096bae8089f288766832f"
+    },
+    "native-frame-context/CommonModules/ОбщегоНазначенияКлиентСервер/Ext/Module.bsl": {
+      "bytes": 168,
+      "sha256": "649acc730ba9f26f236fed65dcf75fe23717fb58435f823baf139fe54b928add"
+    },
+    "native-frame-context/CommonModules/ОбщегоНазначенияКлиентСервер.xml": {
+      "bytes": 778,
+      "sha256": "9157b92c5f6dd82f31efd94ae7114f020cd0acc99f00297b4bcbf683ef82e932"
+    },
+    "native-frame-context/CommonModules/СтроковыеФункцииКлиентСервер/Ext/Module.bsl": {
+      "bytes": 168,
+      "sha256": "649acc730ba9f26f236fed65dcf75fe23717fb58435f823baf139fe54b928add"
+    },
+    "native-frame-context/CommonModules/СтроковыеФункцииКлиентСервер.xml": {
+      "bytes": 778,
+      "sha256": "aa7ca0052fe9fe0d68522de0d21b1e74b1e8dfead893670953b4a5de8a298045"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-linked-context.log",
+    "interpretation": "Exact original first constant and global descriptor table plus empty named-module binding scaffolds do not make this synthetic three-parameter empty frame valid. Full original configuration context is not reproduced."
+  }
+}

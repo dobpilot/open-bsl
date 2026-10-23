@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "shared-unused-frame ordinary five/four frames and container info",
+  "change": "Public entry 0 reaches private entry 19 through a constant Boolean branch and empty guard. Shared goto-label command 24 refers to label index 4: public frame targets modifying body 32, private frame targets End 42. Both paths are probed independently. Only slot zero is accessed, other locals and NOPs are unused. No original code is executed.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-shared-label-frame.image": {
+      "bytes": 1139,
+      "sha256": "b0a279093fb381d6ad3cf1821d88b88a581ed90e6668564b853bfd5bc3f04d71"
+    },
+    "native-image-shared-label-frame.Module.bin": {
+      "bytes": 2400,
+      "sha256": "9779a1927ad5e3db8526aba06003a1019443bfc8e212574dbaea64bdfe742cc9"
+    },
+    "measure-native-image-shared-label-frame.bsl": {
+      "bytes": 1249,
+      "sha256": "c5e596c49793430316f49448ddef55d87408a210927871570eaf07ca5cfd5c90"
+    },
+    "measure-native-image-shared-label-frame.platform.txt": {
+      "bytes": 158,
+      "sha256": "7f6675a5d7b627c1f9d13515b1ef614a674423beb61722af75fd3a20714191fe"
+    }
+  },
+  "exit_status": 0
+}

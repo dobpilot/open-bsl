@@ -1,0 +1,6 @@
+image.native.while.positive.result=0
+image.native.while.positive.argument=0
+image.native.while.zero.result=0
+image.native.while.zero.argument=0
+image.native.while.negative.result=-2
+image.native.while.negative.argument=-2

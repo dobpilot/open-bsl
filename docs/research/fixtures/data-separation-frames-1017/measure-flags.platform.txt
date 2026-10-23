@@ -1,0 +1,27 @@
+TRUE=OK;MODE=YES
+FALSE=OK;MODE=NO
+ZERO=OK;MODE=NO
+ONE=OK;MODE=YES
+TWO=OK;MODE=YES
+NEGATIVE=OK;MODE=YES
+FRACTION=OK;MODE=YES
+RU.TRUE=OK;MODE=YES
+RU.FALSE=OK;MODE=NO
+RU.YES=OK;MODE=YES
+RU.NO=OK;MODE=NO
+EN.TRUE=OK;MODE=YES
+EN.FALSE=OK;MODE=NO
+EN.YES=ERROR;MODE=YES
+EN.NO=ERROR;MODE=YES
+TEXT.ONE=ERROR;MODE=YES
+TEXT.ZERO=ERROR;MODE=YES
+EMPTY=ERROR;MODE=YES
+SPACES=OK;MODE=YES
+UNDEFINED=ERROR;MODE=YES
+NULL=ERROR;MODE=YES
+ARRAY=ERROR;MODE=YES
+DATE=ERROR;MODE=YES
+UNKNOWN.NUMBER={DataProcessor.Замеры.Form.Форма.Form(35)}: Ошибка при вызове метода контекста (SetDataSeparationSafeMode): Неверное имя разделителя НеизвестныйРазделитель
+UNKNOWN.BADWORD={DataProcessor.Замеры.Form.Форма.Form(35)}: Ошибка при вызове метода контекста (SetDataSeparationSafeMode): Несоответствие типов (параметр номер '2')
+NAME.NUMBER={DataProcessor.Замеры.Form.Форма.Form(35)}: Ошибка при вызове метода контекста (SetDataSeparationSafeMode): Неверное имя разделителя 1
+FINAL=NO

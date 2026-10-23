@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental scoped return-join control, completed native receipt",
+  "scope": "Same ordinary public foreach and private four-slot numeric alias function. Public tail has comparison sum=6, conditional branch 41, True/Undefined alternatives and common Return53 with pure cleanup. All declarations remain; both branch results and private caller are observed.",
+  "files": {
+    "native-image-scoped-return-join-41.image": {
+      "bytes": 1156,
+      "sha256": "0ae452eebdbef1dbd905765c512b097486f0c21590993c052eaaed5ad9d76eca"
+    },
+    "native-image-scoped-return-join-41.Module.bin": {
+      "bytes": 2417,
+      "sha256": "7775adf7fac69bfd0a34ad69e4bdc434557ed637f422390670935b872f139f84"
+    },
+    "measure-native-image-scoped-return-join-41.bsl": {
+      "bytes": 1610,
+      "sha256": "df00318b54ef1203588f3f6adb530ef2ea9751af826a471477a4171cb1a1aedf"
+    },
+    "measure-native-image-scoped-return-join-41.platform.txt": {
+      "bytes": 247,
+      "sha256": "97c5a3866ee3e14823047b2fa3ee82c6acf02bfe0d0f12b336a41ad66658db9f"
+    }
+  },
+  "native_receipt_complete": true,
+  "format_note": "Boolean checks use explicit BI=1/BL=0 formatting; first default-locale receipts observed Yes and were replaced by fresh native measurements, not by interpreter output."
+}

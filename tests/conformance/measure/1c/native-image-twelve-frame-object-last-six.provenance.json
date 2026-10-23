@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental last-six original-flags control, failed; no oracle",
+  "scope": "last-six original flags, remaining flags ordinary. All twelve external slots0, private DefPrm absent, Const0=N7, initializer14 and empty body. Original globals absent; only entry is observed.",
+  "files": {
+    "native-image-twelve-frame-object-last-six.image": {
+      "bytes": 1471,
+      "sha256": "64e68eb10ad3e6b452451213b02f17e4193a52ef71a3b108616205707ee50e45"
+    },
+    "native-image-twelve-frame-object-last-six.Module.bin": {
+      "bytes": 2732,
+      "sha256": "5055bd15916ce9a80935a6c9695d1b5dd1bcb1eacffcb3950a031dfa41df96c7"
+    },
+    "measure-native-image-twelve-frame-object-last-six.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-last-six.log",
+    "interpretation": "Failure is reproducible with only last-six flags changed in the synthetic empty frame. It does not establish bit semantics or original-context validity."
+  }
+}

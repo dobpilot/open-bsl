@@ -1,0 +1,10 @@
+[
+  {
+    "check": "export-xml",
+    "exit_code": 0
+  },
+  {
+    "check": "export-cf",
+    "exit_code": 0
+  }
+]

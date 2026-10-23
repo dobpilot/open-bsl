@@ -1,0 +1,3 @@
+route.points.collection.type.russian	error
+route.points.collection.type.long	Yes
+route.points.collection.type.short	error

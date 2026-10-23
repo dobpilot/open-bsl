@@ -1,0 +1,7 @@
+file.begin	move-file-arity-1
+MOVE.FILE.ZERO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ПереместитьФайл)
+MOVE.FILE.ONE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ПереместитьФайл)
+MOVE.FILE.TWO	{<Unknown module>(1)}: Error calling context method (MoveFile): Error renaming files: Invalid file path. The schema is not registered
+MOVE.FILE.THREE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,45)}: Too many actual parameters (ПереместитьФайл)
+MOVE.FILE.ENGLISH	{<Unknown module>(1)}: Error calling context method (MoveFile): Error renaming files: Invalid file path. The schema is not registered
+file.end	move-file-arity-1

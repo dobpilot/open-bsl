@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-private-procedure-flag2.image",
+  "change": "Only private variable flags 5 to 1338, slot remains minus one. Partial result and argument 5; owned process timed out after 60 seconds. Not a successful oracle.",
+  "exit_status": 1,
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-variable-flags-only.image": {
+      "bytes": 353,
+      "sha256": "b10727ca316546171b840696763d7deef1121eca048d00ff5cd7669679fbf8d4"
+    },
+    "native-image-private-variable-flags-only.Module.bin": {
+      "bytes": 1773,
+      "sha256": "011a068c19037b329af8d08e6ed986d723f2f5e93dd8729423bd5546518033d8"
+    },
+    "measure-native-image-private-variable-flags-only.bsl": {
+      "bytes": 601,
+      "sha256": "84ea34a351e725a474062abbb66ef62016c3cfd4b6c313a3b5fa21414b6c9c0e"
+    },
+    "measure-native-image-private-variable-flags-only.partial.txt": {
+      "bytes": 88,
+      "sha256": "597149bf8a37654bc5b5ec18e5e87d24af6cf06a187460332ba27d5d49aa8b55"
+    }
+  }
+}

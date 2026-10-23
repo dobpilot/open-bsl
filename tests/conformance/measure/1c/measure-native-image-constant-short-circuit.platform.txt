@@ -1,0 +1,4 @@
+image.native.constant_short_circuit.and.false=42
+image.native.constant_short_circuit.and.true=11
+image.native.constant_short_circuit.or.false=42
+image.native.constant_short_circuit.or.true=11

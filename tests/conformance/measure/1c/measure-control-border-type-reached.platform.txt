@@ -1,0 +1,4 @@
+NONE	No border	PASS
+SINGLE	Single	PASS
+UNDERLINE	Underline	PASS
+TYPE	ControlBorderType

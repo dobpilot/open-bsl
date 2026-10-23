@@ -1,0 +1,6 @@
+selection.parent.all=accepted:Child:Group:Root
+selection.parent.root=accepted:Group:Root
+selection.parent.group=accepted:Child
+selection.parent.number=rejected
+selection.parent.null=rejected
+selection.parent.string=rejected

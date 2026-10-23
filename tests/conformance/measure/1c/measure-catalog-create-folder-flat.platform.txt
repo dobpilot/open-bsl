@@ -1,0 +1,8 @@
+folder.create.flat.body.read=NO
+folder.create.flat.body.write=rejected
+folder.create.flat.bare=NO
+folder.create.flat.qualified=NO
+folder.create.flat.alias=YES
+folder.create.flat.type=YES
+folder.create.flat.write=rejected
+folder.create.flat.after=NO

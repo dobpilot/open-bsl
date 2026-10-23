@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental original object-frame string control, failed; no oracle",
+  "scope": "Same original twelve descriptors, no DefPrm, explicit empty initializer at14 and empty private body. Only Const0 changes from numeric7 to synthetic empty string, not the actual original string. Original nine globals remain absent.",
+  "files": {
+    "native-image-twelve-frame-object-string.image": {
+      "bytes": 1488,
+      "sha256": "e4d9957525c7fe1c27e334eb9b86803faf80314437a59a153f7a19ac4075d999"
+    },
+    "native-image-twelve-frame-object-string.Module.bin": {
+      "bytes": 2749,
+      "sha256": "3f7153ef05d44b4da9627c93a046e6647fb7719ce6721d39096610e490ab6bd4"
+    },
+    "measure-native-image-twelve-frame-object-string.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-string.log",
+    "interpretation": "Changing only Const0 to an empty string does not establish a valid original-descriptor frame; actual original constant and globals are not reproduced."
+  }
+}

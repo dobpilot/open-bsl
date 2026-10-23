@@ -1,0 +1,22 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "native process failure during invalid-entry invocation",
+  "scope": "Same invalid flags3 declaration with entry79 beyond71 commands. Fifth ordinary wrapper prepares three arguments then CallLoc3; driver reports before and complete outcome if available. Native failure or incomplete output is not a language oracle.",
+  "files": {
+    "native-image-scoped-called-invalid-entry.image": {
+      "bytes": 2803,
+      "sha256": "b47677731aabb612e62c70466ed9e1aca0b9025db81847a758535e93e03e1a6a"
+    },
+    "native-image-scoped-called-invalid-entry.Module.bin": {
+      "bytes": 4064,
+      "sha256": "b7c9300e496a2a379d8f530e087bbf37cda311e5be17983e886d8f4d8d6b9082"
+    },
+    "measure-native-image-scoped-called-invalid-entry.bsl": {
+      "bytes": 641,
+      "sha256": "8fe8cdc53d83140cfa21dd83c4063678a3f576be2ed0bfdbc06501e424bb5d1e"
+    }
+  },
+  "native_receipt_complete": false,
+  "native_exit_status": 139,
+  "outcome": "Segmentation fault after image.invalid_entry.before=1; no completed return, caught exception, argument or done observation; not a BSL language oracle."
+}

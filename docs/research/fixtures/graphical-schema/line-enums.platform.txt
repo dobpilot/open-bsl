@@ -1,0 +1,34 @@
+graphical.connectorlinetype.none.text	Нет линии
+graphical.connectorlinetype.none.alias	1
+graphical.connectorlinetype.dashed.text	Пунктирная
+graphical.connectorlinetype.dashed.alias	1
+graphical.connectorlinetype.dashdotted.text	Пунктирно-точечная
+graphical.connectorlinetype.dashdotted.alias	1
+graphical.connectorlinetype.dashdotteddotted.text	Точечно-пунктирно-точечная
+graphical.connectorlinetype.dashdotteddotted.alias	1
+graphical.connectorlinetype.solid.text	Сплошная
+graphical.connectorlinetype.solid.alias	1
+graphical.connectorlinetype.dotted.text	Точечная
+graphical.connectorlinetype.dotted.alias	1
+graphical.connectorlinetype.type	ТипСоединительнойЛинии
+graphical.connectorlinetype.type.alias	1
+graphical.connectorlinetype.global.text	ПеречислениеТипСоединительнойЛинии
+graphical.connectorlinetype.global.type	ПеречислениеТипСоединительнойЛинии
+graphical.connectortextlocation.firstsegment.text	Первый сегмент
+graphical.connectortextlocation.firstsegment.alias	1
+graphical.connectortextlocation.middle.text	Середина линии
+graphical.connectortextlocation.middle.alias	1
+graphical.connectortextlocation.type	ПоложениеТекстаСоединительнойЛинии
+graphical.connectortextlocation.type.alias	1
+graphical.connectortextlocation.global.text	ПеречислениеПоложениеТекстаСоединительнойЛинии
+graphical.connectortextlocation.global.type	ПеречислениеПоложениеТекстаСоединительнойЛинии
+graphical.arrowstyle.filled.text	Заполненная
+graphical.arrowstyle.filled.alias	1
+graphical.arrowstyle.blank.text	Незаполненная
+graphical.arrowstyle.blank.alias	1
+graphical.arrowstyle.none.text	Нет
+graphical.arrowstyle.none.alias	1
+graphical.arrowstyle.type	СтильСтрелки
+graphical.arrowstyle.type.alias	1
+graphical.arrowstyle.global.text	ПеречислениеСтильСтрелки
+graphical.arrowstyle.global.type	ПеречислениеСтильСтрелки

@@ -1,0 +1,3 @@
+image.native.new.result=0
+image.native.new.argument=0
+image.native.new.original=1

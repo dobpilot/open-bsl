@@ -1,0 +1,2 @@
+ZERO	{DataProcessor.Замеры.Form.Форма.Form(34)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,7)}: Constructor not found
+ZERO_PARENS	{DataProcessor.Замеры.Form.Форма.Form(42)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,7)}: Constructor not found

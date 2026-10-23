@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-assembled supplemental native control, not compiler evidence",
+  "base": "native-image-private-procedure-flag2.image",
+  "change": "Three reference parameters and their ordered static call; only first parameter changed by measured addition of 7",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-procedure-three.image": {
+      "bytes": 566,
+      "sha256": "3952f328f3beb90975180ce458cb099bda02e4b1a54c4f92f6418e3c5114e040"
+    },
+    "native-image-private-procedure-three.Module.bin": {
+      "bytes": 1827,
+      "sha256": "f72e2d64569f2739d13be7fe46ac57590f9eb5fee39a5d4a64c0976b978c95c5"
+    },
+    "measure-native-image-private-procedure-three.bsl": {
+      "bytes": 1093,
+      "sha256": "5e0cc46aae79f0401fa1688a8950d8b0a7bcf6bbcb4ed8fdbd9642c372e39add"
+    },
+    "measure-native-image-private-procedure-three.platform.txt": {
+      "bytes": 156,
+      "sha256": "a9bb05fb41693c1273c8daa7d6864c47602366cb9ca15d6dc4b0e1c53af8a38b"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+image.native.while_context.iterate.result=5
+image.native.while_context.iterate.sum=5
+image.native.while_context.iterate.removed=3
+image.native.while_context.iterate.count=0
+image.native.while_context.empty.result=10
+image.native.while_context.empty.sum=10
+image.native.while_context.empty.removed=0
+image.native.while_context.empty.count=0

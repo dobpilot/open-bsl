@@ -1,0 +1,12 @@
+business.read.new.ru	accepted
+business.read.new.en	accepted
+business.read.arity.ru	{Обработка.Замеры.Форма.Форма.Форма(45)}: Too many actual parameters
+business.read.arity.en	{Обработка.Замеры.Форма.Форма.Форма(51)}: Too many actual parameters
+business.read.new.ref.empty	1
+business.read.saved.ru.text	read-probe
+business.read.saved.ru.flag	1
+business.read.saved.ref.same	1
+business.read.saved.number.same	1
+business.read.saved.en.text	read-probe
+business.read.saved.en.flag	1
+business.read.saved.new	0

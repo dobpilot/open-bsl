@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-private-procedure-flag2.image",
+  "change": "Only the private parameter descriptor changes flags/external_slot from 5/-1 to 1338/0. Static call and increment instructions unchanged. Caller result and argument are 5 rather than baseline 12. Internal parameter value is not observed.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-variable-flag.image": {
+      "bytes": 352,
+      "sha256": "cf3cb63734c67c5e9595a348cc786b06db6646cf88f35e28ab91f0f8a026db20"
+    },
+    "native-image-private-variable-flag.Module.bin": {
+      "bytes": 1773,
+      "sha256": "f2c97a9c82122b2429ccce5d8203d1477495d3b7ebb90c833eff8fbc01f75396"
+    },
+    "measure-native-image-private-variable-flag.bsl": {
+      "bytes": 583,
+      "sha256": "baaa70f17a80f33cc88dbf96429179ad55815e62fb8a68531d86994a3ded99a8"
+    },
+    "measure-native-image-private-variable-flag.platform.txt": {
+      "bytes": 76,
+      "sha256": "d9d6141a1c557f0f5cc37c5e066829bf440ffb37903331cc9b609c30ca5c044b"
+    }
+  }
+}

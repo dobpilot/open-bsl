@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:CommonModule xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="d7b9c017-c8e3-45a9-b8c0-2e5902fc2aa4">
+  <name>ЗамерыДинамическогоМодуля</name>
+  <server>true</server>
+</mdclass:CommonModule>

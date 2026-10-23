@@ -1,0 +1,9 @@
+{
+  "source": "demo read-only Config acquisition; native dump 1C 8.3.27.2342",
+  "owner": "8f4d5fc1-5c2c-4202-bb79-a180b03b3267",
+  "mapping": "Config {\"S\"} -> XML StringQualifiers Length=0 AllowedLength=Variable",
+  "files_sha256": {
+    "CommonAttribute.xml": "7c7ea678b307ccf68e3eb1c181d684769ebf44d9131bbc1843c51b5da764fffb",
+    "config.deflate": "c60a806b25bc69e35c1a660342456bb1dc59454ba8613360d3c08a24b84407c7"
+  }
+}

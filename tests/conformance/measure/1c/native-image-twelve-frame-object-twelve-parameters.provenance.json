@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental twelve declared/actual parameters control, complete native receipt",
+  "scope": "Only private declared parameter count changes from3 to12 relative to twelve-arguments. Twelve original descriptors/external_slot0 and absent DefPrm retained; empty body, twelve actual values, initializer23, Const0=N7. This alters the synthetic declaration; it does not modify or reproduce the original module.",
+  "files": {
+    "native-image-twelve-frame-object-twelve-parameters.image": {
+      "bytes": 1543,
+      "sha256": "0e023be9374203b8f480536dadf7943bc0d946b3e5db80f87a353541a01d6a22"
+    },
+    "native-image-twelve-frame-object-twelve-parameters.Module.bin": {
+      "bytes": 2804,
+      "sha256": "43e28895b76305daec998b2d46960d8592010fcc3b0a76119c4c672afd46c5d9"
+    },
+    "measure-native-image-twelve-frame-object-twelve-parameters.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "measure-native-image-twelve-frame-object-twelve-parameters.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-object-twelve-parameters.log"
+  }
+}

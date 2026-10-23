@@ -1,0 +1,3 @@
+MODE	D
+ALIAS	D
+TYPE	String

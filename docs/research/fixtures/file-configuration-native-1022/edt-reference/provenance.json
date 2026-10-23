@@ -1,0 +1,53 @@
+{
+  "repository": "https://github.com/1C-Company/GitConverter",
+  "tree": "55d71967c41825256e48b9c7d2b13224a88a76e4",
+  "files": [
+    {
+      "path": "GitConverter/src/Configuration/Configuration.mdo",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/Configuration/Configuration.mdo",
+      "sha256": "24d8014e6bc8a4145b54a5ea6132b7d33f6449162ed51953d7882e83618114ef"
+    },
+    {
+      "path": "GitConverter/src/CommonModules/ОбщегоНазначения/ОбщегоНазначения.mdo",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/CommonModules/%D0%9E%D0%B1%D1%89%D0%B5%D0%B3%D0%BE%D0%9D%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D1%8F/%D0%9E%D0%B1%D1%89%D0%B5%D0%B3%D0%BE%D0%9D%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D1%8F.mdo",
+      "sha256": "8cb19a8a1656a87270295cc70b914cd4358fc994e714b4bb08fd4f64beb0f2b4"
+    },
+    {
+      "path": "GitConverter/src/Catalogs/ВерсииEDT/ВерсииEDT.mdo",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/Catalogs/%D0%92%D0%B5%D1%80%D1%81%D0%B8%D0%B8EDT/%D0%92%D0%B5%D1%80%D1%81%D0%B8%D0%B8EDT.mdo",
+      "sha256": "d3b4794f27bfbbcf3e9337d7a3faafade177032d0d457013aac908c563c93819"
+    },
+    {
+      "path": "GitConverter/src/Catalogs/ВерсииEDT/Forms/ФормаЭлемента/Form.form",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/Catalogs/%D0%92%D0%B5%D1%80%D1%81%D0%B8%D0%B8EDT/Forms/%D0%A4%D0%BE%D1%80%D0%BC%D0%B0%D0%AD%D0%BB%D0%B5%D0%BC%D0%B5%D0%BD%D1%82%D0%B0/Form.form",
+      "sha256": "e49d8d3d1817055a991e7e584236fb07a066037eeffc94a602a9f02306ca7a58"
+    },
+    {
+      "path": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/LICENSE.md",
+      "sha256": "d07d3a727c2be3ef493625d868d4da5d77677dbeef6ad93f1398c9b1bdab058b"
+    },
+    {
+      "path": "GitConverter/src/Catalogs/ХранилищаКонфигураций/Templates/ПустоеРасширение/Template.txt",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/Catalogs/%D0%A5%D1%80%D0%B0%D0%BD%D0%B8%D0%BB%D0%B8%D1%89%D0%B0%D0%9A%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D0%B9/Templates/%D0%9F%D1%83%D1%81%D1%82%D0%BE%D0%B5%D0%A0%D0%B0%D1%81%D1%88%D0%B8%D1%80%D0%B5%D0%BD%D0%B8%D0%B5/Template.txt",
+      "sha256": "e4e4c4b1fc02044594389d065f36f8702646f054dc53eab4f79617cecc4771f1"
+    },
+    {
+      "path": "GitConverter/src/Catalogs/ХранилищаКонфигураций/ХранилищаКонфигураций.mdo",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/Catalogs/%D0%A5%D1%80%D0%B0%D0%BD%D0%B8%D0%BB%D0%B8%D1%89%D0%B0%D0%9A%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D0%B9/%D0%A5%D1%80%D0%B0%D0%BD%D0%B8%D0%BB%D0%B8%D1%89%D0%B0%D0%9A%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D0%B9.mdo",
+      "sha256": "69e1906dc1f4f0de319bdecff683caeb4673f363b96df627656e8dbdce002783"
+    }
+  ],
+  "additional_files": [
+    {
+      "path": "GitConverter/src/Catalogs/ВерсииХранилища/ВерсииХранилища.mdo",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/Catalogs/%D0%92%D0%B5%D1%80%D1%81%D0%B8%D0%B8%D0%A5%D1%80%D0%B0%D0%BD%D0%B8%D0%BB%D0%B8%D1%89%D0%B0/%D0%92%D0%B5%D1%80%D1%81%D0%B8%D0%B8%D0%A5%D1%80%D0%B0%D0%BD%D0%B8%D0%BB%D0%B8%D1%89%D0%B0.mdo",
+      "sha256": "56794dd859ea1b97e7b40811a3e6261399ce66accfb4ee43075065ae757c701a"
+    },
+    {
+      "path": "GitConverter/src/InformationRegisters/ИнформацияПользователей/ИнформацияПользователей.mdo",
+      "url": "https://raw.githubusercontent.com/1C-Company/GitConverter/55d71967c41825256e48b9c7d2b13224a88a76e4/GitConverter/src/InformationRegisters/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D1%8F%D0%9F%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D0%B5%D0%B9/%D0%98%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D1%8F%D0%9F%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D0%B5%D0%B9.mdo",
+      "sha256": "8b909106ad82bd3abc25461e42120d902e30e71b6a0f0c76e30a45ba53f686b0"
+    }
+  ]
+}

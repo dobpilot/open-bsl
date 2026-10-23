@@ -1,0 +1,4 @@
+image.try-return.body=11|Т
+image.try-return.handler=22|ТИ
+image.try-return.normal-suffix=33|ТХ
+image.try-return.caught-suffix=33|ТИХ

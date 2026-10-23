@@ -1,0 +1,8 @@
+ROOT	EnumDataCompositionTotalPlacement
+TYPE	DataCompositionTotalPlacement
+AUTO	Auto
+END	End
+BEGIN	Begin
+BOTH	Begin and end
+NONE	None
+ALIASES	PASS

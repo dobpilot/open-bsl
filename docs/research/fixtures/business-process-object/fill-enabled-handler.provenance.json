@@ -1,0 +1,23 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_date": "2026-10-07",
+  "configuration": "own isolated enabled-filling business-process control",
+  "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+  "metadata_provenance": "fill-enabled.provenance.json",
+  "operation": "Native runner replaces only the own object module with the three-parameter handler; both owned attribute filling flags remain enabled",
+  "observations": "Four modes: own attribute mutation, shared data mutation, returned data replacement, standard-processing cancellation; 16 complete native lines",
+  "files": {
+    "fill-enabled-handler.bsl": {
+      "bytes": 5265,
+      "sha256": "72e8de5c9f1350af9ceaf6e6a091c5b7c285c2ce86407763b9e230b394b2c15a"
+    },
+    "fill-enabled-handler-object.bsl": {
+      "bytes": 1111,
+      "sha256": "0af101389f840623ee38e948d012cc11cba5e4bf22225d4ad5e2f83a43847bcf"
+    },
+    "fill-enabled-handler.platform.txt": {
+      "bytes": 710,
+      "sha256": "09a3c344eb2e7f8657b51bec621a24e8e79288264a8f163002a9ac1f9781be50"
+    }
+  }
+}

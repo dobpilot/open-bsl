@@ -1,0 +1,13 @@
+business.new-ref.initial.type	1
+business.new-ref.initial.undefined	0
+business.new-ref.initial.filled	0
+business.new-ref.assigned	1
+business.new-ref.reference.empty	1
+business.new-ref.modified	0
+business.new-ref.read.same	1
+business.new-ref.empty	accepted
+business.new-ref.undefined	rejected
+business.new-ref.undefined.unchanged	1
+business.new-ref.other.same-initial	1
+business.new-ref.get.arity	rejected
+business.new-ref.set.arity	rejected

@@ -1,0 +1,5 @@
+﻿enum.alias=YES
+enum.type=ChartLabelLocation
+enum.presentation=Edge auto
+enum.type.lookup=YES
+completed=YES

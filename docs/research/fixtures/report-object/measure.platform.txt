@@ -1,0 +1,14 @@
+report.type	Report Object: ЗамерОтчета
+report.type.lookup	1
+report.body	7
+report.own	1
+report.independent	7
+report.default	|0
+report.fields	123456789012|1
+report.row.boolean	1
+report.rows	1|0
+report.section.type	Report Tabular section: СтрокиПробы
+report.row.type	Report Tabular section Row: СтрокиПробы
+report.section.lookup	1
+report.row.lookup	1
+report.context	7

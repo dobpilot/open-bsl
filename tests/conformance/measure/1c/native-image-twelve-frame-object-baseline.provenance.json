@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "object-module transfer control failed; no native oracle",
+  "scope": "Same bytes as the corresponding common-module entry control, installed in the ObjectModule of the fresh test data processor Замеры. Numeric Const0=7 and empty body retained; original application code and nine original globals are absent. Only owner execution context changes.",
+  "files": {
+    "native-image-twelve-frame-object-baseline.image": {
+      "bytes": 1504,
+      "sha256": "b61f101282e5334abdf947b81d9c3ac560fc6e35354511de70a9716a638ab6d6"
+    },
+    "native-image-twelve-frame-object-baseline.Module.bin": {
+      "bytes": 2765,
+      "sha256": "21d1c00b32d2b3c46f3699c81ce16353757e26d54688ac3be3384630d1371fa1"
+    },
+    "measure-native-image-twelve-frame-object-baseline.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-baseline.log",
+    "interpretation": "Even the ordinary descriptor baseline fails. This transfer does not establish a valid object-module execution envelope."
+  }
+}

@@ -1,0 +1,2 @@
+image.native.add_month_snapshot.result=0
+image.native.add_month_snapshot.reference=20250304050607

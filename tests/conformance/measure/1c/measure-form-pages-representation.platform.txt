@@ -1,0 +1,8 @@
+AUTO	Auto	PASS
+NONE	None	PASS
+SWIPE	Swipe (touchscreen)	PASS
+TOP	Tabs above	PASS
+BOTTOM	Tabs below	PASS
+LEFT	Tabs on the left (horizontally)	PASS
+RIGHT	Tabs on the right (horizontally)	PASS
+TYPE	FormPagesRepresentation

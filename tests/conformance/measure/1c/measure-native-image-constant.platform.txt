@@ -1,0 +1,1 @@
+image.native.constant=60

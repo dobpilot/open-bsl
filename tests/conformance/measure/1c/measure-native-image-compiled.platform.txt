@@ -1,0 +1,10 @@
+image.arithmetic=14
+image.reference=6
+image.default=12
+image.procedure=13
+image.branch.negative=2
+image.branch.zero=100
+image.branch.positive=12
+image.loops=17
+image.short_circuit=1
+image.exception=поймано

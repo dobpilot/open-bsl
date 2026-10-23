@@ -1,0 +1,12 @@
+arguments.1	ok:2
+arguments.2	error
+arguments.3	error
+arguments.4	ok:2
+arguments.5	ok:2
+arguments.6	error
+arguments.7	ok:2
+arguments.8	error
+arguments.9	ok:2
+arguments.10	ok:2
+arguments.11	ok:3
+arguments.12	error

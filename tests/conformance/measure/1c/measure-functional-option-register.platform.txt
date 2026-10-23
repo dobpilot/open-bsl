@@ -1,0 +1,17 @@
+file.begin	functional-option-register-1
+FUNCTIONAL_OPTION.REGISTER_LOCATION	InformationRegister.ОпцииПробы.Resource.ПризнакОпции
+FUNCTIONAL_OPTION.REGISTER_PERIODICITY	Nonperiodical
+FUNCTIONAL_OPTION.REGISTER_PARAMETER_FIRST	InformationRegister.ОпцииПробы.Dimension.ПервыйКлюч
+FUNCTIONAL_OPTION.REGISTER_PARAMETER_SECOND	InformationRegister.ОпцииПробы.Dimension.ВторойКлюч
+FUNCTIONAL_OPTION.REGISTER_BOOL_EMPTY	Boolean:No
+FUNCTIONAL_OPTION.REGISTER_NUMBER_EMPTY	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Not all of the necessary functional options are specified
+FUNCTIONAL_OPTION.REGISTER_BOOL_FALSE	Boolean:No
+FUNCTIONAL_OPTION.REGISTER_BOOL_TRUE	Boolean:Yes
+FUNCTIONAL_OPTION.REGISTER_NUMBER	Number:20
+FUNCTIONAL_OPTION.REGISTER_BOOL_PARTIAL_TRUE	Boolean:Yes
+FUNCTIONAL_OPTION.REGISTER_BOOL_PARTIAL_FALSE	Boolean:No
+FUNCTIONAL_OPTION.REGISTER_BOOL_PARTIAL_SECOND	Boolean:No
+FUNCTIONAL_OPTION.REGISTER_NUMBER_PARTIAL	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Not all of the necessary functional options are specified
+FUNCTIONAL_OPTION.REGISTER_BOOL_NO_MATCH	Boolean:No
+FUNCTIONAL_OPTION.REGISTER_NUMBER_NO_MATCH	Boolean:No
+file.end	functional-option-register-1

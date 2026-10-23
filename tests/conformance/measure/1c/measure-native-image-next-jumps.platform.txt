@@ -1,0 +1,4 @@
+image.native.next_jumps.value=42
+image.native.next_jumps.negative=11
+image.native.next_jumps.positive=42
+image.native.next_jumps.reference=42

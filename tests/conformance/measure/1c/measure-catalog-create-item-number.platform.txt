@@ -1,0 +1,11 @@
+catalog.numeric.new=Yes
+catalog.numeric.reference.empty=Yes
+catalog.numeric.code.type=Yes
+catalog.numeric.code.zero=Yes
+catalog.numeric.presentation=[0]
+catalog.numeric.code.string=7
+catalog.numeric.description=present
+catalog.numeric.invalid.code=accepted
+catalog.numeric.code.after.invalid=0
+catalog.numeric.description.default=[]
+catalog.numeric.description.assigned=rejected

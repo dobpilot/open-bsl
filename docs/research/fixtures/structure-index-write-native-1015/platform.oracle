@@ -1,0 +1,7 @@
+﻿structure.write=2
+structure.count=1
+structure.missing=ERROR
+structure.numeric=ERROR
+structure.byref=7
+structure.fixed=ERROR
+completed=YES

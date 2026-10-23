@@ -1,0 +1,5 @@
+catalog.storage.reference.type=Yes
+catalog.storage.reference.equal=Yes
+catalog.storage.reference.uuid=Yes
+catalog.storage.empty.equal=Yes
+catalog.storage.uuid.equal=Yes

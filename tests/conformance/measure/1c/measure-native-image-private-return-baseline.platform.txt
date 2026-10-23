@@ -1,0 +1,4 @@
+image.private-return-baseline.type=Number
+image.private-return-baseline.value=5
+image.private-return-baseline.argument=5
+image.private-return-baseline.done=1

@@ -1,0 +1,3 @@
+task.presentation.type=ЗамерЗадачи
+task.presentation.primary=en
+task.presentation.alias=1

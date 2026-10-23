@@ -1,0 +1,4 @@
+canonical.error.0	accepted
+canonical.error.1	rejected
+canonical.error.2	rejected
+canonical.error.3	rejected

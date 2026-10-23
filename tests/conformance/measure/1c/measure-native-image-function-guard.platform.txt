@@ -1,0 +1,4 @@
+image.native.function_guard.ascii=abc
+image.native.function_guard.cyrillic=Пр
+image.native.function_guard.zero=
+image.native.function_guard.long=abc

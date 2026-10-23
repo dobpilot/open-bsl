@@ -1,0 +1,37 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "independent compiler-produced protected module",
+  "module_resource": "f0d54940-82ea-4392-a3b5-2af94c9a7e00.0",
+  "method": "Designer CreateDistributionFiles -cffile, individual module source exclusion; image/info without text verified",
+  "container_reader_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-execute-control-module.bsl": {
+      "bytes": 411,
+      "sha256": "c135fda0045bb2df2aa38cf358be429b42d29ab4a48df2633a91ad9f439eea05"
+    },
+    "native-image-execute-compiled.image": {
+      "bytes": 541,
+      "sha256": "cdaa0b78acfeda3c638aab9201e259cbea855ab796937c3467dd3276cfcfdb4b"
+    },
+    "native-image-execute-compiled.Module.bin": {
+      "bytes": 1314,
+      "sha256": "26cbac4e47c40bab28dc06a6669c37e873664bf8b5e0815b168e7f24f63fa006"
+    },
+    "measure-native-image-execute-source.bsl": {
+      "bytes": 632,
+      "sha256": "809e95c7118db73d7db154e6c07da5324d993b7e75dbf17e971d2fbb49ac4343"
+    },
+    "measure-native-image-execute-source.platform.txt": {
+      "bytes": 64,
+      "sha256": "6e7958c3adec6020b8691c58dc73271e7743d389122e3a61443a55cb3e7a7f20"
+    },
+    "measure-native-image-execute-compiled.bsl": {
+      "bytes": 632,
+      "sha256": "809e95c7118db73d7db154e6c07da5324d993b7e75dbf17e971d2fbb49ac4343"
+    },
+    "measure-native-image-execute-compiled.platform.txt": {
+      "bytes": 64,
+      "sha256": "6e7958c3adec6020b8691c58dc73271e7743d389122e3a61443a55cb3e7a7f20"
+    }
+  }
+}

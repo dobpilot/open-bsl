@@ -1,0 +1,22 @@
+Auto
+Vertical
+Combined
+Horizontal
+Separate column
+Auto
+Vertical
+Combined
+Horizontal
+Separate column
+DataCompositionFieldPlacement
+EnumDataCompositionFieldPlacement
+DataCompositionFieldPlacement
+DataCompositionFieldPlacement
+1
+1
+1
+1
+1
+0
+0
+Auto

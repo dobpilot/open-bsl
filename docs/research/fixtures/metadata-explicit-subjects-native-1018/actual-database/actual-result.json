@@ -1,0 +1,7 @@
+{
+  "status": "passed",
+  "binary_sha256": "615ef8fad4cab8548934e55e3d400ead7c872da139d4c69f4943cca2c5595d69",
+  "binary_unchanged": true,
+  "scope": "Real SDK acquisition, original native users/roles and DatabaseDataAccess; independent nonprivileged Sessions/connections. Explicit empty diagnostic initializer, not production startup.",
+  "database_read_only": true
+}

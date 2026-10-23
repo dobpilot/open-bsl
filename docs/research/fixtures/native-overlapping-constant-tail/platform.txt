@@ -1,0 +1,3 @@
+native.overlap.entered=1
+native.overlap.shared=42
+native.overlap.promise=1

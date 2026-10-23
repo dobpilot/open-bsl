@@ -1,0 +1,20 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental finite zero-label control, pending native receipt",
+  "scope": "Public ordinary frame jumps at pc24 to32. Private four-slot flags1 frame with one empty DefPrm jumps at same pc24 to32. Only DefPrm is added relative to the nonzero-label absent-default control. Falling through pc24 would return sentinel Const[1]=23. Both entries terminate; no original application code is executed. This does not establish original flags2 procedure behavior.",
+  "files": {
+    "native-image-nonzero-label-private-defaults.image": {
+      "bytes": 997,
+      "sha256": "9ff05f08cbbaa5c83b546517bb5d5bb8a3a70b55458e609dac715b958e3cafd4"
+    },
+    "native-image-nonzero-label-private-defaults.Module.bin": {
+      "bytes": 2258,
+      "sha256": "0d3d51e6d6a06ea277b99ed9c788c388dca4262f1345c329434e670501c69850"
+    },
+    "measure-native-image-nonzero-label-private-defaults.bsl": {
+      "bytes": 1523,
+      "sha256": "a6479334bbdf4765e13773f76c68ec193bb07d72846531c3e1f38a5709e860d8"
+    }
+  },
+  "interpretation": "Non-discriminating control: wrapper reads an uninitialized local instead of returning the private result. The Undefined receipt is not evidence about private jump behavior; do not use as a label-semantic oracle."
+}

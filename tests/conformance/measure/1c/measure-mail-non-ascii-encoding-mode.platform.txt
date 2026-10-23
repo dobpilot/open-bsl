@@ -1,0 +1,9 @@
+file.begin	mail-non-ascii-encoding-mode-1
+MAIL.ENCODING.MIME	MIME
+MAIL.ENCODING.QUOTED	QuotedPrintable
+MAIL.ENCODING.NONE	None
+MAIL.ENCODING.TYPE	InternetMailMessageNonASCIISymbolsEncodingMode
+MAIL.ENCODING.ALIAS.MIME	Yes
+MAIL.ENCODING.ALIAS.QUOTED	Yes
+MAIL.ENCODING.ALIAS.NONE	Yes
+file.end	mail-non-ascii-encoding-mode-1

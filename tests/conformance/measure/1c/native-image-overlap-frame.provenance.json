@@ -1,0 +1,32 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "native-image-shared-try-body.image",
+  "change": "Replace only the private entry local metadata with four observed flags 1338/1459/3091/3027, external slot 0, and omit DefPrm. Public traversal completes with reference/result 12. Independent private Execute call crashed ENTERPRISE; its incomplete observation is not a BSL execution oracle. The final successful driver does not invoke the private entry.",
+  "files": {
+    "native-image-overlap-frame.image": {
+      "bytes": 684,
+      "sha256": "5b935957c9356e67e8cfc392e05a566fd7c57231906c13bef4d55d0c11c594c7"
+    },
+    "native-image-overlap-frame.Module.bin": {
+      "bytes": 1945,
+      "sha256": "cff17719d535e0ffdb84b57797c6ca1432478375e74b4af54dba21709c74751e"
+    },
+    "measure-native-image-overlap-frame.bsl": {
+      "bytes": 580,
+      "sha256": "255140b8f4b5d223e188209d2325e5ca09af7ea602cd3fce2a88534fb98d4444"
+    },
+    "measure-native-image-overlap-frame.platform.txt": {
+      "bytes": 62,
+      "sha256": "bc2c25e783a42f3b8e28b03d3c412161791b2011c0977e2091e6ed98ab435f7e"
+    },
+    "native-image-overlap-frame-private-crash.driver.bsl": {
+      "bytes": 1219,
+      "sha256": "cfd6361c9f38f8ed715ee51fc7fb13140ca299f4b11a759157bd8fb7187856f9"
+    },
+    "native-image-overlap-frame-private-crash.observation.txt": {
+      "bytes": 349,
+      "sha256": "d34ebab3c2a4b91c17dfa4ab97c8c6cd66e28b13621c26ad740da340bc5420ad"
+    }
+  }
+}

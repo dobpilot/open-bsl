@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental slot6 original-flag control failed; no oracle",
+  "scope": "slot-six original flags, remaining flags ordinary. All twelve external slots0, private DefPrm absent, Const0=N7, initializer14 and empty body. Original globals absent; only entry is observed.",
+  "files": {
+    "native-image-twelve-frame-object-slot-six.image": {
+      "bytes": 1459,
+      "sha256": "2d34512d23fe49aec3f03302fb9eed694bfa1195d1a701512286e6365cc5a6f5"
+    },
+    "native-image-twelve-frame-object-slot-six.Module.bin": {
+      "bytes": 2720,
+      "sha256": "82fc1d66aa0c8305f76cae43b135f4ff2974a6366960c5c8831cd3cd1715ef82"
+    },
+    "measure-native-image-twelve-frame-object-slot-six.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-slot-six.log"
+  }
+}

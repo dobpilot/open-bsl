@@ -1,0 +1,11 @@
+{
+  "database": "demo",
+  "process_exit_code": 0,
+  "seconds": 151.98,
+  "canary_passed": true,
+  "sdk_readonly_transactions": true,
+  "diagnostic_network_guard": false,
+  "binary_sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+  "binary_unchanged_during_run": true,
+  "scope": "SDK0.9.23 with measured explicit catalog-role/user rights and document-reference fix; unchanged original initialization. SDK PostgreSQL operations enforce READ ONLY transactions; filesystem is read-only under bwrap, address space limited to12GiB. No diagnostic hooks in binary."
+}

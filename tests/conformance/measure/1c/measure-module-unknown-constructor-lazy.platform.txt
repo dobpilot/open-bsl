@@ -1,0 +1,1 @@
+file.begin	module-unknown-constructor-lazy-1

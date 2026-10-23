@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental twelve-slot entry control, native process failure; no oracle",
+  "scope": "original frame: private flags2, parameter count3, original variable names and zero label table. Original mode retains twelve descriptor flags/external slots and omits DefPrm; baseline has ordinary parameters/locals and three empty defaults. Body is only NOP/End. Const[0]=7. No original body or application code is executed.",
+  "files": {
+    "native-image-twelve-frame-entry-original.image": {
+      "bytes": 1495,
+      "sha256": "d3f19f0290e8854b34bf2104e314c7830ed86e99881aa559f966e1a9339e5005"
+    },
+    "native-image-twelve-frame-entry-original.Module.bin": {
+      "bytes": 2756,
+      "sha256": "5a969e772f73ebf2753b23606c6f6cae1b2d53aaff1e17c6d878046d0e3694ab"
+    },
+    "measure-native-image-twelve-frame-entry-original.bsl": {
+      "bytes": 922,
+      "sha256": "4892f2f2e08276c9c80886e736496c592f58846d56e93fb8b96afdeab00f29be"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-entry-original.log",
+    "interpretation": "The synthetic empty-body control does not preserve the original module environment. Failure does not establish the semantics or validity of the original frame."
+  }
+}

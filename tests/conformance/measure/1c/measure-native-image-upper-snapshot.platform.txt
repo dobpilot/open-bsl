@@ -1,0 +1,3 @@
+image.native.builtin_snapshot.61.value=АБВЁ XYZ
+image.native.builtin_snapshot.61.argument=изменено
+image.native.builtin_snapshot.61.direct=1

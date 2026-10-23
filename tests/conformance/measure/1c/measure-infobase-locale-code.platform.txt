@@ -1,0 +1,3 @@
+INFOBASE	en_US_POSIX	String
+CURRENT	en_US_POSIX	String
+ALIAS	Yes

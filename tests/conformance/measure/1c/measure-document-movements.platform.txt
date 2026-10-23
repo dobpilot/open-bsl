@@ -1,0 +1,10 @@
+document.movements.body=Коллекция движений:0
+document.movements.body.identity=Да
+document.movements.type=Коллекция движений
+document.movements.type.lookup=Да
+document.movements.type.english=Да
+document.movements.count=0:0
+document.movements.alias=Да
+document.movements.isolation=Нет
+document.movements.write=rejected
+document.movements.iteration=0

@@ -1,0 +1,4 @@
+image.native.extra.103.result=0
+image.native.extra.104.result=0
+image.native.extra.108.result=0
+image.native.extra.110.result=0

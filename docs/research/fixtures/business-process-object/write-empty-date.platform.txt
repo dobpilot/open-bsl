@@ -1,0 +1,6 @@
+business.write.before.new	1
+business.write.before.ref.empty	1
+business.write.before.number.empty	1
+business.write.error	{Обработка.Замеры.Форма.Форма.Форма(38)}: Error calling context method (Записать): "Date"field value cannot be an empty date
+business.write.arity.ru	rejected
+business.write.arity.en	rejected

@@ -1,0 +1,7 @@
+html.type.document	Yes
+html.type.body	Yes
+html.type.html	HTML Marking element
+html.type.head	HTML Title element
+html.type.title	HTML element
+html.type.div	HTML Block element
+html.type.br	HTML element

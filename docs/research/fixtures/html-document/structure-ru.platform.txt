@@ -1,0 +1,9 @@
+html.initial.root	html
+html.initial.root.children	0
+html.initial.body.undefined	Да
+html.body.same	Да
+html.body.type	Элемент тело HTML
+html.body.name	body
+html.body.replaced	Да
+html.body.old.parent.undefined	Да
+html.title.empty.text	<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"><html><head><title>Заголовок &lt;&amp;&gt;</title></head><body>&lt;&amp;&gt;"<br><div></div></body></html>

@@ -1,0 +1,2 @@
+image.native.string.length=40
+image.native.string.value=строка "в кавычках"<LF><LF>вторая<LF>третья<CR>конец

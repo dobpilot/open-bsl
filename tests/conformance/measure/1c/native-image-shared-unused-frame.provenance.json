@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-shared-try-body.image and Module.bin",
+  "change": "Only ordinary frames differ: public has one reference parameter plus four unused normal locals; private has one reference parameter with a different name plus three unused normal locals. Commands, entries, defaults and module info remain unchanged. Both entry paths are probed; unknown flags and original application code are not executed.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-shared-unused-frame.image": {
+      "bytes": 780,
+      "sha256": "596ca44de0e88c430b45cf7b0574d5db0cccbb13957b58a9fc616e9feefb8701"
+    },
+    "native-image-shared-unused-frame.Module.bin": {
+      "bytes": 2041,
+      "sha256": "245dcab525f4563517dd50c811b808bab6466c2cab37f4848f6dc076cd7332cf"
+    },
+    "measure-native-image-shared-unused-frame.bsl": {
+      "bytes": 1255,
+      "sha256": "3a5528e1ebd97551dad8f53f13842c7f42b8808df57da119bc421cf003f51436"
+    },
+    "measure-native-image-shared-unused-frame.platform.txt": {
+      "bytes": 164,
+      "sha256": "d188e2209890cd8509af30f4adb1e6b03b1552e2572ceede4b627732570a2c16"
+    }
+  },
+  "exit_status": 0
+}

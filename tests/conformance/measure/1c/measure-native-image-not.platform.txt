@@ -1,0 +1,4 @@
+image.native.not.true.result=20
+image.native.not.true.argument=20
+image.native.not.false.result=10
+image.native.not.false.argument=10

@@ -1,0 +1,7 @@
+file.begin	data-composition-filter-application-type-1
+DCS.FILTER.APPLICATION.ITEMS	No hierarchy
+DCS.FILTER.APPLICATION.HIERARCHY	Hierarchy
+DCS.FILTER.APPLICATION.HIERARCHY_ONLY	Hierarchy only
+DCS.FILTER.APPLICATION.TYPE	DataCompositionFilterApplicationType
+DCS.FILTER.APPLICATION.ENGLISH	OK
+file.end	data-composition-filter-application-type-1

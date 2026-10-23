@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "change": "Public function accepts a numeric argument and normal reference array. It appends private result through native method-call opcode 20, then appends Const[0] independently, then returns unchanged argument. Private arithmetic retains descriptor 1338/0 and N7. Calls are repeated twice. No dynamic fragment or original application code is executed.",
+  "files": {
+    "native-image-private-alias-direct-observation.image": {
+      "bytes": 481,
+      "sha256": "1b777d1aacfdfaf96acc098f45fba427cfb009bb27a18b8c31432b44e115c4c3"
+    },
+    "native-image-private-alias-direct-observation.Module.bin": {
+      "bytes": 1773,
+      "sha256": "5ce5ee58b858548727c8df8d876bea69046cc6bc07541bdbd2f8940f7cc1cd2a"
+    },
+    "measure-native-image-private-alias-direct-observation.bsl": {
+      "bytes": 2615,
+      "sha256": "a11415f3de4255b804fca4c296ba12717f5be821257afc172918cf1f8ef758f7"
+    },
+    "measure-native-image-private-alias-direct-observation.platform.txt": {
+      "bytes": 464,
+      "sha256": "83f784cc2dbde0b383ae56c302018e8de998e97072b79811db2e16369cf1ac57"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-alias-direct-observation-1009-v1-ib"
+}

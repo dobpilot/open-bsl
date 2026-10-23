@@ -1,0 +1,23 @@
+{
+  "source": "demo ConfigCAS, read-only SDK acquisition",
+  "canonical_identity": "0af29d86-a889-11f1-90dc-02d78b8d8e99",
+  "native_export": "1C 8.3.27.2342 ibcmd config export --file original.cfe",
+  "edt_import": "1C:EDT 2026.1.3+25 import --configuration-files xml",
+  "resources": "Original compressed resource bytes and configinfo packed with v8unpack; native export succeeds",
+  "files_sha256": {
+    "demo-extension-xml/Catalogs/Расш1_Справочник1.xml": "4c74c6b375dd95684c96960cffc8f1b8d5bcb43e0da12ab341f48f5bd9481eee",
+    "demo-extension-xml/Catalogs/СтавкиНДС.xml": "cebd2f0007663354cf7699e659949dd723c5b8abb40f60a4a3ae46e6c5dbc4ce",
+    "demo-extension-xml/Configuration.xml": "027591cd538bc8ff228514e79fd83d11fe3ee39fd18b7d792ec91a09572bedda",
+    "demo-extension-xml/Languages/Русский.xml": "081c7c0850916771b7d335822252c8a94170960663ced919ed2a52ea0cfa4b33",
+    "demo-extension-xml/Roles/Расш1_ОсновнаяРоль/Ext/Rights.xml": "fc44678b9c20d96963896d403a6016f450ee9d763750b2d871a6cc3bacb7feb0",
+    "demo-extension-xml/Roles/Расш1_ОсновнаяРоль.xml": "9360515a3c57420028f26ec05d0d199c843981b1e539f0e61fd350bd794f6398",
+    "demo-extension-edt/.project": "d9f2e20defba061e80397f31aeb1fc6a869f43b5cf48e5a63e5e7839a7e73bee",
+    "demo-extension-edt/.settings/org.eclipse.core.resources.prefs": "4238e4eafab8309d5f1ee3c167db1e6bf254d5587daa652f1495da7c3942b4c4",
+    "demo-extension-edt/DT-INF/PROJECT.PMF": "ee45774d9c6528ca0db733f3e3de5e4983cb4ae338c84ca3efbcbea325edfda1",
+    "demo-extension-edt/src/Catalogs/Расш1_Справочник1/Расш1_Справочник1.mdo": "9386649825f1e03860135f8862ae5da61dc4788d649e9081abd8d5da8edd1e16",
+    "demo-extension-edt/src/Catalogs/СтавкиНДС/СтавкиНДС.mdo": "1f2decf10d52fbd3be2a7ae20ee70a4baae66101e9a2eeb00646eaaa228023e6",
+    "demo-extension-edt/src/Configuration/Configuration.mdo": "2842979570f0c0758c452cd0170eaae0f5a1c1d5bbae9d49ce19b7a1f84eee3f",
+    "demo-extension-edt/src/Roles/Расш1_ОсновнаяРоль/Rights.rights": "c9af92a6c96a29dc1f749403d8ad88024aa914e75e0885ee349e45aa7af0fa7b",
+    "demo-extension-edt/src/Roles/Расш1_ОсновнаяРоль/Расш1_ОсновнаяРоль.mdo": "215b8a5b4724425383b832f91a85d3760c8537fd22920cb97b9eaf665d1f6e55"
+  }
+}

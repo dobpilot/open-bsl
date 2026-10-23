@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:CommonModule xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="fca893b1-3e72-4fbb-a3d5-4b5a1a63d146">
+  <name>ЗамерыЛенивойАрности</name>
+  <server>true</server>
+  <serverCall>true</serverCall>
+</mdclass:CommonModule>

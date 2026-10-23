@@ -1,0 +1,4 @@
+SINGLE	Single	CommandParameterUseMode
+MULTIPLE	Multiple	CommandParameterUseMode
+SINGLE_ALIAS	Yes
+MULTIPLE_ALIAS	Yes

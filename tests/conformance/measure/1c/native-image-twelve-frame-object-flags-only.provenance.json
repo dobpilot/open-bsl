@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental original-flags negative-slot control, failed; no oracle",
+  "scope": "flags-only: three-parameter twelve-slot empty frame, absent private DefPrm, initializer14, Const0=N7. external-only retains ordinary flags and changes every private external slot to0; flags-only retains original flags and changes every private external slot to-1. Original global environment absent.",
+  "files": {
+    "native-image-twelve-frame-object-flags-only.image": {
+      "bytes": 1499,
+      "sha256": "3da7ac4f91de6362b4800de17105ba639676c2dd8366b20297c8c95253611f2f"
+    },
+    "native-image-twelve-frame-object-flags-only.Module.bin": {
+      "bytes": 2760,
+      "sha256": "a181a61f59af02941865bd8ef91128ce63fa8e503872414e2f0c4b576bfbfeb8"
+    },
+    "measure-native-image-twelve-frame-object-flags-only.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-flags-only.log",
+    "interpretation": "Original flag table also fails with external slots=-1 in this synthetic envelope. No flag bit semantics or validity of the original method is inferred."
+  }
+}

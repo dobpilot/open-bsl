@@ -1,0 +1,8 @@
+business.head-task.ru.type	Замер задачи
+business.head-task.en.type	Замер задачи
+business.head-task.empty	1
+business.head-task.reference	1
+business.head-task.undefined	accepted
+business.head-task.after.undefined.empty	1
+business.head-task.string	accepted
+business.head-task.after.string.empty	1

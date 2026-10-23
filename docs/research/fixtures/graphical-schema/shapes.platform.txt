@@ -1,0 +1,32 @@
+graphical.shapes.block.text	Блок
+graphical.shapes.block.alias	1
+graphical.shapes.document.text	Документ
+graphical.shapes.document.alias	1
+graphical.shapes.none.text	Нет
+graphical.shapes.none.alias	1
+graphical.shapes.folder.text	Папка
+graphical.shapes.folder.alias	1
+graphical.shapes.verticalbrackets.text	Скобки вертикальные
+graphical.shapes.verticalbrackets.alias	1
+graphical.shapes.horizontalbrackets.text	Скобки горизонтальные
+graphical.shapes.horizontalbrackets.alias	1
+graphical.shapes.uparrow.text	Стрелка вверх
+graphical.shapes.uparrow.alias	1
+graphical.shapes.updownarrow.text	Стрелка вверх-вниз
+graphical.shapes.updownarrow.alias	1
+graphical.shapes.leftarrow.text	Стрелка влево
+graphical.shapes.leftarrow.alias	1
+graphical.shapes.leftrightarrow.text	Стрелка влево-вправо
+graphical.shapes.leftrightarrow.alias	1
+graphical.shapes.downarrow.text	Стрелка вниз
+graphical.shapes.downarrow.alias	1
+graphical.shapes.rightarrow.text	Стрелка вправо
+graphical.shapes.rightarrow.alias	1
+graphical.shapes.file.text	Файл
+graphical.shapes.file.alias	1
+graphical.shapes.ellipse.text	Эллипс
+graphical.shapes.ellipse.alias	1
+graphical.shapes.type	ФигурыГрафическойСхемы
+graphical.shapes.type.alias	1
+graphical.shapes.global.text	ПеречислениеФигурыГрафическойСхемы
+graphical.shapes.global.type	ПеречислениеФигурыГрафическойСхемы

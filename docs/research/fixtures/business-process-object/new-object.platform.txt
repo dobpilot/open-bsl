@@ -1,0 +1,10 @@
+business.new.type	Business process Object: Замер бизнес процесса
+business.new.is-new	1
+business.new.ref.empty	1
+business.new.number	
+business.new.date	
+business.new.deletion-mark	0
+business.new.started	0
+business.new.completed	0
+business.new.date.assigned	20261006123456
+business.new.fill.is-new	1

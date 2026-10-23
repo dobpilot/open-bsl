@@ -1,0 +1,47 @@
+// Нативная проба контекстных процедур с тремя, пятью и шестью аргументами.
+Попытка
+    Аргумент0 = 1;
+    Аргумент1 = 2;
+    Аргумент2 = 3;
+    Аргумент3 = 4;
+    Аргумент4 = 5;
+    Аргумент5 = 6;
+    РезультатПробы = ЗамерыТранзитивногоРодителя.Проба3(Аргумент0, Аргумент1, Аргумент2, Аргумент3, Аргумент4, Аргумент5);
+    Сообщить("image.native.context.procedure.3.result=" + Строка(РезультатПробы));
+    Сообщить("image.native.context.procedure.3.argument0=" + Строка(Аргумент0));
+    Сообщить("image.native.context.procedure.3.argument1=" + Строка(Аргумент1));
+    Сообщить("image.native.context.procedure.3.argument2=" + Строка(Аргумент2));
+    Сообщить("image.native.context.procedure.3.argument3=" + Строка(Аргумент3));
+    Сообщить("image.native.context.procedure.3.argument4=" + Строка(Аргумент4));
+    Сообщить("image.native.context.procedure.3.argument5=" + Строка(Аргумент5));
+    Аргумент0 = 1;
+    Аргумент1 = 2;
+    Аргумент2 = 3;
+    Аргумент3 = 4;
+    Аргумент4 = 5;
+    Аргумент5 = 6;
+    РезультатПробы = ЗамерыТранзитивногоРодителя.Проба5(Аргумент0, Аргумент1, Аргумент2, Аргумент3, Аргумент4, Аргумент5);
+    Сообщить("image.native.context.procedure.5.result=" + Строка(РезультатПробы));
+    Сообщить("image.native.context.procedure.5.argument0=" + Строка(Аргумент0));
+    Сообщить("image.native.context.procedure.5.argument1=" + Строка(Аргумент1));
+    Сообщить("image.native.context.procedure.5.argument2=" + Строка(Аргумент2));
+    Сообщить("image.native.context.procedure.5.argument3=" + Строка(Аргумент3));
+    Сообщить("image.native.context.procedure.5.argument4=" + Строка(Аргумент4));
+    Сообщить("image.native.context.procedure.5.argument5=" + Строка(Аргумент5));
+    Аргумент0 = 1;
+    Аргумент1 = 2;
+    Аргумент2 = 3;
+    Аргумент3 = 4;
+    Аргумент4 = 5;
+    Аргумент5 = 6;
+    РезультатПробы = ЗамерыТранзитивногоРодителя.Проба6(Аргумент0, Аргумент1, Аргумент2, Аргумент3, Аргумент4, Аргумент5);
+    Сообщить("image.native.context.procedure.6.result=" + Строка(РезультатПробы));
+    Сообщить("image.native.context.procedure.6.argument0=" + Строка(Аргумент0));
+    Сообщить("image.native.context.procedure.6.argument1=" + Строка(Аргумент1));
+    Сообщить("image.native.context.procedure.6.argument2=" + Строка(Аргумент2));
+    Сообщить("image.native.context.procedure.6.argument3=" + Строка(Аргумент3));
+    Сообщить("image.native.context.procedure.6.argument4=" + Строка(Аргумент4));
+    Сообщить("image.native.context.procedure.6.argument5=" + Строка(Аргумент5));
+Исключение
+    Сообщить("image.native.context.procedure.failure=" + ОписаниеОшибки());
+КонецПопытки;

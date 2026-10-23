@@ -1,0 +1,4 @@
+module.unknown_common.before=42
+module.unknown_common.call=ERROR
+module.unknown_common.procedure=ERROR
+module.unknown_common.after=42

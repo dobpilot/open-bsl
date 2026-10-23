@@ -1,0 +1,6 @@
+ROOT	EnumViewScalingMode
+TYPE	ViewScalingMode
+AUTO	Auto
+LARGE	Large
+NORMAL	Normal
+ALIASES	PASS

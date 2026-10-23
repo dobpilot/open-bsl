@@ -1,0 +1,17 @@
+mail.pop3.APOP	APOP	1
+mail.pop3.CramMD5	CramMD5	1
+mail.pop3.Обычная	General	1
+mail.pop3.General	General	1
+mail.pop3.root	EnumPOP3AuthenticationMode
+mail.pop3.type	POP3AuthenticationMode
+mail.smtp.CramMD5	CramMD5	1
+mail.smtp.Login	Login	1
+mail.smtp.Plain	Plain	1
+mail.smtp.БезАутентификации	None	1
+mail.smtp.None	None	1
+mail.smtp.ПоУмолчанию	Default	1
+mail.smtp.Default	Default	1
+mail.smtp.root	EnumSMTPAuthenticationMode
+mail.smtp.type	SMTPAuthenticationMode
+mail.pop3.type.alias	1
+mail.smtp.type.alias	1

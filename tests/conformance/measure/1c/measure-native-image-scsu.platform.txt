@@ -1,0 +1,10 @@
+image.scsu.arithmetic=14
+image.scsu.reference=6
+image.scsu.default=12
+image.scsu.procedure=13
+image.scsu.branch.negative=2
+image.scsu.branch.zero=100
+image.scsu.branch.positive=12
+image.scsu.loops=17
+image.scsu.short_circuit=1
+image.scsu.exception=поймано

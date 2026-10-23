@@ -1,0 +1,11 @@
+document.assignment.number.number.text=accepted:Number:[999999999]
+document.assignment.number.number.numeric=accepted:Number:[17]
+document.assignment.number.number.undefined=accepted:Number:[0]
+document.assignment.number.number.null=accepted:Number:[0]
+document.assignment.number.number.boolean=accepted:Number:[1]
+document.assignment.number.date.native=accepted:Yes
+document.assignment.number.date.string=accepted:Yes
+document.assignment.number.date.undefined=accepted:Yes
+document.assignment.number.date.null=accepted:Yes
+document.assignment.number.deletion.true=accepted:Yes
+document.assignment.number.posted.true=accepted:Yes

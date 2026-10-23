@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ConfigDumpInfo xmlns="http://v8.1c.ru/8.3/xcf/dumpinfo" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" format="Hierarchical" version="2.20">
+	<ConfigVersions>
+		<Metadata name="CommonModule.ЗамерыДинамическогоМодуля" id="d7b9c017-c8e3-45a9-b8c0-2e5902fc2aa4" configVersion="d3971b641bbc234caece3aa3a0d05ed000000000"/>
+		<Metadata name="CommonModule.ЗамерыДинамическогоМодуля.Module" id="d7b9c017-c8e3-45a9-b8c0-2e5902fc2aa4.0" configVersion="9f84c365aa0efc4089830f22ef37388b00000000"/>
+		<Metadata name="CommonModule.ЗамерыЗначенияМодуля" id="4d392458-2a40-4ad6-9c35-9c8422c2184b" configVersion="bedbcc1fe1b39143b15397fadc655ab500000000"/>
+		<Metadata name="CommonModule.ЗамерыЗначенияМодуля.Module" id="4d392458-2a40-4ad6-9c35-9c8422c2184b.0" configVersion="4b0220da71402c4a84c564bce2d70cc300000000"/>
+		<Metadata name="CommonModule.ЗамерыЛенивойАрности" id="fca893b1-3e72-4fbb-a3d5-4b5a1a63d146" configVersion="c61db1cb966c9a4ebffeb2b3cee7a6d100000000"/>
+		<Metadata name="CommonModule.ЗамерыЛенивойАрности.Module" id="fca893b1-3e72-4fbb-a3d5-4b5a1a63d146.0" configVersion="7d0a0e4a1ebdb747bcfc4c79705365cf00000000"/>
+		<Metadata name="CommonModule.ЗамерыСамоссылкиМодуля" id="3a56c8f4-6ef2-4d72-924b-0e3f82bc6901" configVersion="7ca2b539335cc54eb940e030c71993e000000000"/>
+		<Metadata name="CommonModule.ЗамерыСамоссылкиМодуля.Module" id="3a56c8f4-6ef2-4d72-924b-0e3f82bc6901.0" configVersion="1cb9d6f4909f7f4094822849d401146700000000"/>
+		<Metadata name="CommonModule.ЗамерыФоновыйСосед" id="9e4b2f7c-8b6d-4eaf-9c73-3f4d2e1a6b23" configVersion="1f620cddfccaa2419f6360c56ea3c84700000000"/>
+		<Metadata name="CommonModule.ЗамерыФоновыйСосед.Module" id="9e4b2f7c-8b6d-4eaf-9c73-3f4d2e1a6b23.0" configVersion="d44b96c1152f9f42859589b8f752015d00000000"/>
+		<Metadata name="CommonModule.ЗамерыФоновыхЗаданий" id="7c2f2d5a-6f4b-4c8e-9a51-1d2b0c9e4f01" configVersion="9fb73c03f9fcae4c9c1f671ae7d79cfd00000000"/>
+		<Metadata name="CommonModule.ЗамерыФоновыхЗаданий.Module" id="7c2f2d5a-6f4b-4c8e-9a51-1d2b0c9e4f01.0" configVersion="59318cc827856f4aa3329a6afe989f8100000000"/>
+		<Metadata name="CommonModule.ЗамерыФоновыхЗаданийДвусторонние" id="8d3a1e6b-7a5c-4d9f-8b62-2e3c1d0f5a12" configVersion="f8d950c5abd5d14e9b889b735e29ac8d00000000"/>
+		<Metadata name="CommonModule.ЗамерыФоновыхЗаданийДвусторонние.Module" id="8d3a1e6b-7a5c-4d9f-8b62-2e3c1d0f5a12.0" configVersion="1ff1675bcf491e4bacd2b72b5f451ded00000000"/>
+		<Metadata name="CommonTemplate.ТаблицаФайла" id="94c69a28-4a6b-47a4-abcd-000000000002" configVersion="83682ec25ed2bb478cae6b3dad11bf6b00000000"/>
+		<Metadata name="CommonTemplate.ТаблицаФайла.Template" id="94c69a28-4a6b-47a4-abcd-000000000002.0" configVersion="9ed0e022f098c3478d659c316773200000000000"/>
+		<Metadata name="CommonTemplate.ТекстФайла" id="94c69a28-4a6b-47a4-abcd-000000000001" configVersion="c2d50a7b61a15e4d9f7527d4d6f1fe6500000000"/>
+		<Metadata name="CommonTemplate.ТекстФайла.Template" id="94c69a28-4a6b-47a4-abcd-000000000001.0" configVersion="27a253c203584b4987b0e345e825936500000000"/>
+		<Metadata name="Configuration.Configuration" id="844357d3-1338-41f3-8138-b7d44e709992" configVersion="5ad54b767b41524a9c50c79736dca94c00000000"/>
+		<Metadata name="Configuration.Configuration.ManagedApplicationModule" id="efca70f3-7466-4c01-b12b-f3d7cf96a7a5.6" configVersion="1e79bf2df5b26841872825d40e4e186500000000"/>
+		<Metadata name="Configuration.Configuration.SessionModule" id="efca70f3-7466-4c01-b12b-f3d7cf96a7a5.7" configVersion="b43153ea3f07ec4888595795698d247d00000000"/>
+		<Metadata name="DataProcessor.Замеры" id="ff92317d-71e7-4664-a13a-18bd31fd3701" configVersion="88bfc5a2ea639b4bba10950b034e8aeb00000000"/>
+		<Metadata name="DataProcessor.Замеры.Form.Форма" id="8081de47-60ab-4047-8c98-1e22e2725431" configVersion="49d62df9191de14ab7c53e554247cfd900000000"/>
+		<Metadata name="DataProcessor.Замеры.Form.Форма.Form" id="8081de47-60ab-4047-8c98-1e22e2725431.0" configVersion="0308ee9fb20cb548bcf5ba8df45d41b700000000"/>
+		<Metadata name="DataProcessor.Замеры.ObjectModule" id="ff92317d-71e7-4664-a13a-18bd31fd3701.0" configVersion="c070ebeeba48c64aaea1ded5e85e726f00000000"/>
+		<Metadata name="DataProcessor.Замеры.Template.МакетОбъекта" id="94c69a28-4a6b-47a4-abcd-000000000003" configVersion="dee718df0b266f4092bdc5a4602f12c100000000"/>
+		<Metadata name="DataProcessor.Замеры.Template.МакетОбъекта.Template" id="94c69a28-4a6b-47a4-abcd-000000000003.0" configVersion="c8259e195c62544bbec4bf917cd3c16f00000000"/>
+		<Metadata name="Language.English" id="7a0b6c77-d103-4bfc-a161-3eec2be3798a" configVersion="6893d3e8975d4d4d9e8e9b143457ce5c00000000"/>
+	</ConfigVersions>
+</ConfigDumpInfo>

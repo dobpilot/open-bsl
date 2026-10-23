@@ -1,0 +1,3 @@
+file.begin	functional-option-source-rights-setup-1
+FUNCTIONAL_OPTION.SOURCE_RIGHTS_SETUP	created
+file.end	functional-option-source-rights-setup-1

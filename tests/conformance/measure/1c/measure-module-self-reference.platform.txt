@@ -1,0 +1,3 @@
+file.begin	module-self-reference-1
+MODULE.SELF_REFERENCE.QUALIFIED_CALL	42
+file.end	module-self-reference-1

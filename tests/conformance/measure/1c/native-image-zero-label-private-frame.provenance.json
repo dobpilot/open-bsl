@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental finite zero-label control, completed native receipt",
+  "scope": "Public ordinary frame has label4 target32. Private four-slot flags1 frame without DefPrm has label4 target0. A start-of-image jump would return7, a fallthrough would return23; native private result is Undefined. Both entries terminate; no original application code is executed. This does not establish original flags2 procedure behavior.",
+  "files": {
+    "native-image-zero-label-private-frame.image": {
+      "bytes": 978,
+      "sha256": "1b331cfcc5cac5f9923efdcaa454334eed1f82bb13895e96b485361a6e6c021e"
+    },
+    "native-image-zero-label-private-frame.Module.bin": {
+      "bytes": 2239,
+      "sha256": "5af16b8275b3aeaffc525a4edf11f2cd3f7ec65cddb3131c8eff91ff190c07e1"
+    },
+    "measure-native-image-zero-label-private-frame.bsl": {
+      "bytes": 1469,
+      "sha256": "b307b0d8b56b9d147def54a611be885f46e1c742b9e5d944e6e20e569f880502"
+    },
+    "measure-native-image-zero-label-private-frame.platform.txt": {
+      "bytes": 333,
+      "sha256": "bc7cca02d9bbd2759a24839688b2cb58397a5bcbe9a2ca394ab16bdbac8a09ee"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-zero-label-private-1010-v1"
+  },
+  "interpretation": "Non-discriminating control: wrapper reads an uninitialized local instead of returning the private result. The Undefined receipt is not evidence about private jump behavior; do not use as a label-semantic oracle."
+}

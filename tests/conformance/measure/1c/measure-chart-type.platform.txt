@@ -1,0 +1,96 @@
+ROOT	EnumChartType
+TYPE	ChartType
+Stock	Stock
+ALIAS_Stock	PASS
+OpenHighLowClose	Open-High"-Low-Close"
+ALIAS_OpenHighLowClose	PASS
+ConcaveSurface	Concave surface
+ALIAS_ConcaveSurface	PASS
+Waterfall	Waterfall
+ALIAS_Waterfall	PASS
+Funnel	Cone
+ALIAS_Funnel	PASS
+NormalizedFunnel	Standardized cone
+ALIAS_NormalizedFunnel	PASS
+NormalizedFunnel3D	Standardized volumetric cone
+ALIAS_NormalizedFunnel3D	PASS
+Funnel3D	Volumetric cone
+ALIAS_Funnel3D	PASS
+ConvexSurface	Convex surface
+ALIAS_ConvexSurface	PASS
+Column	Column
+ALIAS_Column	PASS
+Bar	Bar
+ALIAS_Bar	PASS
+Bar3D	Bar 3D
+ALIAS_Bar3D	PASS
+NormalizedColumn	Normalized bar chart
+ALIAS_NormalizedColumn	PASS
+NormalizedBar	Normalized horizontal bar
+ALIAS_NormalizedBar	PASS
+NormalizedBar3D	Normalized horizontal 3D column
+ALIAS_NormalizedBar3D	PASS
+NormalizedColumn3D	Normalized 3D column
+ALIAS_NormalizedColumn3D	PASS
+Column3D	3D column
+ALIAS_Column3D	PASS
+StackedColumn	Stacked column
+ALIAS_StackedColumn	PASS
+StackedBar	Stacked Bar
+ALIAS_StackedBar	PASS
+StackedBar3D	Stacked bar 3D 
+ALIAS_StackedBar3D	PASS
+StackedColumn3D	Stacked column 3D
+ALIAS_StackedColumn3D	PASS
+Line	Line
+ALIAS_Line	PASS
+Step	Step
+ALIAS_Step	PASS
+StackedLine	Stacked graph
+ALIAS_StackedLine	PASS
+Area	Area
+ALIAS_Area	PASS
+StackedArea	Stacked Area
+ALIAS_StackedArea	PASS
+NormalizedArea	Normalized area graph
+ALIAS_NormalizedArea	PASS
+ShadedSurface	Shaded surface
+ALIAS_ShadedSurface	PASS
+Gauge	Gauge
+ALIAS_Gauge	PASS
+BarGraph	Bar graph
+ALIAS_BarGraph	PASS
+TapeGraph	Tape Graph
+ALIAS_TapeGraph	PASS
+CeilGraph	Ceil Graph
+ALIAS_CeilGraph	PASS
+PyramidGraph	Pyramid Graph
+ALIAS_PyramidGraph	PASS
+WireframeSurface	Wire-frame surface
+ALIAS_WireframeSurface	PASS
+Donut	Doughnut
+ALIAS_Donut	PASS
+Donut3D	3D doughnut
+ALIAS_Donut3D	PASS
+Pie	Pie
+ALIAS_Pie	PASS
+Pie3D	Pie 3D
+ALIAS_Pie3D	PASS
+Surface	Surface
+ALIAS_Surface	PASS
+Bubble	Bubble
+ALIAS_Bubble	PASS
+RadarLine	Radar chart
+ALIAS_RadarLine	PASS
+RadarStackedLine	Stacked radar chart
+ALIAS_RadarStackedLine	PASS
+RadarArea	Radar area chart
+ALIAS_RadarArea	PASS
+RadarStackedArea	Stacked radar area chart
+ALIAS_RadarStackedArea	PASS
+RadarNormalizedArea	Normalized radar area chart
+ALIAS_RadarNormalizedArea	PASS
+Honeycomb	Honeycomb
+ALIAS_Honeycomb	PASS
+Scatter	Scatter
+ALIAS_Scatter	PASS

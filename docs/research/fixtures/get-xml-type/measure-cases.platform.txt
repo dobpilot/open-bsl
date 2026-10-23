@@ -1,0 +1,12 @@
+xml.gettype.initial	|a|1
+xml.gettype.plain	|a|1
+xml.gettype.namespace	urn:probe|thing|1
+xml.gettype.builtin	http://www.w3.org/2001/XMLSchema|string|1
+xml.gettype.explicit	urn:probe|Kind|1
+xml.gettype.missingprefix	undefined
+xml.gettype.unprefixed	urn:probe|Kind|1
+xml.gettype.niltrue	undefined
+xml.gettype.nilone	undefined
+xml.gettype.text	undefined
+xml.gettype.end	undefined
+xml.gettype.whitespace	|b|1

@@ -1,0 +1,6 @@
+catalog.own.body=EMPTY:ERROR
+catalog.own.empty=FALSE
+catalog.own.input=FALSE:2:Description:ПроверяемаяСтрока
+catalog.own.message="ПроверяемаяСтрока" is a required field.
+catalog.own.field=ПроверяемаяСтрока
+catalog.own.filled=TRUE

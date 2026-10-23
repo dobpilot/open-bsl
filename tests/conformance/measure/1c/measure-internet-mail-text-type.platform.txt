@@ -1,0 +1,11 @@
+file.begin	internet-mail-text-type-1
+MAIL.TEXT.HTML	HTML
+MAIL.TEXT.CUSTOM	CustomText
+MAIL.TEXT.PLAIN	PlainText
+MAIL.TEXT.RICH	RichText
+MAIL.TEXT.TYPE	InternetMailTextType
+MAIL.TEXT.ALIAS.HTML	Yes
+MAIL.TEXT.ALIAS.CUSTOM	Yes
+MAIL.TEXT.ALIAS.PLAIN	Yes
+MAIL.TEXT.ALIAS.RICH	Yes
+file.end	internet-mail-text-type-1

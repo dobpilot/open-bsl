@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental control, completed native receipt",
+  "change": "Four independent public wrappers call four private functions. Each private function has the four original descriptor flags 1338/0,1459/0,3091/0,3027/0 and only returns a distinct slot; each private declaration omits DefPrm. All four slots are called with two actual arguments; zero-argument cases are excluded. All arithmetic is NOP. Const[0] is 7; caller argument is 5. No original code is executed.",
+  "files": {
+    "native-image-private-frame-no-defaults-two-arguments.image": {
+      "bytes": 1510,
+      "sha256": "dc5ef44bdd042f6451b41ee57fa898815bb5280c42cc9c7295bf0ed1b87af01a"
+    },
+    "native-image-private-frame-no-defaults-two-arguments.Module.bin": {
+      "bytes": 2771,
+      "sha256": "5b08d9994a772bb3468003d9b18b7ac99c0523113ea90daf1eb918fc3f476926"
+    },
+    "measure-native-image-private-frame-no-defaults-two-arguments.bsl": {
+      "bytes": 3062,
+      "sha256": "ac57855661ee34eab7f5b760d2356070e721c8001b5e967788c36ab0496e14f2"
+    },
+    "measure-native-image-private-frame-no-defaults-two-arguments.platform.txt": {
+      "bytes": 801,
+      "sha256": "a803e0c7efba6002f6b44e962df04cfd6d35258ba48f38110f643c4d639e19f5"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-private-two-1009-v1",
+    "scope": "Two actual arguments, but the second equals Const[0]; this control does not distinguish argument binding from constant-backed reads."
+  }
+}

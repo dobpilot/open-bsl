@@ -1,0 +1,7 @@
+catalog.code.body	ERROR
+catalog.code.cancel	manual
+catalog.code.generate	H-0000001
+catalog.code.safe.restored	YES
+catalog.code.handler	standard=YES:prefix=[P-]:safe=NO
+catalog.code.handler	standard=YES:prefix=[]:safe=NO
+catalog.code.handler	standard=YES:prefix=[S-]:safe=NO

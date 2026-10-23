@@ -1,0 +1,5 @@
+AUTO	Auto	PASS
+BOX	Checkbox	PASS
+SWITCH	Switch	PASS
+TUMBLER	Tumblers	PASS
+TYPE	CheckBoxType

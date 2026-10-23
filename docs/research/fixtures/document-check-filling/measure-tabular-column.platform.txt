@@ -1,0 +1,6 @@
+document.check.table.empty	1
+document.check.table.empty.trace	1|Date;Запасы.НомерВариантаКП;
+document.check.table.row.empty	0
+document.check.table.row.trace	2|Date;Запасы.НомерВариантаКП;
+document.check.table.row.filled	1
+document.check.table.clear	1

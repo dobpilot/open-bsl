@@ -1,0 +1,5 @@
+image.original-wrapper-baseline.value=5
+image.original-wrapper-baseline.argument0=5
+image.original-wrapper-baseline.argument1=6
+image.original-wrapper-baseline.argument2=9
+image.original-wrapper-baseline.done=1

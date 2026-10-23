@@ -1,0 +1,4 @@
+image.native.date.string=20240229123456
+image.native.date.parts=20240229000000
+image.native.date.time=20240229123456
+image.native.date.type=1

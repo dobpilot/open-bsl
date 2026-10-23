@@ -1,0 +1,4 @@
+image.shared-tail.result=5
+image.shared-tail.argument=5
+image.shared-tail.private-result=5
+image.shared-tail.private-argument=5

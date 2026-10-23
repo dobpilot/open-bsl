@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" xmlns:mdclassExtension="http://g5.1c.ru/v8/dt/metadata/mdclass/extension" uuid="182ffc1d-7701-4067-a547-c7b78532e40d">
+  <name>Расширение1</name>
+  <synonym>
+    <key>ru</key>
+    <value>Расширение1</value>
+  </synonym>
+  <objectBelonging>Adopted</objectBelonging>
+  <extension xsi:type="mdclassExtension:ConfigurationExtension">
+    <defaultRunMode>Checked</defaultRunMode>
+    <usePurposes>Checked</usePurposes>
+    <defaultLanguage>Checked</defaultLanguage>
+    <interfaceCompatibilityMode>Checked</interfaceCompatibilityMode>
+    <defaultRoles>Extended</defaultRoles>
+  </extension>
+  <containedObjects classId="9cd510cd-abfc-11d4-9434-004095e12fc7" objectId="8a5b56d4-65ed-41ea-a2fc-5fd6cd30e049"/>
+  <containedObjects classId="9fcd25a0-4822-11d4-9414-008048da11f9" objectId="00bbc52f-1044-4c82-8e61-25efb254e0fd"/>
+  <containedObjects classId="e3687481-0a87-462c-a166-9f34594f9bba" objectId="8a9b2055-14a4-4398-bb5f-d8a07948a0bf"/>
+  <containedObjects classId="9de14907-ec23-4a07-96f0-85521cb6b53b" objectId="d2cce38f-ed8d-4a71-a89e-041e13066443"/>
+  <containedObjects classId="51f2d5d8-ea4d-4064-8892-82951750031e" objectId="85e740cd-f9d5-44c7-a5d5-63e9644209c6"/>
+  <containedObjects classId="e68182ea-4237-4383-967f-90c1e3370bc7" objectId="18daa605-9984-4545-848f-730f4247c2c1"/>
+  <containedObjects classId="fb282519-d103-4dd3-bc12-cb271d631dfc" objectId="445a8fbf-5be3-4617-a149-5b871391c6db"/>
+  <keepMappingToExtendedConfigurationObjectsByIDs>true</keepMappingToExtendedConfigurationObjectsByIDs>
+  <namePrefix>Расш1_</namePrefix>
+  <configurationExtensionCompatibilityMode>8.3.27</configurationExtensionCompatibilityMode>
+  <configurationExtensionPurpose>Customization</configurationExtensionPurpose>
+  <defaultRunMode>ManagedApplication</defaultRunMode>
+  <usePurposes>PersonalComputer</usePurposes>
+  <scriptVariant>Russian</scriptVariant>
+  <defaultRoles>Role.Расш1_ОсновнаяРоль</defaultRoles>
+  <defaultLanguage>Language.Русский</defaultLanguage>
+  <languages uuid="88d12ead-1cc1-4d46-8657-19c1a2f859fc" extendedConfigurationObject="2e19ccbb-840a-4b2a-a851-b5467418911a">
+    <name>Русский</name>
+    <objectBelonging>Adopted</objectBelonging>
+    <extension xsi:type="mdclassExtension:LanguageExtension">
+      <extendedConfigurationObject>Checked</extendedConfigurationObject>
+      <languageCode>Checked</languageCode>
+    </extension>
+    <languageCode>ru</languageCode>
+  </languages>
+  <roles>Role.Расш1_ОсновнаяРоль</roles>
+  <catalogs>Catalog.СтавкиНДС</catalogs>
+  <catalogs>Catalog.Расш1_Справочник1</catalogs>
+</mdclass:Configuration>

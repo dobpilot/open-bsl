@@ -1,0 +1,12 @@
+variable.encoding	{"#",f5c65050-3bbb-11d5-b988-0050bae0a95d,
+{"Pattern",
+{"S",12,1}
+}
+}
+fixed.encoding	{"#",f5c65050-3bbb-11d5-b988-0050bae0a95d,
+{"Pattern",
+{"S",12,0}
+}
+}
+variable.short	[ab]
+fixed.short	[ab          ]

@@ -1,0 +1,7 @@
+{
+  "status": "built",
+  "candidate": "target/verification-compact-1017/release/bsl-cli-sdk23-explicit-subjects-1018",
+  "sha256": "ab0b6b2dfa9ceddef53a5d6a8368ef8f1d4679ab1abf3412b114269b54e4bcf8",
+  "sdk_version": "0.9.23",
+  "scope": "Current host explicit-subject extension, after full3903/0/1 gate"
+}

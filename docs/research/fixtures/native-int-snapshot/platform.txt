@@ -1,0 +1,2 @@
+image.native.int_snapshot.result=0
+image.native.int_snapshot.reference=0

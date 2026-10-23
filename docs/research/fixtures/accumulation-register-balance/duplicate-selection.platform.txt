@@ -1,0 +1,3 @@
+duplicate.column	Категория
+duplicate.column	Категория
+duplicate.column	Количество

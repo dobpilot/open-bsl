@@ -1,0 +1,4 @@
+image.native.local_function.enter=1
+image.native.local_function.result=12
+image.native.local_function.argument=12
+image.native.local_function.private=ERROR

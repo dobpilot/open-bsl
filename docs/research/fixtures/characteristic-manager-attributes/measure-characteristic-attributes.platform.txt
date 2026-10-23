@@ -1,0 +1,4 @@
+characteristic.attribute.body=read=;write=ERROR;
+characteristic.attribute.default=
+characteristic.attribute.truncated=123456789ABC
+characteristic.attribute.other=

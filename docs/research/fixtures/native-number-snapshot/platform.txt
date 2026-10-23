@@ -1,0 +1,2 @@
+image.native.number_snapshot.result=0
+image.native.number_snapshot.reference=0

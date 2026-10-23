@@ -1,0 +1,11 @@
+file.begin	usual-group-representation-1
+FORM.USUAL.NONE	None
+FORM.USUAL.NORMAL	Normal marking
+FORM.USUAL.STRONG	Strong marking
+FORM.USUAL.WEAK	Light marking
+FORM.USUAL.TYPE	UsualGroupRepresentation
+FORM.USUAL.ALIAS.NONE	Yes
+FORM.USUAL.ALIAS.NORMAL	Yes
+FORM.USUAL.ALIAS.STRONG	Yes
+FORM.USUAL.ALIAS.WEAK	Yes
+file.end	usual-group-representation-1

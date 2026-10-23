@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed supplemental conditional outside-loop control",
+  "scope": "All three declarations preserved. Back-edge44 jumps9; command9 jumps19, the iterator check. False comparison at41 continues through9; true branch42 exits to45. Dead43 jumps initialization10. Sum3 causes an early break. Public entry label10 skips trampoline during initialization. Public nonempty/empty loops and private caller observed.",
+  "files": {
+    "native-image-scoped-foreach-outside-conditional.image": {
+      "bytes": 1165,
+      "sha256": "c5b9d820494204a59ead9fdbd84b2bb0a81246218cfd02e7275e62269d9661b7"
+    },
+    "native-image-scoped-foreach-outside-conditional.Module.bin": {
+      "bytes": 2426,
+      "sha256": "dcbc49ecadf6e02a647f4593c537187996570a7478d583a5443645ed57df9216"
+    },
+    "measure-native-image-scoped-foreach-outside-conditional.bsl": {
+      "bytes": 1407,
+      "sha256": "9334510431e152b7f7152ecdb4a6e3c41c9801c81582abe7d2bcbe13b8e6c927"
+    },
+    "measure-native-image-scoped-foreach-outside-conditional.platform.txt": {
+      "bytes": 241,
+      "sha256": "a1d586f674e9c78ee0f8cbe3168473f3a40721135d7739f0287a54034d58a81e"
+    }
+  },
+  "native_receipt_complete": true,
+  "measurement_note": "Initial control incorrectly used field-read opcode12 instead of constant-load4; corrected control remeasured in fresh temporary IB. Initial failure log retained separately."
+}

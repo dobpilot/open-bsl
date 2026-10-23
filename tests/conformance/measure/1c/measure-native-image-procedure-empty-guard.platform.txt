@@ -1,0 +1,2 @@
+image.native.procedure.empty_guard.stop=10
+image.native.procedure.empty_guard.continue=3

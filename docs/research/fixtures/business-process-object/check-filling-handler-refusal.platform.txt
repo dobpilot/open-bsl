@@ -1,0 +1,5 @@
+business.check.handler-refusal.result	0
+business.check.handler-refusal.input	0|1|ТекстПробы
+business.check.handler-refusal.other	не вызван
+business.check.handler-refusal.assigned	0
+business.check.handler-refusal.assigned-input	0|1|ТекстПробы

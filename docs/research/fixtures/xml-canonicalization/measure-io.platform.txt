@@ -1,0 +1,11 @@
+canonical.numeric.filter	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.numeric.prefix	<r xmlns="urn:root" a="1" b="2"><z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.file.bytes	PHIgeG1sbnM9InVybjpyb290IiB4bWxuczp1PSJ1cm46dW51c2VkIiB4bWxuczp6
+PSJ1cm46eiIgYT0iMSIgYj0iMiI+PHo6ZSBhPSIxIiB6OmI9IjIiPjwvejplPtGC
+0LXQutGB0YImbHQ7JmFtcDsmZ3Q7PC9yPg==
+canonical.stream.bytes	PHIgeG1sbnM9InVybjpyb290IiB4bWxuczp1PSJ1cm46dW51c2VkIiB4bWxuczp6
+PSJ1cm46eiIgYT0iMSIgYj0iMiI+PHo6ZSBhPSIxIiB6OmI9IjIiPjwvejplPtGC
+0LXQutGB0YImbHQ7JmFtcDsmZ3Q7PC9yPjxyIHhtbG5zPSJ1cm46cm9vdCIgeG1s
+bnM6dT0idXJuOnVudXNlZCIgeG1sbnM6ej0idXJuOnoiIGE9IjEiIGI9IjIiPjx6
+OmUgYT0iMSIgejpiPSIyIj48L3o6ZT7RgtC10LrRgdGCJmx0OyZhbXA7Jmd0Ozwv
+cj4=

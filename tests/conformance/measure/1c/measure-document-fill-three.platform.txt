@@ -1,0 +1,5 @@
+document.fill.three.undefined=Undefined:Undefined:[]:Yes:[handler]:No:No:No
+document.fill.three.null=Null:Undefined:[]:Yes:[handler]:No:No:No
+document.fill.three.number=Number:Undefined:[]:Yes:[handler]:No:No:No
+document.fill.three.structure=Structure:Undefined:[]:Yes:[handler]:No:No:No
+document.fill.three.disabled=Structure:Undefined:[]:Yes:[handler]:No:No:No

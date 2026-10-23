@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "complete native unused-invalid-entry contextual loading control",
+  "scope": "Retains all five private27-context declarations and adds the measured flags3/three-parameter/Var116/24-slot/50-zero-label declaration, with original entry6746 outside63 commands. The driver never calls that added declaration; this measures loading only.",
+  "files": {
+    "native-image-private27-unused-context.image": {
+      "bytes": 3195,
+      "sha256": "af3ae1f49d5cce95f16b40a41d26bda592d9615bf621119424216c05778189e0"
+    },
+    "native-image-private27-unused-context.Module.bin": {
+      "bytes": 4456,
+      "sha256": "6c79328e505a2dfd79ff9ce140499cd3bb8d5a81c2c07186c763b7683cdd4c75"
+    },
+    "measure-native-image-private27-unused-context.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-private27-unused-context.platform.txt": {
+      "bytes": 388,
+      "sha256": "0778faa991f77a467b21dfa473a7bd64808eaec2dd3ffa46c2ce42c7fd4f39e9"
+    }
+  },
+  "measurement": "All nine native lines match private27-context byte for byte. The added flags3 declaration is not called; no body or call semantics are inferred."
+}

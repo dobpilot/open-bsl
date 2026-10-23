@@ -1,0 +1,4 @@
+image.shared-reference-body.result=12
+image.shared-reference-body.argument=12
+image.shared-reference-body.private-result=12
+image.shared-reference-body.private-argument=12

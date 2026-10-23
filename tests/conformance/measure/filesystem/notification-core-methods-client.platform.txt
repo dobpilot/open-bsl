@@ -1,20 +1,20 @@
-﻿file.begin	notification-core-methods-client-1
+file.begin	notification-core-methods-client-1
 canary	ok
-methods	Количество,Count,ВГраница,UBound,Добавить,Add,Удалить,Delete,Очистить,Clear,Вставить,Insert,Получить,Get,Свойство,Property,Найти,Find,НайтиСтроки,FindRows,Сортировать,Sort,ЗаполнитьЗначения,FillValues,Итог,Total,Скопировать,Copy,СкопироватьКолонки,CopyColumns,ВыгрузитьКолонку,UnloadColumn,ЗагрузитьКолонку,LoadColumn,Сдвинуть,Move,Индекс,IndexOf,Свернуть,GroupBy,Записать,Write,Закрыть,Close,Размер,Size,ОткрытьПотокДляЧтения,OpenStreamForRead,ПривестиЗначение,Установить,Set,ПрочитатьЦелое16,ReadInt16,ПрочитатьЦелое32,ReadInt32,ПрочитатьЦелое64,ReadInt64,ЗаписатьЦелое16,WriteInt16,ЗаписатьЦелое32,WriteInt32,ЗаписатьЦелое64,WriteInt64,Разделить,Split,Соединить,Concat,ПолучитьСрез,GetSlice,ЗаписатьПобитовоеИ,WriteBitwiseAnd,ЗаписатьПобитовоеИли,WriteBitwiseOr,ЗаписатьПобитовоеИсключительноеИли,WriteBitwiseXor,ЗаписатьПобитовоеИНе,WriteBitwiseAndNot,Инвертировать,Invert
-array	Array|1111111111111100110000000000000000000000000000000110000000000000000000000000000
-fixed_array	Fixed value array|1111000000001100110000000000000000000000000000000000000000000000000000000000000
-structure	Structure|1100001111110011000000000000000000000000000000000000000000000000000000000000000
-fixed_structure	Fixed structure|1100000000000011000000000000000000000000000000000000000000000000000000000000000
-map	Map|1100001111111100000000000000000000000000000000000000000000000000000000000000000
-fixed_map	Fixed map|1100000000001100000000000000000000000000000000000000000000000000000000000000000
-binary	Binary data|0000000000000000000000000000000000000000110011110000000000000000000000000000000
-buffer	Binary data buffer|0000000000001100000000000011000000000000110000000111111111111111111111111111111
-types	Type descriptions|0000000000000000000000000000000000000000000000001000000000000000000000000000000
-table	Value table|1100111111111100111111111111111111111111000000000000000000000000000000000000000
-table.columns	Value table column collection|1100111111111100110000000000000000111100000000000000000000000000000000000000000
-table.column	Value table column|0000000000000000000000000000000000000000000000000000000000000000000000000000000
-table.row	Value table row|0000000000001100000000000000000000000000000000000110000000000000000000000000000
-table.indexes	Value table index collection|1100111111000000000000000000000000000000000000000000000000000000000000000000000
+methods	Количество,Count,ВГраница,UBound,Добавить,Add,Удалить,Delete,Очистить,Clear,Вставить,Insert,Получить,Get,Свойство,Property,Найти,Find,НайтиСтроки,FindRows,Сортировать,Sort,ЗаполнитьЗначения,FillValues,Итог,Total,Скопировать,Copy,СкопироватьКолонки,CopyColumns,ВыгрузитьКолонку,UnloadColumn,ЗагрузитьКолонку,LoadColumn,Сдвинуть,Move,Индекс,IndexOf,Свернуть,GroupBy,Записать,Write,Закрыть,Close,Размер,Size,ОткрытьПотокДляЧтения,OpenStreamForRead,ПривестиЗначение,Типы,Types,СодержитТип,ContainsType,Установить,Set,ПрочитатьЦелое16,ReadInt16,ПрочитатьЦелое32,ReadInt32,ПрочитатьЦелое64,ReadInt64,ЗаписатьЦелое16,WriteInt16,ЗаписатьЦелое32,WriteInt32,ЗаписатьЦелое64,WriteInt64,Разделить,Split,Соединить,Concat,ПолучитьСрез,GetSlice,ЗаписатьПобитовоеИ,WriteBitwiseAnd,ЗаписатьПобитовоеИли,WriteBitwiseOr,ЗаписатьПобитовоеИсключительноеИли,WriteBitwiseXor,ЗаписатьПобитовоеИНе,WriteBitwiseAndNot,Инвертировать,Invert
+array	Array|11111111111111001100000000000000000000000000000000000110000000000000000000000000000
+fixed_array	Fixed value array|11110000000011001100000000000000000000000000000000000000000000000000000000000000000
+structure	Structure|11000011111100110000000000000000000000000000000000000000000000000000000000000000000
+fixed_structure	Fixed structure|11000000000000110000000000000000000000000000000000000000000000000000000000000000000
+map	Map|11000011111111000000000000000000000000000000000000000000000000000000000000000000000
+fixed_map	Fixed map|11000000000011000000000000000000000000000000000000000000000000000000000000000000000
+binary	Binary data|00000000000000000000000000000000000000001100111100000000000000000000000000000000000
+buffer	Binary data buffer|00000000000011000000000000110000000000001100000000000111111111111111111111111111111
+types	Type descriptions|00000000000000000000000000000000000000000000000011111000000000000000000000000000000
+table	Value table|11001111111111001111111111111111111111110000000000000000000000000000000000000000000
+table.columns	Value table column collection|11001111111111001100000000000000001111000000000000000000000000000000000000000000000
+table.column	Value table column|00000000000000000000000000000000000000000000000000000000000000000000000000000000000
+table.row	Value table row|00000000000011000000000000000000000000000000000000000110000000000000000000000000000
+table.indexes	Value table index collection|11001111110000000000000000000000000000000000000000000000000000000000000000000000000
 table.index.error.Количество	Type mismatch (parameter number '2')
 table.index.error.Count	Type mismatch (parameter number '2')
 table.index.error.ВГраница	Type mismatch (parameter number '2')
@@ -64,6 +64,10 @@ table.index.error.Size	Type mismatch (parameter number '2')
 table.index.error.ОткрытьПотокДляЧтения	Type mismatch (parameter number '2')
 table.index.error.OpenStreamForRead	Type mismatch (parameter number '2')
 table.index.error.ПривестиЗначение	Type mismatch (parameter number '2')
+table.index.error.Типы	Type mismatch (parameter number '2')
+table.index.error.Types	Type mismatch (parameter number '2')
+table.index.error.СодержитТип	Type mismatch (parameter number '2')
+table.index.error.ContainsType	Type mismatch (parameter number '2')
 table.index.error.Установить	Type mismatch (parameter number '2')
 table.index.error.Set	Type mismatch (parameter number '2')
 table.index.error.ПрочитатьЦелое16	Type mismatch (parameter number '2')
@@ -94,9 +98,9 @@ table.index.error.ЗаписатьПобитовоеИНе	Type mismatch (parame
 table.index.error.WriteBitwiseAndNot	Type mismatch (parameter number '2')
 table.index.error.Инвертировать	Type mismatch (parameter number '2')
 table.index.error.Invert	Type mismatch (parameter number '2')
-table.index	Value table index|???????????????????????????????????????????????????????????????????????????????
-list	Value list|1100111111111100000000000011000000111100000000000000000000000000000000000000000
-list.item	Value list item|0000000000000000000000000000000000000000000000000000000000000000000000000000000
+table.index	Value table index|???????????????????????????????????????????????????????????????????????????????????
+list	Value list|11001111111111000000000000110000001111000000000000000000000000000000000000000000000
+list.item	Value list item|00000000000000000000000000000000000000000000000000000000000000000000000000000000000
 uuid.error.Количество	Type mismatch (parameter number '2')
 uuid.error.Count	Type mismatch (parameter number '2')
 uuid.error.ВГраница	Type mismatch (parameter number '2')
@@ -146,6 +150,10 @@ uuid.error.Size	Type mismatch (parameter number '2')
 uuid.error.ОткрытьПотокДляЧтения	Type mismatch (parameter number '2')
 uuid.error.OpenStreamForRead	Type mismatch (parameter number '2')
 uuid.error.ПривестиЗначение	Type mismatch (parameter number '2')
+uuid.error.Типы	Type mismatch (parameter number '2')
+uuid.error.Types	Type mismatch (parameter number '2')
+uuid.error.СодержитТип	Type mismatch (parameter number '2')
+uuid.error.ContainsType	Type mismatch (parameter number '2')
 uuid.error.Установить	Type mismatch (parameter number '2')
 uuid.error.Set	Type mismatch (parameter number '2')
 uuid.error.ПрочитатьЦелое16	Type mismatch (parameter number '2')
@@ -176,5 +184,5 @@ uuid.error.ЗаписатьПобитовоеИНе	Type mismatch (parameter num
 uuid.error.WriteBitwiseAndNot	Type mismatch (parameter number '2')
 uuid.error.Инвертировать	Type mismatch (parameter number '2')
 uuid.error.Invert	Type mismatch (parameter number '2')
-uuid	Unique identifier|???????????????????????????????????????????????????????????????????????????????
+uuid	Unique identifier|???????????????????????????????????????????????????????????????????????????????????
 file.end	notification-core-methods-client-1

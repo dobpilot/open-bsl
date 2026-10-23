@@ -1,0 +1,11 @@
+canonical.object.type	Canonicalizing DOM document XML writer
+canonical.object.type.alias	1
+canonical.КаноническийXML	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.КаноническийXMLСКомментариями	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;<!--inside--></r>\n<!--after-->
+canonical.ИсключающийКаноническийXML	<r xmlns="urn:root" a="1" b="2"><z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.ИсключающийКаноническийXMLСКомментариями	<r xmlns="urn:root" a="1" b="2"><z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>текст&lt;&amp;&gt;<!--inside--></r>\n<!--after-->
+canonical.КаноническийXML1_1	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.КаноническийXML1_1СКомментариями	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;<!--inside--></r>\n<!--after-->
+canonical.default	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.prefixes	<r xmlns="urn:root" xmlns:u="urn:unused" a="1" b="2"><z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.xpath	<z:e></z:e>

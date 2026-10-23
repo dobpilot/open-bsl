@@ -1,0 +1,5 @@
+query.reference.type=Yes
+query.reference.uuid=Yes
+query.reference.equal=Yes
+query.reference.table.type=Yes
+query.reference.table.equal=Yes

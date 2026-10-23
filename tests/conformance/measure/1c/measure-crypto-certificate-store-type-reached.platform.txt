@@ -1,0 +1,4 @@
+ROOT	Root certificates	PASS
+PERSONAL	Personal certificates	PASS
+RECIPIENT	Recipient certificates	PASS
+TYPE	CryptoCertificateStoreType

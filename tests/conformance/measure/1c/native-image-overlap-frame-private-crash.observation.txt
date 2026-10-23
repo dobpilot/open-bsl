@@ -1,0 +1,8 @@
+Platform: 8.3.27.2342
+Own isolated file infobase: /tmp/open-bsl-native-overlap-frame-1007-ib
+Runner exit: 1
+ENTERPRISE process: Segmentation fault
+Output before process failure (not a complete execution oracle):
+image.overlap-frame.result=12
+image.overlap-frame.argument=12
+The independent private-entry call did not produce a catchable BSL result.

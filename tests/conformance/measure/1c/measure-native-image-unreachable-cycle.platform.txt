@@ -1,0 +1,4 @@
+image.native.unreachable_cycle.true=42
+image.native.unreachable_cycle.false=11
+image.native.unreachable_cycle.next=22
+image.native.unreachable_cycle.jump=42

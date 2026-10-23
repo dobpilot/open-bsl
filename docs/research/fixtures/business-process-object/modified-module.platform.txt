@@ -1,0 +1,4 @@
+business.modified-module.initialization	rejected
+business.modified-module.own	0
+business.modified-module.disabled	0
+business.modified-module.arity	rejected

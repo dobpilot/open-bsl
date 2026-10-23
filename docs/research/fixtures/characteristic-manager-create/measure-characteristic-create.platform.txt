@@ -1,0 +1,8 @@
+characteristic.create.type=1
+characteristic.create.new=1
+characteristic.create.folder=0
+characteristic.create.code=
+characteristic.create.description=
+characteristic.create.reference.empty=1
+characteristic.create.value_type.count=4
+characteristic.create.description.set=probe

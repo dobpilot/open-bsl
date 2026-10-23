@@ -1,0 +1,9 @@
+﻿enum.type=QuerySchemaOrderDirection
+enum.presentation=Ascending
+enum.alias.asc=ERROR
+enum.alias.ascending=YES
+enum.type.lookup=YES
+enum.desc.alias=YES
+enum.desc.presentation=Descending
+enum.distinct=YES
+completed=YES

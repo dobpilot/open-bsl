@@ -1,0 +1,5 @@
+ROOT	EnumDataCompositionSortDirection
+TYPE	DataCompositionSortDirection
+ASC	Ascending
+DESC	Descending
+ALIASES	PASS

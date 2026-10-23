@@ -1,0 +1,15 @@
+document.property.disabled.body.number.read=accepted
+document.property.disabled.body.number.write=rejected
+document.property.disabled.body.date.read=accepted
+document.property.disabled.body.date.write=rejected
+document.property.disabled.body.ref.read=accepted
+document.property.disabled.body.isnew=rejected
+document.property.disabled.body.deletion.read=accepted
+document.property.disabled.body.posted.read=accepted
+document.property.disabled.number.type=String
+document.property.disabled.number=[]
+document.property.disabled.date.empty=Yes
+document.property.disabled.isnew=Yes
+document.property.disabled.ref.empty=Yes
+document.property.disabled.deletion=No
+document.property.disabled.posted=No

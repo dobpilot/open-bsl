@@ -1,0 +1,9 @@
+image.native.compare.lte.negative=1
+image.native.compare.lte.zero=1
+image.native.compare.lte.positive=0
+image.native.compare.ne.negative=1
+image.native.compare.ne.zero=0
+image.native.compare.ne.positive=1
+image.native.compare.gte.negative=0
+image.native.compare.gte.zero=1
+image.native.compare.gte.positive=1

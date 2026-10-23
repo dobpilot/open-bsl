@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental flags2 queue capture control, completed native receipt",
+  "scope": "Same image as native-image-zero-label-procedure-effect. Driver drains native pending user messages after each module call, before reporting values. No original application code is executed.",
+  "files": {
+    "native-image-zero-label-procedure-queue.image": {
+      "bytes": 1183,
+      "sha256": "6a965797268d27ccb7b8c840699dc5c31b90d7ea10cc18e04a7db594a2926076"
+    },
+    "native-image-zero-label-procedure-queue.Module.bin": {
+      "bytes": 2444,
+      "sha256": "a63791891c188ccfea33facc07b54adee78858c839f1d5bafd11eaa2d610dec4"
+    },
+    "measure-native-image-zero-label-procedure-queue.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-zero-label-procedure-queue.platform.txt": {
+      "bytes": 388,
+      "sha256": "0778faa991f77a467b21dfa473a7bd64808eaec2dd3ffa46c2ce42c7fd4f39e9"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-zero-procedure-queue-1010-v1",
+    "interpretation": "Pending native user messages are drained after each call and copied by the text driver to the receipt. The private route is zero; the public route is nonzero. Both values and arguments remain5."
+  }
+}

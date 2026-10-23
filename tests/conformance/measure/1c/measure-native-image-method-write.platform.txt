@@ -1,0 +1,4 @@
+image.native.method.write.first=1
+image.native.method.write.value=7
+image.native.method.write.second=3
+image.native.method.write.last=7

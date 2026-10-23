@@ -1,0 +1,7 @@
+file.begin	infobase-user-data-separation-values-1
+USER_DATA_SEPARATION_VALUES.ASSIGN	ACCEPTED
+USER_DATA_SEPARATION_VALUES.COUNT	1
+USER_DATA_SEPARATION_VALUES.HAS_KEY	YES
+USER_DATA_SEPARATION_VALUES.VALUE	own-separator-value
+USER_DATA_SEPARATION_VALUES.SOURCE_CHANGE	changed-source
+file.end	infobase-user-data-separation-values-1

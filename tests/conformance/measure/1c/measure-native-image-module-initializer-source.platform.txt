@@ -1,0 +1,7 @@
+image.native.module_initializer_source.first=42
+image.native.module_initializer_source.second=42
+image.native.module_initializer_source.first_changed=111
+image.native.module_initializer_source.second_unchanged=42
+image.native.module_initializer_source.first_after_second=111
+image.native.module_initializer_source.second_changed=222
+image.native.module_initializer_source.third=42

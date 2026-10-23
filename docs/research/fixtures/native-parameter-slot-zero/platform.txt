@@ -1,0 +1,3 @@
+native.external.slot.entered=1
+native.external.slot.argument=42
+native.external.slot.omitted=ERROR

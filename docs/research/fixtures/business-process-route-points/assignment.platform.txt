@@ -1,0 +1,4 @@
+route.points.assignment.same	Yes
+route.points.assignment.other	No
+route.points.assignment.number	Yes
+route.points.assignment.manager	error

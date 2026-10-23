@@ -1,0 +1,7 @@
+ROOT	EnumSpreadsheetDocumentCellAreaType
+TYPE	SpreadsheetDocumentCellAreaType
+TABLE	Table
+ROWS	Rows
+COLUMNS	Columns
+RECTANGLE	Rectangle
+ALIAS_TABLE	PASS

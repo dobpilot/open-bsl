@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "native-image-local-function",
+  "change": "Only private variable descriptor changes from 5/-1 to 1338/0. Original arithmetic writes parameter and private function returns it. Two calls observe value, type and unchanged/changed argument independently. No application code is executed.",
+  "files": {
+    "native-image-private-alias-write.image": {
+      "bytes": 380,
+      "sha256": "275d8507b31f5d3fb3e3b00ce210605d98a3e816c1efc6b56e6f234f47dd79d5"
+    },
+    "native-image-private-alias-write.Module.bin": {
+      "bytes": 1773,
+      "sha256": "fc049e69846ce7b667d19013fd6f1d00096a6db6d342de4a872132177809b102"
+    },
+    "measure-native-image-private-alias-write.bsl": {
+      "bytes": 1410,
+      "sha256": "8ce6f6875ceb2ea0549586177a9daab9af76737e96095d0f06e39106dae0c5d6"
+    },
+    "measure-native-image-private-alias-write.platform.txt": {
+      "bytes": 289,
+      "sha256": "886295beaeb8b6470df426161e33c01a85807bdd9a292d1986862e57a7df8742"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-alias-write-1009-v1-ib"
+}

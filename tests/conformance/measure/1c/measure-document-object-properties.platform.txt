@@ -1,0 +1,14 @@
+document.property.body.number.read=accepted
+document.property.body.number.write=rejected
+document.property.body.date.read=accepted
+document.property.body.date.write=rejected
+document.property.body.ref.read=accepted
+document.property.body.isnew=rejected
+document.property.body.deletion.read=accepted
+document.property.body.posted.read=accepted
+document.property.number=[]
+document.property.date.empty=Yes
+document.property.isnew=Yes
+document.property.ref.empty=Yes
+document.property.deletion=No
+document.property.posted=No

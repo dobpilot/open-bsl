@@ -1,0 +1,2 @@
+image.private-variable-slot-only.result=12
+image.private-variable-slot-only.argument=12

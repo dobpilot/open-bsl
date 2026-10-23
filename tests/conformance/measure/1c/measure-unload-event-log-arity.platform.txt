@@ -1,0 +1,9 @@
+file.begin	unload-event-log-arity-1
+EVENTLOG.ZERO	too-few
+EVENTLOG.ONE	receiver-type
+EVENTLOG.TWO	receiver-type
+EVENTLOG.THREE	receiver-type
+EVENTLOG.FOUR	receiver-type
+EVENTLOG.FIVE	receiver-type
+EVENTLOG.SIX	too-many
+file.end	unload-event-log-arity-1

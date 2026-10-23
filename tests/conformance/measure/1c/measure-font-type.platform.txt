@@ -1,0 +1,5 @@
+WINDOWS	Windows font	FontType
+ABSOLUTE	Absolute	FontType
+AUTO	Auto font	FontType
+STYLE	Style element	FontType
+ALIAS	Yes

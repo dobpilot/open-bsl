@@ -1,0 +1,2 @@
+image.native.local_eval.result=42
+image.native.local_eval.number=1

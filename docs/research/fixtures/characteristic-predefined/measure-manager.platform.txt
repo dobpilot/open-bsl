@@ -1,0 +1,6 @@
+characteristic.manager.predefined.type	1
+characteristic.manager.predefined.context	1
+characteristic.manager.predefined.local	local
+characteristic.manager.predefined.global	1
+characteristic.manager.predefined.global.en	1
+characteristic.manager.predefined.write	read-only

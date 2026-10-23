@@ -1,0 +1,5 @@
+file.begin	collaboration-conversation-type-1
+COLLABORATION_CONVERSATION_TYPE.RUSSIAN	CollaborationSystemConversationID
+COLLABORATION_CONVERSATION_TYPE.ENGLISH	CollaborationSystemConversationID
+COLLABORATION_CONVERSATION_TYPE.EQUAL	Yes
+file.end	collaboration-conversation-type-1

@@ -1,0 +1,3 @@
+image.native.foreach_branch.sum=5
+image.native.foreach_branch.count=3
+image.native.foreach_branch.empty=10

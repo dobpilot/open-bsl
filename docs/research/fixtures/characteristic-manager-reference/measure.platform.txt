@@ -1,0 +1,9 @@
+characteristic.ref.uuid	12345678-1234-1234-1234-123456789abc
+characteristic.ref.alias	1
+characteristic.ref.type	1
+characteristic.ref.generated	1
+base64.string.argument	
+characteristic.ref.invalid	rejected
+characteristic.ref.empty.uuid	00000000-0000-0000-0000-000000000000
+characteristic.ref.empty.alias	1
+characteristic.ref.empty.type	1

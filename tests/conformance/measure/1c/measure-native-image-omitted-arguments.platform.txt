@@ -1,0 +1,17 @@
+image.native.omitted.Первый.result=4191
+image.native.omitted.Первый.first=7
+image.native.omitted.Первый.second=28
+image.native.omitted.Первый.third=39
+image.native.omitted.Средний.result=4137
+image.native.omitted.Средний.first=17
+image.native.omitted.Средний.second=8
+image.native.omitted.Средний.third=39
+image.native.omitted.Последний.result=3597
+image.native.omitted.Последний.first=17
+image.native.omitted.Последний.second=28
+image.native.omitted.Последний.third=9
+image.native.omitted.Все.result=3531
+image.native.omitted.Все.first=7
+image.native.omitted.Все.second=8
+image.native.omitted.Все.third=9
+image.native.omitted.explicit_undefined=1

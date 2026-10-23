@@ -1,0 +1,2 @@
+image.native.global.length=1
+image.native.global.code=10

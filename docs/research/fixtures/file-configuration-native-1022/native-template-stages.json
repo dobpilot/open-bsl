@@ -1,0 +1,14 @@
+[
+  {
+    "stage": "templates-initial-dump",
+    "exit_code": 0
+  },
+  {
+    "stage": "templates-native-load",
+    "exit_code": 0
+  },
+  {
+    "stage": "templates-native-export",
+    "exit_code": 0
+  }
+]

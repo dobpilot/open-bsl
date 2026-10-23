@@ -1,0 +1,10 @@
+alias=YES
+mixed=YES
+presentation=Use coordinates
+value.type=ChartPlotAreaPlacement
+lookup.ru=ChartPlotAreaPlacement
+lookup.en=ChartPlotAreaPlacement
+enum.type=EnumChartPlotAreaPlacement
+enum.presentation=EnumChartPlotAreaPlacement
+self.equal=YES
+completed=YES

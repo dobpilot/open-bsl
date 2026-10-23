@@ -1,0 +1,6 @@
+file.begin	data-lock-mode-1
+DATA.LOCK.MODE.SHARED	Shared
+DATA.LOCK.MODE.EXCLUSIVE	Exceptional
+DATA.LOCK.MODE.TYPE	DataLockMode
+DATA.LOCK.MODE.ENGLISH	OK
+file.end	data-lock-mode-1

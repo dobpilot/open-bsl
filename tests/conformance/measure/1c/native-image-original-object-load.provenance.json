@@ -1,0 +1,18 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "complete native original object loading control",
+  "scope": "Complete original UNF/buh image copied unchanged into disposable DataProcessor object module; creates object only, invokes no original exports. Uses named-module binding scaffolds, not original configuration. Original image/container remain in private diagnostics; no recovered original source published.",
+  "original_image_sha256": "e6b12a9ff23c3ae6d5a800e77b2cd76e43680eff664a33fbcbabb39065987824",
+  "container_sha256": "b222224187bb41f6efc333520076f03b68bbf2a4fa401e6c143721d44913de8d",
+  "files": {
+    "measure-native-image-original-object-load.bsl": {
+      "bytes": 430,
+      "sha256": "2876ffe278698b8118ec09a13bf394538e7fc15d09b86094a02f007c14345945"
+    },
+    "measure-native-image-original-object-load.platform.txt": {
+      "bytes": 106,
+      "sha256": "ffe6926818fbad215c160aeb0f283379157bcc60d1102f913d27b4aa303b0201"
+    }
+  },
+  "measurement": "All three native lines complete: enter, created, done. Full original image unchanged; no original exported method called."
+}

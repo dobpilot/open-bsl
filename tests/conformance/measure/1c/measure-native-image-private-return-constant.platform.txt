@@ -1,0 +1,4 @@
+image.private-return-constant.type=Number
+image.private-return-constant.value=11
+image.private-return-constant.argument=5
+image.private-return-constant.done=1

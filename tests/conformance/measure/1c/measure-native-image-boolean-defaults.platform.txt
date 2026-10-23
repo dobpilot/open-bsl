@@ -1,0 +1,15 @@
+image.native.boolean_default.ИстинаПоУмолчанию.default=1
+image.native.boolean_default.ИстинаПоУмолчанию.default.type=1
+image.native.boolean_default.ИстинаПоУмолчанию.true=1
+image.native.boolean_default.ИстинаПоУмолчанию.true.type=1
+image.native.boolean_default.ИстинаПоУмолчанию.false=0
+image.native.boolean_default.ИстинаПоУмолчанию.false.type=1
+image.native.boolean_default.ИстинаПоУмолчанию.undefined=1
+image.native.boolean_default.ЛожьПоУмолчанию.default=0
+image.native.boolean_default.ЛожьПоУмолчанию.default.type=1
+image.native.boolean_default.ЛожьПоУмолчанию.true=1
+image.native.boolean_default.ЛожьПоУмолчанию.true.type=1
+image.native.boolean_default.ЛожьПоУмолчанию.false=0
+image.native.boolean_default.ЛожьПоУмолчанию.false.type=1
+image.native.boolean_default.ЛожьПоУмолчанию.undefined=1
+image.native.boolean_default.required=1

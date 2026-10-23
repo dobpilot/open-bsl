@@ -1,0 +1,9 @@
+catalog.level.new	0
+catalog.level.alias	0
+catalog.level.context	0
+catalog.level.body	ERROR
+catalog.level.folder	0
+catalog.level.parent	1
+catalog.level.grandparent	2
+catalog.level.reset	0
+catalog.level.missing.parent	1

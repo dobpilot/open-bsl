@@ -1,0 +1,7 @@
+ROOT	EnumFoldersAndItems
+TYPE	FoldersAndItems
+AUTO	Auto
+FOLDERS	Folders
+BOTH	FoldersAndItems
+ITEMS	Items
+ALIASES	PASS

@@ -1,0 +1,16 @@
+Opening balance
+Closing balance
+None
+Opening balance
+Closing balance
+None
+DataCompositionBalanceType
+EnumDataCompositionBalanceType
+DataCompositionBalanceType
+DataCompositionBalanceType
+1
+1
+1
+0
+0
+Opening balance

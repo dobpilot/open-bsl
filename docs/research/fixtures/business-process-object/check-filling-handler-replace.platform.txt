@@ -1,0 +1,5 @@
+business.check.handler-replace.result	0
+business.check.handler-replace.input	0|1|ТекстПробы
+business.check.handler-replace.other	не вызван
+business.check.handler-replace.assigned	1
+business.check.handler-replace.assigned-input	0|1|ТекстПробы

@@ -1,0 +1,10 @@
+[
+  {
+    "step": "build",
+    "exit_code": 0
+  },
+  {
+    "step": "replay",
+    "exit_code": 0
+  }
+]

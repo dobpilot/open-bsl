@@ -1,0 +1,7 @@
+dangling.enum.metadata.type=enum
+dangling.enum.metadata.empty=NO
+dangling.enum.metadata.filled=YES
+dangling.enum.metadata.text=[<Object not found> (54:84093272f97870604114bca67664d5d3)]
+dangling.enum.creation.empty=YES
+dangling.enum.fill.empty=NO
+dangling.enum.fill.text=[<Object not found> (54:84093272f97870604114bca67664d5d3)]

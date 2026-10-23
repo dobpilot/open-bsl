@@ -1,0 +1,7 @@
+NONE	None	PASS
+SOLID	Solid	PASS
+DASHED	Dashed	PASS
+DOTTED	Dotted	PASS
+DASH_DOT	DashDotted	PASS
+DASH_DOT_DOT	DotDashDotted	PASS
+TYPE	SpreadsheetDocumentDrawingLineType

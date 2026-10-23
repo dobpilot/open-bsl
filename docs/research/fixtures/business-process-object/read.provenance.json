@@ -1,0 +1,76 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_date": "2026-10-07",
+  "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+  "metadata_provenance": "fill-enabled.provenance.json",
+  "object_module": "Empty for assigned/standard/section controls; read-module-object.bsl for module/new-module, read-own-module-object.bsl for own-context controls",
+  "operation": "Own control: unsaved Read and arity; saved object reload after one own write; assigned unsaved standard and own fields",
+  "observations": "Unsaved Read resets measured fields, replaces section containers while keeping previous aliases usable, and preserves module state and additional-properties identity. Runtime replays: assigned 14, standard fields 22, sections 8, qualified module calls 5, own-context calls 5. Stored reload is measured only on 1C; runtime persistence is not implemented.",
+  "files": {
+    "read.bsl": {
+      "bytes": 4106,
+      "sha256": "3fb4ca06739faff4fe08ed54af06b128990e1f655df5fbdcc6861e4e9b8ee93e"
+    },
+    "read.platform.txt": {
+      "bytes": 563,
+      "sha256": "a871a584ddc8dbf1604ea13bd220ab8fba638a2eae8f50fbfccf67033e18f9fc"
+    },
+    "read-new-assigned.bsl": {
+      "bytes": 2991,
+      "sha256": "baef78c0ad385b6884db5ab666beaa581c7f9d362906d167bf2eabd541482e87"
+    },
+    "read-new-assigned.platform.txt": {
+      "bytes": 432,
+      "sha256": "2630ac4dd07022d6aed32094a4fc59f19a77899d7679213744630f3581d16d09"
+    },
+    "read-new-standard.bsl": {
+      "bytes": 4661,
+      "sha256": "4ee6fdc2eb716faa3f76db5e2fddc642a8a0f65ad63f736ccb2733828d7e3971"
+    },
+    "read-new-standard.platform.txt": {
+      "bytes": 690,
+      "sha256": "f9b6ff630c4fa425e295dc2ce608baf36e1b895c642c4f223a17ee9807a99706"
+    },
+    "read-module.bsl": {
+      "bytes": 2320,
+      "sha256": "ed8a806063eec11c22a43d9e71f57e40e583626aed897a4d7aef44f054a6c900"
+    },
+    "read-module.platform.txt": {
+      "bytes": 271,
+      "sha256": "ccbe9c32afb7ddd7279a430fabf4370f59c10b9bf87df6fbf297518cdd9baca6"
+    },
+    "read-new-module.bsl": {
+      "bytes": 1636,
+      "sha256": "8f2d7e510daccefecf6c5e4e1bd5e8ee6cd4741316e4afbeb1977a8c4383b6e8"
+    },
+    "read-new-module.platform.txt": {
+      "bytes": 194,
+      "sha256": "f6b0f85d64333319b6c309b9e094ed4bcf83c5f8ec5f245b1c89a24cda75f87a"
+    },
+    "read-new-section.bsl": {
+      "bytes": 2701,
+      "sha256": "4afde704fcf6a73834deaa3fff2618ea9c280391abe116310a390315b82771ab"
+    },
+    "read-new-section.platform.txt": {
+      "bytes": 328,
+      "sha256": "8c4c3a8f8b5648256fd3d3c146855dd6d8202c7c20c4318056053b1c2af10283"
+    },
+    "read-own-module.bsl": {
+      "bytes": 1656,
+      "sha256": "3336bcd09e8ad907cfee9723147d86917eea056e601340652ba5dd7150daac09"
+    },
+    "read-own-module.platform.txt": {
+      "bytes": 194,
+      "sha256": "f6b0f85d64333319b6c309b9e094ed4bcf83c5f8ec5f245b1c89a24cda75f87a"
+    },
+    "read-module-object.bsl": {
+      "bytes": 464,
+      "sha256": "760e260209aef67661a6880c9fe8cc0aaad537655c3173111144e29342315a64"
+    },
+    "read-own-module-object.bsl": {
+      "bytes": 678,
+      "sha256": "3ca29c2439e8c25818b9dce387095ebe2d6fe615e10d76ebcd8d8ef4d56d7b0b"
+    }
+  },
+  "section_metadata_provenance": "tabular-section.provenance.json; /tmp/open-bsl-business-process-sections-1006-ib"
+}

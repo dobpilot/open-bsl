@@ -1,0 +1,7 @@
+business.modified-failure.setter	accepted
+business.modified-failure.setter.flag	1
+business.modified-failure.fill	accepted
+business.modified-failure.fill.flag	1
+business.modified-failure.fill.text	partial
+business.modified-failure.head.same	1
+business.modified-failure.other	0

@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "native-image-shared-reference-body.Module.bin container info",
+  "change": "Two empty try guards precede a shared reference-parameter body. The private flag-2 entry is inside the public function range. Both public and independent dynamic private-entry calls increment 5 to 12 and return 12. No original application code is executed.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-shared-try-body.image": {
+      "bytes": 568,
+      "sha256": "1b520ef9b9647d79cf111aeee965e66c245076a7ccd49c0f5ce8236fa99fd48f"
+    },
+    "native-image-shared-try-body.Module.bin": {
+      "bytes": 1829,
+      "sha256": "93912d346285d1b5a21cae5ad2ac68db86775a84dd9089eafb9e71a81c1610fc"
+    },
+    "measure-native-image-shared-try-body.bsl": {
+      "bytes": 1231,
+      "sha256": "572ea6d4d6db61e77ad12d8b66067e3d8145d44c9a122e7e7ab64a9c07fa904b"
+    },
+    "measure-native-image-shared-try-body.platform.txt": {
+      "bytes": 148,
+      "sha256": "18c8f32a244d89f4889fe1ad6f0f3321c421cd4e4dde977412cd332c2b820d10"
+    }
+  }
+}

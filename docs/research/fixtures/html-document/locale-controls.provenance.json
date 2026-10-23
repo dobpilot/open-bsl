@@ -1,0 +1,48 @@
+{
+  "platform": "8.3.27.2342",
+  "date": "2026-10-07",
+  "infobase": "/tmp/open-bsl-html-dom-ru-1007-ib",
+  "observations": "Original scripts/oracles retained. structure-ru repeats the identical original driver under /Lru and measures Russian boolean and body-type presentations. Explicit-Format-en drivers replace only boolean String conversions with Format(value, Л=en); under /Len their native outputs equal the unchanged original English receipts byte for byte. No HTML operation or oracle normalization is changed. Default DOM type localization remains a separate known limitation.",
+  "files": {
+    "structure.bsl": {
+      "bytes": 3710,
+      "sha256": "8f34ccc016730e440af8bcaf90a1cbfca098f5b50af8c067134e825cbeeda384"
+    },
+    "structure.platform.txt": {
+      "bytes": 414,
+      "sha256": "5b5e4fc6620d1e21f1e91463fea0ce015ef761ee383051779d1a30edc5ee6f1d"
+    },
+    "writer-type.bsl": {
+      "bytes": 512,
+      "sha256": "e5266584c4b984204ed0f4a98ad94e1a6166f096d68ee3b2631dac5751c8523e"
+    },
+    "writer-type.platform.txt": {
+      "bytes": 51,
+      "sha256": "79bff73c283f5b3b7619e321f885ea6e9690d9ce0ff82a0b430afc89aafbd8ce"
+    },
+    "structure-ru.bsl": {
+      "bytes": 3710,
+      "sha256": "8f34ccc016730e440af8bcaf90a1cbfca098f5b50af8c067134e825cbeeda384"
+    },
+    "structure-ru.platform.txt": {
+      "bytes": 429,
+      "sha256": "e38aca47d834b1e0c273879a797c33b155928d870263ad35e13475a1757c958b"
+    },
+    "structure-format-en.bsl": {
+      "bytes": 3746,
+      "sha256": "a464e0afb43f0949f2cb22dbca2635716d852bbb826eea98823055bc3e2d6215"
+    },
+    "structure-format-en.platform.txt": {
+      "bytes": 414,
+      "sha256": "5b5e4fc6620d1e21f1e91463fea0ce015ef761ee383051779d1a30edc5ee6f1d"
+    },
+    "writer-type-format-en.bsl": {
+      "bytes": 521,
+      "sha256": "82ae42f435524ad6e38b0c74086e8ba25607eba214a63aca24306715ffa559c2"
+    },
+    "writer-type-format-en.platform.txt": {
+      "bytes": 51,
+      "sha256": "79bff73c283f5b3b7619e321f885ea6e9690d9ce0ff82a0b430afc89aafbd8ce"
+    }
+  }
+}

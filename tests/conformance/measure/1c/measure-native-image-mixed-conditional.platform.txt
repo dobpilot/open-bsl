@@ -1,0 +1,9 @@
+image.native.mixed_conditional.positive.value=2
+image.native.mixed_conditional.positive.argument=3
+image.native.mixed_conditional.positive.direct=1
+image.native.mixed_conditional.zero.value=13
+image.native.mixed_conditional.zero.argument=0
+image.native.mixed_conditional.zero.direct=1
+image.native.mixed_conditional.negative.value=13
+image.native.mixed_conditional.negative.argument=-5
+image.native.mixed_conditional.negative.direct=1

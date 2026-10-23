@@ -1,0 +1,8 @@
+predefined.bare=YES
+predefined.parameter=parameter
+predefined.write=rejected
+predefined.filled=YES
+predefined.type=YES
+predefined.function=YES
+predefined.uuid=aac7644e-bd2a-11f1-9a17-02d78b8d8e99
+predefined.metadata.uuid=NO

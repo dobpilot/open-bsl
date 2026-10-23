@@ -1,0 +1,1099 @@
+{
+  "status": "native_complete_host_implementation_pending",
+  "platform": "8.3.27.2342",
+  "subjects": {
+    "0": "current principal",
+    "1": "RootAllow role",
+    "2": "RootDeny role",
+    "3": "RootSaveOnly role",
+    "4": "explicit current-user description"
+  },
+  "standards": {
+    "0": "Undefined",
+    "1": "Code",
+    "2": "Description"
+  },
+  "rows": [
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 0,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 0,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 0,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 0,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 0,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 0,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 1,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 1,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 1,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 1,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 1,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 1,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 2,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 2,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 2,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 2,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 2,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 2,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 3,
+      "standard": 0,
+      "right": "Read",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 3,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 3,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 3,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 3,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 3,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 4,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 4,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 4,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 4,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 4,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": false,
+      "subject": 4,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 0,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 0,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 0,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 0,
+      "standard": 1,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 0,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 0,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 1,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 1,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 1,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 1,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 1,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 1,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 2,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 2,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 2,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 2,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 2,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 2,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 3,
+      "standard": 0,
+      "right": "Read",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 3,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 3,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 3,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 3,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 3,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 4,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 4,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 4,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 4,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 4,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "admin",
+      "privileged": true,
+      "subject": 4,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 0,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 0,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 0,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 0,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 0,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 0,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 1,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 1,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 1,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 1,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 1,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 1,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 2,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 2,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 2,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 2,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 2,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 2,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 3,
+      "standard": 0,
+      "right": "Read",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 3,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 3,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 3,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 3,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 3,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 4,
+      "standard": 0,
+      "right": "Read",
+      "result": "administration_required",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): You need administrative rights to perform operation."
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 4,
+      "standard": 0,
+      "right": "View",
+      "result": "administration_required",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): You need administrative rights to perform operation."
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 4,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 4,
+      "standard": 1,
+      "right": "View",
+      "result": "administration_required",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): You need administrative rights to perform operation."
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 4,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": false,
+      "subject": 4,
+      "standard": 2,
+      "right": "View",
+      "result": "administration_required",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): You need administrative rights to perform operation."
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 0,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 0,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 0,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 0,
+      "standard": 1,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 0,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 0,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 1,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 1,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 1,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 1,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 1,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 1,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 2,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 2,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 2,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 2,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 2,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 2,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 3,
+      "standard": 0,
+      "right": "Read",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 3,
+      "standard": 0,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 3,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 3,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 3,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 3,
+      "standard": 2,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 4,
+      "standard": 0,
+      "right": "Read",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 4,
+      "standard": 0,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 4,
+      "standard": 1,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 4,
+      "standard": 1,
+      "right": "View",
+      "result": "deny",
+      "native_value": "NO"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 4,
+      "standard": 2,
+      "right": "Read",
+      "result": "not_applicable",
+      "native_value": "ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы"
+    },
+    {
+      "profile": "deny",
+      "privileged": true,
+      "subject": 4,
+      "standard": 2,
+      "right": "View",
+      "result": "allow",
+      "native_value": "YES"
+    }
+  ],
+  "note": "Names do not imply role grants; actual rights are retained in effective XML/CF. The role called RootDeny currently grants catalog Read/View in this measured profile."
+}

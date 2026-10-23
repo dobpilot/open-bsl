@@ -1,0 +1,27 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "incomplete declared-size41 linked private38 call control",
+  "scope": "Only private declared Var size changes12 to41 in retained linked-context image. Twelve original flags/external_slot0, three parameters/no DefPrm/40 zero labels, original first String constant and nine globals retained; empty private body and synthetic wrapper retained. Uses same named-module binding scaffolds, not original application implementations.",
+  "files": {
+    "native-image-twelve-frame-object-declared41.image": {
+      "bytes": 1920,
+      "sha256": "0f2fb71bd706c1831dac50cdcb56d663ecb5063e13bdcedbb59e7aa1b8774f23"
+    },
+    "native-image-twelve-frame-object-declared41.Module.bin": {
+      "bytes": 3181,
+      "sha256": "6d4d7bdd5733a8c938b99c9819f5790f1597a113586ad29ee896252ad52ca724"
+    },
+    "measure-native-image-twelve-frame-object-declared41.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "native_exit_code": 139,
+    "runner_exit_code": 1,
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-declared41-1010.log",
+    "interpretation": "Changing declared Var size12 to41 alone does not produce a complete call receipt in the same synthetic linked object context. This does not establish call behavior of the full original module."
+  }
+}

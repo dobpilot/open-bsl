@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental flags2 queue capture control, completed native receipt",
+  "scope": "Same image as native-image-nonzero-label-procedure-effect. Driver drains native pending user messages after each module call, before reporting values. No original application code is executed.",
+  "files": {
+    "native-image-nonzero-label-procedure-queue.image": {
+      "bytes": 1184,
+      "sha256": "e5b77c310544f6d79273a7c649030826144bf19e5c5ec82e259699728432e395"
+    },
+    "native-image-nonzero-label-procedure-queue.Module.bin": {
+      "bytes": 2445,
+      "sha256": "8b13a8467f50db7ccafa59124349a492894c50a9223e509fd3027a736e5fe4ac"
+    },
+    "measure-native-image-nonzero-label-procedure-queue.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-nonzero-label-procedure-queue.platform.txt": {
+      "bytes": 391,
+      "sha256": "210dc2604efeb07cd15851875da32541d534b6471898f1c6e7d0a0d8a33eaa5f"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-nonzero-procedure-queue-1010-v1",
+    "interpretation": "Pending native user messages are drained after each call and copied by the text driver to the receipt. The private route is nonzero; the public route is nonzero. Both values and arguments remain5."
+  }
+}

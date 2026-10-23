@@ -1,0 +1,9 @@
+balance.rows	0
+balance.columns	2
+balance.column	Категория
+balance.column.type	Строка
+balance.string.length	12
+balance.column	Количество
+balance.column.type	Число
+balance.number.digits	38
+balance.number.fraction	2

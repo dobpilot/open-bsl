@@ -1,0 +1,2 @@
+image.execute-source.result=12
+image.execute-source.argument=12

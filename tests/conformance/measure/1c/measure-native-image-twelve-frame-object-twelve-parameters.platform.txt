@@ -1,0 +1,5 @@
+image.twelve-frame-entry.value=5
+image.twelve-frame-entry.argument0=5
+image.twelve-frame-entry.argument1=6
+image.twelve-frame-entry.argument2=9
+image.twelve-frame-entry.done=1

@@ -1,0 +1,9 @@
+business.fill.empty.date	1
+business.fill.empty.number	1
+business.fill.empty.is-new	1
+business.fill.changed.date	1
+business.fill.changed.number	1
+business.fill.changed.deletion-mark	1
+business.fill.changed.started	1
+business.fill.changed.completed	1
+business.fill.changed.additional	42

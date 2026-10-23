@@ -1,0 +1,4 @@
+image.native.branch.true.result=10
+image.native.branch.true.argument=10
+image.native.branch.false.result=20
+image.native.branch.false.argument=20

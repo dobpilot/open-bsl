@@ -1,0 +1,3 @@
+ZERO	{DataProcessor.Замеры.Form.Форма.Form(34)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,7)}: Constructor not found
+ONE	{<Unknown module>(1)}: Error calling constructor (ОписаниеОбновленияКонфигурации): Type mismatch (parameter number '1')
+TWO	{DataProcessor.Замеры.Form.Форма.Form(48)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,7)}: Constructor not found

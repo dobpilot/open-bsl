@@ -1,0 +1,2 @@
+image.native.round_snapshot.result=0
+image.native.round_snapshot.reference=0

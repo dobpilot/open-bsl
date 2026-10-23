@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-local-function",
+  "change": "Replace private arithmetic with five NOPs; private function only returns parameter. Descriptor is 5/-1. No original code is executed.",
+  "files": {
+    "native-image-private-return-baseline.image": {
+      "bytes": 376,
+      "sha256": "74ef5cdbca588ffd308b18a44178b63a032b0c5594ed938f06ca761b99fc622c"
+    },
+    "native-image-private-return-baseline.Module.bin": {
+      "bytes": 1773,
+      "sha256": "b3acd8b8730780ae693b9678d389b43a902a5cb1ba0b0cff410bf992daa0acfe"
+    },
+    "measure-native-image-private-return-baseline.bsl": {
+      "bytes": 746,
+      "sha256": "629beb2b36c0e8884bbb9ab00a67966acc9114b566f3e9697421404ddfb45847"
+    },
+    "measure-native-image-private-return-baseline.platform.txt": {
+      "bytes": 158,
+      "sha256": "e67c9992796e4439599e264d75dbd48146758ad7550d7e29aae273bd5ef57c64"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-return-baseline-1009-v1-ib"
+}

@@ -1,0 +1,4 @@
+canonical.xpath-result.0	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.xpath-result.1	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.xpath-result.2	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+canonical.xpath-result.3	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>

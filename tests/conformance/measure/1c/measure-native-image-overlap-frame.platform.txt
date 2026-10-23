@@ -1,0 +1,2 @@
+image.overlap-frame.result=12
+image.overlap-frame.argument=12

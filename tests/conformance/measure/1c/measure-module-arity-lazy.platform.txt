@@ -1,0 +1,7 @@
+file.begin	module-arity-lazy-1
+MODULE.ARITY.GOOD_EXPORT	42
+MODULE.ARITY.BAD_EXPORT	ERROR:{CommonModule.ЗамерыЛенивойАрности.Module(11)}: Too many actual parameters
+MODULE.ARITY.BAD_EXTERNAL_CALL	ERROR:{CommonModule.ЗамерыЛенивойАрности.Module(15)}: Too many actual parameters
+MODULE.ARITY.MISSING_LOCAL	ERROR:{CommonModule.ЗамерыЛенивойАрности.Module(23)}: Not enough actual parameters
+MODULE.ARITY.MISSING_EXTERNAL	ERROR:{CommonModule.ЗамерыЛенивойАрности.Module(27)}: Not enough actual parameters
+file.end	module-arity-lazy-1

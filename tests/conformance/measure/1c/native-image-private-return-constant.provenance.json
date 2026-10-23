@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-local-function",
+  "change": "Replace private arithmetic with five NOPs; private function only returns parameter. Descriptor is 1338/0. Const[0] is changed from 7 to 11. No original code is executed.",
+  "files": {
+    "native-image-private-return-constant.image": {
+      "bytes": 379,
+      "sha256": "866353b8b5ef540bd76fbf5675ba8a9c04aee6563f28c2b4f98e7ae6e57949c2"
+    },
+    "native-image-private-return-constant.Module.bin": {
+      "bytes": 1773,
+      "sha256": "5c5d456ea04fea5dfe51a060242d3b21e67316e65033449e26fc70fe7ea2a55a"
+    },
+    "measure-native-image-private-return-constant.bsl": {
+      "bytes": 746,
+      "sha256": "08bad217e76258f87dfe9f4dfe7e27b3925ac8683b9ee019547f1ee6f7986019"
+    },
+    "measure-native-image-private-return-constant.platform.txt": {
+      "bytes": 159,
+      "sha256": "bf86ad5802de94a0b7d73bc3d2175f1a308dd563b962fe8e90716b102dd47619"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-return-constant-1009-v1-ib"
+}

@@ -1,0 +1,7 @@
+file.begin	empty-picture-1
+PICTURE.EMPTY.TYPE	Picture
+PICTURE.EMPTY.STRING	[Picture]
+PICTURE.EMPTY.FILLED	No
+PICTURE.EMPTY.EQUAL	Yes
+PICTURE.EMPTY.ENGLISH	OK
+file.end	empty-picture-1

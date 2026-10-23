@@ -1,0 +1,9 @@
+characteristic.predefined.body	ru=0;en=0;write=rejected;
+characteristic.predefined.ru	0
+characteristic.predefined.en	0
+characteristic.predefined.type	1
+characteristic.predefined.write.ru	rejected
+characteristic.predefined.write.en	rejected
+characteristic.predefined.after	0
+characteristic.predefined.own	0
+characteristic.predefined.other	0

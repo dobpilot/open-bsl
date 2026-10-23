@@ -1,0 +1,7 @@
+image.zero-label-private-procedure.public.type=Number
+image.zero-label-private-procedure.public.value=5
+image.zero-label-private-procedure.public.argument=5
+image.zero-label-private-procedure.private.type=Number
+image.zero-label-private-procedure.private.value=5
+image.zero-label-private-procedure.private.argument=5
+image.zero-label-private-procedure.done=1

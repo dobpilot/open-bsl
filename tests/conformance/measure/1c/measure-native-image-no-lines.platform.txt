@@ -1,0 +1,5 @@
+image.native.no_lines.constant=42
+image.native.no_lines.negative=11
+image.native.no_lines.zero=22
+image.native.no_lines.positive=22
+image.native.no_lines.reference=42

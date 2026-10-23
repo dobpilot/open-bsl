@@ -1,0 +1,4 @@
+image.shared-label-frame.result=12
+image.shared-label-frame.argument=12
+image.shared-label-frame.private-result=5
+image.shared-label-frame.private-argument=5

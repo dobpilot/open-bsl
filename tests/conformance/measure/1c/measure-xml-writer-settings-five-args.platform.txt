@@ -1,0 +1,11 @@
+DEFAULT	UTF-8:1.0:T:F:1
+SETTINGS	UTF-8:1.0:T:T:2
+XML	<root a="1"<LF>    b="2"><LF>  <child/><LF></root>
+CHARS.0	ACCEPTED
+CHARS.1	ACCEPTED
+CHARS.2	ACCEPTED
+CHARS.3	ACCEPTED
+CHARS.4	ACCEPTED
+MODE.1	<root a="1" b="2"><LF>  <child/><LF></root>
+MODE.2	<root a="1" b="2"><child/></root>
+INVALID_CHARS	ERROR

@@ -1,0 +1,3 @@
+module.transitive.begin	OK
+module.transitive.good	42
+module.transitive.end	OK

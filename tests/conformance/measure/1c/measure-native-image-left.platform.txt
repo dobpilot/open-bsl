@@ -1,0 +1,4 @@
+image.native.left.ascii=abc
+image.native.left.cyrillic=Пр
+image.native.left.zero=
+image.native.left.long=abc

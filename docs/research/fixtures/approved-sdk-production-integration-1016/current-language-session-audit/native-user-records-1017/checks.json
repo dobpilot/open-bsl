@@ -1,0 +1,26 @@
+[
+  {
+    "check": "initdb",
+    "exit_code": 0
+  },
+  {
+    "check": "start",
+    "exit_code": 0
+  },
+  {
+    "check": "restore",
+    "exit_code": 0
+  },
+  {
+    "check": "columns",
+    "exit_code": 0
+  },
+  {
+    "check": "users",
+    "exit_code": 0
+  },
+  {
+    "check": "stop",
+    "exit_code": 0
+  }
+]

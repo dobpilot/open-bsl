@@ -1,0 +1,4 @@
+image.shared-unused-frame.result=12
+image.shared-unused-frame.argument=12
+image.shared-unused-frame.private-result=12
+image.shared-unused-frame.private-argument=12

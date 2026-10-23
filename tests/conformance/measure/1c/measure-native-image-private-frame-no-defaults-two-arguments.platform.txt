@@ -1,0 +1,13 @@
+image.private-frame-no-defaults-two-arguments.slot0.type=Number
+image.private-frame-no-defaults-two-arguments.slot0.value=7
+image.private-frame-no-defaults-two-arguments.slot0.argument=5
+image.private-frame-no-defaults-two-arguments.slot1.type=Number
+image.private-frame-no-defaults-two-arguments.slot1.value=7
+image.private-frame-no-defaults-two-arguments.slot1.argument=5
+image.private-frame-no-defaults-two-arguments.slot2.type=Number
+image.private-frame-no-defaults-two-arguments.slot2.value=7
+image.private-frame-no-defaults-two-arguments.slot2.argument=5
+image.private-frame-no-defaults-two-arguments.slot3.type=Number
+image.private-frame-no-defaults-two-arguments.slot3.value=7
+image.private-frame-no-defaults-two-arguments.slot3.argument=5
+image.private-frame-no-defaults-two-arguments.done=1

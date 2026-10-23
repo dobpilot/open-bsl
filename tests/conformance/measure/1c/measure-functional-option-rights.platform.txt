@@ -1,0 +1,11 @@
+file.begin	functional-option-rights-1
+FUNCTIONAL_OPTION.RIGHTS_USER	FunctionalDenied
+FUNCTIONAL_OPTION.RIGHTS_READ	No
+FUNCTIONAL_OPTION.RIGHTS_DIRECT	ERROR:{<Unknown module>(1)}: Error calling context method (Get): Access violation!
+FUNCTIONAL_OPTION.RIGHTS_NORMAL	ERROR:{<Unknown module>(1)}: Error calling context method (GetFunctionalOption): Error getting functional option value "ОпцияПробы".
+No access: 
+FUNCTIONAL_OPTION.RIGHTS_PRIVILEGED	Boolean:Yes
+FUNCTIONAL_OPTION.RIGHTS_NORMAL_AFTER	ERROR:{<Unknown module>(1)}: Error calling context method (GetFunctionalOption): Error getting functional option value "ОпцияПробы".
+No access: 
+FUNCTIONAL_OPTION.RIGHTS_READ_AFTER	No
+file.end	functional-option-rights-1

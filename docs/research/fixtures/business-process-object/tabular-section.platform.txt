@@ -1,0 +1,11 @@
+business.section.initial.count	0
+business.section.add.count	1
+business.section.row.number	1
+business.section.row.text.default	
+business.section.row.flag.default	0
+business.section.row.text.truncated	abcdefghijkl
+business.section.row.flag.number	1
+business.section.other.count	0
+business.section.index.text	abcdefghijkl
+business.section.iteration	1
+business.section.clear.count	0

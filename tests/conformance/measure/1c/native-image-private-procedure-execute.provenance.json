@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "single-flag supplemental modification of compiler-produced baseline",
+  "base": "native-image-execute-compiled.image",
+  "change": "Only private procedure declaration flags changed 0 to 2; original compiler instructions retained",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-private-procedure-execute.image": {
+      "bytes": 497,
+      "sha256": "7bba898eead5770c944950e678f31236b709fab497d37e52398529840304e7fb"
+    },
+    "native-image-private-procedure-execute.Module.bin": {
+      "bytes": 1773,
+      "sha256": "1bd7e33b3fb86357035f0273bc093a6ee94f32776fc57e00d9d3efcda987a1f5"
+    },
+    "measure-native-image-private-procedure-execute.bsl": {
+      "bytes": 665,
+      "sha256": "77e1949052f674ce189bd569ac2ca4c91bedfba4bccd0909880e7496b33ac590"
+    },
+    "measure-native-image-private-procedure-execute.platform.txt": {
+      "bytes": 86,
+      "sha256": "5653bfa3c661a5862f66453d76c2cad1a4cc050b2cf698625a59c0e7fae80919"
+    }
+  }
+}

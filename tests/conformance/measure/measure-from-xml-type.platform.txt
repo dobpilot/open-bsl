@@ -1,0 +1,62 @@
+file.begin	from-xml-type-1
+from_xml_type.anyType	
+from_xml_type.anySimpleType	
+from_xml_type.string	String
+from_xml_type.normalizedString	
+from_xml_type.token	
+from_xml_type.Name	
+from_xml_type.NCName	
+from_xml_type.ID	
+from_xml_type.NMTOKEN	
+from_xml_type.language	
+from_xml_type.decimal	Number
+from_xml_type.integer	
+from_xml_type.long	
+from_xml_type.int	
+from_xml_type.short	
+from_xml_type.byte	
+from_xml_type.nonPositiveInteger	
+from_xml_type.negativeInteger	
+from_xml_type.nonNegativeInteger	
+from_xml_type.positiveInteger	
+from_xml_type.unsignedLong	
+from_xml_type.unsignedInt	
+from_xml_type.unsignedShort	
+from_xml_type.unsignedByte	
+from_xml_type.double	
+from_xml_type.float	
+from_xml_type.boolean	Boolean
+from_xml_type.date	
+from_xml_type.dateTime	Date
+from_xml_type.time	
+from_xml_type.duration	
+from_xml_type.gYear	
+from_xml_type.gMonth	
+from_xml_type.gDay	
+from_xml_type.gYearMonth	
+from_xml_type.gMonthDay	
+from_xml_type.anyURI	
+from_xml_type.base64Binary	Binary data
+from_xml_type.hexBinary	
+from_xml_type.QName	
+from_xml_type.NOTATION	
+from_xml_type.IDREF	
+from_xml_type.IDREFS	
+from_xml_type.ENTITIES	
+from_xml_type.NMTOKENS	
+from_xml_type.String	
+from_xml_type.unknown	
+from_xml_type.OBJECT	String
+from_xml_type.ALIAS	Boolean
+from_xml_type.WRONG_NS	
+from_xml_type.EMPTY_NS	
+from_xml_type.CORE_UNDEFINED	
+from_xml_type.CORE_UUID	
+from_xml_type.ONE_STRING	error
+from_xml_type.NUMBER	error
+from_xml_type.UNDEFINED	error
+from_xml_type.BAD_NAMESPACE	error
+from_xml_type.FACTORY_SETUP	ok
+from_xml_type.SERIALIZER	String
+from_xml_type.SERIALIZER_OBJECT	Number
+file.end	from-xml-type-1

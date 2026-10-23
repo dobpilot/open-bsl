@@ -1,0 +1,5 @@
+fixed.length	5
+fixed.policy	fixed
+fixed.short	[ab   ]
+fixed.long	[abcde]
+fixed.default	[     ]

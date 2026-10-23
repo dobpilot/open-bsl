@@ -1,0 +1,12 @@
+business.fill.standard.undefined.date.empty	1
+business.fill.standard.undefined.number.empty	1
+business.fill.standard.new.date.assigned	0
+business.fill.standard.new.number.assigned	0
+business.fill.standard.new.deletion-mark	0
+business.fill.standard.new.started	0
+business.fill.standard.new.completed	0
+business.fill.standard.changed.date.retained	1
+business.fill.standard.changed.number.retained	1
+business.fill.standard.changed.deletion-mark	1
+business.fill.standard.changed.started	1
+business.fill.standard.changed.completed	1

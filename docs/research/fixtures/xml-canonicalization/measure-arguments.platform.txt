@@ -1,0 +1,6 @@
+canonical.constructor.alias	1
+canonical.argument	Новый ConversionToCanonicalXML(1)	rejected
+canonical.argument	ПреобразованиеКаноническойПробы.КанонизироватьВСтроку(1)	rejected
+canonical.argument	ПреобразованиеКаноническойПробы.КанонизироватьВСтроку(ДокументКаноническойПробы, 1)	rejected
+canonical.argument	ПреобразованиеКаноническойПробы.КанонизироватьВСтроку(ДокументКаноническойПробы, , 1)	accepted
+canonical.argument	ПреобразованиеКаноническойПробы.КанонизироватьВСтроку(ДокументКаноническойПробы, , , 1)	accepted

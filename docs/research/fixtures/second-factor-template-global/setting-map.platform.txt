@@ -1,0 +1,10 @@
+twofactor.map.alias	1
+twofactor.map.default.type	1
+twofactor.map.default.count	0
+twofactor.map.default.other.same	0
+twofactor.map.default.other.count	0
+twofactor.map.assigned.live	42
+twofactor.map.getter.live	77
+twofactor.map.name.number.error	0
+twofactor.map.parameters.structure.error	1
+twofactor.map.parameters.number.error	1

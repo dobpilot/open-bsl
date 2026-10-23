@@ -1,0 +1,4 @@
+image.private-return-unusual.type=Number
+image.private-return-unusual.value=7
+image.private-return-unusual.argument=5
+image.private-return-unusual.done=1

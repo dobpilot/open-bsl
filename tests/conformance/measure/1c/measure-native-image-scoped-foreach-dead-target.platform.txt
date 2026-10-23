@@ -1,0 +1,7 @@
+image.scoped_foreach.mixed.sum=6
+image.scoped_foreach.mixed.count=3
+image.scoped_foreach.empty.sum=0
+image.scoped_foreach.empty.count=0
+image.scoped_foreach.private.value=7
+image.scoped_foreach.private.argument=5
+image.scoped_foreach.done=1

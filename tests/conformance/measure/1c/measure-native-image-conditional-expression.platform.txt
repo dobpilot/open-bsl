@@ -1,0 +1,6 @@
+image.native.conditional.yes.result=12
+image.native.conditional.yes.target=12
+image.native.conditional.yes.direct=1
+image.native.conditional.no.result=4
+image.native.conditional.no.target=4
+image.native.conditional.no.direct=1

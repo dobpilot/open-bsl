@@ -1,0 +1,20 @@
+FORM_FIELD.HTML	FormFieldType	HTML document field	Yes
+FORM_FIELD.PDF	FormFieldType	PDF document field	Yes
+FORM_FIELD.INPUT	FormFieldType	Input field	Yes
+FORM_FIELD.GEOGRAPHICAL	FormFieldType	Geographical schema field	Yes
+FORM_FIELD.GRAPHICAL	FormFieldType	Graphical schema field	Yes
+FORM_FIELD.DENDROGRAM	FormFieldType	Dendrogram field	Yes
+FORM_FIELD.CHART	FormFieldType	Chart field	Yes
+FORM_FIELD.GANTT	FormFieldType	Gantt chart field	Yes
+FORM_FIELD.PROGRESS	FormFieldType	Progress bar	Yes
+FORM_FIELD.CALENDAR	FormFieldType	Calendar field	Yes
+FORM_FIELD.PICTURE	FormFieldType	Image field	Yes
+FORM_FIELD.LABEL	FormFieldType	Text box	Yes
+FORM_FIELD.RADIO	FormFieldType	Radio buttons	Yes
+FORM_FIELD.PERIOD	FormFieldType	Period field	Yes
+FORM_FIELD.PLANNER	FormFieldType	Planner field	Yes
+FORM_FIELD.TRACK	FormFieldType	Slider field	Yes
+FORM_FIELD.SPREADSHEET	FormFieldType	Spreadsheet document field	Yes
+FORM_FIELD.TEXT	FormFieldType	Text document field	Yes
+FORM_FIELD.CHECK	FormFieldType	Checkbox	Yes
+FORM_FIELD.FORMATTED	FormFieldType	Formatted document field	Yes

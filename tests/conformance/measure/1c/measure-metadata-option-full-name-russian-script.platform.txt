@@ -1,0 +1,6 @@
+file.begin	metadata-option-full-name-russian-script-1
+METADATA_OPTION_FULL_NAME.CONSTANT_RUSSIAN	Константа.ЗначениеОпцииПробы
+METADATA_OPTION_FULL_NAME.CONSTANT_ENGLISH	Константа.ЗначениеОпцииПробы
+METADATA_OPTION_FULL_NAME.OPTION_RUSSIAN	ФункциональнаяОпция.ОпцияПробы
+METADATA_OPTION_FULL_NAME.OPTION_ENGLISH	ФункциональнаяОпция.ОпцияПробы
+file.end	metadata-option-full-name-russian-script-1

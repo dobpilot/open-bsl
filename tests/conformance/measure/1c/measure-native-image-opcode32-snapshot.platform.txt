@@ -1,0 +1,2 @@
+image.native.opcode32_snapshot.result=0
+image.native.opcode32_snapshot.reference=0

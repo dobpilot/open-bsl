@@ -1,0 +1,18 @@
+file.begin	functional-option-catalog-1
+FUNCTIONAL_OPTION.CATALOG_LOCATION	Catalog.ЗамерВременныхТаблиц.Attribute.ОпцияБулево
+FUNCTIONAL_OPTION.CATALOG_PARAMETER	1
+FUNCTIONAL_OPTION.CATALOG_PARAMETER_TYPE	Metadata object property values collection
+FUNCTIONAL_OPTION.CATALOG_PARAMETER_TARGET	Catalog.ЗамерВременныхТаблиц
+FUNCTIONAL_OPTION.CATALOG_PARAMETER_INDEX	rejected
+FUNCTIONAL_OPTION.CATALOG_BOOL_EMPTY	Boolean:No
+FUNCTIONAL_OPTION.CATALOG_NUMBER_EMPTY	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Not all of the necessary functional options are specified
+FUNCTIONAL_OPTION.CATALOG_BOOL_FALSE	Boolean:No
+FUNCTIONAL_OPTION.CATALOG_BOOL_TRUE	Boolean:Yes
+FUNCTIONAL_OPTION.CATALOG_NUMBER	Number:20
+FUNCTIONAL_OPTION.CATALOG_BOOL_PARTIAL	Boolean:Yes
+FUNCTIONAL_OPTION.CATALOG_NUMBER_PARTIAL	ERROR:{DataProcessor.Замеры.Form.Форма.Form(28)}: Error calling context method (GetFunctionalOption): Not all of the necessary functional options are specified
+FUNCTIONAL_OPTION.CATALOG_EMPTY_REF	Boolean:No
+FUNCTIONAL_OPTION.CATALOG_NUMBER_EMPTY_REF	Boolean:No
+FUNCTIONAL_OPTION.CATALOG_GROUP	Null:
+FUNCTIONAL_OPTION.CATALOG_UNKNOWN_PARAMETER	Boolean:Yes
+file.end	functional-option-catalog-1

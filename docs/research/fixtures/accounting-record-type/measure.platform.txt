@@ -1,0 +1,9 @@
+accounting.debit.presentation	Debit
+accounting.credit.presentation	Credit
+accounting.debit.type	AccountingRecordType
+accounting.credit.type	AccountingRecordType
+accounting.debit.alias	1
+accounting.credit.alias	1
+accounting.distinct	1
+accounting.bare.type	EnumAccountingRecordType
+accounting.lookup.alias	1

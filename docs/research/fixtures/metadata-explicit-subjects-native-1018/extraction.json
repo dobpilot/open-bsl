@@ -1,0 +1,27 @@
+{
+  "container": "control.cf",
+  "sha256": "82af543529a2cd1bc88a05fb51009f081f56c77dc1e05d5ad00ffc0ebf05c379",
+  "resources": [
+    {
+      "output": "catalog.deflate",
+      "resource": "1316b080-3b2c-501b-ace3-a1234a3fedd1",
+      "sha256": "e654874882a13fe4b47a5a8998b406af23028cfaba53cffafd56fa4ea40a39fc"
+    },
+    {
+      "output": "RootAllow.rights.deflate",
+      "resource": "9d3bec1a-c27a-4d3b-94e1-45dd6c85cf81.0",
+      "sha256": "0f1fdfd713b8280e2b15b1cea93bcfbff2ca0af8b5f2a287caab79f52d99a479"
+    },
+    {
+      "output": "RootDeny.rights.deflate",
+      "resource": "114a9841-1e1b-487a-8340-d833179eb15f.0",
+      "sha256": "720a6bf3ee436cf189e2982ceca466f96d27480ae41c5441d42fef075aa66354"
+    },
+    {
+      "output": "RootSaveOnly.rights.deflate",
+      "resource": "b1df1c9b-a628-4963-8ed3-fb0f314688b9.0",
+      "sha256": "2f25a4f9328d087ca81dd9ad028165505470556dfb01e56fa69a37d120ee47d9"
+    }
+  ],
+  "tool": "Existing v8unpack Python research tool; no product dependency"
+}

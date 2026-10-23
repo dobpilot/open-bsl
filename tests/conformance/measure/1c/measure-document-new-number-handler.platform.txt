@@ -1,0 +1,4 @@
+document.number.handler.cancel=[manual]
+document.number.handler.generate=[H-0000001]
+document.number.handler.call=standard=YES:prefix=[P-]
+document.number.handler.call=standard=YES:prefix=[]

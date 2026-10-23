@@ -1,0 +1,7 @@
+business.section.body.read.error	0
+business.section.body.count.error	0
+business.section.body.add.error	0
+business.section.body.clear.error	0
+business.section.body.assign.error	1
+business.section.body.after-create.count	0
+business.section.body.after-create.add	1

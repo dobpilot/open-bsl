@@ -1,0 +1,3 @@
+image.private-variable-trace.result=5
+image.private-variable-trace.argument=5
+image.private-variable-trace.count=0

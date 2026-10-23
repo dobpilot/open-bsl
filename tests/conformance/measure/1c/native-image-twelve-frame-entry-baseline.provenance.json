@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental twelve-slot entry control, complete native receipt",
+  "scope": "baseline frame: private flags2, parameter count3, original variable names and zero label table. Original mode retains twelve descriptor flags/external slots and omits DefPrm; baseline has ordinary parameters/locals and three empty defaults. Body is only NOP/End. Const[0]=7. No original body or application code is executed.",
+  "files": {
+    "native-image-twelve-frame-entry-baseline.image": {
+      "bytes": 1504,
+      "sha256": "b61f101282e5334abdf947b81d9c3ac560fc6e35354511de70a9716a638ab6d6"
+    },
+    "native-image-twelve-frame-entry-baseline.Module.bin": {
+      "bytes": 2765,
+      "sha256": "21d1c00b32d2b3c46f3699c81ce16353757e26d54688ac3be3384630d1371fa1"
+    },
+    "measure-native-image-twelve-frame-entry-baseline.bsl": {
+      "bytes": 922,
+      "sha256": "4892f2f2e08276c9c80886e736496c592f58846d56e93fb8b96afdeab00f29be"
+    },
+    "measure-native-image-twelve-frame-entry-baseline.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-entry-baseline.log"
+  }
+}

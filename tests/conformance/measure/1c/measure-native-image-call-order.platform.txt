@@ -1,0 +1,4 @@
+image.native.call.order.first=1
+image.native.call.order.first.size=1
+image.native.call.order.second=3
+image.native.call.order.second.size=2

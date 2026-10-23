@@ -1,0 +1,17 @@
+catalog.owner.body.empty=YES
+catalog.owner.body.write=ERROR
+catalog.owner.body.type=owner
+catalog.owner.creation.empty=YES
+catalog.owner.assignment=YES
+catalog.owner.wrong_type=empty
+catalog.owner.unowned=OK
+catalog.owner.unowned.undefined=YES
+catalog.owner.unowned.assignment=ERROR
+catalog.owner.conversion.number=initial
+catalog.owner.conversion.boolean=initial
+catalog.owner.conversion.undefined=initial
+catalog.owner.conversion.null=initial
+catalog.owner.conversion.array=initial
+catalog.owner.conversion.structure=initial
+catalog.owner.conversion.foreign_reference=initial
+catalog.owner.conversion.object=initial

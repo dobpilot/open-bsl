@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental slot9 original-flag control, complete native receipt",
+  "scope": "slot-nine original flags, remaining flags ordinary. All twelve external slots0, private DefPrm absent, Const0=N7, initializer14 and empty body. Original globals absent; only entry is observed.",
+  "files": {
+    "native-image-twelve-frame-object-slot-nine.image": {
+      "bytes": 1459,
+      "sha256": "8505b392ec2c35367a616887abaaafcc9cb37f6563dc0e690588d071930f1ba0"
+    },
+    "native-image-twelve-frame-object-slot-nine.Module.bin": {
+      "bytes": 2720,
+      "sha256": "77abafe6198c521d7bfa568018149e7b6545c19cbbf7879e3f93ea765a372a2c"
+    },
+    "measure-native-image-twelve-frame-object-slot-nine.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "measure-native-image-twelve-frame-object-slot-nine.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-object-slot-nine.log"
+  }
+}

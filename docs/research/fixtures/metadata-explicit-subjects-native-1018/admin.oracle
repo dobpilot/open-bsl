@@ -1,0 +1,63 @@
+﻿user=RootProbeAdmin
+priv=0;subject=0;standard=0;right=Read=YES
+priv=0;subject=0;standard=0;right=View=NO
+priv=0;subject=0;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=0;standard=1;right=View=NO
+priv=0;subject=0;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=0;standard=2;right=View=NO
+priv=0;subject=1;standard=0;right=Read=YES
+priv=0;subject=1;standard=0;right=View=NO
+priv=0;subject=1;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=1;standard=1;right=View=NO
+priv=0;subject=1;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=1;standard=2;right=View=NO
+priv=0;subject=2;standard=0;right=Read=YES
+priv=0;subject=2;standard=0;right=View=YES
+priv=0;subject=2;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=2;standard=1;right=View=NO
+priv=0;subject=2;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=2;standard=2;right=View=YES
+priv=0;subject=3;standard=0;right=Read=NO
+priv=0;subject=3;standard=0;right=View=NO
+priv=0;subject=3;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=3;standard=1;right=View=NO
+priv=0;subject=3;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=3;standard=2;right=View=NO
+priv=0;subject=4;standard=0;right=Read=YES
+priv=0;subject=4;standard=0;right=View=NO
+priv=0;subject=4;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=4;standard=1;right=View=NO
+priv=0;subject=4;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=0;subject=4;standard=2;right=View=NO
+priv=1;subject=0;standard=0;right=Read=YES
+priv=1;subject=0;standard=0;right=View=YES
+priv=1;subject=0;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=0;standard=1;right=View=YES
+priv=1;subject=0;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=0;standard=2;right=View=YES
+priv=1;subject=1;standard=0;right=Read=YES
+priv=1;subject=1;standard=0;right=View=NO
+priv=1;subject=1;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=1;standard=1;right=View=NO
+priv=1;subject=1;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=1;standard=2;right=View=NO
+priv=1;subject=2;standard=0;right=Read=YES
+priv=1;subject=2;standard=0;right=View=YES
+priv=1;subject=2;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=2;standard=1;right=View=NO
+priv=1;subject=2;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=2;standard=2;right=View=YES
+priv=1;subject=3;standard=0;right=Read=NO
+priv=1;subject=3;standard=0;right=View=NO
+priv=1;subject=3;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=3;standard=1;right=View=NO
+priv=1;subject=3;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=3;standard=2;right=View=NO
+priv=1;subject=4;standard=0;right=Read=YES
+priv=1;subject=4;standard=0;right=View=NO
+priv=1;subject=4;standard=1;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=4;standard=1;right=View=NO
+priv=1;subject=4;standard=2;right=Read=ERROR:{DataProcessor.Замеры.Form.Форма.Form(46)}: Error calling context method (AccessRight): Cannot apply the Read right to Catalog.ВладелецПробы
+priv=1;subject=4;standard=2;right=View=NO
+
+completed=YES

@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental first-six original-flags control, complete native receipt",
+  "scope": "first-six original flags, remaining flags ordinary. All twelve external slots0, private DefPrm absent, Const0=N7, initializer14 and empty body. Original globals absent; only entry is observed.",
+  "files": {
+    "native-image-twelve-frame-object-first-six.image": {
+      "bytes": 1472,
+      "sha256": "f1275308551d73362e22d6e004b50ca3a3eb9958d933a2eab4b8bc527ebfab6c"
+    },
+    "native-image-twelve-frame-object-first-six.Module.bin": {
+      "bytes": 2733,
+      "sha256": "bf90c7841e498ee31d6c45cee26076b16c2bb9825fcb60daaa6ecf6f1cc355f6"
+    },
+    "measure-native-image-twelve-frame-object-first-six.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "measure-native-image-twelve-frame-object-first-six.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-object-first-six.log"
+  }
+}

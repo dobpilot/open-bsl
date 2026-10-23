@@ -1,0 +1,7 @@
+file.begin	account-type-1
+ACCOUNT.TYPE.ACTIVE	Assets
+ACCOUNT.TYPE.PASSIVE	Liabilities
+ACCOUNT.TYPE.ACTIVE_PASSIVE	Assets/Liabilities
+ACCOUNT.TYPE.TYPE	AccountType
+ACCOUNT.TYPE.ENGLISH	OK
+file.end	account-type-1

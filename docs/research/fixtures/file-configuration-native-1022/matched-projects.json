@@ -1,0 +1,53 @@
+[
+  {
+    "database": "demo",
+    "native_root": "a3f5e643-b9c4-4763-9c5d-91fc9be92710",
+    "configurator_version": "8.3.27.2342",
+    "edt_version": "2026.1.3+25",
+    "artifacts": [
+      {
+        "path": "target/diagnostics/file-source-edt-1022/demo/native-xml/Configuration.xml",
+        "sha256": "2b0fc39f861bbdd351f5d92ea79db5b5860effdd5d24ef32ad26752ea83b7965"
+      },
+      {
+        "path": "target/diagnostics/file-source-edt-1022/demo/edt-workspace/DEMO/src/Configuration/Configuration.mdo",
+        "sha256": "743a199d437a35463deb304e408603be9e5da0eefc158e0407e65074c8314ec3"
+      }
+    ],
+    "read_only_acquisition": true
+  },
+  {
+    "database": "buh",
+    "native_root": "e0666db2-45d6-49b4-a200-061c6ba7d569",
+    "configurator_version": "8.3.27.2342",
+    "edt_version": "2026.1.3+25",
+    "artifacts": [
+      {
+        "path": "target/diagnostics/buh-native-config-1015/native-xml/Configuration.xml",
+        "sha256": "dc0d067dbe68cf43d72ce1e9983f6d1b942cb232543fed3390bd33282ce94c77"
+      },
+      {
+        "path": "target/diagnostics/file-source-edt-1022/buh-workspace/BUH/src/Configuration/Configuration.mdo",
+        "sha256": "426e21becfa4085077e9b67a22873239343eae6257c37a3fe1005ecd7ce18a3e"
+      }
+    ],
+    "read_only_acquisition": true
+  },
+  {
+    "database": "unf",
+    "native_root": "de29c81d-d880-419b-8f65-cc49813f0e9a",
+    "configurator_version": "8.3.27.2342",
+    "edt_version": "2026.1.3+25",
+    "artifacts": [
+      {
+        "path": "target/diagnostics/file-source-edt-1022/unf/native-xml/Configuration.xml",
+        "sha256": "d6c2fe8200c614d2a78e0efb5d6635246ef957f9797cdc737e0dcc5f26a75600"
+      },
+      {
+        "path": "target/diagnostics/file-source-edt-1022/unf/edt-workspace/UNF/src/Configuration/Configuration.mdo",
+        "sha256": "cb7da5d386ac5902f297c9a8ff084230e65d780fcd1f137dd7f1fdbef2d86c88"
+      }
+    ],
+    "read_only_acquisition": true
+  }
+]

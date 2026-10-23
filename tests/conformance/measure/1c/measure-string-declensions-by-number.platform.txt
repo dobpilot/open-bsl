@@ -1,0 +1,9 @@
+ARITY_1	ERROR:{DataProcessor.Замеры.Form.Форма.Form(34)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ПолучитьСклоненияСтрокиПоЧислу)
+ARITY_2	ERROR:{<Unknown module>(1)}: Error calling context method (GetStringDeclensionsByNumber): Invalid passed parameter: The "L" parameter value is not supported.
+ARITY_3	ERROR:{<Unknown module>(1)}: Error calling context method (GetStringDeclensionsByNumber): Invalid passed parameter: The "L" parameter value is not supported.
+ARITY_4	ERROR:{<Unknown module>(1)}: Error calling context method (GetStringDeclensionsByNumber): Invalid passed parameter: The "L" parameter value is not supported.
+ARITY_5	ERROR:{<Unknown module>(1)}: Error calling context method (GetStringDeclensionsByNumber): Invalid passed parameter: The "L" parameter value is not supported.
+ARITY_6	ERROR:{<Unknown module>(1)}: Error calling context method (GetStringDeclensionsByNumber): Invalid passed parameter: The "L" parameter value is not supported.
+ALIAS	ERROR:{<Unknown module>(1)}: Error calling context method (GetStringDeclensionsByNumber): Invalid passed parameter: The "L" parameter value is not supported.
+ARITY_7	ERROR:{DataProcessor.Замеры.Form.Форма.Form(90)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,100)}: Too many actual parameters (ПолучитьСклоненияСтрокиПоЧислу)
+RUSSIAN_LOCALE	OK:Array

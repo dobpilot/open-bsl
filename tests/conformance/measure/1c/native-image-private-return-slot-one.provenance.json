@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-modified supplemental native control, not compiler evidence",
+  "base": "native-image-local-function",
+  "change": "Replace private arithmetic with five NOPs; private function only returns parameter. Descriptor is 1338/1. Const has distinguishable values 7 and 23. No original code is executed.",
+  "files": {
+    "native-image-private-return-slot-one.image": {
+      "bytes": 387,
+      "sha256": "1f24fa3367d253e652341a1c494e512515ce5d3b96352b8fa0e4bbe56ca75a2b"
+    },
+    "native-image-private-return-slot-one.Module.bin": {
+      "bytes": 1773,
+      "sha256": "f41e6f356a6a190d88d05f41c07655c7476fe27e83a0195479532b38a0448303"
+    },
+    "measure-native-image-private-return-slot-one.bsl": {
+      "bytes": 746,
+      "sha256": "88ab260044c9a11d8ab59978579cae214e02c75e125db85ab76613fe5c0b86b1"
+    },
+    "measure-native-image-private-return-slot-one.platform.txt": {
+      "bytes": 159,
+      "sha256": "c0b184d09f86dd4c7a83baf625d497acf878b8e415b20f9e71d26a26584f8846"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-return-slot-one-1009-v1-ib"
+}

@@ -1,0 +1,6 @@
+business.fields.isolation.first.text	первый
+business.fields.isolation.first.flag	1
+business.fields.isolation.second.text	
+business.fields.isolation.second.flag	0
+business.fields.isolation.disabled-fill.text	первый
+business.fields.isolation.disabled-fill.flag	1

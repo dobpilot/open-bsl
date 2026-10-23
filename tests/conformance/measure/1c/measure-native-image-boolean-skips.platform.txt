@@ -1,0 +1,6 @@
+image.native.boolean_skips.not=11
+image.native.boolean_skips.different=22
+image.native.boolean_skips.true=42
+image.native.boolean_skips.equal=42
+image.native.boolean_skips.reverse=22
+image.native.boolean_skips.false_not=42

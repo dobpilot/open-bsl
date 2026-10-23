@@ -1,0 +1,3 @@
+image.native.property.first=7
+image.native.property.changed=12
+image.native.property.argument=12

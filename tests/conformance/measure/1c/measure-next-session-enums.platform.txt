@@ -1,0 +1,29 @@
+ColorDepth.ROOT	EnumColorDepth
+ColorDepth.TYPE	ColorDepth
+ColorDepth.BitPerPixel1	1 bit per pixel
+ColorDepth.BitPerPixel24	24 bits per pixel
+ColorDepth.BitPerPixel32	32 bits per pixel
+ColorDepth.BitPerPixel4	4 bits per pixel
+ColorDepth.BitPerPixel8	8 bits per pixel
+ColorDepth.ALIASES	PASS
+ToolTipRepresentation.ROOT	EnumToolTipRepresentation
+ToolTipRepresentation.TYPE	ToolTipRepresentation
+ToolTipRepresentation.Auto	Auto
+ToolTipRepresentation.Balloon	Tooltip
+ToolTipRepresentation.Button	Button
+ToolTipRepresentation.None	No
+ToolTipRepresentation.ShowAuto	Display automatically
+ToolTipRepresentation.ShowTop	Display above
+ToolTipRepresentation.ShowLeft	Display to the left
+ToolTipRepresentation.ShowBottom	Display below
+ToolTipRepresentation.ShowRight	Display to the right
+ToolTipRepresentation.ALIASES	PASS
+ClientApplicationType.ROOT	EnumClientApplicationType
+ClientApplicationType.TYPE	ClientApplicationType
+ClientApplicationType.WebClient	Web client
+ClientApplicationType.ExternalConnection	External connection
+ClientApplicationType.MobileAppClient	Mobile application client
+ClientApplicationType.MobileClient	Mobile client
+ClientApplicationType.ThickClient	Thick client
+ClientApplicationType.ThinClient	Thin client
+ClientApplicationType.ALIASES	PASS

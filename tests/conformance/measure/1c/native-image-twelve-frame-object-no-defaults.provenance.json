@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental ordinary object-frame absent-defaults control, complete native receipt",
+  "scope": "Only private DefPrm is removed from successful ordinary object initializer baseline. Three parameters, twelve ordinary descriptors, Const0=N7, initializer14 and empty private body unchanged.",
+  "files": {
+    "native-image-twelve-frame-object-no-defaults.image": {
+      "bytes": 1468,
+      "sha256": "62c571d109ec40f530af6f94bf11e0712a7da92bd0ed63cb10eb09f8405e1ebf"
+    },
+    "native-image-twelve-frame-object-no-defaults.Module.bin": {
+      "bytes": 2729,
+      "sha256": "2d037d80493b81772dde64df0ca1f006c63c5e6711004bc06e6128bda59f6808"
+    },
+    "measure-native-image-twelve-frame-object-no-defaults.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    },
+    "measure-native-image-twelve-frame-object-no-defaults.platform.txt": {
+      "bytes": 176,
+      "sha256": "2a8b566f2b05801f4c65c0622092699b5b9917e164ef6c1ba52343b5afc442cb"
+    }
+  },
+  "outcome": {
+    "status": "completed",
+    "lines": 5,
+    "log": "target/diagnostics/native-twelve-frame-object-no-defaults.log"
+  }
+}

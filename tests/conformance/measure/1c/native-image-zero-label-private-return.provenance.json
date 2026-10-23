@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental finite label control, completed native receipt",
+  "scope": "Public ordinary frame jumps at pc24 to32. Private four-slot flags1 frame without DefPrm jumps at same pc24 to0, where slot equals Const[0]=7 and branches to32. Falling through pc24 would return sentinel Const[1]=23. Wrapper forwards the actual private return through opcode5/0 followed by17/0, without reading an uninitialized local. Both entries are intended to terminate; no original application code is executed. This does not establish original flags2 procedure behavior.",
+  "files": {
+    "native-image-zero-label-private-return.image": {
+      "bytes": 944,
+      "sha256": "174288395d80f78b5c1dbe5cfc575bb083bbe7e685a784155c84b619ba8b3803"
+    },
+    "native-image-zero-label-private-return.Module.bin": {
+      "bytes": 2205,
+      "sha256": "86752706a4529f78cf5d772c9f29ef9399341d02ebbeb0b7cd855f2e1c70e719"
+    },
+    "measure-native-image-zero-label-private-return.bsl": {
+      "bytes": 1469,
+      "sha256": "b307b0d8b56b9d147def54a611be885f46e1c742b9e5d944e6e20e569f880502"
+    },
+    "measure-native-image-zero-label-private-return.platform.txt": {
+      "bytes": 331,
+      "sha256": "3169da4c13e8c665348e9dffa15a4afeb41a3eebb0b9a59a26a2637c01d1968d"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-zero-label-return-1010-v1",
+    "interpretation": "Both controls forward the private result correctly and return7. This does not distinguish zero-address routing from a fallback to the public nonzero label; use the later three-path controls for that question."
+  }
+}

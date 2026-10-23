@@ -1,0 +1,5 @@
+ras.constructor.default=ERROR:{<Unknown module>(1)}: Error calling constructor (АдминистрированиеСервера): Server connection error: Connection refused
+ras.constructor.address=ERROR:{<Unknown module>(1)}: Error calling constructor (АдминистрированиеСервера): Server connection error: Connection refused
+ras.constructor.port=ERROR:{<Unknown module>(1)}: Error calling constructor (АдминистрированиеСервера): Server connection error: Connection refused
+ras.constructor.alias=ERROR:{<Unknown module>(1)}: Error calling constructor (ServerAdministration): Server connection error: Connection refused
+ras.constructor.too_many=ERROR:{DataProcessor.Замеры.Form.Форма.Form(23)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,7)}: Constructor not found

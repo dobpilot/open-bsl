@@ -1,0 +1,11 @@
+catalog.object.type.name=Справочник объект: ЗамерВременныхТаблиц
+catalog.object.type.ru=Да
+catalog.assign.string.0=[абвгдежзи]
+catalog.assign.string.1=[12]
+catalog.assign.string.2=[1.5]
+catalog.assign.string.3=[Да]
+catalog.assign.string.4=[Нет]
+catalog.assign.string.5=[]
+catalog.assign.string.6=[]
+catalog.assign.description=[1234567890123456789012345]
+catalog.object.presentation=[1234567890123456789012345]

@@ -1,0 +1,13 @@
+Use
+Do not use
+Use
+Do not use
+DataCompositionConditionalAppearanceUse
+EnumDataCompositionConditionalAppearanceUse
+DataCompositionConditionalAppearanceUse
+DataCompositionConditionalAppearanceUse
+1
+1
+0
+0
+Do not use

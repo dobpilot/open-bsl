@@ -1,0 +1,4 @@
+business.check.message.result	0
+business.check.message.count	1
+business.check.message.text	"Текст пробы" is a required field.
+business.check.message.field	ТекстПробы

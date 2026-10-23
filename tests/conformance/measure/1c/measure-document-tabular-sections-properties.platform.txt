@@ -1,0 +1,7 @@
+document.section.body=count:0:add-ok
+document.section.body.after=0
+document.section.body.saved.count=1
+document.section.body.saved.identity=Нет
+document.section.line.write=rejected:1
+document.section.row.identity=Да
+document.section.identity=Да

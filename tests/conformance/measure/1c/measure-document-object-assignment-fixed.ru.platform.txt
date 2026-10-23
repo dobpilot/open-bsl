@@ -1,0 +1,15 @@
+document.assignment.fixed.number.text=accepted:Строка:[123456789]
+document.assignment.fixed.number.numeric=accepted:Строка:[17       ]
+document.assignment.fixed.number.undefined=accepted:Строка:[         ]
+document.assignment.fixed.number.null=accepted:Строка:[         ]
+document.assignment.fixed.number.boolean=accepted:Строка:[Да       ]
+document.assignment.fixed.date.native=accepted:Да
+document.assignment.fixed.date.string=accepted:Да
+document.assignment.fixed.date.undefined=accepted:Да
+document.assignment.fixed.date.null=accepted:Да
+document.assignment.fixed.deletion.true=accepted:Да
+document.assignment.fixed.posted.true=accepted:Да
+document.assignment.fixed.number.initial=accepted:Строка:[         ]
+document.assignment.fixed.number.short=accepted:Строка:[abc      ]
+document.assignment.fixed.number.spaces=accepted:Строка:[  abc    ]
+document.assignment.fixed.number.empty=accepted:Строка:[         ]

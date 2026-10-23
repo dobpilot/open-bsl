@@ -1,0 +1,4 @@
+TYPE	Type descriptions
+COUNT	0
+HAS_STRING	NO
+ALIAS_COUNT	0

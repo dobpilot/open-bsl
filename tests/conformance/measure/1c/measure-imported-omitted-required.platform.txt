@@ -1,0 +1,3 @@
+file.begin	imported-omitted-required-1
+CALL.IMPORTED.OMITTED.REQUIRED	first|Yes|third
+file.end	imported-omitted-required-1

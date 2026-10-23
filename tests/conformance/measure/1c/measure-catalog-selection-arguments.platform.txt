@@ -1,0 +1,15 @@
+selection.argument.parent.empty=accepted
+selection.argument.parent.null=accepted
+selection.argument.parent.number=accepted
+selection.argument.parent.string=accepted
+selection.argument.owner.empty=accepted
+selection.argument.owner.null=accepted
+selection.argument.owner.number=accepted
+selection.argument.filter.empty=accepted
+selection.argument.filter.two=rejected
+selection.argument.filter.deletion=rejected
+selection.argument.filter.unknown=rejected
+selection.argument.order.ref=rejected
+selection.argument.order.unknown=rejected
+selection.argument.order.direction=accepted
+selection.argument.order.number=rejected

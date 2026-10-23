@@ -1,0 +1,8 @@
+file.begin	computer-time-zone-1
+TIME.COMPUTER.VALUE	Europe/Moscow
+TIME.COMPUTER.ENGLISH	Europe/Moscow
+TIME.COMPUTER.TYPE	String
+TIME.COMPUTER.SAME	Yes
+TIME.COMPUTER.AFTER_SESSION_CHANGE	Europe/Moscow
+TIME.COMPUTER.SESSION_CHANGED	GMT+0
+file.end	computer-time-zone-1

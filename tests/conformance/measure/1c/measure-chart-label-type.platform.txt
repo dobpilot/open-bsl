@@ -1,0 +1,48 @@
+ROOT	EnumChartLabelType
+TYPE	ChartLabelType
+Value	Value
+ALIAS_Value	PASS
+ValuePercent	Value + percent
+ALIAS_ValuePercent	PASS
+ValueSize	Value + size
+ALIAS_ValueSize	PASS
+None	None
+ALIAS_None	PASS
+Percent	Percent
+ALIAS_Percent	PASS
+Series	Series
+ALIAS_Series	PASS
+SeriesValue	Series + value
+ALIAS_SeriesValue	PASS
+SeriesValuePercent	Series + value + percent
+ALIAS_SeriesValuePercent	PASS
+SeriesValueSize	Series + value + size
+ALIAS_SeriesValueSize	PASS
+SeriesPercent	Series + percent
+ALIAS_SeriesPercent	PASS
+SeriesSize	Series + size
+ALIAS_SeriesSize	PASS
+SeriesPoint	Series + point
+ALIAS_SeriesPoint	PASS
+SeriesPointValue	Series + point + value
+ALIAS_SeriesPointValue	PASS
+SeriesPointValuePercent	Series + point + value + percent
+ALIAS_SeriesPointValuePercent	PASS
+SeriesPointValueSize	Series + point + value + size
+ALIAS_SeriesPointValueSize	PASS
+SeriesPointPercent	Series + point + percent
+ALIAS_SeriesPointPercent	PASS
+SeriesPointSize	Series + point + size
+ALIAS_SeriesPointSize	PASS
+Point	Point
+ALIAS_Point	PASS
+PointValue	Point + value
+ALIAS_PointValue	PASS
+PointValuePercent	Point + value + percent
+ALIAS_PointValuePercent	PASS
+PointValueSize	Point + value + size
+ALIAS_PointValueSize	PASS
+PointPercent	Point + percent
+ALIAS_PointPercent	PASS
+PointSize	Point + size
+ALIAS_PointSize	PASS

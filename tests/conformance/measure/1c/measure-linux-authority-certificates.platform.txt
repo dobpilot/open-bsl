@@ -1,0 +1,3 @@
+linux.ca.type=LinuxCertificationAuthorityCertificates
+linux.ca.alias=Да
+linux.ca.connection=OpenSSLSecureConnection

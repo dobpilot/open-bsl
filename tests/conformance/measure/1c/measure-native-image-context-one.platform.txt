@@ -1,0 +1,4 @@
+image.native.context.one.first=0
+image.native.context.one.second=1
+image.native.context.one.absent=1
+image.native.context.one.count=2

@@ -1,0 +1,13 @@
+find.document.exact	12345678-1234-4321-abcd-0123456789ab
+find.document.alias	12345678-1234-4321-abcd-0123456789ab
+find.document.context	12345678-1234-4321-abcd-0123456789ab
+find.document.attribute.case	12345678-1234-4321-abcd-0123456789ab
+find.document.value.case	00000000-0000-0000-0000-000000000000
+find.document.trailing	12345678-1234-4321-abcd-0123456789ab
+find.document.leading	00000000-0000-0000-0000-000000000000
+find.document.missing	00000000-0000-0000-0000-000000000000
+find.document.number	00000000-0000-0000-0000-000000000000
+find.document.undefined	00000000-0000-0000-0000-000000000000
+find.document.attribute.unknown	ERROR
+find.document.arity.extra	ERROR
+find.document.arity.missing	ERROR

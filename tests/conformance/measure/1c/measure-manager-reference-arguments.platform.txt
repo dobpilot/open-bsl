@@ -1,0 +1,4 @@
+manager.reference.arg.undefined=Yes
+manager.reference.arg.number=error
+manager.reference.arg.string=error
+manager.reference.arg.null=error

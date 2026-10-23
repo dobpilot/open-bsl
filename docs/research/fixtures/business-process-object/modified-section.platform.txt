@@ -1,0 +1,10 @@
+business.modified-section.new	0
+business.modified-section.clear.empty	1
+business.modified-section.add	1
+business.modified-section.read	0
+business.modified-section.old.row.set	0
+business.modified-section.old.add	0
+business.modified-section.old.clear	0
+business.modified-section.row.same	1
+business.modified-section.fill.empty	1
+business.modified-section.count	0

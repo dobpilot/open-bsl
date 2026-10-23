@@ -1,0 +1,8 @@
+outside.length	0
+outer.matches	Yes
+called.length	0
+called.matches	No
+inner.matches	Yes
+after.inner.outer	Yes
+after.inner.inner	No
+after.handler.length	0

@@ -1,0 +1,32 @@
+[
+  {
+    "check": "initdb",
+    "exit_code": 0,
+    "seconds": 0.87
+  },
+  {
+    "check": "start",
+    "exit_code": 0,
+    "seconds": 0.12
+  },
+  {
+    "check": "restore",
+    "exit_code": 0,
+    "seconds": 3.57
+  },
+  {
+    "check": "read-only",
+    "exit_code": 0,
+    "seconds": 0.16
+  },
+  {
+    "check": "actual-probe",
+    "exit_code": 0,
+    "seconds": 0.46
+  },
+  {
+    "check": "stop",
+    "exit_code": 0,
+    "seconds": 0.11
+  }
+]

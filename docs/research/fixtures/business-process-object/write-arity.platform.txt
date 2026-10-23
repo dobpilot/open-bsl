@@ -1,0 +1,4 @@
+business.write-arity.ru	{Обработка.Замеры.Форма.Форма.Форма(34)}: Too many actual parameters
+business.write-arity.ru.ref.empty	1
+business.write-arity.en	{Обработка.Замеры.Форма.Форма.Форма(41)}: Too many actual parameters
+business.write-arity.en.ref.empty	1

@@ -1,0 +1,11 @@
+image.private-alias-direct.call1.result=5
+image.private-alias-direct.call1.argument=5
+image.private-alias-direct.call1.count=2
+image.private-alias-direct.call1.private=14
+image.private-alias-direct.call1.constant=7
+image.private-alias-direct.call2.result=5
+image.private-alias-direct.call2.argument=5
+image.private-alias-direct.call2.count=4
+image.private-alias-direct.call2.private=14
+image.private-alias-direct.call2.constant=7
+image.private-alias-direct.done=1

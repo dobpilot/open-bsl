@@ -1,0 +1,68 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_date": "2026-10-07",
+  "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+  "metadata_provenance": "fill-enabled.provenance.json",
+  "object_module": "empty; reset by native runner",
+  "help_document": "platform-syntax-help:syntax-context:objects/catalog125/catalog702/object707/properties/HeadTask3922.html",
+  "observations": "Eight initial native lines, five non-empty-reference lines, two initialization lines. Both aliases carry the configured task-reference type. Valid reference assignments preserve the reference; undefined/string assignments and Read produce a typed empty reference. During object-module initialization reading is allowed and assignment is rejected. Runtime replay remains pending.",
+  "files": {
+    "head-task.bsl": {
+      "bytes": 1953,
+      "sha256": "aa06f68d46bb46b0dc2cb47cd9d6008dcd3a4e723667bdfb5d56a960f62c35a7"
+    },
+    "head-task.platform.txt": {
+      "bytes": 316,
+      "sha256": "4d7de6e64e828dc1f28235c5dd998983eb3931572794fe8ebe27091e0f164770"
+    },
+    "head-task-reference.bsl": {
+      "bytes": 1601,
+      "sha256": "87e21e7a7677e3202c37869705be29dcf31da2d2d099bdde07fc49eba1592012"
+    },
+    "head-task-reference.platform.txt": {
+      "bytes": 186,
+      "sha256": "85269e2d8f6c5f1483ddef70d22ee29bfb6666aeff4f6e07304a9b7602458a5a"
+    },
+    "head-task-module.bsl": {
+      "bytes": 640,
+      "sha256": "e60978e05a3552c2e4c182be27f7dfe774d83b5a868e668a6a9eab2d2695132c"
+    },
+    "head-task-module.platform.txt": {
+      "bytes": 114,
+      "sha256": "9d8ef337401523cd4e06d74293ef115595e9b17a5b618f26374040ea1fed241a"
+    },
+    "head-task-module-object.bsl": {
+      "bytes": 820,
+      "sha256": "d401a3e0c8267b1f7137e7111399157367d0a511c064646f0b5ce2d122b83bfc"
+    },
+    "head-task-identity.bsl": {
+      "bytes": 2111,
+      "sha256": "c4dbe8d3e37b6be957491a4b30819eee266111d66dd2706d50a71ba6f0eb22be"
+    },
+    "head-task-identity.platform.txt": {
+      "bytes": 284,
+      "sha256": "7853fa5416549b94b5997baec3d3d575de9fd4d22912b4fee30b1f840d7f1418"
+    },
+    "head-task-reference-identity.bsl": {
+      "bytes": 1680,
+      "sha256": "91a49553f2073d580cf7071945c01f315cf5271473d142e263ed4c52fca933ce"
+    },
+    "head-task-reference-identity.platform.txt": {
+      "bytes": 170,
+      "sha256": "3bc085d5c21711fed44d3396bebd8cb10fadedd9c1887aeb9948fa024605ac61"
+    },
+    "head-task-module-identity.bsl": {
+      "bytes": 640,
+      "sha256": "e60978e05a3552c2e4c182be27f7dfe774d83b5a868e668a6a9eab2d2695132c"
+    },
+    "head-task-module-identity.platform.txt": {
+      "bytes": 92,
+      "sha256": "a213601dc2bf4fbdfe0ccce81404b5bea20357b9bf8896bb475e49261407a422"
+    },
+    "head-task-module-identity-object.bsl": {
+      "bytes": 879,
+      "sha256": "de361a14984ffc3818e0190ad5bd216f5c71c7e15244797ce527c39a588d7eb3"
+    }
+  },
+  "identity_controls": "Separate complete native receipts compare Type objects directly: 8 initial/conversion lines, 5 assignment/Read lines, 2 initialization lines. These replay through SDK-acquired BP attributes and an explicit schema task target. Original text-presentation receipts are retained but not claimed passing; current reference presentation uses metadata name instead of synonym."
+}

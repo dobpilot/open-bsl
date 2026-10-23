@@ -1,0 +1,7 @@
+LARGE	LargeDashed	PASS
+DOUBLE	Double	PASS
+NONE	None	PASS
+THIN	ThinDashed	PASS
+SOLID	Solid	PASS
+DOTTED	Dotted	PASS
+TYPE	SpreadsheetDocumentCellLineType

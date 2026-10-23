@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental three-slot flag control failed; no oracle",
+  "scope": "slots-nine-eleven original flags, remaining flags ordinary. All twelve external slots0, private DefPrm absent, Const0=N7, initializer14 and empty body. Original globals absent; only entry is observed.",
+  "files": {
+    "native-image-twelve-frame-object-slots-nine-eleven.image": {
+      "bytes": 1463,
+      "sha256": "3a3ed5d27e695a130ced5db07f2b0182353c15aaf5ce1cb5070187264afb960f"
+    },
+    "native-image-twelve-frame-object-slots-nine-eleven.Module.bin": {
+      "bytes": 2724,
+      "sha256": "bdbdd603186d13576ce90e3ce7ebb544f849016bcf8283ace3847fb7b51f0f49"
+    },
+    "measure-native-image-twelve-frame-object-slots-nine-eleven.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-slots-nine-eleven.log"
+  }
+}

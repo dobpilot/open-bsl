@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<ConfigDumpInfo xmlns="http://v8.1c.ru/8.3/xcf/dumpinfo" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" format="Hierarchical" version="2.20">
+	<ConfigVersions>
+		<Metadata name="AccumulationRegister.ЗамерМакетаРегистра" id="9233da2d-7475-4df7-8503-23c95a1b9514" configVersion="686666dfbd48c94bb2bead7ec2e28b8700000000">
+			<Metadata name="AccumulationRegister.ЗамерМакетаРегистра.Resource.Сумма" id="cce6d6af-4671-4934-ae17-fb8956063a32"/>
+		</Metadata>
+		<Metadata name="AccumulationRegister.ЗамерМакетаРегистра.ManagerModule" id="9233da2d-7475-4df7-8503-23c95a1b9514.2" configVersion="fd326473e4097640ad9a75ae8ef458e300000000"/>
+		<Metadata name="Catalog.ВладелецПробы" id="1316b080-3b2c-501b-ace3-a1234a3fedd1" configVersion="6d9e27463fd09c409bb7da9bfff916f300000000">
+			<Metadata name="Catalog.ВладелецПробы.Attribute.ИскомоеЗначение" id="26069638-d009-5163-a17d-f3603d8cd655"/>
+		</Metadata>
+		<Metadata name="CommonModule.ОчередьЗаданийСлужебный" id="430b88f0-d9a9-475b-a409-a6fbad144999" configVersion="d2b019edf3162a419e28da146e447ad900000000"/>
+		<Metadata name="CommonModule.ОчередьЗаданийСлужебный.Module" id="430b88f0-d9a9-475b-a409-a6fbad144999.0" configVersion="2f85f54705da364b92093a3be5e0ec6e00000000"/>
+		<Metadata name="Configuration.Configuration" id="26c30ece-33b5-498a-b409-a91a046ba66b" configVersion="5bcd214cf9341d42a0e51aeca67cc7ee00000000"/>
+		<Metadata name="Configuration.Configuration.ManagedApplicationModule" id="e2267f2f-daf0-49f2-b383-c9bc3ebe5df0.6" configVersion="fa805032b5eee742a2fba0a6bc6c976400000000"/>
+		<Metadata name="Constant.РежимПеречисленияПробы" id="927c63c3-0958-497d-addd-b1f0af4b6b8d" configVersion="7d41a692a8180f4e9e174de33f42a26b00000000"/>
+		<Metadata name="DataProcessor.Замеры" id="ff92317d-71e7-4664-a13a-18bd31fd3701" configVersion="6462b9107b1ce34880703d9d073c6f0f00000000"/>
+		<Metadata name="DataProcessor.Замеры.Form.Форма" id="8081de47-60ab-4047-8c98-1e22e2725431" configVersion="bcf9a36ff396a4468a50a8349483f3c300000000"/>
+		<Metadata name="DataProcessor.Замеры.Form.Форма.Form" id="8081de47-60ab-4047-8c98-1e22e2725431.0" configVersion="10880fdc4626504e8a136e4fbf3c351f00000000"/>
+		<Metadata name="DataProcessor.Замеры.ObjectModule" id="ff92317d-71e7-4664-a13a-18bd31fd3701.0" configVersion="109aaaffe3ad9b4b9c920281b09368d800000000"/>
+		<Metadata name="Document.ЗамерДокумента" id="f77edfd7-d0d4-532b-a649-399fb412f0a4" configVersion="ffab02a6f40edf478b5e4a759987259300000000">
+			<Metadata name="Document.ЗамерДокумента.Attribute.Заполняемый" id="ae787631-1111-4444-8888-123456789001"/>
+			<Metadata name="Document.ЗамерДокумента.Attribute.НеЗаполняемый" id="ae787631-1111-4444-8888-123456789002"/>
+		</Metadata>
+		<Metadata name="Document.ЗамерДокумента.ObjectModule" id="f77edfd7-d0d4-532b-a649-399fb412f0a4.0" configVersion="3315200ce968eb4daf4e166c4c61f81100000000"/>
+		<Metadata name="Enum.EnumLegacyProbe" id="c143f002-c8de-45ef-8272-ca10ec452db4" configVersion="bb33abb66443254da34afecbe2e3f1f600000000">
+			<Metadata name="Enum.EnumLegacyProbe.EnumValue.Second" id="0a6c66ba-3403-4eae-bad0-66ce551f7082"/>
+			<Metadata name="Enum.EnumLegacyProbe.EnumValue.First" id="40ae3f99-8ef0-4819-8dff-e6701aab4cf4"/>
+		</Metadata>
+		<Metadata name="Language.English" id="63db5aee-c386-4dc8-ade0-98e46bbd7dc1" configVersion="7042864230a66e47a0a542e9bc38bc7900000000"/>
+		<Metadata name="Role.RootAllow" id="9d3bec1a-c27a-4d3b-94e1-45dd6c85cf81" configVersion="d2f7548a81a5b24f99fe67fb4490725400000000"/>
+		<Metadata name="Role.RootAllow.Rights" id="9d3bec1a-c27a-4d3b-94e1-45dd6c85cf81.0" configVersion="12e3b1855a0963418202725c244fe44a00000000"/>
+		<Metadata name="Role.RootDeny" id="114a9841-1e1b-487a-8340-d833179eb15f" configVersion="730b77f489c0ff4cbccaae42f717ea6a00000000"/>
+		<Metadata name="Role.RootDeny.Rights" id="114a9841-1e1b-487a-8340-d833179eb15f.0" configVersion="736f8a3e4bbd1540a5157e8081a4dcda00000000"/>
+		<Metadata name="ScheduledJob.РегламентнаяОбработкаОчередиЗадач" id="9ef2eacd-8de2-4a5d-9f0f-fa06f16b469f" configVersion="e5eb0bb511966b4392c0844dec50047f00000000"/>
+	</ConfigVersions>
+</ConfigDumpInfo>

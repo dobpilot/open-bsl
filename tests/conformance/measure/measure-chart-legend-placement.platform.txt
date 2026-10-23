@@ -1,0 +1,11 @@
+legend.root	EnumChartLegendPlacement
+legend.type	ChartLegendPlacement
+legend.Auto	Auto
+legend.Bottom	Bottom
+legend.Top	Top
+legend.Left	Left
+legend.Right	Right
+legend.None	None
+legend.UseCoordinates	Use coordinates
+legend.aliases	PASS
+legend.folded	PASS

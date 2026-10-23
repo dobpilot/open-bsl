@@ -1,0 +1,2 @@
+image.native.async_source_parameters.argument=42
+image.native.async_source_parameters.result=99

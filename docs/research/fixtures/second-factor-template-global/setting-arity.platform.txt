@@ -1,0 +1,3 @@
+twofactor.arity.number.error	1
+twofactor.arity.string.error	1
+twofactor.arity.two.error	1

@@ -1,0 +1,4 @@
+image.native.default.undefined=1
+image.native.default.explicit=7
+image.native.default.argument=7
+image.native.default.nested=1

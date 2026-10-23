@@ -1,0 +1,5 @@
+{
+  "status": "invalid_probe_setup",
+  "reason": "SetPrivilegedMode(False) called in a function that had not enabled it; AccessRight matrix not reached",
+  "not_an_access_right_oracle": true
+}

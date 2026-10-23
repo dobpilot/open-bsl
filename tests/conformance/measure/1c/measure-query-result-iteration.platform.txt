@@ -1,0 +1,7 @@
+file.begin	query-result-iteration-1
+QUERY.RESULT.ITERATION.LINEAR	Line
+QUERY.RESULT.ITERATION.BY.GROUPS	By group
+QUERY.RESULT.ITERATION.BY.GROUPS.WITH.HIERARCHY	By group with hierarchy
+QUERY.RESULT.ITERATION.TYPE	QueryResultIteration
+QUERY.RESULT.ITERATION.ENGLISH	OK
+file.end	query-result-iteration-1

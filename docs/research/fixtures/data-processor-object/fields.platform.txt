@@ -1,0 +1,15 @@
+fields.body.text	body
+fields.body.flag	Да
+fields.body.rows	1
+fields.section.type	Обработка табличная часть: СтрокиПробы
+fields.body.row.text	body
+fields.body.row.flag	Да
+fields.adjust.text	abcdefghijkl
+fields.adjust.flag	Да
+fields.second.text	body
+fields.row.type	Обработка табличная часть строка: СтрокиПробы
+fields.row.number	2
+fields.row.default.text	
+fields.row.default.flag	Нет
+fields.row.adjust.text	abcdefghijkl
+fields.second.rows	1

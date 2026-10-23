@@ -1,0 +1,2 @@
+FOREGROUND	Client application:ClientApplicationType:Thin client
+BACKGROUND	Client application:Undefined:

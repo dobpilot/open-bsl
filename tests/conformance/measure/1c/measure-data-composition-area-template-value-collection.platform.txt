@@ -1,0 +1,4 @@
+ARITY_0	OK
+ARITY_1	ERROR
+EN_ALIAS	OK
+TYPE	Data composition template of value collection area

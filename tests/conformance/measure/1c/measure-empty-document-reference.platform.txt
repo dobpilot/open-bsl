@@ -1,0 +1,11 @@
+document.empty.0=ЗамерДокумента
+document.empty.1=00000000-0000-0000-0000-000000000000
+document.empty.2=NO
+document.empty.3=
+document.empty.4=YES
+document.empty.5=YES
+document.empty.6=YES
+document.empty.7=YES
+document.empty.8=YES
+document.empty.9=ЗамерДокумента
+document.empty.10=rejected

@@ -1,0 +1,9 @@
+characteristic.qualification.manager.context=1
+characteristic.qualification.code=123456789
+characteristic.qualification.description=1234567890123456789012345
+characteristic.qualification.type.count=1
+characteristic.qualification.type.string=1
+characteristic.qualification.undefined=ACCEPT
+characteristic.qualification.undefined.type_description=1
+characteristic.qualification.undefined.count=4
+characteristic.qualification.folder.write=ERROR

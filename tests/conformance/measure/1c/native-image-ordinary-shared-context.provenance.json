@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed native ordinary shared-body contextual module",
+  "scope": "Public entry0 Goto42 label0 selects11 inside private ordinary callee body. Each ordinary method retains its own parameter descriptor and declaration. Global Metadata external name and previously measured external NStr declaration included. Existing by-reference arithmetic and private visibility observations retained. No private malformed frame is omitted.",
+  "files": {
+    "native-image-ordinary-shared-context.image": {
+      "bytes": 537,
+      "sha256": "edbb4b667d0f1a86c4115129225194a0d4cd1b843f60431b40ee382d2d743fe5"
+    },
+    "native-image-ordinary-shared-context.Module.bin": {
+      "bytes": 1798,
+      "sha256": "6bde679afadd514ce5c5cda5b04ec4ee4776c22cccb6f56c12769691d1c9ca18"
+    },
+    "measure-native-image-ordinary-shared-context.bsl": {
+      "bytes": 1089,
+      "sha256": "48fd4bc839c227b80cd324a3d3d323325d98f7344573934fc38f09a804889c00"
+    },
+    "measure-native-image-ordinary-shared-context.platform.txt": {
+      "bytes": 156,
+      "sha256": "7b35d0c53003d0c84bf43f6e32d77712fab476f03f30953633a6f186e66d742f"
+    }
+  },
+  "native_receipt_complete": true,
+  "measurement_note": "First two runs failed native module initialization because external String33 was undefined, reported by user. Replaced it with previously measured NStr33/2 and remeasured in a fresh temporary IB; only final complete four-line receipt is an oracle."
+}

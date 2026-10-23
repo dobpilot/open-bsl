@@ -1,0 +1,6 @@
+file.begin	event-log-event-presentation-1
+EVENT.PRESENTATION.ZERO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ПредставлениеСобытияЖурналаРегистрации)
+EVENT.PRESENTATION.ONE	{<Unknown module>(1)}: Error calling context method (EventLogEventPresentation): Type mismatch (parameter number '1')
+EVENT.PRESENTATION.TWO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,54)}: Too many actual parameters (ПредставлениеСобытияЖурналаРегистрации)
+EVENT.PRESENTATION.ENGLISH	{<Unknown module>(1)}: Error calling context method (EventLogEventPresentation): Type mismatch (parameter number '1')
+file.end	event-log-event-presentation-1

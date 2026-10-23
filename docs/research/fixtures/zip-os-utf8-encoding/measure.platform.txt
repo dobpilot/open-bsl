@@ -1,0 +1,5 @@
+zip.os-utf8.presentation	OS encoding with UTF8
+zip.os-utf8.type	FileNamesEncodingInZipFile
+zip.os-utf8.alias	1
+zip.os-utf8.auto	0
+zip.os-utf8.utf8	0

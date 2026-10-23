@@ -1,0 +1,5 @@
+{
+  "source": "docs/research/fixtures/metadata-right-host-integration-1018/native/dbnames.deflate",
+  "sha256": "3cd4dbaac1d52239bf55962e50e92478d822750a75eecc819227ccc9f899eb6a",
+  "scope": "Existing explicitly synthetic owner/kind index for the same native catalog GUID; role rights/catalog descriptors remain actual CF bytes. No physical schema or SQL behavior is inferred from this unit fixture."
+}

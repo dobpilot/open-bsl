@@ -1,0 +1,6 @@
+document.number.year.first=[00000000001]
+document.number.year.same=[00000000002]
+document.number.year.next=[00000000001]
+document.number.year.empty=[00000000001]
+document.number.year.return=[00000000003]
+document.number.year.prefix=[P-000000001]

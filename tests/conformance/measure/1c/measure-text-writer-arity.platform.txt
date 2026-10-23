@@ -1,0 +1,10 @@
+file.begin	text-writer-arity-1
+TEXT.WRITER.ZERO	OK
+TEXT.WRITER.ONE	{<Unknown module>(1)}: Error calling constructor (ЗаписьТекста): Invalid parameter value (parameter number '1')
+TEXT.WRITER.TWO	{<Unknown module>(1)}: Error calling constructor (ЗаписьТекста): Invalid parameter value (parameter number '1')
+TEXT.WRITER.THREE	{<Unknown module>(1)}: Error calling constructor (ЗаписьТекста): Invalid parameter value (parameter number '1')
+TEXT.WRITER.FOUR	{<Unknown module>(1)}: Error calling constructor (ЗаписьТекста): Invalid parameter value (parameter number '1')
+TEXT.WRITER.FIVE	{<Unknown module>(1)}: Error calling constructor (ЗаписьТекста): Invalid parameter value (parameter number '1')
+TEXT.WRITER.SIX	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,18)}: Constructor not found
+TEXT.WRITER.ENGLISH	{<Unknown module>(1)}: Error calling constructor (TextWriter): Invalid parameter value (parameter number '1')
+file.end	text-writer-arity-1

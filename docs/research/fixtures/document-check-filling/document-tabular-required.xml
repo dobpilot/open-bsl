@@ -1,0 +1,192 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" version="2.20">
+  <Document uuid="f77edfd7-d0d4-532b-a649-399fb412f0a4">
+    <InternalInfo>
+      <xr:GeneratedType name="DocumentObject.ЗамерДокумента" category="Object">
+        <xr:TypeId>559f445d-2eef-5d80-a0ab-43e958fdc6f6</xr:TypeId>
+        <xr:ValueId>c8489ff6-0b93-51d0-a290-fb7a5e748c31</xr:ValueId>
+      </xr:GeneratedType>
+      <xr:GeneratedType name="DocumentRef.ЗамерДокумента" category="Ref">
+        <xr:TypeId>66bb49c5-b325-5609-a5b0-267606d0b5da</xr:TypeId>
+        <xr:ValueId>92ca1fc0-04ca-5712-8ee3-7b655949b5b0</xr:ValueId>
+      </xr:GeneratedType>
+      <xr:GeneratedType name="DocumentSelection.ЗамерДокумента" category="Selection">
+        <xr:TypeId>a5dbde16-44df-5b4b-819b-f0b6d2fca1b4</xr:TypeId>
+        <xr:ValueId>b24856d7-d826-56b7-9307-bddf31a8238d</xr:ValueId>
+      </xr:GeneratedType>
+      <xr:GeneratedType name="DocumentList.ЗамерДокумента" category="List">
+        <xr:TypeId>f3b8814e-4543-5596-b163-69bbbb2b447e</xr:TypeId>
+        <xr:ValueId>7a135f81-0f3c-51a7-9a20-a6b67cf7c46c</xr:ValueId>
+      </xr:GeneratedType>
+      <xr:GeneratedType name="DocumentManager.ЗамерДокумента" category="Manager">
+        <xr:TypeId>29611101-a28f-5fa8-bee1-d85777e8c3db</xr:TypeId>
+        <xr:ValueId>c5a8dfd3-6e1c-5a3b-9623-88ce055483fc</xr:ValueId>
+      </xr:GeneratedType>
+    </InternalInfo>
+    <Properties>
+      <Name>ЗамерДокумента</Name>
+      <Synonym>
+        <v8:item>
+          <v8:lang>ru</v8:lang>
+          <v8:content>Проба документа</v8:content>
+        </v8:item>
+      </Synonym>
+      <Comment/>
+      <NumberType>String</NumberType>
+      <NumberLength>9</NumberLength>
+      <NumberAllowedLength>Variable</NumberAllowedLength>
+      <NumberPeriodicity>Nonperiodical</NumberPeriodicity>
+      <CheckUnique>true</CheckUnique>
+      <Autonumbering>true</Autonumbering>
+    </Properties>
+    <ChildObjects>
+      <TabularSection xmlns:app="http://v8.1c.ru/8.2/managed-application/core" uuid="3827a494-db18-4d85-98ff-9376e84082d1">
+				<InternalInfo>
+					<xr:GeneratedType name="DocumentTabularSection.ЗамерДокумента.Запасы" category="TabularSection">
+						<xr:TypeId>860e41f1-b5b2-4006-bd9b-ff639af0b2fb</xr:TypeId>
+						<xr:ValueId>23f18ef2-fc50-48f2-b206-95a201911e97</xr:ValueId>
+					</xr:GeneratedType>
+					<xr:GeneratedType name="DocumentTabularSectionRow.ЗамерДокумента.Запасы" category="TabularSectionRow">
+						<xr:TypeId>78fe2855-908e-42fc-9334-99344a4b8324</xr:TypeId>
+						<xr:ValueId>747e5fe7-cf55-4fbb-9213-ae1afd876119</xr:ValueId>
+					</xr:GeneratedType>
+				</InternalInfo>
+				<Properties>
+					<Name>Запасы</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Товары, работы, услуги</v8:content>
+						</v8:item>
+					</Synonym>
+					<Comment/>
+					<ToolTip>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Товары, работы, услуги, продукция</v8:content>
+						</v8:item>
+					</ToolTip>
+					<FillChecking>ShowError</FillChecking>
+					<StandardAttributes>
+						<xr:StandardAttribute name="LineNumber">
+							<xr:LinkByType/>
+							<xr:FillChecking>DontCheck</xr:FillChecking>
+							<xr:MultiLine>false</xr:MultiLine>
+							<xr:FillFromFillingValue>false</xr:FillFromFillingValue>
+							<xr:CreateOnInput>Auto</xr:CreateOnInput>
+							<xr:TypeReductionMode>TransformValues</xr:TypeReductionMode>
+							<xr:MaxValue xsi:nil="true"/>
+							<xr:ToolTip/>
+							<xr:ExtendedEdit>false</xr:ExtendedEdit>
+							<xr:Format/>
+							<xr:ChoiceForm/>
+							<xr:QuickChoice>Auto</xr:QuickChoice>
+							<xr:ChoiceHistoryOnInput>Auto</xr:ChoiceHistoryOnInput>
+							<xr:EditFormat/>
+							<xr:PasswordMode>false</xr:PasswordMode>
+							<xr:DataHistory>Use</xr:DataHistory>
+							<xr:MarkNegatives>false</xr:MarkNegatives>
+							<xr:MinValue xsi:nil="true"/>
+							<xr:Synonym/>
+							<xr:Comment/>
+							<xr:FullTextSearch>Use</xr:FullTextSearch>
+							<xr:ChoiceParameterLinks/>
+							<xr:FillValue xsi:nil="true"/>
+							<xr:Mask/>
+							<xr:ChoiceParameters/>
+						</xr:StandardAttribute>
+					</StandardAttributes>
+					<LineNumberLength>5</LineNumberLength>
+				</Properties>
+				<ChildObjects>
+					<Attribute uuid="c9678a18-1e16-4f8e-b3d5-779f9fd0f450">
+						<Properties>
+							<Name>ТипНоменклатурыЗапас</Name>
+							<Synonym>
+								<v8:item>
+									<v8:lang>ru</v8:lang>
+									<v8:content>Тип номенклатуры: запас</v8:content>
+								</v8:item>
+							</Synonym>
+							<Comment/>
+							<Type>
+								<v8:Type>xs:boolean</v8:Type>
+							</Type>
+							<PasswordMode>false</PasswordMode>
+							<Format/>
+							<EditFormat/>
+							<ToolTip/>
+							<MarkNegatives>false</MarkNegatives>
+							<Mask/>
+							<MultiLine>false</MultiLine>
+							<ExtendedEdit>false</ExtendedEdit>
+							<MinValue xsi:nil="true"/>
+							<MaxValue xsi:nil="true"/>
+							<FillChecking>DontCheck</FillChecking>
+							<ChoiceFoldersAndItems>Items</ChoiceFoldersAndItems>
+							<ChoiceParameterLinks/>
+							<ChoiceParameters/>
+							<QuickChoice>Auto</QuickChoice>
+							<CreateOnInput>Auto</CreateOnInput>
+							<ChoiceForm/>
+							<LinkByType/>
+							<ChoiceHistoryOnInput>Auto</ChoiceHistoryOnInput>
+							<Indexing>DontIndex</Indexing>
+							<FullTextSearch>Use</FullTextSearch>
+							<DataHistory>Use</DataHistory>
+						</Properties>
+					</Attribute>
+					<Attribute uuid="b4a6fe1a-dd79-494a-b527-a9a5f20c7baf">
+						<Properties>
+							<Name>НомерВариантаКП</Name>
+							<Synonym>
+								<v8:item>
+									<v8:lang>ru</v8:lang>
+									<v8:content>Номер варианта КП</v8:content>
+								</v8:item>
+							</Synonym>
+							<Comment/>
+							<Type>
+								<v8:Type>xs:decimal</v8:Type>
+								<v8:NumberQualifiers>
+									<v8:Digits>2</v8:Digits>
+									<v8:FractionDigits>0</v8:FractionDigits>
+									<v8:AllowedSign>Nonnegative</v8:AllowedSign>
+								</v8:NumberQualifiers>
+							</Type>
+							<PasswordMode>false</PasswordMode>
+							<Format/>
+							<EditFormat/>
+							<ToolTip>
+								<v8:item>
+									<v8:lang>ru</v8:lang>
+									<v8:content>Указывает отношение текущей строки к номеру варианта коммерческого предложения (см. Количество вариантов КП).
+[0, 1, 2,.. N]*
+* 0: нет вариантов</v8:content>
+								</v8:item>
+							</ToolTip>
+							<MarkNegatives>false</MarkNegatives>
+							<Mask/>
+							<MultiLine>false</MultiLine>
+							<ExtendedEdit>false</ExtendedEdit>
+							<MinValue xsi:nil="true"/>
+							<MaxValue xsi:nil="true"/>
+							<FillChecking>ShowError</FillChecking>
+							<ChoiceFoldersAndItems>Items</ChoiceFoldersAndItems>
+							<ChoiceParameterLinks/>
+							<ChoiceParameters/>
+							<QuickChoice>Auto</QuickChoice>
+							<CreateOnInput>Auto</CreateOnInput>
+							<ChoiceForm/>
+							<LinkByType/>
+							<ChoiceHistoryOnInput>Auto</ChoiceHistoryOnInput>
+							<Indexing>DontIndex</Indexing>
+							<FullTextSearch>Use</FullTextSearch>
+							<DataHistory>Use</DataHistory>
+						</Properties>
+					</Attribute>
+					</ChildObjects>
+			</TabularSection>
+			</ChildObjects>
+  </Document>
+</MetaDataObject>

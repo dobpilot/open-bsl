@@ -1,0 +1,16 @@
+business.fill-handler.own.text	обработчик
+business.fill-handler.own.flag	1
+business.fill-handler.own.data.text	вход
+business.fill-handler.own.data.flag	1
+business.fill-handler.mutate.text	изменено
+business.fill-handler.mutate.flag	0
+business.fill-handler.mutate.data.text	изменено
+business.fill-handler.mutate.data.flag	0
+business.fill-handler.replace.text	замена
+business.fill-handler.replace.flag	0
+business.fill-handler.replace.data.text	вход
+business.fill-handler.replace.data.flag	1
+business.fill-handler.disable.text	отключено
+business.fill-handler.disable.flag	0
+business.fill-handler.disable.data.text	вход
+business.fill-handler.disable.data.flag	1

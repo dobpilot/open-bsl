@@ -1,0 +1,21 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "incomplete native entry BlockEnd5406 control",
+  "scope": "Only known ordinary callee entry10 Line opcode changes to BlockEnd45/5406; both original declarations, reference argument arithmetic and driver unchanged. This tests the operand in an ordinary frame, not original12-slot private context.",
+  "files": {
+    "native-image-entry-blockend-5406.image": {
+      "bytes": 382,
+      "sha256": "a284c83ff68cccbce57fd895c68de3d896cf2818275977e457955a1386c4fa24"
+    },
+    "native-image-entry-blockend-5406.Module.bin": {
+      "bytes": 1773,
+      "sha256": "867a66001cfd39da42a6798953d13a6be6fb602609a8df7f2052e338fb5b7f7d"
+    },
+    "measure-native-image-entry-blockend-5406.bsl": {
+      "bytes": 1089,
+      "sha256": "48fd4bc839c227b80cd324a3d3d323325d98f7344573934fc38f09a804889c00"
+    }
+  },
+  "native_receipt_complete": false,
+  "outcome": "Enterprise did not complete within60s; timeout stopped it. Only image.native.local_function.enter=1 observed. Driver already catches the call; no return, argument, caught error or later private visibility observation. No conclusion about cause or opcode support."
+}

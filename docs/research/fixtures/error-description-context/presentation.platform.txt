@@ -1,0 +1,4 @@
+description.equals.property	No
+description.equals.brief	No
+description.equals.detail	No
+description.matches	Yes

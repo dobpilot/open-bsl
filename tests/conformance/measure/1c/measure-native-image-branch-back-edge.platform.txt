@@ -1,0 +1,2 @@
+image.native.back_edge.result=20
+image.native.back_edge.argument=20

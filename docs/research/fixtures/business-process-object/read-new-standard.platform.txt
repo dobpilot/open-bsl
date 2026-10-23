@@ -1,0 +1,22 @@
+business.read-new.ru.number	
+business.read-new.ru.date.same	0
+business.read-new.ru.text	
+business.read-new.ru.flag	0
+business.read-new.ru.date.empty	1
+business.read-new.ru.deleted	0
+business.read-new.ru.started	0
+business.read-new.ru.completed	0
+business.read-new.ru.extra	local-extra
+business.read-new.ru.new	1
+business.read-new.ru.ref.empty	1
+business.read-new.en.number	
+business.read-new.en.date.same	0
+business.read-new.en.text	
+business.read-new.en.flag	0
+business.read-new.en.date.empty	1
+business.read-new.en.deleted	0
+business.read-new.en.started	0
+business.read-new.en.completed	0
+business.read-new.en.extra	local-extra
+business.read-new.en.new	1
+business.read-new.en.ref.empty	1

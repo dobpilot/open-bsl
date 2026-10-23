@@ -1,0 +1,6 @@
+image.native.conditional_return.outer.result=12
+image.native.conditional_return.outer.direct=1
+image.native.conditional_return.inner.result=-3
+image.native.conditional_return.inner.direct=1
+image.native.conditional_return.division.result=4
+image.native.conditional_return.division.direct=1

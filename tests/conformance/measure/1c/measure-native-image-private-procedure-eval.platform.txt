@@ -1,0 +1,1 @@
+image.private-procedure-eval.error={CommonModule.ЗамерыТранзитивногоРодителя.Module}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Procedure called as function (Изменить)

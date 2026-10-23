@@ -1,0 +1,28 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental control, completed native receipt",
+  "change": "Four independent public wrappers call four private functions. Each private function has the four original descriptor flags 1338/0,1459/0,3091/0,3027/0 and only returns a distinct slot; each private declaration omits DefPrm. All four slots are called with two actual arguments; zero-argument cases are excluded. All arithmetic is NOP. Const[0] is 7; caller argument is 5 and the second actual argument is Const[1]=23. No original code is executed.",
+  "files": {
+    "native-image-private-frame-no-defaults-distinct-second-argument.image": {
+      "bytes": 1519,
+      "sha256": "7844d53d5e7a74cac26a1da5bf6c3ec320bbcc0c7b5079fb61e35d99ae67c4fd"
+    },
+    "native-image-private-frame-no-defaults-distinct-second-argument.Module.bin": {
+      "bytes": 2780,
+      "sha256": "4dc542c98c1e9b26e577e25ce8d0619a9b044c5d1eba3a06c572e79c8a87b5fd"
+    },
+    "measure-native-image-private-frame-no-defaults-distinct-second-argument.bsl": {
+      "bytes": 3249,
+      "sha256": "1a909047aa5a9023c59867b00ba11e5d58ff0b03236d0830367fea1f19390f66"
+    },
+    "measure-native-image-private-frame-no-defaults-distinct-second-argument.platform.txt": {
+      "bytes": 944,
+      "sha256": "20009e3ba642c33c8a50801e4c89671c61511123bba1e1a1cb4679ecc7fb7cf5"
+    }
+  },
+  "measurement": {
+    "exit_code": 0,
+    "infobase": "/tmp/bsl-private-distinct-1009-v1",
+    "scope": "Four pure private reads with two actual arguments 5 and 23, Const[0]=7; no general BSL arity contract is inferred."
+  }
+}

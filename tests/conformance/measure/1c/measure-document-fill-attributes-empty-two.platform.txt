@@ -1,0 +1,8 @@
+document.fill.attributes.empty-two.undefined.before=[]:[]
+document.fill.attributes.empty-two.undefined.after=[]:[]:[default]:[default]
+document.fill.attributes.empty-two.empty.before=[]:[]
+document.fill.attributes.empty-two.empty.after=[]:[]:[default]:[default]
+document.fill.attributes.empty-two.values.before=[]:[]
+document.fill.attributes.empty-two.values.after=[]:[]:[filled]:[default]
+document.fill.attributes.empty-two.disabled.before=[]:[]
+document.fill.attributes.empty-two.disabled.after=[]:[]:[]:[]

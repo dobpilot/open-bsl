@@ -1,0 +1,5 @@
+document.fill.undefined=Undefined:Yes:[handler]:No:No:No
+document.fill.null=Null:Yes:[handler]:No:No:No
+document.fill.number=Number:Yes:[handler]:No:No:No
+document.fill.structure=Structure:Yes:[handler]:No:No:No
+document.fill.disabled=Structure:Yes:[handler]:No:No:No

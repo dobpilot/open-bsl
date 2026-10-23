@@ -1,0 +1,2 @@
+image.private-procedure-flag2.result=12
+image.private-procedure-flag2.argument=12

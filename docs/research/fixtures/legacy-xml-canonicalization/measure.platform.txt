@@ -1,0 +1,8 @@
+legacy.dom.type	DOM node canonical writing
+legacy.writer.type	Canonical XML writing
+legacy.algorithm.КаноническийXML	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+legacy.algorithm.КаноническийXMLСКомментариями	<r xmlns="urn:root" xmlns:u="urn:unused" xmlns:z="urn:z" a="1" b="2"><z:e a="1" z:b="2"></z:e>текст&lt;&amp;&gt;<!--inside--></r>\n<!--after-->
+legacy.algorithm.ИсключающийКаноническийXML	<r xmlns="urn:root" a="1" b="2"><z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>текст&lt;&amp;&gt;</r>
+legacy.algorithm.ИсключающийКаноническийXMLСКомментариями	<r xmlns="urn:root" a="1" b="2"><z:e xmlns:z="urn:z" a="1" z:b="2"></z:e>текст&lt;&amp;&gt;<!--inside--></r>\n<!--after-->
+legacy.algorithm.КаноническийXML1_1	<rejected>
+legacy.algorithm.КаноническийXML1_1СКомментариями	<rejected>

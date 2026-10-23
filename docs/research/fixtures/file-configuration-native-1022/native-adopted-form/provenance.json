@@ -1,0 +1,14 @@
+{
+  "platform": "1C 8.3.27.2342",
+  "source": "buh ConfigCAS; SDK read-only acquisition, preserved resource bytes, native CFE export",
+  "header_mapping": "Adopted with nil explicit target, scoped name under verified parent",
+  "identities": {
+    "extension-form.xml": "4c749cea-6ce3-4bc5-8b1f-c407aa85f95d",
+    "base-form.xml": "41083788-dfa5-4e2f-92d2-cac6bf94997c"
+  },
+  "files_sha256": {
+    "extension-header.txt": "0f1eadea548375b53d99f9c07772e3c97db806ab9caad55a1b2338c7eb8df835",
+    "extension-form.xml": "3af3e5b6edfa1ecad779d68c261d2ec9d89b6e761ec85215849e5b9cfbd6f89b",
+    "base-form.xml": "8654df8f48db46b5429d0303f6b15649e2c243580915fec243ffd9ccbe913815"
+  }
+}

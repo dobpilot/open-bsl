@@ -1,0 +1,10 @@
+processor.type	Обработка объект: Замеры
+processor.metadata	Замеры
+processor.same	Да
+processor.distinct	Нет
+processor.first.initial	7
+processor.first.increment	8
+processor.second.initial	7
+processor.export.variable	41
+processor.own.receiver	Да
+processor.own.create	7

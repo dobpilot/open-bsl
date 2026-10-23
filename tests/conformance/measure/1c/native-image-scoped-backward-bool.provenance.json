@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "completed scoped backward boolean assignment control",
+  "scope": "Three declarations; exported ordinary procedure16 one reference parameter four ordinary slots; false10/Assign11 shared by branch19 and Jump21; true and false caller observations plus unchanged private call.",
+  "files": {
+    "native-image-scoped-backward-bool.image": {
+      "bytes": 919,
+      "sha256": "a3cc83efec4ff052fa0367ee2252ad7a58d80fdf246b63d8700e2dd8d81c4d6f"
+    },
+    "native-image-scoped-backward-bool.Module.bin": {
+      "bytes": 2180,
+      "sha256": "31f20273f3a5f21b7cdb12a523600d47071267d125f79a6cd09e89757768225b"
+    },
+    "measure-native-image-scoped-backward-bool.bsl": {
+      "bytes": 1028,
+      "sha256": "b6983fb064b73d307306f329dcc7f13388bb6558ac0ae3e28cffec1c5061df99"
+    },
+    "measure-native-image-scoped-backward-bool.platform.txt": {
+      "bytes": 147,
+      "sha256": "ac5cf4844bc0e846f5e17017944e45c6b87e4a65892fbe46b6b5aa98477ee38e"
+    }
+  },
+  "native_receipt_complete": true
+}

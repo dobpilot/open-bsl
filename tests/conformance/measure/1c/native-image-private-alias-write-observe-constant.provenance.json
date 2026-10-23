@@ -1,0 +1,26 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "native-image-local-function",
+  "change": "Private descriptor changes from 5/-1 to 1338/0; caller adds Const[0] to private result after the call. Addresses are shifted for two added instructions. Original arithmetic writes parameter and private function returns it. Two calls observe value, type and unchanged/changed argument independently. No application code is executed.",
+  "files": {
+    "native-image-private-alias-write-observe-constant.image": {
+      "bytes": 394,
+      "sha256": "6841258d9bfd63f11fdb9e575c2aa2a4e508f2daf3709367da8ffe5353ca3463"
+    },
+    "native-image-private-alias-write-observe-constant.Module.bin": {
+      "bytes": 1773,
+      "sha256": "a24a4c1d380cdb6dfa01b2a318538eec1af84251dc3eae46ef803503a56a2884"
+    },
+    "measure-native-image-private-alias-write-observe-constant.bsl": {
+      "bytes": 1563,
+      "sha256": "a5b5b4bb7ce9b7269badbf4cab6e7da62c328f3e519d54f74e9c1396ea2f254f"
+    },
+    "measure-native-image-private-alias-write-observe-constant.platform.txt": {
+      "bytes": 408,
+      "sha256": "2528ef7c93230297db5756fdfccec3e20f2341ad819c9e1a4d2e00a5d80666ee"
+    }
+  },
+  "exit_status": 0,
+  "infobase": "/tmp/open-bsl-private-alias-write-observe-constant-1009-v1-ib"
+}

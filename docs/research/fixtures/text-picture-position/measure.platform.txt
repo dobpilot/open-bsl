@@ -1,0 +1,9 @@
+picture.position.member	Auto|Auto|TextPositionRelativeToPicture|1
+picture.position.member	OnTop|On top|TextPositionRelativeToPicture|1
+picture.position.member	Top|Top|TextPositionRelativeToPicture|1
+picture.position.member	Left|Left|TextPositionRelativeToPicture|1
+picture.position.member	Bottom|Bottom|TextPositionRelativeToPicture|1
+picture.position.member	Right|Right|TextPositionRelativeToPicture|1
+picture.position.root	EnumTextPositionRelativeToPicture
+picture.position.root.type	EnumTextPositionRelativeToPicture
+picture.position.type.alias	1

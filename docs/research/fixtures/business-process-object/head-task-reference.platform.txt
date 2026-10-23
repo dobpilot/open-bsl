@@ -1,0 +1,5 @@
+business.head-task.assigned.ru	1
+business.head-task.assigned.en	1
+business.head-task.wrong.resets	1
+business.head-task.read.resets	1
+business.head-task.read.type	Замер задачи

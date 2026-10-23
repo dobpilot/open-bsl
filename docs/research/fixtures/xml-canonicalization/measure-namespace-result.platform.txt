@@ -1,0 +1,43 @@
+canonical.namespace.count	4
+canonical.namespace.type.0	DOM XPath namespace
+canonical.namespace.property.0.ИмяУзла	#namespace
+canonical.namespace.property.0.ЛокальноеИмя	xmlns
+canonical.namespace.property.0.Префикс	xmlns
+canonical.namespace.property.0.URIПространстваИмен	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.0.ЗначениеУзла	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.0.ТипУзла	XPath namespace
+canonical.namespace.type.1	DOM XPath namespace
+canonical.namespace.property.1.ИмяУзла	#namespace
+canonical.namespace.property.1.ЛокальноеИмя	xmlns
+canonical.namespace.property.1.Префикс	xmlns
+canonical.namespace.property.1.URIПространстваИмен	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.1.ЗначениеУзла	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.1.ТипУзла	XPath namespace
+canonical.namespace.type.2	DOM XPath namespace
+canonical.namespace.property.2.ИмяУзла	#namespace
+canonical.namespace.property.2.ЛокальноеИмя	xmlns
+canonical.namespace.property.2.Префикс	xmlns
+canonical.namespace.property.2.URIПространстваИмен	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.2.ЗначениеУзла	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.2.ТипУзла	XPath namespace
+canonical.namespace.type.3	DOM XPath namespace
+canonical.namespace.property.3.ИмяУзла	#namespace
+canonical.namespace.property.3.ЛокальноеИмя	
+canonical.namespace.property.3.Префикс	
+canonical.namespace.property.3.URIПространстваИмен	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.3.ЗначениеУзла	http://www.w3.org/2000/xmlns/
+canonical.namespace.property.3.ТипУзла	XPath namespace
+canonical.namespace.type.4	Undefined
+canonical.namespace.property.4.ИмяУзла	<rejected>
+canonical.namespace.property.4.ЛокальноеИмя	<rejected>
+canonical.namespace.property.4.Префикс	<rejected>
+canonical.namespace.property.4.URIПространстваИмен	<rejected>
+canonical.namespace.property.4.ЗначениеУзла	<rejected>
+canonical.namespace.property.4.ТипУзла	<rejected>
+canonical.namespace.type.5	Undefined
+canonical.namespace.property.5.ИмяУзла	<rejected>
+canonical.namespace.property.5.ЛокальноеИмя	<rejected>
+canonical.namespace.property.5.Префикс	<rejected>
+canonical.namespace.property.5.URIПространстваИмен	<rejected>
+canonical.namespace.property.5.ЗначениеУзла	<rejected>
+canonical.namespace.property.5.ТипУзла	<rejected>

@@ -1,0 +1,25 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "hand-constructed supplemental native control, not compiler evidence",
+  "base": "native-image-shared-tail-both.Module.bin container info",
+  "change": "Public flag-17 function and private flag-2 procedure with the same reference parameter jump into a shared body adding 7 and executing Return. A second independent export invokes the private entry through opcode 52. Both native paths change argument 5 to 12.",
+  "container_writer_commit": "51473807dc8f874e9b06d84f466fff0861f3c4ac",
+  "files": {
+    "native-image-shared-reference-body.image": {
+      "bytes": 532,
+      "sha256": "6692a01f72d476964cf3e1866704fb755c5b454ed348b8d6d3152e0cb343eed9"
+    },
+    "native-image-shared-reference-body.Module.bin": {
+      "bytes": 1793,
+      "sha256": "5c7248bce69e53458fc5de9e3018d494b1e59c23284b61cacdb9d17f8af1db24"
+    },
+    "measure-native-image-shared-reference-body.bsl": {
+      "bytes": 1267,
+      "sha256": "1d7a4eee68f9f13e449e01dfc2739a00f074e734acba8f7698fb06352d910be7"
+    },
+    "measure-native-image-shared-reference-body.platform.txt": {
+      "bytes": 172,
+      "sha256": "5168411201ed931065936ba6d9b33196a0455166f380dbb161cf9e125f92efa3"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+file.begin	authentication-lock-settings-1
+AUTH.LOCK.MANAGER.TYPE	Manager of infobase users authentication lock
+AUTH.LOCK.SETTINGS.TYPE	Settings for infobase users authentication lock
+AUTH.LOCK.DURATION.TYPE	Number
+AUTH.LOCK.ATTEMPTS.TYPE	Number
+AUTH.LOCK.CODES.TYPE	String
+AUTH.LOCK.MUTATED	90|7|x;y
+AUTH.LOCK.ENGLISH	OK
+AUTH.LOCK.BAD.NUMBER	ACCEPTED
+AUTH.LOCK.BAD.NUMBER.VALUE	Number|90
+AUTH.LOCK.BAD.STRING	ACCEPTED
+AUTH.LOCK.BAD.STRING.VALUE	String|1
+file.end	authentication-lock-settings-1

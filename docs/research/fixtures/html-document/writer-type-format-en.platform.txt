@@ -1,0 +1,2 @@
+html.writer.type	HTML writer
+html.writer.alias	Yes

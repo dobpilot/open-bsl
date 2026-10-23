@@ -1,0 +1,2 @@
+image.native.opcode32.true=1
+image.native.opcode32.false=0

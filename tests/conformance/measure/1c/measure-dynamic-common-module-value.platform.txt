@@ -1,0 +1,3 @@
+file.begin	dynamic-common-module-value-1
+DYNAMIC.MODULE.VALUE.PLATFORM	Job is completed|ok
+file.end	dynamic-common-module-value-1

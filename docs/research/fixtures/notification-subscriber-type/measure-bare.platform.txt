@@ -1,0 +1,5 @@
+SUBSCRIBER.BARE.BEGIN	1
+SUBSCRIBER.BARE.TEXT	EnumDeliverableNotificationSubscriberType
+SUBSCRIBER.BARE.TYPE	EnumDeliverableNotificationSubscriberType
+SUBSCRIBER.BARE.ALIAS	Yes
+SUBSCRIBER.BARE.END	1

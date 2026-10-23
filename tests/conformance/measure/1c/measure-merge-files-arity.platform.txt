@@ -1,0 +1,7 @@
+file.begin	merge-files-arity-1
+MERGE.FILES.ZERO	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ОбъединитьФайлы)
+MERGE.FILES.ONE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,1)}: Not enough actual parameters (ОбъединитьФайлы)
+MERGE.FILES.TWO	{<Unknown module>(1)}: Error calling context method (MergeFiles): Error assembling file: Invalid file path
+MERGE.FILES.THREE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,45)}: Too many actual parameters (ОбъединитьФайлы)
+MERGE.FILES.ENGLISH	{<Unknown module>(1)}: Error calling context method (MergeFiles): Error assembling file: Invalid file path
+file.end	merge-files-arity-1

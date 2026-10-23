@@ -1,0 +1,16 @@
+business.fill-handler-empty.empty.fresh.text	
+business.fill-handler-empty.empty.fresh.flag	0
+business.fill-handler-empty.empty.fresh.data.text	вход
+business.fill-handler-empty.empty.fresh.data.flag	1
+business.fill-handler-empty.empty.filled.text	старое
+business.fill-handler-empty.empty.filled.flag	1
+business.fill-handler-empty.empty.filled.data.text	вход
+business.fill-handler-empty.empty.filled.data.flag	1
+business.fill-handler-empty.undefined.fresh.text	
+business.fill-handler-empty.undefined.fresh.flag	0
+business.fill-handler-empty.undefined.fresh.data.text	вход
+business.fill-handler-empty.undefined.fresh.data.flag	1
+business.fill-handler-empty.undefined.filled.text	старое
+business.fill-handler-empty.undefined.filled.flag	1
+business.fill-handler-empty.undefined.filled.data.text	вход
+business.fill-handler-empty.undefined.filled.data.flag	1

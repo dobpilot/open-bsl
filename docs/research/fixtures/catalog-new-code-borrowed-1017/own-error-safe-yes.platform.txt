@@ -1,0 +1,16 @@
+own.0.restored=caught=YES:safe=NO:disabled=NO:privileged=NO:code=yes
+own.0.outer=NO:NO:NO
+own.1.restored=caught=YES:safe=YES:disabled=NO:privileged=NO:code=yes
+own.1.outer=NO:NO:NO
+own.2.restored=caught=YES:safe=NO:disabled=YES:privileged=NO:code=yes
+own.2.outer=NO:NO:NO
+own.3.restored=caught=YES:safe=NO:disabled=YES:privileged=NO:code=yes
+own.3.outer=NO:NO:NO
+own.4.restored=caught=YES:safe=NO:disabled=NO:privileged=YES:code=yes
+own.4.outer=NO:NO:NO
+own.5.restored=caught=YES:safe=YES:disabled=NO:privileged=NO:code=yes
+own.5.outer=NO:NO:NO
+own.6.restored=caught=YES:safe=NO:disabled=YES:privileged=YES:code=yes
+own.6.outer=NO:NO:NO
+own.7.restored=caught=YES:safe=NO:disabled=YES:privileged=YES:code=yes
+own.7.outer=NO:NO:NO

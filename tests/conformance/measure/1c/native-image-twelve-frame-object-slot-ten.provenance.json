@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental object frame control failed; no oracle",
+  "scope": "slot-ten original flags, remaining flags ordinary. All twelve external slots0, private DefPrm absent, Const0=N7, initializer14 and empty body. Original globals absent; only entry is observed.",
+  "files": {
+    "native-image-twelve-frame-object-slot-ten.image": {
+      "bytes": 1457,
+      "sha256": "3533ad84ac6c5965d98b4ced8eb463104f0c30cc0c21815cd10589aae7007163"
+    },
+    "native-image-twelve-frame-object-slot-ten.Module.bin": {
+      "bytes": 2718,
+      "sha256": "81a05aee9955afb7ff4ab1359e62f9bcd3a0de332025c171f0dd74ae2ce56b2e"
+    },
+    "measure-native-image-twelve-frame-object-slot-ten.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-slot-ten.log"
+  }
+}

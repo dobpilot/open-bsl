@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "supplemental object frame control failed; no oracle",
+  "scope": "Original twelve flags/external_slot0, declared parameter count3 and absent private DefPrm retained. Static wrapper passes twelve actual arguments (5,6,9 repeated four times). Empty body and explicit initializer retained, command addresses shifted by nine additional reads. Const0=N7, no original globals.",
+  "files": {
+    "native-image-twelve-frame-object-twelve-arguments.image": {
+      "bytes": 1542,
+      "sha256": "a2c92da3dfb94d081660007754aa3873f0aab641cacaf3905519c6bc7177f490"
+    },
+    "native-image-twelve-frame-object-twelve-arguments.Module.bin": {
+      "bytes": 2803,
+      "sha256": "e1e04e3dd211087f0797de1a08aa16cdfee61e7ab1643adcb4f64840b79a010b"
+    },
+    "measure-native-image-twelve-frame-object-twelve-arguments.bsl": {
+      "bytes": 969,
+      "sha256": "13d1653443365997f8555693c2c7c807c1681ea1cc6383897ae666d4e8d786d9"
+    }
+  },
+  "outcome": {
+    "status": "SIGSEGV",
+    "complete_receipt": false,
+    "log": "target/diagnostics/native-twelve-frame-object-twelve-arguments.log"
+  }
+}

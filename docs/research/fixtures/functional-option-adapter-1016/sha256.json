@@ -1,0 +1,122 @@
+[
+  {
+    "path": "README.md",
+    "sha256": "bd2ee26a95aa32c1c0b725861a18866b3a163df3916da4d0aa16dbb248bcaeb7"
+  },
+  {
+    "path": "actual-postgres/first-harness-assertion/local-functional-option-tests.log",
+    "sha256": "8d89f880d4ce621f968f0dd43a4b1e3cf083efc7a82cd22b3067f5b99d130b57"
+  },
+  {
+    "path": "actual-postgres/first-harness-assertion/postgres.log",
+    "sha256": "6742e9cb33579087911a2694dd040707dd0899beb761f244978b48f5441d8a8c"
+  },
+  {
+    "path": "actual-postgres/first-harness-assertion/results.json",
+    "sha256": "04872ef83c42b10b97f838aa1a14547c1b3f4d0d2cf5b2e2835c0e33e9398772"
+  },
+  {
+    "path": "actual-postgres/initdb.log",
+    "sha256": "1392ddcae2822abdce0075c6d72b4509fbc8c941682524c2e13fe09861878fb8"
+  },
+  {
+    "path": "actual-postgres/local-functional-option-tests.log",
+    "sha256": "7cd40093d85c48e719268e68b7f2da6db59c45aa79b31c064ea595d5d5292754"
+  },
+  {
+    "path": "actual-postgres/postgres.log",
+    "sha256": "2bcffb4bd984471ed81c39221ecaeac3737c1115f2504aaabcb3af0811993399"
+  },
+  {
+    "path": "actual-postgres/results.json",
+    "sha256": "0518afe8630a49b928573b4191737acc2824a289896b6ee1fe5976096ca65a86"
+  },
+  {
+    "path": "actual-postgres/scope.json",
+    "sha256": "3cc85ce6b8057fc371a8730c34345c295a70d666eb76de41afaaaa082cbd34c2"
+  },
+  {
+    "path": "actual-postgres/start.log",
+    "sha256": "66afd0411ccc09366e99fdd99b85f21899c8d2d064f5835126859618802153ad"
+  },
+  {
+    "path": "actual-postgres/stop.log",
+    "sha256": "ca19178a35ab4153b75b494963b66ce8243e1b94c173107c87b44d09db23652d"
+  },
+  {
+    "path": "local_functional_option_tests.rs",
+    "sha256": "f6390fe169e53a2112f8fc22a29def7c326dbc38b27518628a9acf4a558af880"
+  },
+  {
+    "path": "resource-validation-tool/Cargo.lock",
+    "sha256": "1ae9ec7524cc18389113acac312f803c36e51fe26a5124442a9ef320aa9956ff"
+  },
+  {
+    "path": "resource-validation-tool/Cargo.toml",
+    "sha256": "d0bdbe2e37a97cc85a88f39b9e1423db8182875152da8f6544613846d5fe6f54"
+  },
+  {
+    "path": "resource-validation-tool/src/main.rs",
+    "sha256": "580f329041fa503307fb9e7e84e1d6ad1fff104eb445fd22c434137c0ae7bc09"
+  },
+  {
+    "path": "result.json",
+    "sha256": "c027e5aed0cf98e081bb2c2d18859004c6848231481fdffe26bcee2cd941be0b"
+  },
+  {
+    "path": "root-gates/clippy.log",
+    "sha256": "e012a49a48b738e77c80a0921d1a9d68571d95b83b82435eed4eff95fcb065fe"
+  },
+  {
+    "path": "root-gates/consumer.log",
+    "sha256": "dda7980e8da1041233b9bd7cd86f479320cbe44ef953019bb06c5f1c023ea622"
+  },
+  {
+    "path": "root-gates/fmt.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "root-gates/openspec.log",
+    "sha256": "472945659b98a1cc3abe9c763206e0fe76ccf1850d914215070e8dc940b05b90"
+  },
+  {
+    "path": "root-gates/results.json",
+    "sha256": "42468e8d5cbb25b02920fa4c140937cddb1445ac6df5edefb8364ff6c7687604"
+  },
+  {
+    "path": "root-gates/rt-tree.log",
+    "sha256": "7414873679e1ae93ccc9f43af39cdd288e12c7405d438bba194b00cc64ce28af"
+  },
+  {
+    "path": "root-gates/rustdoc.log",
+    "sha256": "341f5f438e1446ac006d189fa8aff9ebb39717d4dc2cf230f1853ad6e86fb957"
+  },
+  {
+    "path": "root-gates/tests.log",
+    "sha256": "dc1751ae2dbb137e2fd0b594d96db2e63b0c2d77cf3b46ba671a4b1efec6968f"
+  },
+  {
+    "path": "root-gates/vm-tree.log",
+    "sha256": "788638ec55256bf95898923c8e73990271baa324d7b80e5b283eed1f1931c48a"
+  },
+  {
+    "path": "root-test-totals.json",
+    "sha256": "09ebf5bb00ea8e06d25b5672c317a1a2638c23ba49d14b8da9976a7a71eca602"
+  },
+  {
+    "path": "run.py",
+    "sha256": "bf379cba25fa958cbd2f6226c5b108dd758c711afbda327c9b212d06b64960e4"
+  },
+  {
+    "path": "source-rights-resource-provenance.json",
+    "sha256": "6f61017a1198762f1b137cfeec63098e99a4fd872614e60eeae15c668bc2dd06"
+  },
+  {
+    "path": "source-rights-resource-validation.log",
+    "sha256": "65ce56e3fa233e6b3a5611dab064ab816861fdf3eb921529f694c243ee644549"
+  },
+  {
+    "path": "source-sha256.json",
+    "sha256": "2f7c4543fbd548f99fea76f7f69507f1b0d16a1242861f7ebbe31eaaceb52675"
+  }
+]

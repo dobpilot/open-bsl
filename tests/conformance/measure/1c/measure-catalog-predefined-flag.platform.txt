@@ -1,0 +1,8 @@
+predefined.flag.body=NO
+predefined.flag.default=NO
+predefined.flag.alias=YES
+predefined.flag.named=YES
+predefined.flag.bare=YES
+predefined.flag.write=rejected
+predefined.flag.retained=YES
+predefined.flag.empty=NO

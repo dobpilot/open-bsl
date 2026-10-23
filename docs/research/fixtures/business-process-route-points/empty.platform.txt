@@ -1,0 +1,3 @@
+route.points.empty.type	Business process route points
+route.points.empty.count	0
+route.points.empty.iteration	0

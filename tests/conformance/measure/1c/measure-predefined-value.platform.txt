@@ -5,6 +5,9 @@ PREDEFINED.EMPTY.RU.FILLED	ERR: Predefined value "Обработка.Замер�
 PREDEFINED.EMPTY.EN.PATH	ERR: Predefined value "DataProcessor.Замеры.EmptyRef" not found.
 PREDEFINED.SYSTEM.RU.TYPE	DataItemSend
 PREDEFINED.SYSTEM.RU.STRING	Auto
+PREDEFINED.FULL_NAME.SYSTEM.RU	DataItemSend.Auto
+PREDEFINED.FULL_NAME.SYSTEM.EN	DataItemSend.Auto
+PREDEFINED.FULL_NAME.UNSUPPORTED	ERR: Predefined value "" not found.
 PREDEFINED.UNKNOWN	ERR: Predefined value "Справочник.НетТакого.НетТакого" not found.
 PREDEFINED.NON_STRING	ERR: Type mismatch (parameter number '1')
 file.end	predefined-value-1

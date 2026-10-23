@@ -1,0 +1,5 @@
+file.begin	receiver-alias-collision-1
+RECEIVER.ALIAS.BARE	0
+RECEIVER.ALIAS.EXPLICIT	0
+RECEIVER.ALIAS.PARAMETER	1
+file.end	receiver-alias-collision-1

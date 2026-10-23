@@ -1,0 +1,6 @@
+document.number.allocate.initial=[]
+document.number.allocate.first=[000000001]
+document.number.allocate.second=[000000002]
+document.number.allocate.again=[000000003]
+document.number.allocate.prefix=[P-0000001]
+document.number.allocate.reference=empty

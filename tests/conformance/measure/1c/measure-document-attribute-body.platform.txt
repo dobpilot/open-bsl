@@ -1,0 +1,2 @@
+document.attribute.body.read=[]
+document.attribute.body.write=rejected

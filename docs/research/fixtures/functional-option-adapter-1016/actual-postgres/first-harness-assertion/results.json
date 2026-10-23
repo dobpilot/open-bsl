@@ -1,0 +1,22 @@
+[
+  {
+    "check": "initdb",
+    "exit_code": 0,
+    "seconds": 0.84
+  },
+  {
+    "check": "start",
+    "exit_code": 0,
+    "seconds": 0.12
+  },
+  {
+    "check": "local-functional-option-tests",
+    "exit_code": 101,
+    "seconds": 4.24
+  },
+  {
+    "check": "stop",
+    "exit_code": 0,
+    "seconds": 0.11
+  }
+]

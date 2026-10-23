@@ -1,0 +1,24 @@
+{
+  "platform": "8.3.27.2342",
+  "kind": "complete native unused private38 contextual loading control",
+  "scope": "Retains all five private27-context declarations. Adds flags2/three-parameter/declared Var41/12 actual slots with original numeric flags and external_slot0/no DefPrm/40 zero labels. Entry12 is inside63 commands but is not called. Synthetic names; this is loading only, not the original entry4371 body or call semantics.",
+  "files": {
+    "native-image-private38-unused-context.image": {
+      "bytes": 2745,
+      "sha256": "7c6b0a886b87a7579f101150a135d1caee88613eee70a894c1fcf9d82258b9be"
+    },
+    "native-image-private38-unused-context.Module.bin": {
+      "bytes": 4006,
+      "sha256": "b0f4a4425f19a79a1dc5b8ec9d24a9b7d0ee12e9f4bf7509437910891c2f2e9c"
+    },
+    "measure-native-image-private38-unused-context.bsl": {
+      "bytes": 1795,
+      "sha256": "d29cebbadd343031811c3a1022ba1621a3d6a17b22d2e492853d8d44ff6c529b"
+    },
+    "measure-native-image-private38-unused-context.platform.txt": {
+      "bytes": 388,
+      "sha256": "0778faa991f77a467b21dfa473a7bd64808eaec2dd3ffa46c2ce42c7fd4f39e9"
+    }
+  },
+  "measurement": "All nine lines match private27-context byte for byte. The added private declaration is not called; original body/call behavior remains unmeasured."
+}

@@ -1,0 +1,13 @@
+Default
+Additional
+Default
+Additional
+DataCompositionPeriodType
+EnumDataCompositionPeriodType
+DataCompositionPeriodType
+DataCompositionPeriodType
+1
+1
+0
+0
+Default

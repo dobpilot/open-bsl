@@ -1,0 +1,3 @@
+DONT	DontProcess	PASS
+PROCESS	Process	PASS
+TYPE	InternetMailTextProcessing

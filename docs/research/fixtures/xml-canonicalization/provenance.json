@@ -1,0 +1,103 @@
+{
+  "platform": "8.3.27.2342",
+  "infobase": "/tmp/open-bsl-xml-canonicalization-operation-1011-ib",
+  "observations": "Native string, arguments, file/stream, namespace/escaping, xml:base/xml:id subset and edge-argument receipts. Scalar or empty-string XPath gives the whole document; Boolean false and Structure filter give empty output. Conversion mechanism is not inferred; Namespace snapshot returns four DOM XPath namespace objects with the recorded native property presentations; positions beyond the snapshot return Undefined. An empty DOM document canonicalizes successfully to the empty string in the separate completed native control; the earlier combined timeout is not evidence of a canonicalizer hang. Boolean false and Structure filters still produce empty output when the document root is named exactly by the native String(value) presentation (No and Structure); ordinary string-to-XPath coercion is therefore not established. Eight xml:base combinations measured for each of the six algorithms, including parent/child paths, absolute path/URI, query, fragment, empty value and relative chain. Passed XPathResult values (single-element node set, Number, Boolean and String) retain the full document in all four recorded controls. Numeric filename 1 is accepted; numeric stream receiver, closed memory stream and element instead of DOM document are rejected. Ten URI edge combinations measured for each algorithm: origin without path, root clamping, network path, terminal dot/parent, double slash collapse, unchanged absolute URI dot segments, relative leading parents and urn scheme.",
+  "files": {
+    "measure.bsl": {
+      "bytes": 3496,
+      "sha256": "645a4609f4c51c3ab3632e2ff719d2ac7bbd28f82d04124a1abc27e5297dea03"
+    },
+    "measure.platform.txt": {
+      "bytes": 1533,
+      "sha256": "58b011fa19b55075c679bffb3ca250c31faaf8826f4e111aa59f8626a6fa1ab8"
+    },
+    "measure-arguments.bsl": {
+      "bytes": 2460,
+      "sha256": "5ada4c49a6b07c753a2ef510eabf1b6daacb202e3163a6296ac102fdb638830e"
+    },
+    "measure-arguments.platform.txt": {
+      "bytes": 807,
+      "sha256": "7fd9b861d326c01b8840afc72b35d374df70fbff7e8852d026ca728c7585d97d"
+    },
+    "measure-io.bsl": {
+      "bytes": 3293,
+      "sha256": "127bb332914425c857d11efd44b0ed0462850ea9b04a685b44c266ff67e4ca52"
+    },
+    "measure-io.platform.txt": {
+      "bytes": 821,
+      "sha256": "8d3d88b2d1dd23426c4733e13fd92177fcfbbbadc4fcf8ff5184da106ba9f537"
+    },
+    "measure-extended.bsl": {
+      "bytes": 3376,
+      "sha256": "bf6ca268bc01cff59333336ca038cd6c5c60c94473417223b86d92adc8f7b77b"
+    },
+    "measure-extended.platform.txt": {
+      "bytes": 5616,
+      "sha256": "71e0e586c3e0f3f3a4b28f772378ccf0251d8cea1ed92e8747b48b5075544fd0"
+    },
+    "measure-edge-arguments.bsl": {
+      "bytes": 3930,
+      "sha256": "fd40391dc976192c4ceeb7e7b861f6cfbd2fd2aad4183671b466914ad03056fc"
+    },
+    "measure-edge-arguments.platform.txt": {
+      "bytes": 592,
+      "sha256": "224e66e64058ddd2983cb4dc998eeabceeb989dabfeb59f9bb231c5157c41b1f"
+    },
+    "measure-namespace-result.bsl": {
+      "bytes": 3258,
+      "sha256": "2e9b4191e94be47b7df465e4e55a57fe167d43dc380e62cdb0972a18e6d867b9"
+    },
+    "measure-namespace-result.platform.txt": {
+      "bytes": 2710,
+      "sha256": "07dcde444dfdfa5716e6262ac2b9709175474e8cbd29c87b75990f3be3fb58e7"
+    },
+    "measure-filter-conversion.bsl": {
+      "bytes": 1443,
+      "sha256": "2c4a8511b5119d2a13c864b1c46c32e87bf0ff187f2af87c2943739b3f28e880"
+    },
+    "measure-filter-conversion.platform.txt": {
+      "bytes": 55,
+      "sha256": "f34f523c8cccf0f218da4a2d56b700482a991011d5deacda0f45bbd16833c9f1"
+    },
+    "measure-empty-document.bsl": {
+      "bytes": 673,
+      "sha256": "1b71f645debfac548a400df7f0fc311d87c70512476e8c1e9a106660ba60ba5b"
+    },
+    "measure-empty-document.platform.txt": {
+      "bytes": 50,
+      "sha256": "4b2a40138eb7ba91f90d6d723c6277c80b2625b33e65921e4d9044f081d539c9"
+    },
+    "measure-base-resolution.bsl": {
+      "bytes": 3855,
+      "sha256": "6b22b1c3d7d507841478d54f80afe31a41f9914d3110b0f3dc176612a49640cc"
+    },
+    "measure-base-resolution.platform.txt": {
+      "bytes": 5512,
+      "sha256": "4933464f6efed8df48c7002365d206c8947749bae64a9b15a2267ce36e86c898"
+    },
+    "measure-xpath-result.bsl": {
+      "bytes": 2008,
+      "sha256": "1dae845e1afcb0e97ffc41d40a8c27ca574d5bd799acec817cdb2d1122659ac5"
+    },
+    "measure-xpath-result.platform.txt": {
+      "bytes": 588,
+      "sha256": "18ff04ddedff241689ed618d5d71817d7d106f0d1df241f9d91b86d9e703ec6f"
+    },
+    "measure-output-errors.bsl": {
+      "bytes": 2763,
+      "sha256": "0f70f0100a6d06987f15bfe50c8fe61b2c1fda6000cbf76bf6366b8d954c4f92"
+    },
+    "measure-output-errors.platform.txt": {
+      "bytes": 108,
+      "sha256": "992204dec262ca5ec1f0603215a6f06700221fcd45c0a59218bc5ce808c40be9"
+    },
+    "measure-base-edges.bsl": {
+      "bytes": 4359,
+      "sha256": "8fcc6ee9f54d09c6ab9e9b9c3432d18d0aae5d40269f912f4121534b2350f59f"
+    },
+    "measure-base-edges.platform.txt": {
+      "bytes": 7378,
+      "sha256": "dacb97a6eec6ed68fadecb76e0c68a44bf5a71515b156434735e3484bfdf8f8b"
+    }
+  }
+}

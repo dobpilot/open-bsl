@@ -1,0 +1,27 @@
+{
+  "status": "passed_full_gates_and_actual_database",
+  "native_rows": 120,
+  "shared_helper_bsl_rows": 120,
+  "prior_native_matrix_rows_preserved": 492,
+  "root_tests": 4,
+  "verification_tests": 8,
+  "actual_database_rows": 120,
+  "actual_missing_role_privileged": "explicit failure verified",
+  "actual_separate_backend_connections": true,
+  "actual_database_receipt": "actual-database/actual-result.json",
+  "existing_expectations_changed": false,
+  "sdk_changes": false,
+  "full_goal_complete": false,
+  "full_gate": "root-gates/result.json",
+  "tests": {
+    "passed": 3903,
+    "failed": 0,
+    "ignored": 1
+  },
+  "frozen_source_and_native_inputs": 1322,
+  "production_handle": 47371,
+  "production_status": "47371 terminal0; latest candidate all three original ThinClient starts passed, canary true/hash unchanged",
+  "production_receipt": "docs/research/fixtures/metadata-explicit-subjects-native-1018/production-startup/result.json",
+  "main_verified_requirements": 462,
+  "main_incomplete_requirements": 10
+}

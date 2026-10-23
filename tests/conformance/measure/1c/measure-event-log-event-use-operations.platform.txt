@@ -1,0 +1,8 @@
+file.begin	event-log-event-use-operations-1
+EVENT.LOG.USE.GET.TYPE	Event log event use
+EVENT.LOG.USE.GET.ENABLED.TYPE	Boolean
+EVENT.LOG.USE.SET.RUSSIAN	OK
+EVENT.LOG.USE.OPERATIONS.ENGLISH	OK
+EVENT.LOG.USE.GET.BAD.NAME	ERROR
+EVENT.LOG.USE.SET.BAD.VALUE	ERROR
+file.end	event-log-event-use-operations-1

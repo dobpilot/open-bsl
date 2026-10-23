@@ -1,0 +1,2 @@
+image.native.property.write.result=12
+image.native.property.write.argument=12

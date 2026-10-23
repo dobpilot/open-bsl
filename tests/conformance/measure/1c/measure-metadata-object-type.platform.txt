@@ -1,0 +1,6 @@
+file.begin	metadata-object-type-1
+METADATA_OBJECT_TYPE.ROOT	Metadata object Configuration
+METADATA_OBJECT_TYPE.PROCESSOR	Metadata object
+METADATA_OBJECT_TYPE.RUSSIAN	Yes
+METADATA_OBJECT_TYPE.ENGLISH	Yes
+file.end	metadata-object-type-1

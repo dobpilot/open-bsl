@@ -1,0 +1,8 @@
+file.begin	metadata-full-name-1
+METADATA_FULL_NAME.SCRIPT_VARIANT	English
+METADATA_FULL_NAME.COMMON_RUSSIAN	CommonAttribute.НаименованиеЯзык1
+METADATA_FULL_NAME.COMMON_ENGLISH	CommonAttribute.НаименованиеЯзык1
+METADATA_FULL_NAME.CATALOG_RUSSIAN	Catalog.ЗамерВременныхТаблиц
+METADATA_FULL_NAME.CATALOG_ENGLISH	Catalog.ЗамерВременныхТаблиц
+METADATA_FULL_NAME.OWNER	Catalog.ВладелецПробы
+file.end	metadata-full-name-1

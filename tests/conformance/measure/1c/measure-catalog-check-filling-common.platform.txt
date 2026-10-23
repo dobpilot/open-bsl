@@ -1,0 +1,7 @@
+catalog.common.empty=FALSE
+catalog.common.input=FALSE:3:Description:ПроверяемаяСтрока:НаименованиеЯзык1
+catalog.common.field=ПроверяемаяСтрока
+catalog.common.field=НаименованиеЯзык1
+catalog.common.only_own=FALSE
+catalog.common.message="НаименованиеЯзык1" is a required field.
+catalog.common.filled=TRUE

@@ -1,0 +1,4 @@
+file.begin	erase-infobase-data-arity-1
+ERASE.DATA.ONE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,33)}: Too many actual parameters (УдалитьДанныеИнформационнойБазы)
+ERASE.DATA.ENGLISH.ONE	{DataProcessor.Замеры.Form.Форма.Form(28)}: Error compiling or calculating expression or executing fragment of code: {<Unknown module>(1,19)}: Too many actual parameters (EraseInfoBaseData)
+file.end	erase-infobase-data-arity-1

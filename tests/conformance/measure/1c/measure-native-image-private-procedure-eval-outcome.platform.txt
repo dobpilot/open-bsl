@@ -1,0 +1,2 @@
+image.private-procedure-eval.rejected=1
+image.private-procedure-eval.argument=5

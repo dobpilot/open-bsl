@@ -1,0 +1,43 @@
+{
+  "platform": "8.3.27.2342",
+  "measured_date": "2026-10-07",
+  "infobase": "/tmp/open-bsl-business-process-fill-enabled-1007-ib",
+  "metadata_provenance": "fill-enabled.provenance.json",
+  "help_document": "platform-syntax-help:syntax-context:objects/catalog125/catalog702/object707/properties/DataExchange3023.html",
+  "observations": "Complete native controls: 11 qualified-object lines, 4 combined initialization lines, 4 separated initialization lines. Parameters persist through Read and aliases remain linked; mutations do not dirty the object; another object is isolated. Both Load and AutoFill reads are rejected during module initialization, so attempted writes also fail. Runtime implementation remains pending.",
+  "files": {
+    "data-exchange.bsl": {
+      "bytes": 2865,
+      "sha256": "c177875c06b8b77481497282d4ca1d83b775400b309f2a95a5538ce1c2722098"
+    },
+    "data-exchange.platform.txt": {
+      "bytes": 372,
+      "sha256": "23f1086469de7b4ede37dc1d632e42041c6152ab1b01f90a91eb9d3d60227db5"
+    },
+    "data-exchange-module.bsl": {
+      "bytes": 888,
+      "sha256": "48287d49e4d84d20cf152774e91101b21a2078ec29555e07a50fe908d462e6a0"
+    },
+    "data-exchange-module.platform.txt": {
+      "bytes": 153,
+      "sha256": "1a5d87cedd14e40bdd9e1d5f19b085ba1386629870d42205780829b4609a0c8c"
+    },
+    "data-exchange-module-object.bsl": {
+      "bytes": 549,
+      "sha256": "8b9c65dada08a910cf232edfac96b39a73411fc857cb2c93601456887b3455ab"
+    },
+    "data-exchange-phase.bsl": {
+      "bytes": 888,
+      "sha256": "48287d49e4d84d20cf152774e91101b21a2078ec29555e07a50fe908d462e6a0"
+    },
+    "data-exchange-phase.platform.txt": {
+      "bytes": 180,
+      "sha256": "e76132b1f8861f15418aa17621431ee5a27892fe7ed835d94bb0179359870b95"
+    },
+    "data-exchange-phase-object.bsl": {
+      "bytes": 1263,
+      "sha256": "c6f8d4ca00396702989141cd596c5298044ca89b13f64ed903a73f312f27d7e9"
+    }
+  },
+  "runtime_replay": "11 qualified-object lines and 4 separated phase-control lines pass through SDK-acquired BP fields; the existing exchange-parameter implementation is reused with an initialization property guard."
+}

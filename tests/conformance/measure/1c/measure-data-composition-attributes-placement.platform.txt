@@ -1,0 +1,7 @@
+ROOT	EnumDataCompositionAttributesPlacement
+TYPE	DataCompositionAttributesPlacement
+TOGETHER	Together
+WITH_OWNER	With owner
+SPECIAL	In special position
+SEPARATELY	Separately
+ALIASES	PASS

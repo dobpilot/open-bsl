@@ -1,0 +1,8 @@
+document.enum.preserve.single.member.source=enum:[Обычная]
+document.enum.preserve.single.empty.source=enum:[Низкая]
+document.enum.preserve.single.member.missing=enum:[Обычная]
+document.enum.preserve.union.member.source=enum:[Обычная]
+document.enum.preserve.union.empty.missing=enum:[]
+document.enum.preserve.union.string.empty=String:[]
+document.enum.storage.member=Yes:Yes
+document.enum.storage.empty=Yes:Yes

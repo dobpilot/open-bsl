@@ -1,0 +1,11 @@
+{
+  "database": "unf",
+  "producer": "1C 8.3.27.2342; EDT 2026.1.3+25",
+  "object_uuid": "be08c831-b5a8-4e28-b13c-26875635a7f1",
+  "read_only_db_export": true,
+  "sha256": {
+    "Chart.xml": "d07ed4e2fe07464855bab85cbee723b60eb38669ea38008126dfea22daa3a8fa",
+    "config.deflate": "55b35a997d5d7c7a735fadef7b237d6a5a091f21b4d7ed13df0a4f4020ff7428",
+    "Chart.mdo": "377c5b95c62240fbd53e5415dbdfbe5839bd145cdf1c093fd666328b8985d70a"
+  }
+}

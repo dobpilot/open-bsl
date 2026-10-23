@@ -1,0 +1,3 @@
+REF	As file reference	PASS
+FILE	As file	PASS
+TYPE	FileDragMode

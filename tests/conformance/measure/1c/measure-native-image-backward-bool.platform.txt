@@ -1,0 +1,2 @@
+image.native.backward_bool.true=1
+image.native.backward_bool.false=0

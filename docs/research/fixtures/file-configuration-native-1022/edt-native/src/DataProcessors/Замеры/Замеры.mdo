@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:DataProcessor xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="ff92317d-71e7-4664-a13a-18bd31fd3701">
+  <producedTypes>
+    <objectType typeId="7992a8c3-af89-4b9f-ba1a-836068499055" valueTypeId="d318a959-c66f-4fbf-9bfa-5f8ff72faf06"/>
+    <managerType typeId="2a96114f-94f1-404e-abaf-96de3784bc25" valueTypeId="0ea9ecc9-d1e6-4a8c-a224-3ae32d98c048"/>
+  </producedTypes>
+  <name>Замеры</name>
+  <useStandardCommands>true</useStandardCommands>
+  <defaultForm>DataProcessor.Замеры.Form.Форма</defaultForm>
+  <forms uuid="8081de47-60ab-4047-8c98-1e22e2725431">
+    <name>Форма</name>
+    <usePurposes>PersonalComputer</usePurposes>
+    <usePurposes>MobileDevice</usePurposes>
+  </forms>
+  <templates uuid="94c69a28-4a6b-47a4-abcd-000000000003">
+    <name>МакетОбъекта</name>
+    <templateType>TextDocument</templateType>
+  </templates>
+</mdclass:DataProcessor>

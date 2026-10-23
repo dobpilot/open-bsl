@@ -1,0 +1,9 @@
+business.fields.text.initial.empty	1
+business.fields.flag.initial	0
+business.fields.text.truncated	abcdefghijkl
+business.fields.text.number	42
+business.fields.flag.number	1
+business.fields.fill.text	
+business.fields.fill.flag	0
+business.fields.refill.text	
+business.fields.refill.flag	0

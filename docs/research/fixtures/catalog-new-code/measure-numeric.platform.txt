@@ -1,0 +1,4 @@
+catalog.code.numeric.cancel	42
+catalog.code.numeric.prefix	42
+catalog.code.numeric.handler	YES
+catalog.code.numeric.handler	YES

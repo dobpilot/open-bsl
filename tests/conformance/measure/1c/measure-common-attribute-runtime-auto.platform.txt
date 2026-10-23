@@ -1,0 +1,8 @@
+common.body.empty=YES
+common.body.write=ERROR
+common.initial.empty=YES
+common.assignment=test
+common.number=42
+common.length=150
+common.isolation=YES
+common.excluded=ERROR
