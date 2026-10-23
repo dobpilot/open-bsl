@@ -16,6 +16,20 @@ use open_bsl::{
     Span, TextError, TypeDescriptor, Value, format_value,
 };
 
+fn inspect_configuration_export(context: &mut CallContext<'_>) -> RtResult<bool> {
+    context.configuration_has_export("МодульОбъекта", "Записать")
+}
+const _: fn(&mut CallContext<'_>) -> RtResult<bool> = inspect_configuration_export;
+
+const _: fn(&Value) -> RtResult<bool> = open_bsl::convert_to_boolean;
+
+// Хост передаёт квалификаторы приобретённых типов только через фасад.
+const _: fn(Vec<open_bsl::ColumnType>) -> Value = Value::new_qualified_type_description;
+
+// Схема платформенного результата не требует имени внутреннего хранилища таблицы.
+const _: fn(Vec<(String, Vec<open_bsl::ColumnType>)>) -> Value =
+    Value::new_table_with_typed_columns;
+
 // --- Свой компонент целиком, только через фасад --------------------------
 
 #[derive(Debug)]
@@ -304,3 +318,27 @@ mod configuration_call_tests;
 #[cfg(test)]
 #[path = "security_mode_tests.rs"]
 mod security_mode_tests;
+
+#[cfg(test)]
+#[path = "value_constraint_tests.rs"]
+mod value_constraint_tests;
+
+#[cfg(test)]
+#[path = "configuration_instance_tests.rs"]
+mod configuration_instance_tests;
+
+#[cfg(test)]
+#[path = "property_context_tests.rs"]
+mod property_context_tests;
+
+#[cfg(test)]
+#[path = "instance_handler_tests.rs"]
+mod instance_handler_tests;
+
+#[cfg(test)]
+#[path = "function_parameter_tests.rs"]
+mod function_parameter_tests;
+
+#[cfg(test)]
+#[path = "numeric_parser_tests.rs"]
+mod numeric_parser_tests;

@@ -15,6 +15,11 @@ pub enum Error {
     /// Структурная ошибка каталога конфигурации: дубль имени модуля,
     /// неизвестный импорт, цикл графа импортов.
     Configuration(String),
+    /// Ошибка разбора или разрешения в именованном модуле конфигурации.
+    InModule {
+        module: String,
+        source: Box<Error>,
+    },
 }
 
 impl fmt::Display for Error {
@@ -35,6 +40,9 @@ impl fmt::Display for Error {
             Self::Configuration(what) => {
                 write!(formatter, "ошибка конфигурации: {what}")
             }
+            Self::InModule { module, source } => {
+                write!(formatter, "модуль «{module}»: {source}")
+            }
         }
     }
 }
@@ -52,6 +60,7 @@ impl std::error::Error for Error {
             Self::Runtime(error) => Some(error),
             Self::Bytecode(error) => Some(error),
             Self::Configuration(_) => None,
+            Self::InModule { source, .. } => Some(source.as_ref()),
         }
     }
 }

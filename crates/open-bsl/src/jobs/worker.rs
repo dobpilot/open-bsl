@@ -16,24 +16,7 @@ pub(super) fn worker_main(
     shared: &Arc<JobRuntimeShared>,
     progress: &std::sync::atomic::AtomicBool,
 ) {
-    // Каталог разбирается один раз на worker; программы разделяются между
-    // сеансами этого worker и не покидают его поток.
-    let engine = match build_worker_engine(&shared.recipe) {
-        Ok(engine) => engine,
-        Err(error) => {
-            let mut registry = shared.registry.lock().expect("реестр без отравления");
-            registry.state = RuntimeState::Broken;
-            let text = format!("worker не разобрал рецепт каталога: {error}");
-            fail_resident_jobs(&mut registry, &text);
-            drop(registry);
-            shared.terminal_watch.notify_all();
-            return;
-        }
-    };
-    // Резиденты живут в пуле ПОТОКА, а не в кадре: вложенное ожидание
-    // внутри кванта резидента обслуживает тот же пул и потому способно
-    // доводить своих соседей (см. `drive_local`).
-    drive_local(shared, &engine, DriveMode::Worker(progress));
+    drive_local(shared, None, DriveMode::Worker(progress));
 }
 
 thread_local! {
@@ -83,9 +66,12 @@ pub(super) enum DriveMode<'a> {
 /// глобальной очереди, а спит только когда двигать нечего.
 pub(super) fn drive_local(
     shared: &Arc<JobRuntimeShared>,
-    engine: &crate::Engine,
+    engine: Option<&crate::Engine>,
     mode: DriveMode<'_>,
 ) {
+    // Каталог строится после первого извлечения задания и живёт до выхода
+    // worker. Helping-ожидания используют переданный заимствованный движок.
+    let mut owned_engine = None;
     let mark_progress = || {
         if let DriveMode::Worker(progress) = &mode {
             progress.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -180,6 +166,8 @@ pub(super) fn drive_local(
                 };
                 #[cfg(test)]
                 HELPING_PARKS.with(|count| count.set(count.get() + 1));
+                #[cfg(test)]
+                catalog_loading_tests::on_idle(shared);
                 match deadline {
                     None => {
                         registry = condvar.wait(registry).expect("реестр без отравления");
@@ -195,6 +183,38 @@ pub(super) fn drive_local(
             }
         };
         if let Some(id) = next_global {
+            // Извлечённое задание защищено и при панике разбора каталога:
+            // оно уже не находится в очереди, но ещё не стало резидентом.
+            let mut claim = StartGuard {
+                shared,
+                id,
+                armed: true,
+            };
+            let engine = match engine.or(owned_engine.as_ref()) {
+                Some(engine) => engine,
+                None => {
+                    match load_worker_engine(shared) {
+                        Ok(engine) => owned_engine = Some(engine),
+                        Err(error) => {
+                            let mut registry =
+                                shared.registry.lock().expect("реестр без отравления");
+                            if registry.state != RuntimeState::Closed {
+                                registry.state = RuntimeState::Broken;
+                                fail_resident_jobs(
+                                    &mut registry,
+                                    &format!("worker не разобрал рецепт каталога: {error}"),
+                                );
+                            }
+                            drop(registry);
+                            shared.terminal_watch.notify_all();
+                            shared.work_available.notify_all();
+                            return;
+                        }
+                    }
+                    owned_engine.as_ref().expect("каталог построен")
+                }
+            };
+            claim.armed = false;
             match start_job(shared, engine, id) {
                 None => continue,
                 Some(Ok(job)) => RESIDENTS.with(|residents| residents.borrow_mut().push_back(job)),
@@ -219,6 +239,9 @@ pub(super) fn drive_local(
         };
         // Паника BSL-исполнения ловится на границе кванта и роняет только
         // это задание; соседи-резиденты продолжают.
+        let engine = engine
+            .or(owned_engine.as_ref())
+            .expect("резидент имеет каталог");
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(engine)));
         match outcome {
             Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
@@ -387,10 +410,13 @@ fn start_job(
     let mut started = false;
     let taken = {
         let mut registry = shared.registry.lock().expect("реестр без отравления");
+        // Разбор холодного каталога мог пересечься с отменой или закрытием.
+        // Проверка и переход выполняются под одним локом: terminal не оживает.
+        let available = !matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken);
         let record = registry.record_mut(id);
         match record {
             None => None,
-            Some(record) => {
+            Some(record) if available && record.snapshot.state == JobStateDto::Queued => {
                 record.snapshot.state = JobStateDto::Running;
                 record.snapshot.begin = begin;
                 started = true;
@@ -402,6 +428,7 @@ fn start_job(
                     record.profile_index,
                 ))
             }
+            Some(_) => None,
         }
     };
     if started {
@@ -461,7 +488,7 @@ impl RunningJob {
     /// подбираются конечным срезом без ожидания первого.
     fn poll(&mut self, engine: &crate::Engine) -> Result<bsl_vm::ProgramPoll, JobPollError> {
         let catalog = engine
-            .catalog()
+            .execution_catalog()
             .expect("worker строится только с каталогом");
         self.vm
             .poll_configuration_with_budget(
@@ -1012,3 +1039,13 @@ mod tests {
         );
     }
 }
+
+fn load_worker_engine(shared: &Arc<JobRuntimeShared>) -> Result<crate::Engine, String> {
+    #[cfg(test)]
+    catalog_loading_tests::on_build(shared);
+    build_worker_engine(&shared.recipe)
+}
+
+#[cfg(test)]
+#[path = "worker_catalog_loading_tests.rs"]
+mod catalog_loading_tests;

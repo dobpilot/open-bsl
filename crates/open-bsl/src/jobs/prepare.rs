@@ -11,6 +11,10 @@ use std::sync::Arc;
 /// не разбирал текстовый образ заново.
 pub(crate) struct TargetTable {
     modules: Vec<(String, Vec<TargetFunction>)>,
+    indexed: Option<(
+        crate::engine::on_demand::WorkerSource,
+        bsl_syntax::PreprocSymbols,
+    )>,
 }
 
 struct TargetFunction {
@@ -23,6 +27,7 @@ struct TargetFunction {
 impl TargetTable {
     fn from_catalog(catalog: &bsl_bytecode::ConfigurationProgram) -> Self {
         Self {
+            indexed: None,
             modules: catalog
                 .modules
                 .iter()
@@ -48,6 +53,50 @@ impl TargetTable {
     /// Разрешает «Модуль.Метод»: неглобальный общий модуль, экспортная
     /// не-async цель. Детали validation — за `JOB.EXECUTE.VALIDATION`.
     pub(super) fn resolve(&self, method_name: &str) -> Result<(u32, u16), String> {
+        if let Some((indexed, symbols)) = &self.indexed {
+            let (module_name, _) = method_name
+                .split_once('.')
+                .ok_or_else(|| format!("цель «{method_name}» не в форме «Модуль.Метод»"))?;
+            let declarations = indexed
+                .source
+                .index()
+                .modules()
+                .iter()
+                .filter(|module| {
+                    module.kind() != bsl_config::ModuleKind::Common || module.execution().server()
+                })
+                .collect::<Vec<_>>();
+            let (target, module) = declarations
+                .iter()
+                .enumerate()
+                .find(|(_, module)| bsl_rt::folded_eq(module.name(), module_name.trim()))
+                .ok_or_else(|| format!("общий модуль «{}» не найден", module_name.trim()))?;
+            let source = indexed.source.module_source(module.id())?;
+            let surface = bsl_syntax::scan_declarations_with_symbols(&source, symbols)
+                .map_err(|error| error.to_string())?;
+            let functions = surface
+                .functions
+                .into_iter()
+                .enumerate()
+                .map(|(position, function)| {
+                    Ok(TargetFunction {
+                        name: function.name,
+                        chunk: (position + 1)
+                            .try_into()
+                            .map_err(|_| "слишком много методов модуля".to_string())?,
+                        exported: function.export,
+                        is_async: function.is_async,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            let table = Self {
+                modules: vec![(module.name().into(), functions)],
+                indexed: None,
+            };
+            return table
+                .resolve(method_name)
+                .map(|(_, chunk)| (target as u32, chunk));
+        }
         let Some((module_name, function_name)) = method_name.split_once('.') else {
             return Err(format!("цель «{method_name}» не в форме «Модуль.Метод»"));
         };
@@ -98,10 +147,18 @@ impl TargetTable {
 /// один раз, и разделяет разобранные программы между своими сеансами.
 #[derive(Clone)]
 pub(crate) struct WorkerRecipe {
-    pub image_text: Arc<str>,
+    // `Arc<String>` переносит готовый буфер. `Arc<str>::from(String)`
+    // копирует весь образ и удваивает его пиковое хранение.
+    pub image_text: Arc<String>,
+    pub indexed: Option<crate::engine::on_demand::WorkerSource>,
     /// Библиотеки, добавленные `register_library` родительского движка:
     /// без них цель с пользовательским типом не слинкуется в worker.
     pub libraries: Vec<bsl_rt::LibraryDescriptor>,
+    /// Типы значений принадлежат каталогу, а не данным сеанса.
+    pub value_types: Vec<Arc<bsl_rt::ValueTypeDescriptor>>,
+    /// Контекст собственных методов нужен динамическому коду задания.
+    pub method_contexts: Vec<(String, &'static [bsl_rt::MethodDescriptor])>,
+    pub property_contexts: Vec<(String, Arc<[String]>)>,
     /// Символы условной компиляции — их видит динамический код задания.
     pub symbols: bsl_syntax::PreprocSymbols,
 }
@@ -112,19 +169,31 @@ pub(crate) struct WorkerRecipe {
 /// препроцессора — цель с пользовательским типом линкуется, а
 /// динамический код задания видит те же `#Если`.
 pub(super) fn build_worker_engine(recipe: &WorkerRecipe) -> Result<crate::Engine, String> {
-    let image = bsl_bytecode::parse_image(&recipe.image_text).map_err(|e| e.to_string())?;
-    let bsl_bytecode::BytecodeImage::Configuration { catalog, entry: _ } = image else {
-        return Err("рецепт worker обязан быть конфигурацией".to_string());
-    };
     let mut builder = crate::Engine::builder();
     for library in &recipe.libraries {
         builder = builder.register_library(*library);
     }
-    builder
-        .preproc_symbols_all(recipe.symbols)
-        .configuration_image(catalog, false)
-        .build()
-        .map_err(|e| e.to_string())
+    for ty in &recipe.value_types {
+        builder = builder.register_value_type(Arc::clone(ty));
+    }
+    for (module, methods) in &recipe.method_contexts {
+        builder = builder.configuration_method_context(module, methods);
+    }
+    for (module, properties) in &recipe.property_contexts {
+        builder = builder.configuration_property_names(module, properties.iter().cloned());
+    }
+    builder = builder.preproc_symbols_all(recipe.symbols);
+    if let Some(indexed) = &recipe.indexed {
+        builder = indexed.configure(builder);
+    } else {
+        let image =
+            bsl_bytecode::parse_image(&recipe.image_text).map_err(|error| error.to_string())?;
+        let bsl_bytecode::BytecodeImage::Configuration { catalog, .. } = image else {
+            return Err("рецепт worker обязан быть конфигурацией".into());
+        };
+        builder = builder.configuration_image(catalog, false);
+    }
+    builder.build().map_err(|error| error.to_string())
 }
 
 /// Готовит сеанс задания без компилятора: entry-программа собирается
@@ -149,12 +218,15 @@ pub(super) fn prepare_job(
     profile_index: u32,
 ) -> Result<(crate::State, crate::Module, bsl_vm::ProgramExecution), JobErrorDto> {
     let catalog = engine
-        .catalog()
+        .execution_catalog()
         .expect("worker строится только с каталогом");
-    let callee = catalog
-        .modules
-        .get(target.0 as usize)
-        .and_then(|module| module.program.chunks.get(target.1 as usize))
+    let target_program = &catalog
+        .module_code(bsl_bytecode::ModuleId::new(target.0))
+        .map_err(|error| JobErrorDto::from_text(error.to_string()))?
+        .program;
+    let callee = target_program
+        .chunks
+        .get(target.1 as usize)
         .ok_or_else(|| JobErrorDto::from_text("цель задания вне каталога"))?;
     let n_params = callee.n_params as usize;
     let argc = params.root_count();
@@ -177,13 +249,13 @@ pub(super) fn prepare_job(
             "цели передано {argc} аргументов при {n_params} параметрах"
         )));
     }
-    let base_program = &catalog.modules[0].program;
+    let base_program = target_program;
     // Аргументы материализуются ЗАРАНЕЕ интернером, который станет
     // таблицами entry-программы: `NameId` внутри значений согласованы с
     // `RuntimeShapes::seeded` прогона. Сами значения едут константами
     // чанка и раскладываются по регистрам обычными `LoadConst`.
     let mut shapes = bsl_rt::RuntimeShapes::seeded(
-        base_program.names.clone(),
+        base_program.names.to_vec(),
         base_program.shapes.clone(),
         Some(engine.registry()),
     );
@@ -225,14 +297,14 @@ pub(super) fn prepare_job(
     let mut entry = bsl_bytecode::Program {
         requirements: base_program.requirements.clone(),
         chunks: vec![chunk],
-        names,
+        names: names.into(),
         shapes: shape_table,
         top_level_locals: (0..n_params).map(|i| format!("Параметр{i}")).collect(),
         function_names: Vec::new(),
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
-        imports: Vec::new(),
+        imports: Default::default(),
         links: vec![bsl_bytecode::LinkEntry::Function {
             module: bsl_bytecode::ModuleId::new(target.0),
             func: target.1,
@@ -329,7 +401,7 @@ pub(super) fn prepare_job(
     )
     .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
     let catalog = engine
-        .catalog()
+        .execution_catalog()
         .expect("worker строится только с каталогом");
     vm.attach_catalog(catalog);
     // Фоновый прогон всегда квантуется: бюджетный poll возвращает
@@ -387,22 +459,60 @@ pub(crate) fn runtime_for_engine(
     config: BackgroundJobConfig,
 ) -> Result<JobRuntime, String> {
     config.validate()?;
-    let catalog = engine
-        .catalog()
-        .ok_or("фоновые задания требуют движка с каталогом общих модулей")?;
-    let image = bsl_bytecode::BytecodeImage::Configuration {
-        catalog: catalog.clone(),
-        entry: None,
+    let indexed = engine.indexed_worker_source();
+    let catalog = engine.catalog();
+    let (text, targets) = if let Some(indexed) = &indexed {
+        (
+            String::new(),
+            TargetTable {
+                modules: Vec::new(),
+                indexed: Some((indexed.clone(), engine.preproc_symbols())),
+            },
+        )
+    } else {
+        let catalog = catalog.ok_or("фоновые задания требуют движка с каталогом общих модулей")?;
+        let phase = crate::engine::startup_phase();
+        let image = bsl_bytecode::BytecodeImage::Configuration {
+            catalog: catalog.clone(),
+            entry: None,
+        };
+        let mut text =
+            bsl_bytecode::write_image(&image, None).map_err(|error| error.to_string())?;
+        drop(image);
+        text.shrink_to_fit();
+        crate::engine::startup_timing("engine.jobs.image", phase);
+        (text, TargetTable::from_catalog(catalog))
     };
-    let text = bsl_bytecode::write_image(&image, None).map_err(|e| e.to_string())?;
     Ok(JobRuntime::new(
         config,
         WorkerRecipe {
-            image_text: Arc::from(text),
+            image_text: Arc::new(text),
+            indexed,
             libraries: engine.extra_libraries().to_vec(),
+            value_types: engine.registry().value_types().to_vec(),
+            method_contexts: engine
+                .method_contexts()
+                .iter()
+                .filter(|(name, _)| {
+                    engine
+                        .execution_catalog()
+                        .is_some_and(|catalog| catalog.module_id(name).is_some())
+                })
+                .cloned()
+                .collect(),
             symbols: engine.preproc_symbols(),
+            property_contexts: engine
+                .property_contexts()
+                .iter()
+                .filter(|(name, _)| {
+                    engine
+                        .execution_catalog()
+                        .is_some_and(|catalog| catalog.module_id(name).is_some())
+                })
+                .cloned()
+                .collect(),
         },
-        TargetTable::from_catalog(catalog),
+        targets,
         Arc::new(SystemJobIds),
         Arc::clone(engine.temp_hub()),
         engine.job_profiles(),

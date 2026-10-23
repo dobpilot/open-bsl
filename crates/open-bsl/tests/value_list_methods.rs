@@ -1,6 +1,33 @@
 use open_bsl::Engine;
 
 #[test]
+fn a_descriptor_backed_core_object_keeps_omitted_method_positions() {
+    for optimizations in [
+        bsl_compiler::Optimizations::default(),
+        bsl_compiler::Optimizations::all(),
+    ] {
+        let engine = Engine::builder()
+            .optimizations(optimizations)
+            .build()
+            .unwrap();
+        let module = engine
+            .compile(
+                r#"
+Список = Новый СписокЗначений;
+Элемент = Список.Добавить("c", "C-value", , Неопределено);
+Возврат Элемент.Пометка;
+"#,
+            )
+            .unwrap();
+
+        assert_eq!(
+            engine.new_state().run(&module).unwrap(),
+            open_bsl::Value::Boolean(false)
+        );
+    }
+}
+
+#[test]
 fn measured_value_list_methods_work_through_direct_and_parameter_calls() {
     for optimizations in [
         bsl_compiler::Optimizations::default(),

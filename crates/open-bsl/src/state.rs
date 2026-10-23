@@ -200,21 +200,20 @@ impl StateBuilder {
             token
         };
         // Движок с каталогом внедряет сервис фоновых заданий в каждый
-        // сеанс: клоны движка разделяют один runtime. Ошибка сборки
-        // runtime не валит сеанс — без сервиса `ФоновыеЗадания` отвечает
-        // ловимой ошибкой возможности.
+        // сеанс. Подготовка общего runtime откладывается до обращения
+        // к возможности: обычный запуск не печатает образ для worker.
+        // Ошибка подготовки остаётся ловимой ошибкой возможности.
         #[cfg(not(target_arch = "wasm32"))]
-        if self.engine.catalog().is_some()
-            && let Ok(runtime) = self.engine.job_runtime()
-        {
+        if self.engine.execution_catalog().is_some() {
             host.env
                 .set_background_jobs(std::rc::Rc::new(crate::jobs::EngineJobService {
-                    runtime,
+                    engine: self.engine.clone(),
                     caller_token: session_token,
                     profile_index: self.job_profile_index,
                 }));
         }
         State {
+            terminal_error: None,
             dynamic: self.engine.dynamic_code(),
             engine: self.engine,
             host,
@@ -272,7 +271,12 @@ impl HostServices {
 }
 
 /// Изолированные изменяемые host-сервисы одной BSL-сессии.
+///
+/// После [`bsl_rt::RtError::CriticalConfiguration`] новые исполнения и вызовы
+/// отклоняются с сохранённой ошибкой. Для продолжения нужен новый `State`;
+/// сам [`Engine`] остаётся пригоден. Очистка ресурсов и `Drop` доступны.
 pub struct State {
+    terminal_error: Option<bsl_rt::RtError>,
     pub(crate) engine: Engine,
     pub(crate) host: HostServices,
     /// Компилятор `Выполнить`/`Вычислить` этой сессии. Лежит рядом с
@@ -337,9 +341,12 @@ impl Execution<'_, '_> {
     ///
     /// Возвращает ошибку связывания или исполнения. Повторный `poll` после
     /// завершения также является ошибкой контракта host-приложения.
+    /// После критического отказа возвращает сохранённую ошибку даже при
+    /// нулевом слайсе.
     pub fn poll(&mut self, host_slice: usize) -> Result<ExecutionPoll, Error> {
+        self.state.check_active()?;
         let registry = self.state.engine.registry();
-        let result = match self.state.engine.catalog() {
+        let result = match self.state.engine.execution_catalog() {
             Some(catalog) => self.vm.poll_configuration_with_registry_and_io(
                 &self.module.program,
                 catalog,
@@ -349,7 +356,7 @@ impl Execution<'_, '_> {
                 &mut self.state.dynamic,
                 &mut self.state.host.env,
                 host_slice,
-            )?,
+            ),
             None => self.vm.poll_with_registry_and_io(
                 &self.module.program,
                 registry,
@@ -358,8 +365,9 @@ impl Execution<'_, '_> {
                 &mut self.state.dynamic,
                 &mut self.state.host.env,
                 host_slice,
-            )?,
+            ),
         };
+        let result = self.state.finish_execution(result.map_err(Error::from))?;
         Ok(match result {
             bsl_vm::ProgramPoll::Complete(value, _) => ExecutionPoll::Complete(value),
             bsl_vm::ProgramPoll::Runnable => ExecutionPoll::Runnable,
@@ -369,6 +377,100 @@ impl Execution<'_, '_> {
 }
 
 impl State {
+    pub(crate) fn check_active(&self) -> Result<(), Error> {
+        match &self.terminal_error {
+            Some(error) => Err(Error::Runtime(error.clone())),
+            None => Ok(()),
+        }
+    }
+
+    // Критический отказ завершает только этот сеанс. Движок и другие состояния
+    // остаются пригодны; частичные изменения хоста не откатываются.
+    pub(crate) fn finish_execution<T>(&mut self, result: Result<T, Error>) -> Result<T, Error> {
+        if let Err(Error::Runtime(error @ bsl_rt::RtError::CriticalConfiguration { .. })) = &result
+        {
+            self.terminal_error = Some(error.clone());
+        }
+        result
+    }
+
+    /// Вызывает обработчик каталожного модуля от имени хоста.
+    /// Объявление `Экспорт` не требуется. Повторные вызовы используют
+    /// экземпляр модуля этого сеанса; обычные вызовы из BSL сохраняют
+    /// проверку экспорта.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку при отсутствии каталога или обработчика, неверной
+    /// арности, связывания либо исполнения, а также сохранённый критический отказ.
+    pub fn call_configuration_handler(
+        &mut self,
+        module: &str,
+        handler: &str,
+        args: Vec<Value>,
+    ) -> Result<(Value, Vec<Value>), Error> {
+        self.call_configuration_handler_with_mode(
+            module,
+            handler,
+            args,
+            bsl_rt::ConfigurationHandlerEntryMode::Inherit,
+        )
+    }
+
+    /// Вызывает обработчик с режимом входа, действующим только во время вызова.
+    /// Обычный режим последующего исполнения этого сеанса не изменяется.
+    ///
+    /// # Errors
+    /// Возвращает ошибки отсутствующего каталога, поиска, арности и исполнения,
+    /// а также сохранённый критический отказ. Критический режим меняет
+    /// классификацию только ошибок самого обработчика; отказы подготовки
+    /// цели сохраняют исходный тип.
+    pub fn call_configuration_handler_with_mode(
+        &mut self,
+        module: &str,
+        handler: &str,
+        args: Vec<Value>,
+        entry_mode: bsl_rt::ConfigurationHandlerEntryMode,
+    ) -> Result<(Value, Vec<Value>), Error> {
+        self.check_active()?;
+        let catalog = self
+            .engine
+            .execution_catalog()
+            .ok_or_else(|| Error::Configuration("движок не содержит конфигурацию".into()))?;
+        let session = self
+            .instances
+            .common
+            .get_or_insert_with(|| bsl_vm::SessionModules::for_catalog(catalog));
+        let runtime = self.instances.runtime.get_or_insert_with(|| {
+            let base = (0..catalog.module_count())
+                .filter_map(|index| {
+                    catalog.prepared_module(bsl_bytecode::ModuleId::new(index as u32))
+                })
+                .max_by_key(|module| module.program.names.len());
+            bsl_rt::RuntimeShapes::seeded(
+                base.map_or_else(Vec::new, |module| module.program.names.to_vec()),
+                base.map_or_else(Vec::new, |module| module.program.shapes.clone()),
+                Some(self.engine.registry()),
+            )
+        });
+        self.dynamic.bind_module(u64::MAX);
+        let result = bsl_vm::call_configuration_handler_with_runtime(
+            catalog,
+            session,
+            module,
+            handler,
+            args,
+            entry_mode,
+            self.engine.registry(),
+            &mut self.host.stdout,
+            &mut self.host.stderr,
+            &mut self.dynamic,
+            &mut self.host.env,
+            Some(runtime),
+        );
+        self.finish_execution(result.map_err(Error::from))
+    }
+
     /// Учёт собственных временных ресурсов сеанса. После Drop State
     /// сохранённый дескриптор отклоняет новые регистрации с возвратом ресурса.
     #[must_use]
@@ -399,6 +501,7 @@ impl State {
     ///
     /// Возвращает ошибку любой фазы компиляции или исполнения.
     pub fn exec(&mut self, source: &str) -> Result<Value, Error> {
+        self.check_active()?;
         let module = self.engine.compile(source)?;
         self.run(&module)
     }
@@ -417,11 +520,13 @@ impl State {
     ///
     /// # Errors
     ///
-    /// Возвращает ошибку связывания компонентов до первой инструкции.
+    /// Возвращает ошибку связывания компонентов до первой инструкции либо
+    /// сохранённый критический отказ этого состояния.
     pub fn start<'state, 'module>(
         &'state mut self,
         module: &'module Module,
     ) -> Result<Execution<'state, 'module>, Error> {
+        self.check_active()?;
         self.dynamic.bind_module(module.id);
         let mut vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
             &module.program,
@@ -432,7 +537,7 @@ impl State {
         // У движка с конфигурацией каждый запуск получает свои сессионные
         // экземпляры общих модулей: `ModuleState` между запусками и
         // сеансами не разделяется.
-        if let Some(catalog) = self.engine.catalog() {
+        if let Some(catalog) = self.engine.execution_catalog() {
             vm.attach_catalog(catalog);
             // Расширение CLI `//@используй`: тела модулей выполняются до
             // entry в post-order файлового графа. Обычная политика —

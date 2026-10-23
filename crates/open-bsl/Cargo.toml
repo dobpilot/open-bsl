@@ -7,7 +7,7 @@ license.workspace = true
 [features]
 constprop = ["bsl-compiler/constprop"]
 copyprop = ["bsl-compiler/copyprop"]
-default = ["binbuf", "regexp", "textdoc", "json", "stream", "http", "crypto", "zip", "pdf", "xml", "spreadsheet"]
+default = ["configuration-files", "binbuf", "regexp", "textdoc", "json", "stream", "http", "crypto", "zip", "pdf", "xml", "spreadsheet"]
 binbuf = ["dep:bsl-binbuf"]
 stream = ["dep:bsl-stream", "binbuf"]
 http = ["dep:bsl-http", "stream"]
@@ -20,7 +20,12 @@ spreadsheet = ["dep:bsl-spreadsheet"]
 textdoc = ["dep:bsl-textdoc"]
 regexp = ["dep:bsl-regexp"]
 
+configuration-files = ["dep:bsl-config-xml", "dep:bsl-config-edt"]
+
 [dependencies]
+bsl-config-xml = { path = "../bsl-config-xml", optional = true }
+bsl-config-edt = { path = "../bsl-config-edt", optional = true }
+bsl-config = { path = "../bsl-config" }
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-compiler = { path = "../bsl-compiler" }
 bsl-format = { path = "../bsl-format" }

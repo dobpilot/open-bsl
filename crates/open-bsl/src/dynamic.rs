@@ -94,7 +94,11 @@ impl DynamicCompiler for DynamicCode {
             request.caller_is_async,
             request.source.to_string(),
         );
-        if let Some(hit) = self.cache.get(&key) {
+        if let Some(hit) = self.cache.get(&key)
+            && (request.scope.module.is_none()
+                || hit.names.starts_with(request.names)
+                || request.names.starts_with(&hit.names))
+        {
             return Ok(Rc::clone(hit));
         }
         // `checked_add`, а не `+=`: номер области монотонно растёт за всё
@@ -108,31 +112,36 @@ impl DynamicCompiler for DynamicCode {
         self.compiles += 1;
         let scope = std::num::NonZeroU64::new(self.scopes)
             .expect("счётчик увеличен перед этим вызовом, ноль недостижим");
-        let imports = request
-            .imports
-            .iter()
-            .map(|import| {
-                let target = self
-                    .engine
-                    .catalog()
-                    .and_then(|catalog| catalog.module(import.module))
-                    .ok_or_else(|| {
-                        "импорт динамического фрагмента отсутствует в каталоге".to_string()
-                    })?;
-                Ok(crate::engine::imported_module_from_program(
-                    &import.alias,
-                    import.module.index() as u32,
-                    &target.program,
-                    import.global,
-                ))
-            })
-            .collect::<Result<Vec<_>, String>>()?;
-        let unit = Rc::new(bsl_compiler::compile_dynamic_snippet_with_imports(
+        let mut imports = self.engine.dynamic_imports(request.imports)?;
+        // Область сохраняет владельца и внутри вложенного динамического кода:
+        // собственные методы доступны только фрагментам его модуля.
+        if let Some(module) = request.scope.module {
+            let methods = self.engine.receiver_methods(module);
+            if !methods.is_empty() {
+                imports.push(bsl_sema::ImportedModule {
+                    alias: String::new(),
+                    module: module.index() as u32,
+                    is_self: true,
+                    global: false,
+                    functions: Vec::new(),
+                    variables: Vec::new(),
+                    component_access: None,
+                    receiver_methods: methods,
+                });
+            }
+        }
+        let properties = request
+            .scope
+            .module
+            .map_or(&[][..], |module| self.engine.receiver_properties(module));
+        let unit = Rc::new(bsl_compiler::compile_dynamic_snippet_with_import_provider(
             request,
             Some(self.engine.registry()),
             &self.engine.preproc_symbols(),
             scope,
             &imports,
+            properties,
+            self.engine.imported_provider(),
         )?);
         self.cache.insert(key, Rc::clone(&unit));
         Ok(unit)

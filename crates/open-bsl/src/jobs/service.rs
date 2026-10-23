@@ -150,7 +150,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         };
         drive_local(
             &self.shared,
-            &self.engine,
+            Some(&self.engine),
             DriveMode::Until {
                 ids,
                 done: &done,
@@ -210,7 +210,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         };
         drive_local(
             &self.shared,
-            &self.engine,
+            Some(&self.engine),
             DriveMode::Until {
                 ids: &ids,
                 done: &done,
@@ -227,7 +227,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
 /// Мост сервиса: `Rc`-обёртка над разделяемым runtime — то, что native
 /// внедряет в `HostEnv` каждого сеанса движка с каталогом.
 pub(crate) struct EngineJobService {
-    pub runtime: Arc<JobRuntime>,
+    pub engine: crate::Engine,
     /// Token временного хранилища сеанса-вызывателя: задания публикуют
     /// write-set'ы в его mailbox.
     pub caller_token: [u8; 16],
@@ -236,7 +236,19 @@ pub(crate) struct EngineJobService {
     pub profile_index: u32,
 }
 
+impl EngineJobService {
+    fn runtime(&self) -> Result<Arc<JobRuntime>, HostError> {
+        self.engine.job_runtime().map_err(|error| {
+            HostError::new(bsl_rt::HostErrorCode::RuntimeBroken, error.to_string())
+        })
+    }
+}
+
 impl bsl_rt::BackgroundJobService for EngineJobService {
+    fn is_ready(&self) -> bool {
+        self.runtime().is_ok()
+    }
+
     fn submit(
         &self,
         method_name: &str,
@@ -244,7 +256,7 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
         key: Option<Arc<bsl_rt::JobKeyDto>>,
         description: Option<String>,
     ) -> Result<Arc<JobSnapshotDto>, HostError> {
-        self.runtime
+        self.runtime()?
             .submit_by_name_with_caller(
                 method_name,
                 params,
@@ -257,11 +269,13 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
     }
 
     fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
-        self.runtime.snapshot(id)
+        self.runtime().ok()?.snapshot(id)
     }
 
     fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
-        self.runtime.snapshots()
+        self.runtime()
+            .map(|runtime| runtime.snapshots())
+            .unwrap_or_default()
     }
 
     fn wait_terminal(
@@ -269,19 +283,21 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
         ids: &[JobId],
         timeout: Option<Duration>,
     ) -> Result<bsl_rt::JobWaitOutcome, HostError> {
-        self.runtime.shared.wait_terminal_blocking(ids, timeout)
+        self.runtime()?.shared.wait_terminal_blocking(ids, timeout)
     }
 
     fn cancel(&self, id: JobId) -> Result<(), HostError> {
-        self.runtime.cancel(id)
+        self.runtime()?.cancel(id)
     }
 
     fn take_messages(&self, id: JobId, remove: bool) -> Result<Vec<UserMessageDto>, HostError> {
-        self.runtime.shared.take_messages(id, remove)
+        self.runtime()?.shared.take_messages(id, remove)
     }
 
     fn graph_limits(&self) -> bsl_rt::GraphLimits {
-        graph_limits_for(&self.runtime.shared.config)
+        self.runtime()
+            .map(|runtime| graph_limits_for(&runtime.shared.config))
+            .unwrap_or_default()
     }
 
     fn wait_first_change(
@@ -289,7 +305,7 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
         jobs: &[(JobId, bsl_rt::JobStateDto)],
         timeout: Option<Duration>,
     ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
-        self.runtime.shared.wait_first_change(jobs, timeout)
+        self.runtime()?.shared.wait_first_change(jobs, timeout)
     }
 }
 

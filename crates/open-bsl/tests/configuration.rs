@@ -84,6 +84,98 @@ fn common_modules_import_each_other() {
     assert_eq!(open_bsl::format_value(&value, None).unwrap(), "23");
 }
 
+#[test]
+fn dynamic_name_returns_the_current_session_common_module() {
+    let engine = Engine::builder()
+        .configuration(open_bsl::ModuleGraphRecipe {
+            modules: vec![
+                open_bsl::ModuleRecipe {
+                    name: "Служебный".into(),
+                    visibility: open_bsl::ModuleVisibility::Named,
+                    imports: Vec::new(),
+                    source: "Перем Счётчик;\n\
+             Функция Следующее() Экспорт\n\
+                 Счётчик = Счётчик + 1;\n\
+                 Возврат Счётчик;\n\
+             КонецФункции\n\
+             Счётчик = 40;"
+                        .into(),
+                },
+                open_bsl::ModuleRecipe {
+                    name: "Посредник".into(),
+                    visibility: open_bsl::ModuleVisibility::Named,
+                    imports: Vec::new(),
+                    source: "Функция Вызвать(Имя) Экспорт\n\
+                 Модуль = Вычислить(Имя);\n\
+                 Возврат Модуль.Следующее();\n\
+             КонецФункции\n\
+             Функция Затенить() Экспорт\n\
+                 Служебный = 17;\n\
+                 Возврат Вычислить(\"Служебный\");\n\
+             КонецФункции\n\
+             Функция ТипСсылки() Экспорт\n\
+                 Возврат ТипЗнч(Вычислить(\"Служебный\")) = Тип(\"ОбщийМодуль\")\n\
+                     И ТипЗнч(Вычислить(\"Служебный\")) = Тип(\"CommonModule\")\n\
+                     И Строка(ТипЗнч(Вычислить(\"Служебный\"))) = \"Common module\";\n\
+             КонецФункции"
+                        .into(),
+                },
+            ],
+            eager_init: false,
+        })
+        .build()
+        .unwrap();
+    let entry = engine
+        .compile_entry("Возврат Посредник.Вызвать(\"Служебный\");")
+        .unwrap();
+    let mut first = engine.new_state();
+    let mut second = engine.new_state();
+    assert_eq!(
+        open_bsl::format_value(&first.run(&entry).unwrap(), None).unwrap(),
+        "41"
+    );
+    assert_eq!(
+        open_bsl::format_value(&second.run(&entry).unwrap(), None).unwrap(),
+        "41"
+    );
+    let shadow = engine
+        .compile_entry("Возврат Посредник.Затенить();")
+        .unwrap();
+    assert_eq!(
+        open_bsl::format_value(&first.run(&shadow).unwrap(), None).unwrap(),
+        "17"
+    );
+    let missing = engine
+        .compile_entry("Возврат Посредник.Вызвать(\"Неизвестный\");")
+        .unwrap();
+    assert!(
+        first
+            .run(&missing)
+            .unwrap_err()
+            .to_string()
+            .contains("переменная «Неизвестный» читается до присваивания")
+    );
+    let module_type = engine
+        .compile_entry("Возврат Посредник.ТипСсылки();")
+        .unwrap();
+    assert_eq!(
+        open_bsl::format_value(&first.run(&module_type).unwrap(), None).unwrap(),
+        "Да"
+    );
+    let standalone = Engine::builder().build().unwrap();
+    let mut standalone_state = standalone.new_state();
+    assert_eq!(
+        open_bsl::format_value(
+            &standalone_state
+                .exec("Возврат ТипЗнч(ЭтотОбъект) = Тип(\"МодульBSL\");")
+                .unwrap(),
+            None,
+        )
+        .unwrap(),
+        "Да"
+    );
+}
+
 /// Нележивая инициализация (`eager_init`): тело модуля выполняется до
 /// первой инструкции entry, даже если entry не касается его символов.
 #[test]
@@ -276,6 +368,75 @@ fn duplicate_global_exports_are_a_build_error() {
 }
 
 #[test]
+fn configuration_method_arity_errors_wait_until_that_method_is_called() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![
+                ModuleRecipe {
+                    name: "Модуль".into(),
+                    source: "Функция Хорошая() Экспорт Возврат Цель.Значение(); КонецФункции
+                             Функция ПлохаяЛокальная() Экспорт Возврат Модуль.Хорошая(1, 2); КонецФункции
+                             Функция ПлохаяВнешняя() Экспорт Возврат Цель.Значение(1, 2); КонецФункции
+                             Функция Сумма(Первый, Второй) Экспорт Возврат Первый + Второй; КонецФункции
+                             Функция ПропущенЛокальный() Экспорт Возврат Модуль.Сумма(1); КонецФункции
+                             Функция ПропущенВнешний() Экспорт Возврат Цель.Сумма(1); КонецФункции"
+                        .into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+                ModuleRecipe {
+                    name: "Цель".into(),
+                    source: "Функция Значение() Экспорт Возврат 42; КонецФункции
+                             Функция Сумма(Первый, Второй) Экспорт Возврат Первый + Второй; КонецФункции"
+                        .into(),
+                    imports: vec![],
+                    visibility: ModuleVisibility::Named,
+                },
+            ],
+            eager_init: false,
+        })
+        .configuration_roots(["Модуль"])
+        .build()
+        .expect("ошибка соседнего метода не мешает собрать конфигурацию");
+
+    let good = engine.compile_entry("Возврат Модуль.Хорошая();").unwrap();
+    assert_eq!(
+        engine.new_state().run(&good).unwrap(),
+        open_bsl::Value::number_from_i64(42)
+    );
+
+    for (name, diagnostic) in [
+        ("ПлохаяЛокальная", "передано: 2"),
+        ("ПлохаяВнешняя", "передано: 2"),
+        ("ПропущенЛокальный", "пропущен обязательный аргумент"),
+        ("ПропущенВнешний", "пропущен обязательный аргумент"),
+    ] {
+        let entry = engine
+            .compile_entry(&format!("Возврат Модуль.{name}();"))
+            .unwrap();
+        let error = engine.new_state().run(&entry).unwrap_err();
+        assert!(error.to_string().contains(diagnostic), "{error}");
+        let caught = engine
+            .compile_entry(&format!(
+                "Попытка Результат = Модуль.{name}(); Исключение Возврат 1; КонецПопытки;"
+            ))
+            .unwrap();
+        assert_eq!(
+            engine.new_state().run(&caught).unwrap(),
+            open_bsl::Value::number_from_i64(1)
+        );
+    }
+
+    let error = engine
+        .compile_entry("Возврат Цель.Значение(1, 2);")
+        .err()
+        .expect("точка входа остаётся строгой");
+    assert!(error.to_string().contains("передано: 2"));
+}
+
+#[test]
 fn rooted_catalog_omits_an_unreachable_semantic_error() {
     use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
 
@@ -342,7 +503,57 @@ fn rooted_catalog_compiles_transitive_static_dependencies() {
 }
 
 #[test]
-fn bare_named_module_value_fails_only_when_its_owner_is_initialized() {
+fn a_named_module_resolves_its_own_qualified_export() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![ModuleRecipe {
+                name: "Сервис".into(),
+                source: "Функция Ответ() Экспорт Возврат 42; КонецФункции Функция Запуск() Экспорт Возврат Сервис.Ответ(); КонецФункции".into(),
+                imports: vec![],
+                visibility: ModuleVisibility::Named,
+            }],
+            eager_init: false,
+        })
+        .configuration_roots(["Сервис"])
+        .build()
+        .unwrap();
+    let entry = engine.compile_entry("Возврат Сервис.Запуск();").unwrap();
+
+    assert_eq!(
+        engine.new_state().run(&entry).unwrap(),
+        open_bsl::Value::number_from_i64(42)
+    );
+}
+
+#[test]
+fn a_bare_self_module_name_returns_the_existing_module() {
+    use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
+
+    let engine = Engine::builder()
+        .configuration(ModuleGraphRecipe {
+            modules: vec![ModuleRecipe {
+                name: "Сервис".into(),
+                source: "Функция Запуск() Экспорт Возврат Сервис; КонецФункции".into(),
+                imports: vec![],
+                visibility: ModuleVisibility::Named,
+            }],
+            eager_init: false,
+        })
+        .configuration_roots(["Сервис"])
+        .build()
+        .expect("ошибка отложена до инициализации модуля");
+    let entry = engine.compile_entry("Возврат Сервис.Запуск();").unwrap();
+
+    assert!(matches!(
+        engine.new_state().run(&entry).unwrap(),
+        open_bsl::Value::Object(_)
+    ));
+}
+
+#[test]
+fn bare_named_module_value_is_available_when_its_owner_is_initialized() {
     use open_bsl::{ModuleGraphRecipe, ModuleRecipe, ModuleVisibility};
 
     let engine = Engine::builder()
@@ -371,7 +582,7 @@ fn bare_named_module_value_fails_only_when_its_owner_is_initialized() {
         })
         .configuration_roots(["Корень"])
         .build()
-        .expect("ошибка в незапущенном модуле не отвергает весь граф");
+        .expect("значение именованного модуля не отвергает граф");
 
     let root = engine.compile_entry("Возврат Корень.Запуск();").unwrap();
     assert_eq!(
@@ -382,11 +593,10 @@ fn bare_named_module_value_fails_only_when_its_owner_is_initialized() {
     let failing = engine
         .compile_entry("Ошибочный.Коснуться();")
         .expect("точка входа компилируется");
-    let error = engine
-        .new_state()
-        .run(&failing)
-        .expect_err("модуль падает при первой инициализации");
-    assert!(error.to_string().contains("переменная «Цель»"), "{error}");
+    assert_eq!(
+        engine.new_state().run(&failing).unwrap(),
+        open_bsl::Value::Undefined
+    );
 }
 
 #[test]

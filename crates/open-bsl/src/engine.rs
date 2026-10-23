@@ -15,6 +15,12 @@ use crate::dynamic::DynamicCode;
 use crate::error::Error;
 use crate::state::{State, StateBuilder};
 
+#[path = "engine_preparation.rs"]
+mod preparation;
+
+#[path = "engine_on_demand.rs"]
+pub(crate) mod on_demand;
+
 /// Неизменяемая конфигурация компилятора и runtime-компонентов.
 #[derive(Clone)]
 pub struct Engine {
@@ -29,6 +35,7 @@ pub struct Engine {
     /// `Rc`-значения и в `Arc` не переносимы; worker фонового задания
     /// получает Send-рецепт (текстовый bytecode), а не этот объект.
     configuration: Option<std::rc::Rc<EngineConfiguration>>,
+    indexed: Option<std::rc::Rc<on_demand::OnDemandCatalog>>,
 }
 
 /// Замороженная конфигурация движка: каталог и экспортные поверхности
@@ -42,8 +49,30 @@ struct EngineConfiguration {
     eager_init: bool,
 }
 
+/// Источник свойств получателя модуля, подготавливаемых вместе с его телом.
+/// Метаданные и исходники могут поступать из разных хранилищ.
+pub trait ModuleContextSource: Send + Sync + std::fmt::Debug {
+    /// Приобретает метаданные уже достигнутой группы модулей без исполнения BSL.
+    /// По умолчанию каждый контекст приобретается при отдельном обращении.
+    ///
+    /// # Errors
+    /// Возвращает ошибку приобретения необходимых метаданных группы.
+    fn prepare_contexts(&self, _modules: &[&str]) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Возвращает имена свойств собственного объекта или менеджера модуля.
+    ///
+    /// # Errors
+    /// Возвращает ошибку получения необходимых метаданных получателя.
+    fn receiver_properties(&self, module: &str) -> Result<Vec<String>, String>;
+}
+
 struct EngineInner {
-    registry: bsl_rt::RuntimeRegistry,
+    registry: Arc<bsl_rt::RuntimeRegistry>,
+    /// Собственные методы сохраняются для компиляции динамических фрагментов.
+    method_contexts: Vec<(String, &'static [bsl_rt::MethodDescriptor])>,
+    property_contexts: Vec<(String, Arc<[String]>)>,
     symbols: bsl_syntax::PreprocSymbols,
     /// Реестр mailbox'ов временного хранилища: общий для клонов движка и
     /// его фонового runtime — задания публикуют write-set'ы сюда.
@@ -94,23 +123,27 @@ impl Engine {
         let syntax = bsl_syntax::parse_with_symbols(source, &self.inner.symbols)?;
         let resolved =
             bsl_sema::resolve_program_with_registry(&syntax.items, &self.inner.registry)?;
-        let program = match self.catalog() {
-            // Внутри конфигурации даже entry без импортов обязан делить
-            // пространство имён каталога: его значения ходят через границы
-            // модулей вместе со своими `NameId`.
-            Some(catalog) => {
-                let base = catalog
-                    .modules
-                    .first()
-                    .expect("непустой каталог: build отвергает пустой рецепт");
-                bsl_compiler::compile_entry_program(
-                    &resolved,
-                    &base.program.names,
-                    &base.program.shapes,
-                    self.build_options(),
-                )?
+        let program = if let Some(indexed) = &self.indexed {
+            indexed.compile_resolved(&resolved)?
+        } else {
+            match self.catalog() {
+                // Внутри конфигурации даже entry без импортов обязан делить
+                // пространство имён каталога: его значения ходят через границы
+                // модулей вместе со своими `NameId`.
+                Some(catalog) => {
+                    let base = catalog
+                        .modules
+                        .first()
+                        .expect("непустой каталог: build отвергает пустой рецепт");
+                    bsl_compiler::compile_entry_program(
+                        &resolved,
+                        &base.program.names,
+                        &base.program.shapes,
+                        self.build_options(),
+                    )?
+                }
+                None => bsl_compiler::compile_program_with(&resolved, self.build_options())?,
             }
-            None => bsl_compiler::compile_program_with(&resolved, self.build_options())?,
         };
         Ok(Module {
             id: self.next_module_id(),
@@ -128,6 +161,13 @@ impl Engine {
     ///
     /// Возвращает ошибку синтаксиса, семантики или генерации байт-кода.
     pub fn compile_entry(&self, source: &str) -> Result<Module, Error> {
+        if let Some(indexed) = &self.indexed {
+            return Ok(Module {
+                id: self.next_module_id(),
+                owner: Arc::downgrade(&self.inner),
+                program: indexed.compile_entry(source)?,
+            });
+        }
         let Some(catalog) = self.catalog() else {
             return self.compile(source);
         };
@@ -166,6 +206,14 @@ impl Engine {
     ///
     /// `Error::Configuration` без каталога; ошибки периметра образа.
     pub fn load_entry(&self, entry: bsl_bytecode::EntryProgram) -> Result<Module, Error> {
+        if let Some(catalog) = &self.indexed {
+            bsl_bytecode::image::verify_linked_program(&entry.program, catalog.as_ref(), None)?;
+            return Ok(Module {
+                id: self.next_module_id(),
+                owner: Arc::downgrade(&self.inner),
+                program: entry.program,
+            });
+        }
         let Some(catalog) = self.catalog() else {
             return Err(Error::Configuration(
                 "entry конфигурационного образа требует движка с каталогом".to_string(),
@@ -208,6 +256,11 @@ impl Engine {
         &self.inner.temp_hub
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn indexed_worker_source(&self) -> Option<on_demand::WorkerSource> {
+        self.indexed.as_ref().map(|catalog| catalog.worker_source())
+    }
+
     /// Библиотеки, добавленные `register_library`, — для рецепта worker.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn extra_libraries(&self) -> &[bsl_rt::LibraryDescriptor] {
@@ -248,9 +301,91 @@ impl Engine {
         self.inner.job_message_display.clone()
     }
 
+    pub(crate) fn receiver_methods(
+        &self,
+        module: bsl_bytecode::ModuleId,
+    ) -> &'static [bsl_rt::MethodDescriptor] {
+        let Some(target) = self
+            .execution_catalog()
+            .and_then(|catalog| catalog.module_name(module))
+        else {
+            return &[];
+        };
+        self.inner
+            .method_contexts
+            .iter()
+            .find(|(name, _)| bsl_rt::folded_eq(name, target))
+            .map_or(&[], |(_, methods)| *methods)
+    }
+
+    pub(crate) fn method_contexts(&self) -> &[(String, &'static [bsl_rt::MethodDescriptor])] {
+        &self.inner.method_contexts
+    }
+
+    pub(crate) fn receiver_properties(&self, module: bsl_bytecode::ModuleId) -> &[String] {
+        if let Some(properties) = self
+            .indexed
+            .as_ref()
+            .and_then(|catalog| catalog.prepared_properties(module))
+        {
+            return properties;
+        }
+        self.execution_catalog()
+            .and_then(|catalog| catalog.module_name(module))
+            .map_or(&[], |target| {
+                receiver_properties(&self.inner.property_contexts, target)
+            })
+    }
+
+    pub(crate) fn property_contexts(&self) -> &[(String, Arc<[String]>)] {
+        &self.inner.property_contexts
+    }
+
     /// Каталог общих модулей движка, если он был собран.
     pub(crate) fn catalog(&self) -> Option<&bsl_bytecode::ConfigurationProgram> {
         self.configuration.as_ref().map(|c| &c.catalog)
+    }
+
+    pub(crate) fn execution_catalog(&self) -> Option<&dyn bsl_bytecode::ExecutionCatalog> {
+        self.indexed
+            .as_deref()
+            .map(|catalog| catalog as &dyn bsl_bytecode::ExecutionCatalog)
+            .or_else(|| {
+                self.catalog()
+                    .map(|catalog| catalog as &dyn bsl_bytecode::ExecutionCatalog)
+            })
+    }
+
+    pub(crate) fn imported_provider(&self) -> Option<&dyn bsl_sema::ImportedModuleProvider> {
+        self.indexed
+            .as_deref()
+            .map(|catalog| catalog as &dyn bsl_sema::ImportedModuleProvider)
+    }
+
+    pub(crate) fn dynamic_imports(
+        &self,
+        imports: &[bsl_bytecode::ModuleImport],
+    ) -> Result<Vec<bsl_sema::ImportedModule>, String> {
+        if let Some(indexed) = &self.indexed {
+            return indexed.dynamic_imports(imports);
+        }
+        imports
+            .iter()
+            .map(|import| {
+                let target = self
+                    .catalog()
+                    .and_then(|catalog| catalog.module(import.module))
+                    .ok_or_else(|| {
+                        "импорт динамического фрагмента отсутствует в каталоге".to_string()
+                    })?;
+                Ok(imported_module_from_program(
+                    &import.alias,
+                    import.module.index() as u32,
+                    &target.program,
+                    import.global,
+                ))
+            })
+            .collect()
     }
 
     /// Runtime фоновых заданий этого движка. Создаётся при первом
@@ -391,10 +526,18 @@ pub struct ModuleGraphRecipe {
 pub struct EngineBuilder {
     optimizations: bsl_compiler::Optimizations,
     debug_info: bool,
+    defer_common_module_name_errors: bool,
     runtime: bsl_rt::RuntimeBuilder,
     symbols: bsl_syntax::PreprocSymbols,
     recipe: ModuleGraphRecipe,
+    indexed_source: Option<Arc<dyn bsl_config::ConfigurationSource>>,
+    indexed_source_conflict: bool,
+    module_context_source: Option<Arc<dyn ModuleContextSource>>,
     configuration_roots: Vec<String>,
+    configuration_entry_sources: Vec<String>,
+    component_modules: Vec<(String, String, String)>,
+    method_contexts: Vec<(String, &'static [bsl_rt::MethodDescriptor])>,
+    property_contexts: Vec<(String, Arc<[String]>)>,
     image: Option<(bsl_bytecode::ConfigurationProgram, bool)>,
     #[cfg(not(target_arch = "wasm32"))]
     job_config: crate::jobs::BackgroundJobConfig,
@@ -437,10 +580,18 @@ impl EngineBuilder {
         Self {
             optimizations: bsl_compiler::Optimizations::default(),
             debug_info: false,
+            defer_common_module_name_errors: false,
             runtime,
             symbols: bsl_syntax::PreprocSymbols::new(),
             recipe: ModuleGraphRecipe::default(),
+            indexed_source: None,
+            indexed_source_conflict: false,
+            module_context_source: None,
             configuration_roots: Vec::new(),
+            configuration_entry_sources: Vec::new(),
+            component_modules: Vec::new(),
+            method_contexts: Vec::new(),
+            property_contexts: Vec::new(),
             image: None,
             #[cfg(not(target_arch = "wasm32"))]
             job_config: crate::jobs::BackgroundJobConfig::default(),
@@ -464,10 +615,32 @@ impl EngineBuilder {
         self
     }
 
+    /// Откладывает ошибки неизвестных имён общих модулей до обращения к ним.
+    /// По умолчанию компиляция строга; политика действует только на `Named`
+    /// и `Global`, сохраняя строгую диагностику остальных модулей.
+    /// Неизвестная переменная, глобальная функция или конструктор в теле
+    /// метода запрещает весь модуль при обращении к нему;
+    /// отсутствующий метод известного импорта — только вызывающий метод.
+    #[must_use]
+    pub fn defer_common_module_name_errors(mut self, enabled: bool) -> Self {
+        self.defer_common_module_name_errors = enabled;
+        self
+    }
+
     pub fn register_library(mut self, library: LibraryDescriptor) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         self.extra_libraries.push(library);
         self.runtime.register(library);
+        self
+    }
+
+    /// Объявляет тип значения, зависящий от конфигурации хоста.
+    ///
+    /// Описание сохраняется в неизменяемом каталоге движка; конфликты имён
+    /// и идентичностей возвращаются методом [`Self::build`].
+    #[must_use]
+    pub fn register_value_type(mut self, ty: Arc<bsl_rt::ValueTypeDescriptor>) -> Self {
+        self.runtime.register_value_type(ty);
         self
     }
 
@@ -517,11 +690,66 @@ impl EngineBuilder {
         self
     }
 
-    /// Ограничивает компиляцию каталога статическим замыканием указанных
-    /// корневых модулей. Пустой список сохраняет компиляцию всего каталога.
+    /// Задаёт индекс конфигурации с загрузкой исходников по требованию.
+    /// Корни и входные тексты готовятся при сборке; остальные тела — при
+    /// первом обращении. У источника остаётся единственный эффективный текст.
+    #[must_use]
+    pub fn configuration_source(
+        mut self,
+        source: Arc<dyn bsl_config::ConfigurationSource>,
+    ) -> Self {
+        self.indexed_source_conflict |=
+            self.indexed_source.is_some() || !self.recipe.modules.is_empty();
+        self.recipe.modules = source
+            .index()
+            .modules()
+            .iter()
+            .filter(|module| {
+                module.kind() != bsl_config::ModuleKind::Common || module.execution().server()
+            })
+            .map(|module| ModuleRecipe {
+                name: module.name().into(),
+                source: String::new(),
+                imports: module
+                    .imports()
+                    .iter()
+                    .map(|import| {
+                        let name = source
+                            .index()
+                            .module(import.module())
+                            .expect("проверенный индекс")
+                            .name();
+                        (import.alias().into(), name.into())
+                    })
+                    .collect(),
+                visibility: match module.kind() {
+                    bsl_config::ModuleKind::Common if module.execution().global() => {
+                        ModuleVisibility::Global
+                    }
+                    bsl_config::ModuleKind::Common => ModuleVisibility::Named,
+                    bsl_config::ModuleKind::Session => ModuleVisibility::Explicit,
+                    _ => ModuleVisibility::Private,
+                },
+            })
+            .collect();
+        self.indexed_source = Some(source);
+        self
+    }
+
+    /// Задаёт адресный источник свойств получателей индексного каталога.
+    #[must_use]
+    pub fn configuration_context_source(mut self, source: Arc<dyn ModuleContextSource>) -> Self {
+        self.module_context_source = Some(source);
+        self
+    }
+
+    /// Задаёт корневые модули подготовки каталога.
     ///
-    /// Зависимости определяет штатный семантический резолвер open-bsl;
-    /// вызывающему не нужно разбирать исходный текст самостоятельно.
+    /// Для готового рецепта компилируется его статическое замыкание. У
+    /// индексного источника готовятся корни и явные импорты; объявления
+    /// остальных целей проверяются при связывании, а тела — при обращении.
+    /// Пустой список сохраняет компиляцию всего каталога. Имена и зависимости
+    /// определяет штатный семантический резолвер open-bsl.
     #[must_use]
     pub fn configuration_roots(
         mut self,
@@ -529,6 +757,88 @@ impl EngineBuilder {
     ) -> Self {
         self.configuration_roots
             .extend(roots.into_iter().map(Into::into));
+        self
+    }
+
+    /// Учитывает семантические зависимости известных входных текстов при
+    /// выборе замыкания [`Self::configuration_roots`]. Тексты не исполняются
+    /// и не становятся модулями каталога; без фильтра корней каталог уже полон.
+    /// Имена и затенение разрешает тот же резолвер, что у [`Engine::compile_entry`].
+    #[must_use]
+    pub fn configuration_entry_sources(
+        mut self,
+        sources: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.configuration_entry_sources
+            .extend(sources.into_iter().map(Into::into));
+        self
+    }
+
+    /// Связывает свойство компонентного глобала с закрытым модулем каталога.
+    ///
+    /// Для готового рецепта обращение к свойству включает модуль и его
+    /// зависимости в граф. У индексного источника тело готовится при
+    /// фактическом обращении. Связь сохраняет обычный компонентный путь
+    /// чтения и вызова, без открытия BSL-импорта закрытого модуля.
+    #[must_use]
+    pub fn configuration_component_module(
+        mut self,
+        global: impl Into<String>,
+        property: impl Into<String>,
+        module: impl Into<String>,
+    ) -> Self {
+        self.component_modules
+            .push((global.into(), property.into(), module.into()));
+        self
+    }
+
+    /// Объявляет методы собственного получателя модуля конфигурации.
+    ///
+    /// Голый вызов объявленного имени идёт через текущий `ЭтотОбъект` и
+    /// обычную диспетчеризацию методов. Другие модули этих имён не получают.
+    #[must_use]
+    pub fn configuration_method_context(
+        mut self,
+        module: impl Into<String>,
+        methods: &'static [bsl_rt::MethodDescriptor],
+    ) -> Self {
+        self.method_contexts.push((module.into(), methods));
+        self
+    }
+
+    /// Объявляет конечную таблицу свойств собственного получателя модуля.
+    /// Голые чтения и присваивания идут через `ЭтотОбъект`; явно объявленные
+    /// переменные и параметры сохраняют приоритет. Остальные имена не меняются.
+    #[must_use]
+    pub fn configuration_property_context(
+        self,
+        module: impl Into<String>,
+        properties: &'static [bsl_rt::PropertyDescriptor],
+    ) -> Self {
+        self.configuration_property_names(
+            module,
+            properties
+                .iter()
+                .flat_map(|property| property.names)
+                .copied()
+                .map(str::to_owned),
+        )
+    }
+
+    /// Объявляет конечный список имён свойств получателя модуля.
+    /// Имена принадлежат движку и могут поступать из метаданных конфигурации.
+    /// Значения и правила записи остаются ответственностью самого объекта.
+    /// Переменные и параметры сохраняют приоритет над свойствами.
+    #[must_use]
+    pub fn configuration_property_names(
+        mut self,
+        module: impl Into<String>,
+        names: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.property_contexts.push((
+            module.into(),
+            names.into_iter().map(Into::into).collect::<Vec<_>>().into(),
+        ));
         self
     }
 
@@ -603,7 +913,81 @@ impl EngineBuilder {
     /// Возвращает ошибку при конфликте идентичностей, имён, кодов или
     /// версий компонентов.
     pub fn build(self) -> Result<Engine, Error> {
-        let registry = self.runtime.build()?;
+        if self.indexed_source_conflict
+            || self.indexed_source.as_ref().is_some_and(|source| {
+                self.recipe.modules.len()
+                    != source
+                        .index()
+                        .modules()
+                        .iter()
+                        .filter(|module| {
+                            module.kind() != bsl_config::ModuleKind::Common
+                                || module.execution().server()
+                        })
+                        .count()
+            })
+        {
+            return Err(Error::Configuration(
+                "каталог задан несколькими источниками".into(),
+            ));
+        }
+        if self.module_context_source.is_some() && self.indexed_source.is_none() {
+            return Err(Error::Configuration(
+                "адресный контекст требует индексный источник конфигурации".into(),
+            ));
+        }
+        // Один индекс обслуживает все контексты, включая сборку движка
+        // фонового работника. Повторный обход каталога для каждого владельца
+        // давал квадратичную проверку ещё до подготовки исполняемых тел.
+        let module_names: std::collections::HashSet<_> = match &self.image {
+            Some((catalog, _)) => catalog
+                .modules
+                .iter()
+                .map(|module| module.name.to_uppercase())
+                .collect(),
+            None => self
+                .recipe
+                .modules
+                .iter()
+                .map(|module| module.name.to_uppercase())
+                .collect(),
+        };
+        let mut property_owners = std::collections::HashSet::new();
+        for (name, _) in &self.property_contexts {
+            let key = name.to_uppercase();
+            if !module_names.contains(&key) {
+                return Err(Error::Configuration(format!(
+                    "контекст свойств задан для неизвестного модуля «{name}»"
+                )));
+            }
+            if !property_owners.insert(key) {
+                return Err(Error::Configuration(format!(
+                    "контекст свойств модуля «{name}» задан повторно"
+                )));
+            }
+        }
+        let mut method_owners = std::collections::HashSet::new();
+        for (name, _) in &self.method_contexts {
+            let key = name.to_uppercase();
+            if !module_names.contains(&key) {
+                return Err(Error::Configuration(format!(
+                    "контекст методов задан для неизвестного модуля «{name}»"
+                )));
+            }
+            if !method_owners.insert(key) {
+                return Err(Error::Configuration(format!(
+                    "контекст методов модуля «{name}» задан повторно"
+                )));
+            }
+        }
+        let registry = Arc::new(self.runtime.build()?);
+        if !self.configuration_entry_sources.is_empty()
+            && (self.image.is_some() || self.recipe.modules.is_empty())
+        {
+            return Err(Error::Configuration(
+                "корневые тексты требуют рецепт конфигурации, а не готовый образ".into(),
+            ));
+        }
         if self.image.is_some()
             && (!self.recipe.modules.is_empty() || !self.configuration_roots.is_empty())
         {
@@ -611,7 +995,30 @@ impl EngineBuilder {
                 "каталог задан и рецептом, и образом — источник должен быть один".to_string(),
             ));
         }
-        let configuration = if let Some((catalog, eager_init)) = self.image {
+        let indexed = if let Some(source) = self.indexed_source {
+            let catalog = on_demand::OnDemandCatalog::new(
+                self.recipe.clone(),
+                source,
+                registry.clone(),
+                self.symbols,
+                bsl_compiler::BuildOptions {
+                    optimizations: self.optimizations,
+                    debug_info: self.debug_info,
+                },
+                self.method_contexts.clone(),
+                self.property_contexts.clone(),
+                &self.component_modules,
+                self.defer_common_module_name_errors,
+                self.module_context_source,
+            )?;
+            catalog.prepare_roots(&self.configuration_roots, &self.configuration_entry_sources)?;
+            Some(std::rc::Rc::new(catalog))
+        } else {
+            None
+        };
+        let configuration = if indexed.is_some() {
+            None
+        } else if let Some((catalog, eager_init)) = self.image {
             bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
             let entry_imports = catalog
                 .modules
@@ -640,12 +1047,18 @@ impl EngineBuilder {
             let (catalog, entry_imports, init_order) = compile_catalog(
                 &self.recipe,
                 &self.configuration_roots,
+                &self.configuration_entry_sources,
+                &self.component_modules,
+                &self.method_contexts,
+                &self.property_contexts,
                 &registry,
                 &self.symbols,
+                self.defer_common_module_name_errors,
                 bsl_compiler::BuildOptions {
                     optimizations: self.optimizations,
                     debug_info: self.debug_info,
                 },
+                preparation::workers(),
             )?;
             Some(std::rc::Rc::new(EngineConfiguration {
                 catalog,
@@ -661,6 +1074,8 @@ impl EngineBuilder {
             debug_info: self.debug_info,
             inner: Arc::new(EngineInner {
                 registry,
+                method_contexts: self.method_contexts,
+                property_contexts: self.property_contexts,
                 symbols: self.symbols,
                 temp_hub: Arc::new(bsl_rt::TempStorageHub::default()),
                 modules: AtomicU64::new(0),
@@ -678,6 +1093,7 @@ impl EngineBuilder {
                 job_message_display: self.job_message_display,
             }),
             configuration,
+            indexed,
         })
     }
 }
@@ -744,15 +1160,42 @@ impl Module {
     }
 }
 
+/// Часы читаются только в явно включённом нативном диагностическом запуске.
+/// Обычная сборка, включая браузерный WASM, от них не зависит.
+pub(crate) fn startup_phase() -> Option<std::time::Instant> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1") {
+        return Some(std::time::Instant::now());
+    }
+    None
+}
+
+/// Выводит длительность завершённого этапа только по запросу диагностического запуска.
+pub(crate) fn startup_timing(stage: &str, start: Option<std::time::Instant>) {
+    if let Some(start) = start {
+        eprintln!(
+            "open-bsl.startup\t{stage}\t{:.6}",
+            start.elapsed().as_secs_f64()
+        );
+    }
+}
+
 /// Компилирует каталог по рецепту: topo-порядок для резолвинга, порядок
 /// манифеста для номеров модулей, общий интернер имён и форм, периметр
 /// `verify_configuration` до заморозки.
+#[allow(clippy::too_many_arguments)]
 fn compile_catalog(
     recipe: &ModuleGraphRecipe,
     roots: &[String],
+    entry_sources: &[String],
+    component_modules: &[(String, String, String)],
+    method_contexts: &[(String, &'static [bsl_rt::MethodDescriptor])],
+    property_contexts: &[(String, Arc<[String]>)],
     registry: &bsl_rt::RuntimeRegistry,
     symbols: &bsl_syntax::PreprocSymbols,
+    defer_name_errors: bool,
     build: bsl_compiler::BuildOptions,
+    workers: usize,
 ) -> Result<
     (
         bsl_bytecode::ConfigurationProgram,
@@ -762,23 +1205,77 @@ fn compile_catalog(
     Error,
 > {
     if roots.is_empty() {
-        return compile_whole_catalog(recipe, registry, symbols, build);
+        return compile_whole_catalog(
+            recipe,
+            method_contexts,
+            property_contexts,
+            registry,
+            symbols,
+            defer_name_errors,
+            build,
+        );
     }
-    let rooted = rooted_recipe(recipe, roots, registry, symbols)?;
-    compile_whole_catalog(&rooted, registry, symbols, build)
+    let rooted = rooted_recipe(
+        recipe,
+        roots,
+        entry_sources,
+        component_modules,
+        method_contexts,
+        property_contexts,
+        registry,
+        symbols,
+        defer_name_errors,
+        workers,
+    )?;
+    let modules = &rooted.recipe.modules;
+    let index_of = |name: &str| {
+        modules
+            .iter()
+            .position(|module| bsl_rt::folded_eq(&module.name, name))
+    };
+    let init_order = configuration_init_order(modules)?;
+    let common = common_module_imports(modules);
+    let compact_imports = (0..modules.len())
+        .map(|current| {
+            Ok(bsl_bytecode::ModuleImports::sharing(
+                module_aliases(modules, current, &index_of)?
+                    .into_iter()
+                    .filter(|(_, target, _)| *target != current)
+                    .map(|(alias, target, global)| bsl_bytecode::ModuleImport {
+                        alias: alias.to_string(),
+                        module: bsl_bytecode::ModuleId::new(target as u32),
+                        global,
+                    }),
+                &common,
+            ))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+    finish_catalog(
+        modules,
+        rooted.resolved,
+        compact_imports,
+        init_order,
+        Some(&rooted.original_to_selected),
+        build,
+    )
+}
+
+fn receiver_properties<'a>(contexts: &'a [(String, Arc<[String]>)], module: &str) -> &'a [String] {
+    contexts
+        .iter()
+        .find(|(name, _)| bsl_rt::folded_eq(name, module))
+        .map_or(&[], |(_, properties)| properties.as_ref())
 }
 
 fn validate_module_names(modules: &[ModuleRecipe]) -> Result<(), Error> {
     // Имена каталога уникальны без учёта регистра — правило свёртки то же,
     // что у остальных имён BSL.
-    for (i, module) in modules.iter().enumerate() {
+    let mut names = std::collections::HashSet::with_capacity(modules.len());
+    for module in modules {
         if module.name.is_empty() {
             return Err(Error::Configuration("имя общего модуля пусто".to_string()));
         }
-        if modules[..i]
-            .iter()
-            .any(|other| bsl_rt::folded_eq(&other.name, &module.name))
-        {
+        if !names.insert(module.name.to_uppercase()) {
             return Err(Error::Configuration(format!(
                 "имя общего модуля «{}» повторяется",
                 module.name
@@ -802,6 +1299,7 @@ fn module_surfaces(
                 &syntax.items,
                 modules[i].visibility == ModuleVisibility::Global,
             )
+            .map_err(Error::from)
         })
         .collect()
 }
@@ -810,19 +1308,16 @@ fn reject_duplicate_global_exports(
     modules: &[ModuleRecipe],
     surfaces: &[bsl_sema::ImportedModule],
 ) -> Result<(), Error> {
+    // Проверяем в прежнем порядке, сохраняя написание первого конфликта.
+    // Повтор внутри одного модуля не относится к межмодульным конфликтам.
+    let mut owners = std::collections::HashMap::new();
     for (i, module) in surfaces
         .iter()
         .enumerate()
         .filter(|(i, _)| modules[*i].visibility == ModuleVisibility::Global)
     {
         for function in &module.functions {
-            if surfaces[..i].iter().enumerate().any(|(other_i, other)| {
-                modules[other_i].visibility == ModuleVisibility::Global
-                    && other
-                        .functions
-                        .iter()
-                        .any(|candidate| bsl_rt::folded_eq(&candidate.name, &function.name))
-            }) {
+            if *owners.entry(function.name.to_uppercase()).or_insert(i) != i {
                 return Err(Error::Configuration(format!(
                     "глобальный экспорт «{}» объявлен несколькими общими модулями",
                     function.name
@@ -833,58 +1328,144 @@ fn reject_duplicate_global_exports(
     Ok(())
 }
 
-fn module_imports(
-    modules: &[ModuleRecipe],
-    surfaces: &[bsl_sema::ImportedModule],
-    current: usize,
-    index_of: &dyn Fn(&str) -> Option<usize>,
-) -> Result<Vec<bsl_sema::ImportedModule>, Error> {
-    let module = &modules[current];
-    let mut imports = Vec::new();
-    for (alias, target) in &module.imports {
-        let Some(target_index) = index_of(target) else {
-            return Err(Error::Configuration(format!(
-                "модуль «{}» импортирует неизвестный «{target}»",
-                module.name
-            )));
-        };
-        let mut imported = surfaces[target_index].clone();
-        imported.alias = alias.clone();
-        imported.global = false;
-        imports.push(imported);
-    }
-    for (target_index, target) in modules.iter().enumerate() {
-        if target_index == current
-            || !matches!(
-                target.visibility,
+fn common_module_imports(modules: &[ModuleRecipe]) -> bsl_bytecode::ModuleImports {
+    modules
+        .iter()
+        .enumerate()
+        .filter(|(_, module)| {
+            matches!(
+                module.visibility,
                 ModuleVisibility::Named | ModuleVisibility::Global
             )
-        {
+        })
+        .map(|(i, module)| bsl_bytecode::ModuleImport {
+            alias: module.name.clone(),
+            module: bsl_bytecode::ModuleId::new(i as u32),
+            global: module.visibility == ModuleVisibility::Global,
+        })
+        .collect()
+}
+
+fn module_aliases<'a>(
+    modules: &'a [ModuleRecipe],
+    current: usize,
+    index_of: &dyn Fn(&str) -> Option<usize>,
+) -> Result<Vec<(&'a str, usize, bool)>, preparation::Failure> {
+    let module = &modules[current];
+    let mut aliases = Vec::new();
+    for (alias, target) in &module.imports {
+        let target_index = index_of(target).ok_or_else(|| {
+            preparation::Failure::Configuration(format!(
+                "модуль «{}» импортирует неизвестный «{target}»",
+                module.name
+            ))
+        })?;
+        aliases.push((alias.as_str(), target_index, false));
+    }
+    let explicit = aliases.len();
+    for (target_index, target) in modules.iter().enumerate() {
+        if !matches!(
+            target.visibility,
+            ModuleVisibility::Named | ModuleVisibility::Global
+        ) {
             continue;
         }
-        if let Some(existing) = imports
+        // Явный псевдоним сохраняет приоритет. Неявные имена уже проверены
+        // на уникальность; собственное имя остаётся доступным резолверу.
+        if let Some((_, existing, _)) = aliases[..explicit]
             .iter()
-            .find(|import| bsl_rt::folded_eq(&import.alias, &target.name))
+            .find(|(alias, _, _)| bsl_rt::folded_eq(alias, &target.name))
         {
-            if existing.module as usize != target_index {
-                return Err(Error::Configuration(format!(
+            if *existing != target_index {
+                return Err(preparation::Failure::Configuration(format!(
                     "псевдоним «{}» модуля «{}» ссылается на два модуля",
                     target.name, module.name
                 )));
             }
             continue;
         }
-        imports.push(surfaces[target_index].clone());
+        aliases.push((
+            &target.name,
+            target_index,
+            target.visibility == ModuleVisibility::Global,
+        ));
+    }
+    Ok(aliases)
+}
+
+fn module_imports(
+    modules: &[ModuleRecipe],
+    surfaces: &[bsl_sema::ImportedModule],
+    current: usize,
+    index_of: &dyn Fn(&str) -> Option<usize>,
+    method_contexts: &[(String, &'static [bsl_rt::MethodDescriptor])],
+) -> Result<Vec<bsl_sema::ImportedModule>, preparation::Failure> {
+    let mut imports = Vec::new();
+    for (name, methods) in method_contexts {
+        if bsl_rt::folded_eq(name, &modules[current].name) {
+            imports.push(bsl_sema::ImportedModule {
+                alias: String::new(),
+                module: surfaces[current].module,
+                is_self: true,
+                global: false,
+                functions: Vec::new(),
+                variables: Vec::new(),
+                component_access: None,
+                receiver_methods: methods,
+            });
+        }
+    }
+    for (alias, target, global) in module_aliases(modules, current, index_of)? {
+        let mut imported = surfaces[target].clone();
+        imported.alias = alias.to_string();
+        imported.is_self = target == current;
+        imported.global = global;
+        if imported.is_self {
+            imported.variables.clear();
+        }
+        imports.push(imported);
     }
     Ok(imports)
 }
 
+fn resolved_configuration_dependencies(
+    resolved: &bsl_sema::ResolvedProgram,
+) -> impl Iterator<Item = usize> + '_ {
+    resolved
+        .links
+        .iter()
+        .filter_map(|link| match link {
+            bsl_sema::ResolvedLink::Function { module, .. }
+            | bsl_sema::ResolvedLink::Variable { module, .. } => Some(*module as usize),
+            bsl_sema::ResolvedLink::ObjectMethod { .. } => None,
+        })
+        .chain(
+            resolved
+                .deferred_module_dependencies
+                .iter()
+                .map(|module| *module as usize),
+        )
+}
+
+struct RootedCatalog {
+    recipe: ModuleGraphRecipe,
+    resolved: Vec<bsl_sema::ResolvedProgram>,
+    original_to_selected: Vec<Option<u32>>,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn rooted_recipe(
     recipe: &ModuleGraphRecipe,
     roots: &[String],
+    entry_sources: &[String],
+    component_modules: &[(String, String, String)],
+    method_contexts: &[(String, &'static [bsl_rt::MethodDescriptor])],
+    property_contexts: &[(String, Arc<[String]>)],
     registry: &bsl_rt::RuntimeRegistry,
     symbols: &bsl_syntax::PreprocSymbols,
-) -> Result<ModuleGraphRecipe, Error> {
+    defer_name_errors: bool,
+    workers: usize,
+) -> Result<RootedCatalog, Error> {
     let modules = &recipe.modules;
     validate_module_names(modules)?;
     let index_of = |name: &str| -> Option<usize> {
@@ -896,22 +1477,58 @@ fn rooted_recipe(
     // Не держим AST всего каталога: в большой конфигурации он на порядки
     // больше замыкания модуля сеанса. Полный AST повторно строится ниже
     // только для модулей, до которых дошёл статический обход.
-    let surfaces = modules
-        .iter()
-        .enumerate()
-        .map(|(i, module)| {
-            let syntax = bsl_syntax::parse_with_symbols(&module.source, symbols)?;
-            imported_module_from_syntax(
-                &module.name,
-                i as u32,
-                &syntax.items,
-                module.visibility == ModuleVisibility::Global,
-            )
-        })
-        .collect::<Result<Vec<_>, Error>>()?;
+    let phase = startup_phase();
+    let surfaces = preparation::ordered_map(modules, workers, |i, module| {
+        let syntax = bsl_syntax::parse_with_symbols(&module.source, symbols)
+            .map_err(preparation::Failure::Parse)?;
+        imported_module_from_syntax(
+            &module.name,
+            i as u32,
+            &syntax.items,
+            module.visibility == ModuleVisibility::Global,
+        )
+    })
+    .into_iter()
+    .enumerate()
+    .map(|(i, result)| result.map_err(|error| error.in_module(&modules[i].name)))
+    .collect::<Result<Vec<_>, Error>>()?;
     reject_duplicate_global_exports(modules, &surfaces)?;
 
+    startup_timing("engine.rooted.exports", phase);
+    let phase = startup_phase();
+    let component_imports = component_modules
+        .iter()
+        .map(|(global, property, target)| {
+            let target_index = index_of(target).ok_or_else(|| Error::Configuration(format!(
+            "компонентное свойство «{global}.{property}» ссылается на неизвестный модуль «{target}»"
+        )))?;
+            let (library_index, function) = registry.lookup_global(global).ok_or_else(|| {
+                Error::Configuration(format!("компонентный глобал «{global}» не зарегистрирован"))
+            })?;
+            let library = registry
+                .library(library_index)
+                .expect("индекс получен из реестра");
+            let imported = bsl_sema::ImportedModule {
+                alias: String::new(),
+                module: surfaces[target_index].module,
+                global: false,
+                is_self: false,
+                functions: Vec::new(),
+                variables: Vec::new(),
+                component_access: Some(bsl_sema::ComponentModuleAccess {
+                    library: bsl_rt::LibraryKey::new(library.package()),
+                    function,
+                    property: property.clone(),
+                }),
+                receiver_methods: &[],
+            };
+            Ok(imported)
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+
     let mut selected = vec![false; modules.len()];
+    let mut analyzed: Vec<Option<bsl_sema::ResolvedProgram>> =
+        (0..modules.len()).map(|_| None).collect();
     let mut pending = Vec::new();
     for root in roots {
         let Some(index) = index_of(root) else {
@@ -925,45 +1542,136 @@ fn rooted_recipe(
         }
     }
 
-    let mut cursor = 0;
-    while let Some(&current) = pending.get(cursor) {
-        cursor += 1;
-        for (_, target) in &modules[current].imports {
-            let Some(target_index) = index_of(target) else {
-                return Err(Error::Configuration(format!(
-                    "модуль «{}» импортирует неизвестный «{target}»",
-                    modules[current].name
-                )));
-            };
-            if !selected[target_index] {
-                selected[target_index] = true;
-                pending.push(target_index);
-            }
-        }
-        let imports = module_imports(modules, &surfaces, current, &index_of)?;
-        let syntax = bsl_syntax::parse_with_symbols(&modules[current].source, symbols)?;
-        let resolved = bsl_sema::resolve_program_with_imports(&syntax.items, registry, &imports)?;
-        for link in &resolved.links {
-            let target = match link {
-                bsl_sema::ResolvedLink::Function { module, .. }
-                | bsl_sema::ResolvedLink::Variable { module, .. } => *module as usize,
-                bsl_sema::ResolvedLink::ObjectMethod { .. } => continue,
-            };
-            if !selected[target] {
-                selected[target] = true;
-                pending.push(target);
-            }
-        }
-        for &target in &resolved.deferred_module_dependencies {
-            let target = target as usize;
-            if !selected[target] {
-                selected[target] = true;
-                pending.push(target);
+    if !entry_sources.is_empty() {
+        let mut imports = modules
+            .iter()
+            .enumerate()
+            .filter(|(_, module)| {
+                matches!(
+                    module.visibility,
+                    ModuleVisibility::Named | ModuleVisibility::Global
+                )
+            })
+            .map(|(index, _)| surfaces[index].clone())
+            .collect::<Vec<_>>();
+        imports.extend(component_imports.iter().cloned());
+        for source in entry_sources {
+            let syntax = bsl_syntax::parse_with_symbols(source, symbols)?;
+            let resolved =
+                bsl_sema::resolve_program_with_imports(&syntax.items, registry, &imports)?;
+            for target in resolved_configuration_dependencies(&resolved) {
+                if !selected[target] {
+                    selected[target] = true;
+                    pending.push(target);
+                }
             }
         }
     }
 
-    Ok(ModuleGraphRecipe {
+    let analyzer = preparation::Analyzer {
+        modules,
+        surfaces: &surfaces,
+        component_imports: &component_imports,
+        method_contexts,
+        property_contexts,
+        registry,
+        symbols,
+        defer_name_errors,
+    };
+    let mut cursor = 0;
+    while cursor < pending.len() {
+        // Окно содержит только уже выбранные модули. Координатор принимает
+        // результаты в прежнем порядке, независимо от завершения потоков.
+        let end = (cursor + 4).min(pending.len());
+        let batch = &pending[cursor..end];
+        let results = analyzer.batch(batch, workers, None);
+        let batch = batch.to_vec();
+        cursor = end;
+        for (current, result) in batch.into_iter().zip(results) {
+            for (_, target) in &modules[current].imports {
+                let Some(target_index) = index_of(target) else {
+                    return Err(Error::Configuration(format!(
+                        "модуль «{}» импортирует неизвестный «{target}»",
+                        modules[current].name
+                    )));
+                };
+                if !selected[target_index] {
+                    selected[target_index] = true;
+                    pending.push(target_index);
+                }
+            }
+            let resolved = result.map_err(|error| error.in_module(&modules[current].name))?;
+            for target in resolved_configuration_dependencies(&resolved) {
+                if !selected[target] {
+                    selected[target] = true;
+                    pending.push(target);
+                }
+            }
+            analyzed[current] = Some(resolved);
+        }
+    }
+
+    // Ошибочное тело могло оборваться до регистрации зависимости. После
+    // отсечения видимых модулей сохраняем прежнюю перепроверку диагностики.
+    if modules.iter().enumerate().any(|(index, module)| {
+        !selected[index]
+            && matches!(
+                module.visibility,
+                ModuleVisibility::Named | ModuleVisibility::Global
+            )
+    }) {
+        let deferred = |statement: &bsl_sema::RStmt| {
+            statement.line == 0
+                && matches!(
+                    statement.kind,
+                    bsl_sema::RStmtKind::Raise(_) | bsl_sema::RStmtKind::RaiseCompilationError(_)
+                )
+        };
+        let recheck = analyzed
+            .iter()
+            .enumerate()
+            .filter_map(|(index, body)| {
+                body.as_ref()
+                    .filter(|body| {
+                        body.top_level.body.iter().any(deferred)
+                            || body
+                                .functions
+                                .iter()
+                                .any(|function| function.body.iter().any(deferred))
+                    })
+                    .map(|_| index)
+            })
+            .collect::<Vec<_>>();
+        for batch in recheck.chunks(4) {
+            let results = analyzer.batch(batch, workers, Some(&selected));
+            for (&current, result) in batch.iter().zip(results) {
+                let resolved = result.map_err(|error| {
+                    // Проверка импортов прежде предшествовала второму анализу.
+                    let reachable = modules
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| selected[*index])
+                        .map(|(_, module)| module.clone())
+                        .collect::<Vec<_>>();
+                    configuration_init_order(&reachable)
+                        .err()
+                        .unwrap_or_else(|| error.in_module(&modules[current].name))
+                })?;
+                analyzed[current] = Some(resolved);
+            }
+        }
+    }
+
+    startup_timing("engine.rooted.selection", phase);
+    let mut original_to_selected = vec![None; modules.len()];
+    let mut resolved = Vec::new();
+    for (original, body) in analyzed.into_iter().enumerate() {
+        if let Some(body) = body {
+            original_to_selected[original] = Some(resolved.len() as u32);
+            resolved.push(body);
+        }
+    }
+    let recipe = ModuleGraphRecipe {
         modules: modules
             .iter()
             .enumerate()
@@ -971,30 +1679,20 @@ fn rooted_recipe(
             .map(|(_, module)| module.clone())
             .collect(),
         eager_init: recipe.eager_init,
+    };
+    Ok(RootedCatalog {
+        recipe,
+        resolved,
+        original_to_selected,
     })
 }
 
-fn compile_whole_catalog(
-    recipe: &ModuleGraphRecipe,
-    registry: &bsl_rt::RuntimeRegistry,
-    symbols: &bsl_syntax::PreprocSymbols,
-    build: bsl_compiler::BuildOptions,
-) -> Result<
-    (
-        bsl_bytecode::ConfigurationProgram,
-        Vec<bsl_sema::ImportedModule>,
-        Vec<u32>,
-    ),
-    Error,
-> {
-    let modules = &recipe.modules;
-    validate_module_names(modules)?;
-    let index_of = |name: &str| -> Option<usize> {
+fn configuration_init_order(modules: &[ModuleRecipe]) -> Result<Vec<u32>, Error> {
+    let index_of = |name: &str| {
         modules
             .iter()
             .position(|module| bsl_rt::folded_eq(&module.name, name))
     };
-
     // DFS post-order по импортам: зависимости раньше зависимых, при
     // нескольких — в порядке следования импортов, корни — в порядке
     // рецепта. Этот же порядок служит нележивой инициализации
@@ -1036,35 +1734,153 @@ fn compile_whole_catalog(
         visit(modules, &index_of, &mut state, &mut topo, i)?;
     }
 
+    Ok(topo.into_iter().map(|i| i as u32).collect())
+}
+
+fn compile_whole_catalog(
+    recipe: &ModuleGraphRecipe,
+    method_contexts: &[(String, &'static [bsl_rt::MethodDescriptor])],
+    property_contexts: &[(String, Arc<[String]>)],
+    registry: &bsl_rt::RuntimeRegistry,
+    symbols: &bsl_syntax::PreprocSymbols,
+    defer_name_errors: bool,
+    build: bsl_compiler::BuildOptions,
+) -> Result<
+    (
+        bsl_bytecode::ConfigurationProgram,
+        Vec<bsl_sema::ImportedModule>,
+        Vec<u32>,
+    ),
+    Error,
+> {
+    let modules = &recipe.modules;
+    validate_module_names(modules)?;
+    let index_of = |name: &str| -> Option<usize> {
+        modules
+            .iter()
+            .position(|module| bsl_rt::folded_eq(&module.name, name))
+    };
+
+    let init_order = configuration_init_order(modules)?;
+
+    let phase = startup_phase();
     let syntax = modules
         .iter()
-        .map(|module| bsl_syntax::parse_with_symbols(&module.source, symbols))
+        .map(|module| {
+            bsl_syntax::parse_with_symbols(&module.source, symbols).map_err(|error| {
+                Error::InModule {
+                    module: module.name.clone(),
+                    source: Box::new(Error::Parse(error)),
+                }
+            })
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let surfaces = module_surfaces(modules, &syntax)?;
     reject_duplicate_global_exports(modules, &surfaces)?;
 
+    startup_timing("engine.catalog.parse", phase);
+    let phase = startup_phase();
+    // Общее окружение хранится один раз; отдельные программы исключают себя
+    // и сохраняют явные псевдонимы без копирования остальных импортов.
+    let common_imports = common_module_imports(modules);
+    let mut compact_imports = Vec::with_capacity(modules.len());
     let mut resolved = Vec::with_capacity(modules.len());
-    for (i, parsed) in syntax.iter().enumerate() {
-        let imports = module_imports(modules, &surfaces, i, &index_of)?;
-        resolved.push(bsl_sema::resolve_program_with_imports(
-            &parsed.items,
-            registry,
-            &imports,
-        )?);
+    // Разобранный модуль больше не нужен после разрешения имён.
+    // Освобождаем его сразу, не удерживая весь AST рядом с результатами.
+    for (i, parsed) in syntax.into_iter().enumerate() {
+        let imports = module_imports(modules, &surfaces, i, &index_of, method_contexts)?;
+        resolved.push(
+            bsl_sema::resolve_configuration_module_with_name_error_policy(
+                &parsed.items,
+                registry,
+                &imports,
+                receiver_properties(property_contexts, &modules[i].name),
+                defer_name_errors
+                    && matches!(
+                        modules[i].visibility,
+                        ModuleVisibility::Named | ModuleVisibility::Global
+                    ),
+            )
+            .map_err(|error| Error::InModule {
+                module: modules[i].name.clone(),
+                source: Box::new(Error::Semantic(error)),
+            })?,
+        );
+        // Не удерживаем N полных окружений в промежуточном представлении.
+        let imports = std::mem::take(&mut resolved.last_mut().unwrap().imports);
+        compact_imports.push(bsl_bytecode::ModuleImports::sharing(
+            imports
+                .into_iter()
+                .map(|(alias, module, global)| bsl_bytecode::ModuleImport {
+                    alias,
+                    module: bsl_bytecode::ModuleId::new(module),
+                    global,
+                }),
+            &common_imports,
+        ));
     }
 
+    startup_timing("engine.catalog.resolve", phase);
+    finish_catalog(modules, resolved, compact_imports, init_order, None, build)
+}
+
+fn finish_catalog(
+    modules: &[ModuleRecipe],
+    resolved: Vec<bsl_sema::ResolvedProgram>,
+    compact_imports: Vec<bsl_bytecode::ModuleImports>,
+    init_order: Vec<u32>,
+    mapping: Option<&[Option<u32>]>,
+    build: bsl_compiler::BuildOptions,
+) -> Result<
+    (
+        bsl_bytecode::ConfigurationProgram,
+        Vec<bsl_sema::ImportedModule>,
+        Vec<u32>,
+    ),
+    Error,
+> {
+    let phase = startup_phase();
     let pairs: Vec<(String, &bsl_sema::ResolvedProgram)> = modules
         .iter()
         .zip(&resolved)
         .map(|(module, resolved)| (module.name.clone(), resolved))
         .collect();
     let (mut catalog, _) = bsl_compiler::compile_configuration(&pairs, None, build)?;
-    for (compiled, recipe) in catalog.modules.iter_mut().zip(modules) {
+    for ((compiled, recipe), imports) in
+        catalog.modules.iter_mut().zip(modules).zip(compact_imports)
+    {
+        compiled.program.imports = imports;
         compiled.entry_visible = recipe.visibility != ModuleVisibility::Private;
         compiled.global = recipe.visibility == ModuleVisibility::Global;
     }
-    bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
-
+    if let Some(mapping) = mapping {
+        let remap = |old: usize| -> Result<u32, Error> {
+            mapping.get(old).copied().flatten().ok_or_else(|| {
+                Error::Configuration("ссылка на модуль вне выбранного каталога".into())
+            })
+        };
+        for module in &mut catalog.modules {
+            for link in &mut module.program.links {
+                if let bsl_bytecode::LinkEntry::Function { module, .. }
+                | bsl_bytecode::LinkEntry::Variable { module, .. } = link
+                {
+                    *module = bsl_bytecode::ModuleId::new(remap(module.index())?);
+                }
+            }
+            for chunk in &mut module.program.chunks {
+                for instruction in &mut chunk.instrs {
+                    if let bsl_bytecode::Instr::GetImportedModule { module, .. } = instruction {
+                        *module = remap(*module as usize)?;
+                    }
+                }
+            }
+            if build.debug_info {
+                bsl_bytecode::image::finalize_unbundled(&mut module.program);
+            } else {
+                bsl_bytecode::image::finalize(&mut module.program);
+            }
+        }
+    }
     let entry_imports = modules
         .iter()
         .zip(&resolved)
@@ -1077,7 +1893,14 @@ fn compile_whole_catalog(
         })
         .filter(|module| modules[module.module as usize].visibility != ModuleVisibility::Private)
         .collect();
-    let init_order = topo.iter().map(|&i| i as u32).collect();
+    // После извлечения экспортов промежуточное представление больше не нужно.
+    // Проверяем байткод без одновременного хранения разрешённых тел модулей.
+    drop(pairs);
+    drop(resolved);
+    startup_timing("engine.catalog.codegen", phase);
+    let phase = startup_phase();
+    bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
+    startup_timing("engine.catalog.verify", phase);
     Ok((catalog, entry_imports, init_order))
 }
 
@@ -1120,9 +1943,12 @@ pub(crate) fn imported_module_from_program(
     bsl_sema::ImportedModule {
         alias: alias.to_string(),
         module,
+        is_self: false,
         global,
         functions,
         variables,
+        component_access: None,
+        receiver_methods: &[],
     }
 }
 
@@ -1131,17 +1957,20 @@ fn imported_module_from_syntax(
     module: u32,
     items: &[bsl_syntax::Item],
     global: bool,
-) -> Result<bsl_sema::ImportedModule, Error> {
+) -> Result<bsl_sema::ImportedModule, preparation::Failure> {
     let mut functions = Vec::new();
     let mut method_index = 0usize;
     let mut variables: Vec<bsl_sema::ImportedVariable> = Vec::new();
     let mut module_variables: Vec<(String, bool)> = Vec::new();
+    let mut variable_positions = std::collections::HashMap::new();
     for item in items {
         match item {
             bsl_syntax::Item::Function(function) => {
                 method_index += 1;
                 let chunk = u16::try_from(method_index).map_err(|_| {
-                    Error::Configuration(format!("в модуле «{alias}» слишком много методов"))
+                    preparation::Failure::Configuration(format!(
+                        "в модуле «{alias}» слишком много методов"
+                    ))
                 })?;
                 if function.export {
                     functions.push(bsl_sema::ImportedFunction {
@@ -1165,7 +1994,9 @@ fn imported_module_from_syntax(
             bsl_syntax::Item::Procedure(procedure) => {
                 method_index += 1;
                 let chunk = u16::try_from(method_index).map_err(|_| {
-                    Error::Configuration(format!("в модуле «{alias}» слишком много методов"))
+                    preparation::Failure::Configuration(format!(
+                        "в модуле «{alias}» слишком много методов"
+                    ))
                 })?;
                 if procedure.export {
                     functions.push(bsl_sema::ImportedFunction {
@@ -1188,14 +2019,14 @@ fn imported_module_from_syntax(
             }
             bsl_syntax::Item::VarDecl(declaration) => {
                 for name in &declaration.names {
-                    if let Some(existing) = module_variables
-                        .iter_mut()
-                        .find(|(variable, _)| bsl_rt::folded_eq(variable, name))
-                    {
-                        existing.1 |= declaration.export;
-                    } else {
-                        module_variables.push((name.clone(), declaration.export));
-                    }
+                    let slot = *variable_positions
+                        .entry(name.to_uppercase())
+                        .or_insert_with(|| {
+                            let slot = module_variables.len();
+                            module_variables.push((name.clone(), declaration.export));
+                            slot
+                        });
+                    module_variables[slot].1 |= declaration.export;
                 }
             }
             bsl_syntax::Item::Stmt(_) => {}
@@ -1206,7 +2037,7 @@ fn imported_module_from_syntax(
             variables.push(bsl_sema::ImportedVariable {
                 name,
                 slot: u16::try_from(slot).map_err(|_| {
-                    Error::Configuration(format!(
+                    preparation::Failure::Configuration(format!(
                         "в модуле «{alias}» слишком много модульных переменных"
                     ))
                 })?,
@@ -1216,9 +2047,12 @@ fn imported_module_from_syntax(
     Ok(bsl_sema::ImportedModule {
         alias: alias.to_string(),
         module,
+        is_self: false,
         global,
         functions,
         variables,
+        component_access: None,
+        receiver_methods: &[],
     })
 }
 
@@ -1322,3 +2156,23 @@ mod debug_info_tests {
         }
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "engine_background_runtime_tests.rs"]
+mod background_runtime_tests;
+
+#[cfg(test)]
+#[path = "engine_import_storage_tests.rs"]
+mod import_storage_tests;
+
+#[cfg(test)]
+#[path = "engine_rooted_analysis_tests.rs"]
+mod rooted_analysis_tests;
+
+#[cfg(test)]
+#[path = "engine_module_names_tests.rs"]
+mod module_names_tests;
+
+#[cfg(test)]
+#[path = "engine_global_declarations_tests.rs"]
+mod global_declarations_tests;

@@ -351,6 +351,7 @@ fn proxy_and_tls_objects_become_transport_configuration() {
              ЯвныйПрокси.НеИспользоватьПроксиДляЛокальныхАдресов = Ложь;\n\
              Корни = Новый СертификатыУдостоверяющихЦентровОС;\n\
              TLS = Новый ЗащищенноеСоединениеOpenSSL(Неопределено, Корни);\n\
+             TLSСтрогий = Новый ЗащищенноеСоединениеOpenSSL(Неопределено, Корни, РежимПроверкиОтзываTLSСертификатаСервера.Строгий);\n\
              БезПроверки = Новый ЗащищенноеСоединениеOpenSSL;\n\
              С1 = Новый HTTPСоединение(\"plain.test\", Неопределено, Неопределено, Неопределено, СистемныйПрокси);\n\
              С2 = Новый HTTPСоединение(\"direct.test\", Неопределено, Неопределено, Неопределено, ПрямойПрокси);\n\
@@ -363,6 +364,7 @@ fn proxy_and_tls_objects_become_transport_configuration() {
              КлиентФайл = Новый СертификатКлиентаФайл(Путь, \"\");\n\
              TLSФайл = Новый ЗащищенноеСоединениеOpenSSL(КлиентФайл, КорниФайл);\n\
              С5 = Новый HTTPСоединение(\"file.test\", Неопределено, Неопределено, Неопределено, Неопределено, Неопределено, TLSФайл);\n\
+             С6 = Новый HTTPСоединение(\"strict.test\", Неопределено, Неопределено, Неопределено, Неопределено, Неопределено, TLSСтрогий);\n\
              УдалитьФайлы(Путь);",
         )
         .unwrap();
@@ -376,7 +378,7 @@ fn proxy_and_tls_objects_become_transport_configuration() {
         .unwrap();
 
     let configs = configs.lock().unwrap();
-    assert_eq!(configs.len(), 6);
+    assert_eq!(configs.len(), 7);
     assert!(matches!(
         configs[0].proxy,
         open_bsl::ProxyMode::PlatformDefault
@@ -403,6 +405,15 @@ fn proxy_and_tls_objects_become_transport_configuration() {
     assert_eq!(
         configs[5].client_identity.as_ref().unwrap().bytes.expose(),
         "не сертификат".as_bytes()
+    );
+    assert!(
+        configs[..6]
+            .iter()
+            .all(|config| config.server_certificate_revocation_check_mode.is_none())
+    );
+    assert_eq!(
+        configs[6].server_certificate_revocation_check_mode,
+        Some(open_bsl::ServerTlsCertificateRevocationCheckMode::Strict)
     );
 }
 
