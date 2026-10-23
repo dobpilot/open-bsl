@@ -759,7 +759,7 @@ impl Discovery<'_> {
 mod tests;
 
 fn work_count(stage: &str, count: usize) {
-    if std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1") {
+    if open_bsl::startup_timings_enabled() {
         eprintln!("open-bsl.work\t{stage}\t{count}");
     }
 }

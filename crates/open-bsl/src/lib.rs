@@ -89,7 +89,7 @@ pub use bsl_syntax::{
 pub use dynamic::DynamicCode;
 pub use engine::{
     Engine, EngineBuilder, Module, ModuleContextSource, ModuleGraphRecipe, ModuleRecipe,
-    ModuleVisibility,
+    ModuleVisibility, set_startup_timings, startup_timings_enabled,
 };
 pub use error::Error;
 pub use state::{Execution, ExecutionPoll, State, StateBuilder};

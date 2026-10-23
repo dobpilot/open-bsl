@@ -68,9 +68,7 @@ impl DatabaseConfigurationSource {
             if let Some(snapshot) = &state.snapshot {
                 return Ok(snapshot.clone());
             }
-            let started = std::env::var_os("OPEN_BSL_STARTUP_TIMINGS")
-                .is_some_and(|value| value == "1")
-                .then(std::time::Instant::now);
+            let started = open_bsl::startup_timings_enabled().then(std::time::Instant::now);
             let resolved = state
                 .decoded
                 .finalize_runtime(&facts)
@@ -165,7 +163,7 @@ impl DatabaseConfigurationSource {
                 }
             }
         }
-        let trace = std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1");
+        let trace = open_bsl::startup_timings_enabled();
         loop {
             let started = trace.then(std::time::Instant::now);
             let changed = self.acquire_details(state, &requested)?;

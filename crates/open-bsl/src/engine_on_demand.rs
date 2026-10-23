@@ -591,7 +591,7 @@ impl OnDemandCatalog {
                 eprintln!("open-bsl.startup\t{name}\t{:.6}", duration.as_secs_f64());
             }
         }
-        if std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1") {
+        if crate::startup_timings_enabled() {
             let count = self
                 .programs
                 .iter()

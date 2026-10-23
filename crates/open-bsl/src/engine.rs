@@ -1165,10 +1165,26 @@ impl Module {
 /// Обычная сборка, включая браузерный WASM, от них не зависит.
 pub(crate) fn startup_phase() -> Option<std::time::Instant> {
     #[cfg(not(target_arch = "wasm32"))]
-    if std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1") {
+    if startup_timings_enabled() {
         return Some(std::time::Instant::now());
     }
     None
+}
+
+static STARTUP_TIMINGS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Включает диагностический вывод длительностей этапов запуска в stderr
+/// (строки `open-bsl.startup` и `open-bsl.work`) для всего процесса. Решает
+/// хост: библиотеки окружение не читают, CLI включает вывод по
+/// `OPEN_BSL_STARTUP_TIMINGS=1`.
+pub fn set_startup_timings(enabled: bool) {
+    STARTUP_TIMINGS.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Включён ли вывод [`set_startup_timings`].
+#[must_use]
+pub fn startup_timings_enabled() -> bool {
+    STARTUP_TIMINGS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Выводит длительность завершённого этапа только по запросу диагностического запуска.

@@ -5,6 +5,11 @@ fn timing_child() {
     if std::env::var_os("OPEN_BSL_TIMING_TEST_CHILD").is_none() {
         return;
     }
+    // Ребёнок ведёт себя как хост: читает переключатель один раз и передаёт
+    // его фасаду, как `bsl-cli`.
+    open_bsl::set_startup_timings(
+        std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1"),
+    );
     open_bsl::Engine::builder()
         .common_module("Проба", "Функция Ответ() Экспорт Возврат 42; КонецФункции")
         .configuration_roots(["Проба"])

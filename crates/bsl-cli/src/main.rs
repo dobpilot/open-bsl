@@ -200,11 +200,17 @@ fn help() -> String {
 
     out.push_str("\nОКРУЖЕНИЕ:\n");
     out.push_str("  NO_COLOR      отключает цвет в REPL (как и TERM=dumb)\n");
+    out.push_str("  OPEN_BSL_STARTUP_TIMINGS=1  печатает в stderr длительности этапов запуска\n");
     out
 }
 
 fn main() {
     let mut args: Vec<String> = std::env::args().collect();
+    // Единственное место, где читается переключатель диагностики запуска:
+    // библиотеки получают его от хоста.
+    open_bsl::set_startup_timings(
+        std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1"),
+    );
     // `--optimize` — модификатор, а не команда: он снимается из аргументов
     // до разбора, поэтому одинаково работает и перед именем скрипта, и
     // рядом с именем скрипта. Скрипту он не достаётся.

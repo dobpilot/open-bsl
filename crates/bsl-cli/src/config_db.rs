@@ -297,7 +297,7 @@ pub(crate) fn run(path: &str, arguments: Vec<String>, options: Options) {
 
 // Протокол диагностических строк совпадает с вложенными этапами фасада.
 fn startup_timing(stage: &str, start: std::time::Instant) {
-    if std::env::var_os("OPEN_BSL_STARTUP_TIMINGS").is_some_and(|value| value == "1") {
+    if open_bsl::startup_timings_enabled() {
         eprintln!(
             "open-bsl.startup\t{stage}\t{:.6}",
             start.elapsed().as_secs_f64()
