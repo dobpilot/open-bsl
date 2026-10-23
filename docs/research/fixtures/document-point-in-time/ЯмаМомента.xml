@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" version="2.20">
+	<Document uuid="00000001-0000-4000-8000-000000000000">
+		<InternalInfo>
+			<xr:GeneratedType name="DocumentObject.ЯмаМомента" category="Object">
+				<xr:TypeId>e6f22e65-877c-52bb-957d-0f68bf5749ac</xr:TypeId>
+				<xr:ValueId>ad4132ca-08b3-5dd1-a8b7-0679ac85bdaa</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentRef.ЯмаМомента" category="Ref">
+				<xr:TypeId>e8f0828d-bd1c-5e10-a966-5d942accc48d</xr:TypeId>
+				<xr:ValueId>890f572c-d7ec-558b-801d-75cefbf000f0</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentSelection.ЯмаМомента" category="Selection">
+				<xr:TypeId>b2448874-66d9-5ea2-a065-07b2a565546b</xr:TypeId>
+				<xr:ValueId>ffbba691-f6d4-5ee1-a745-7eef6696cac1</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentList.ЯмаМомента" category="List">
+				<xr:TypeId>896ee640-4a0f-5a61-8c67-6e6e90ac577d</xr:TypeId>
+				<xr:ValueId>b950ff0c-4d14-50a7-af4e-430723ad238c</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="DocumentManager.ЯмаМомента" category="Manager">
+				<xr:TypeId>9cf5a479-d3d7-5ecf-a0cc-152b3bc02614</xr:TypeId>
+				<xr:ValueId>8e30de67-dc48-5f62-89c3-6351c9d29cfb</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<Name>ЯмаМомента</Name>
+			<Synonym>
+				<v8:item>
+					<v8:lang>ru</v8:lang>
+					<v8:content>Проба документа</v8:content>
+				</v8:item>
+			</Synonym>
+			<Comment />
+			<NumberType>String</NumberType>
+			<NumberLength>9</NumberLength>
+			<NumberAllowedLength>Variable</NumberAllowedLength>
+			<NumberPeriodicity>Nonperiodical</NumberPeriodicity>
+			<CheckUnique>true</CheckUnique>
+			<Autonumbering>true</Autonumbering>
+		</Properties>
+		<ChildObjects />
+	</Document>
+</MetaDataObject>
