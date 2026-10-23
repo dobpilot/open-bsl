@@ -16,7 +16,7 @@
 
 ## 3. Front end, compiler and VM
 - [x] 3.1 Replace the constructor-code literals in `bsl-sema/src/core_receivers.rs` with descriptor properties read from the runtime table; remove the added `expect`.
-- [ ] 3.2 Make the register-capacity fallback a named plain-pipeline stage that starts from clean tables; compile a configuration catalog once; split `name_methods` from `allow_sparse_large_frame`.
+- [x] 3.2 Make the register-capacity fallback a named plain-pipeline stage that starts from clean tables; split `name_methods` from `allow_sparse_large_frame`. Compiling the catalog once is dropped (decided 2026-10-23): it needs either a second exhaustive opcode walk to renumber names or a second walk of the resolved tree, both ruled out; the bounded retry only runs for catalogs over 65 536 names.
 - [x] 3.3 Run `benchmarks/hot-code-diff.sh` and an alternating A/B for the `Frame`/`step` changes; move the handled-error stack out of `Frame` if the difference is measurable.
 - [x] 3.4 Resolve `GetImportedModule` targets through an index fixed at verification.
 - [x] 3.5 Move `bind_program_shapes` from `bsl-bytecode` to `bsl-vm`.
@@ -34,7 +34,7 @@
 - [x] 5.3 Split `bsl-orm/src/lib.rs` and `bsl-session/src/lib.rs` into modules along existing seams. The data-composition constructors in `bsl-orm` turned out not to duplicate `bsl-rt/src/data_composition.rs` (disjoint names, required by `configuration-session-runtime`); they are grouped in `bsl-orm/src/data_composition.rs` instead of removed.
 - [x] 5.4 Move `run_in_session`, interface-language resolution and host-connection authorization from `bsl-cli` into the library; move the `rustls` provider installation with it.
 - [x] 5.5 Pass startup-timing output as a host option; read `OPEN_BSL_STARTUP_TIMINGS` once in the CLI and list it under `--help` ENVIRONMENT.
-- [ ] 5.6 Update the ARCH-02 topology in `docs/architecture/component-architecture.md` for `bsl-config`, the `configuration-files` facade feature and the `bsl-config-db` → `bsl-syntax` edge; decide whether `configuration-files` stays a default feature.
+- [x] 5.6 Update the ARCH-02 topology in `docs/architecture/component-architecture.md` for `bsl-config`, the `configuration-files` facade feature and the `bsl-config-db` → `bsl-syntax` edge; decide whether `configuration-files` stays a default feature (decided: opt-in; `bsl-cli` and `open-bsl-consumer` enable it).
 - [ ] 5.7 Record the legal position on decompiling vendor module images in `decompile-native-module-images` before that change resumes.
 
 ## 6. Facade and jobs

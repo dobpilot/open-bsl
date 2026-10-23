@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 bsl-vm = { path = "../bsl-vm" }
-open-bsl = { path = "../open-bsl" }
+open-bsl = { path = "../open-bsl", features = ["configuration-files"] }
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-compiler = { path = "../bsl-compiler" }
 bsl-syntax = { path = "../bsl-syntax" }

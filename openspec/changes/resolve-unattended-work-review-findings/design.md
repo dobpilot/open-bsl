@@ -47,7 +47,12 @@ times. Decision: the fallback is a named, deterministic stage of the plain
 pipeline (so `the_optimizing_passes_agree_with_the_plain_run_on_every_script`
 compares like with like), it starts from a clean table snapshot, the
 configuration path compiles once and reuses the collected names, and the
-`name_methods` flag is split from `allow_sparse_large_frame`.
+`name_methods` flag is split from `allow_sparse_large_frame`. Compiling the catalog
+only once was dropped after review: renumbering names in finished bytecode
+would be a second exhaustive opcode walk, and collecting them from the
+resolved tree a second walk the name-capacity code deliberately avoids; the
+name-capacity retry stays bounded and only runs for catalogs whose shared
+table exceeds 65 536 names.
 
 ## Hot path
 

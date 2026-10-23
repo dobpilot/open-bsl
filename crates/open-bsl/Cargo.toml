@@ -7,7 +7,7 @@ license.workspace = true
 [features]
 constprop = ["bsl-compiler/constprop"]
 copyprop = ["bsl-compiler/copyprop"]
-default = ["configuration-files", "binbuf", "regexp", "textdoc", "json", "stream", "http", "crypto", "zip", "pdf", "xml", "spreadsheet"]
+default = ["binbuf", "regexp", "textdoc", "json", "stream", "http", "crypto", "zip", "pdf", "xml", "spreadsheet"]
 binbuf = ["dep:bsl-binbuf"]
 stream = ["dep:bsl-stream", "binbuf"]
 http = ["dep:bsl-http", "stream"]
