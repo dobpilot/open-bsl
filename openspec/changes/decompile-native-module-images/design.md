@@ -914,3 +914,24 @@ this exact additional prefix, identical parameter frames and defaults, and
 no intervening method entry. Reject altered handlers, cleanup, jumps and frames.
 This does not establish arbitrary overlap recovery: the original buh entries
 have different local flags and missing defaults, and still fail explicitly.
+
+## Legal position (decided 2026-10-23)
+
+Recovering BSL from a vendor module image is decompilation of someone else's
+program. Licence agreements of vendor configurations usually forbid it; the
+Civil Code of the Russian Federation (art. 1280) allows a lawful user to
+decompile for interoperability under its own conditions. open-bsl does not
+judge a particular case, so the project's position is:
+
+- Decompilation runs only on an explicit host request
+  (`LoadOptions::decompile_protected_modules`, CLI
+  `--decompile-protected-modules`). The default loads protected modules as
+  export signatures with stub bodies and recovers nothing.
+- The user who enables it is responsible for having the right to decompile
+  that configuration; the CLI help says so next to the flag.
+- Vendor module images and text recovered from them are never committed.
+  Tests and probes use images compiled from the project's own control
+  modules; probes that need images of vendor modules (the `original-*`
+  inputs under `target/diagnostics/`) run only on a machine that already has
+  them and keep them outside the repository.
+

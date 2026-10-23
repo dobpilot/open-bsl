@@ -35,7 +35,7 @@
 - [x] 5.4 Move `run_in_session`, interface-language resolution and host-connection authorization from `bsl-cli` into the library; move the `rustls` provider installation with it.
 - [x] 5.5 Pass startup-timing output as a host option; read `OPEN_BSL_STARTUP_TIMINGS` once in the CLI and list it under `--help` ENVIRONMENT.
 - [x] 5.6 Update the ARCH-02 topology in `docs/architecture/component-architecture.md` for `bsl-config`, the `configuration-files` facade feature and the `bsl-config-db` → `bsl-syntax` edge; decide whether `configuration-files` stays a default feature (decided: opt-in; `bsl-cli` and `open-bsl-consumer` enable it).
-- [ ] 5.7 Record the legal position on decompiling vendor module images in `decompile-native-module-images` before that change resumes.
+- [x] 5.7 Record the legal position on decompiling vendor module images in `decompile-native-module-images` before that change resumes.
 
 ## 6. Facade and jobs
 - [x] 6.1 Resolve background-job target chunks by method name; share the server common-module filter with `EngineBuilder::configuration_source`.
