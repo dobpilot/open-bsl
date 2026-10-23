@@ -47,5 +47,5 @@
 - [x] 7.2 Replace the per-probe branches of `tests/conformance/measure/1c/run-on-1c.sh` with a setup manifest beside each probe; remove fixed `/tmp` information-base paths.
 
 ## 8. Verification
-- [ ] 8.1 `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`.
+- [x] 8.1 `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`.
 - [ ] 8.2 `openspec validate resolve-unattended-work-review-findings --strict`; merge deltas and archive.
