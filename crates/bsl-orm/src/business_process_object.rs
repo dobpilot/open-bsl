@@ -210,19 +210,16 @@ pub(super) fn create(
         .ok_or_else(|| {
             RtError::DynamicError("табличные части бизнес-процесса неизвестны".into())
         })?;
-    // В нативном Config строка переменной длины 12 несёт квалификаторы
-    // `[12, 1]`; прежние хостовые контроли задают сокращённые `[12]`.
-    // Начальные значения измерены для этой формы. Другие настройки и
-    // собственные поля не подменяются поведением документа по аналогии.
+    // Начальные значения измерены для строк переменной длины и булевых
+    // полей (см. `variable_length_string`). Другие настройки и собственные
+    // поля не подменяются поведением документа по аналогии.
     if number.number_type != DocumentNumberType::String
         || number.length != 11
         || !number.variable_length
-        || attributes.iter().any(|attribute| !matches!(attribute.types(),
-            [ColumnType { id: TypeRef::Native(TypeId::String), quals }] if (quals.as_slice() == ["12"] || quals.as_slice() == ["12", "1"])
-        ) && !matches!(attribute.types(),
+        || attributes.iter().any(|attribute| !variable_length_string(attribute.types()) && !matches!(attribute.types(),
             [ColumnType { id: TypeRef::Native(TypeId::Boolean), quals }] if quals.is_empty()
         ))
-        || sections.iter().any(|section| section.attributes().is_none_or(|attributes| attributes.iter().any(|attribute| !matches!(attribute.types(), [ColumnType { id: TypeRef::Native(TypeId::String), quals }] if (quals.as_slice() == ["12"] || quals.as_slice() == ["12", "1"])) && !matches!(attribute.types(), [ColumnType { id: TypeRef::Native(TypeId::Boolean), quals }] if quals.is_empty()))))
+        || sections.iter().any(|section| section.attributes().is_none_or(|attributes| attributes.iter().any(|attribute| !variable_length_string(attribute.types()) && !matches!(attribute.types(), [ColumnType { id: TypeRef::Native(TypeId::Boolean), quals }] if quals.is_empty()))))
     {
         return Err(RtError::DynamicError(
             "начальные значения этой формы объекта бизнес-процесса пока не поддерживаются".into(),
@@ -270,6 +267,15 @@ pub(super) fn create(
     Ok(value)
 }
 
+/// Строка переменной длины: квалификаторы `[длина, 1]` из нативного Config
+/// или сокращённые хостовые `[длина]`. Её начальное значение и проверка
+/// заполнения от длины не зависят. Строка фиксированной длины (`[длина, 0]`)
+/// дополняется пробелами и сюда не входит: для неё остаётся явная ошибка.
+fn variable_length_string(types: &[ColumnType]) -> bool {
+    matches!(types, [ColumnType { id: TypeRef::Native(TypeId::String), quals }]
+        if matches!(quals.as_slice(), [length] | [length, _] if length.parse::<u32>().is_ok())
+            && quals.get(1).is_none_or(|variable| variable == "1"))
+}
 fn initial_data(
     metadata: &MetadataObject,
     catalog: &Arc<MetadataCatalog>,
@@ -662,8 +668,7 @@ fn check_filling(
         match attribute.fill_checking() {
             Some(FillChecking::DontCheck) => {}
             Some(FillChecking::ShowError) => {
-                if !matches!(attribute.types(), [ColumnType { id: TypeRef::Native(TypeId::String), quals }] if (quals.as_slice() == ["12"] || quals.as_slice() == ["12", "1"]))
-                {
+                if !variable_length_string(attribute.types()) {
                     return Err(RtError::DynamicError("проверка этого типа собственного реквизита бизнес-процесса пока не поддерживается".into()));
                 }
                 paths.push(Value::Str(attribute.name().into()));

@@ -30,7 +30,7 @@
 
 ## 5. Configuration and session
 - [ ] 5.1 Extract one fill / fill-check handler protocol for catalog, document and business-process objects.
-- [ ] 5.2 Replace the `Строка(12)`/`Строка(12,1)` special case in business-process fill checking with general qualifier handling or an explicit unsupported error per type.
+- [x] 5.2 Replace the `Строка(12)`/`Строка(12,1)` special case in business-process fill checking with general qualifier handling or an explicit unsupported error per type.
 - [ ] 5.3 Split `bsl-orm/src/lib.rs` and `bsl-session/src/lib.rs` into modules along existing seams; remove the data-composition stubs from `bsl-orm`.
 - [ ] 5.4 Move `run_in_session`, interface-language resolution and host-connection authorization from `bsl-cli` into the library; move the `rustls` provider installation with it.
 - [x] 5.5 Pass startup-timing output as a host option; read `OPEN_BSL_STARTUP_TIMINGS` once in the CLI and list it under `--help` ENVIRONMENT.
