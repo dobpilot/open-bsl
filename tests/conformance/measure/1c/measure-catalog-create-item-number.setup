@@ -1,0 +1,9 @@
+# Минимальный справочник нужен пробам временных таблиц и ссылок менеджера.
+# Запускайте её на отдельной `ONEC_IB`, чтобы состав остальных баз замеров
+# не зависел от уже загруженных дополнительных объектов.
+copy-tree tests/conformance/measure/1c/cfg-src-temp-tables
+child Catalog ЗамерВременныхТаблиц
+
+# Числовой код и отключённое наименование проверяются отдельно от строковой пробы.
+sed Catalogs/ЗамерВременныхТаблиц.xml s|<CodeType>String</CodeType>|<CodeType>Number</CodeType>|; s|<DescriptionLength>25</DescriptionLength>|<DescriptionLength>0</DescriptionLength>|; s|<DefaultPresentation>AsDescription</DefaultPresentation>|<DefaultPresentation>AsCode</DefaultPresentation>|
+sed Catalogs/ЗамерВременныхТаблиц.xml /\.StandardAttribute\.Description<\/xr:Field>/d

@@ -1,0 +1,3 @@
+mkdir InformationRegisters
+copy docs/research/fixtures/information-register-get/PeriodicInformationRegister.xml InformationRegisters/ЗамерПолучитьПериод.xml
+child InformationRegister ЗамерПолучитьПериод

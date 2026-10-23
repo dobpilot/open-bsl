@@ -1,0 +1,6 @@
+# Ошибочный дочерний модуль изолирован от остальных проб.
+copy-tree tests/conformance/measure/1c/cfg-src-transitive-unused
+child CommonModule ЗамерыТранзитивногоРодителя
+child CommonModule ЗамерыТранзитивногоДочернего
+control-image tests/conformance/measure/1c/native-image-function-early-return.Module.bin CommonModules/ЗамерыТранзитивногоРодителя/Ext/Module.bin
+remove CommonModules/ЗамерыТранзитивногоРодителя/Ext/Module.bsl

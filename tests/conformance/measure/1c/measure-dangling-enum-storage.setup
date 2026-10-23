@@ -1,0 +1,7 @@
+# Неизвестное значение перечисления сохраняется из нативной формы ссылки.
+mkdir Documents
+mkdir Enums
+copy tests/conformance/measure/1c/document-dangling-enum-filling.xml Documents/ЗамерДокумента.xml
+copy tests/conformance/measure/1c/document-attribute-enum.xml Enums/ЗамерПеречисления.xml
+child Document ЗамерДокумента
+child Enum ЗамерПеречисления

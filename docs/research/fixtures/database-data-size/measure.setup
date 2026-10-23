@@ -1,0 +1,4 @@
+# Глобальный подсчёт объёма измеряется на собственном регистре.
+mkdir InformationRegisters
+copy docs/research/fixtures/database-data-size/InformationRegister.source.xml InformationRegisters/ЗамерПолучить.xml
+child InformationRegister ЗамерПолучить

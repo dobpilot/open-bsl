@@ -1,0 +1,1 @@
+copy tests/conformance/measure/1c/native-image-module-initializer-source.bsl DataProcessors/Замеры/Ext/ObjectModule.bsl

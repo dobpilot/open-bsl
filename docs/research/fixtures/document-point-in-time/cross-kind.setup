@@ -1,0 +1,6 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+copy docs/research/fixtures/document-point-in-time/АльфаМомента.xml Documents/АльфаМомента.xml
+child Document АльфаМомента
+copy docs/research/fixtures/document-point-in-time/ЯмаМомента.xml Documents/ЯмаМомента.xml
+child Document ЯмаМомента

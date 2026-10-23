@@ -1,0 +1,19 @@
+# Функциональные опции над константой создаются только в отдельной базе замера.
+mkdir Constants
+mkdir FunctionalOptions
+copy tests/conformance/measure/1c/functional-option-constant.xml Constants/ЗначениеОпцииПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробы.xml FunctionalOptions/ОпцияПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробыПривилегированная.xml FunctionalOptions/ОпцияПробыПривилегированная.xml
+child Constant ЗначениеОпцииПробы
+child FunctionalOption ОпцияПробы
+child FunctionalOption ОпцияПробыПривилегированная
+
+# Роли для отдельных аутентифицированных сеансов измерения опций.
+mkdir Roles/FunctionalAdmin/Ext
+copy tests/conformance/measure/1c/functional-option-FunctionalAdmin.xml Roles/FunctionalAdmin.xml
+copy tests/conformance/measure/1c/functional-option-FunctionalAdmin.Rights.xml Roles/FunctionalAdmin/Ext/Rights.xml
+child Role FunctionalAdmin
+mkdir Roles/FunctionalDenied/Ext
+copy tests/conformance/measure/1c/functional-option-FunctionalDenied.xml Roles/FunctionalDenied.xml
+copy tests/conformance/measure/1c/functional-option-FunctionalDenied.Rights.xml Roles/FunctionalDenied/Ext/Rights.xml
+child Role FunctionalDenied

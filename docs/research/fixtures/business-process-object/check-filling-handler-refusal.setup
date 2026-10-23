@@ -1,0 +1,2 @@
+mkdir BusinessProcesses/ЗамерБизнесПроцесса/Ext
+copy docs/research/fixtures/business-process-object/check-filling-handler-refusal-object.bsl BusinessProcesses/ЗамерБизнесПроцесса/Ext/ObjectModule.bsl

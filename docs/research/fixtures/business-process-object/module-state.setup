@@ -1,0 +1,4 @@
+# Контроль собственного состояния модуля использует уже созданный тестовый
+# бизнес-процесс; модуль подменяется только в копии нативной выгрузки.
+mkdir BusinessProcesses/ЗамерБизнесПроцесса/Ext
+copy docs/research/fixtures/business-process-object/module-state-object.bsl BusinessProcesses/ЗамерБизнесПроцесса/Ext/ObjectModule.bsl

@@ -1,0 +1,3 @@
+# Инициализация собственного модуля объекта проверяется отдельно от формы.
+copy tests/conformance/measure/1c/native-image-module-initializer.Module.bin DataProcessors/Замеры/Ext/ObjectModule.bin
+remove DataProcessors/Замеры/Ext/ObjectModule.bsl

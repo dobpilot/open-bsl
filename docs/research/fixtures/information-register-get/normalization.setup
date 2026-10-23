@@ -1,0 +1,4 @@
+# Собственный независимый регистр для контроля прямого чтения.
+mkdir InformationRegisters
+copy docs/research/fixtures/information-register-get/InformationRegister.xml InformationRegisters/ЗамерПолучить.xml
+child InformationRegister ЗамерПолучить

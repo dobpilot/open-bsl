@@ -1,0 +1,5 @@
+mkdir ChartsOfCharacteristicTypes/ЗамерХарактеристик/Ext
+copy docs/research/fixtures/characteristic-manager-create/ЗамерХарактеристик.native.xml ChartsOfCharacteristicTypes/ЗамерХарактеристик.xml
+copy docs/research/fixtures/characteristic-predefined/Predefined.xml ChartsOfCharacteristicTypes/ЗамерХарактеристик/Ext/Predefined.xml
+copy docs/research/fixtures/characteristic-predefined/ManagerModule.bsl ChartsOfCharacteristicTypes/ЗамерХарактеристик/Ext/ManagerModule.bsl
+child ChartOfCharacteristicTypes ЗамерХарактеристик

@@ -1,0 +1,3 @@
+# Один и тот же пустой кадр проверяется в контексте объекта обработки.
+copy tests/conformance/measure/1c/native-image-twelve-frame-object-first-six.Module.bin DataProcessors/Замеры/Ext/ObjectModule.bin
+remove DataProcessors/Замеры/Ext/ObjectModule.bsl

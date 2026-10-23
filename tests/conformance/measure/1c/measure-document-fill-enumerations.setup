@@ -1,0 +1,6 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+copy tests/conformance/measure/1c/document-fill-enumerations.xml Documents/ЗамерДокумента.xml
+mkdir Enums
+copy tests/conformance/measure/1c/document-attribute-enum.xml Enums/ЗамерПеречисления.xml
+child Enum ЗамерПеречисления

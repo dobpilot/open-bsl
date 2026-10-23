@@ -1,0 +1,14 @@
+# Непериодический регистр с двумя измерениями для функциональных опций.
+mkdir InformationRegisters
+mkdir FunctionalOptions
+mkdir FunctionalOptionsParameters
+copy tests/conformance/measure/1c/functional-option-register.xml InformationRegisters/ОпцииПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияРегистра.xml FunctionalOptions/ОпцияРегистра.xml
+copy tests/conformance/measure/1c/functional-option-ЧисловаяОпцияРегистра.xml FunctionalOptions/ЧисловаяОпцияРегистра.xml
+copy tests/conformance/measure/1c/functional-option-ПараметрПервый.xml FunctionalOptionsParameters/ПараметрПервый.xml
+copy tests/conformance/measure/1c/functional-option-ПараметрВторой.xml FunctionalOptionsParameters/ПараметрВторой.xml
+child FunctionalOptionsParameter ПараметрВторой
+child FunctionalOptionsParameter ПараметрПервый
+child FunctionalOption ЧисловаяОпцияРегистра
+child FunctionalOption ОпцияРегистра
+child InformationRegister ОпцииПробы

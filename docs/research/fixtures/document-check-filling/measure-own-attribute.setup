@@ -1,0 +1,6 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+remove Documents/ЗамерДокумента/Ext/ObjectModule.bsl
+mkdir Documents/ЗамерДокумента/Ext
+copy docs/research/fixtures/document-check-filling/document-own-attribute.xml Documents/ЗамерДокумента.xml
+copy docs/research/fixtures/document-check-filling/path-mutation-object.bsl Documents/ЗамерДокумента/Ext/ObjectModule.bsl

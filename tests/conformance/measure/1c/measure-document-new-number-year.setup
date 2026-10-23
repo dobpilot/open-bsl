@@ -1,0 +1,4 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+remove Documents/ЗамерДокумента/Ext/ObjectModule.bsl
+sed Documents/ЗамерДокумента.xml s|<NumberPeriodicity>Nonperiodical</NumberPeriodicity>|<NumberPeriodicity>Year</NumberPeriodicity>|; s|<NumberLength>9</NumberLength>|<NumberLength>11</NumberLength>|

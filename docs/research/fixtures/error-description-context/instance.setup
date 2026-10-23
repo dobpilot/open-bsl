@@ -1,0 +1,2 @@
+mkdir DataProcessors/Замеры/Ext
+copy docs/research/fixtures/error-description-context/ObjectModule.bsl DataProcessors/Замеры/Ext/ObjectModule.bsl

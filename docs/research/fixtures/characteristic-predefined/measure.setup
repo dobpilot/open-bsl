@@ -1,0 +1,2 @@
+mkdir ChartsOfCharacteristicTypes/ЗамерХарактеристик/Ext
+copy docs/research/fixtures/characteristic-predefined/ObjectModule.bsl ChartsOfCharacteristicTypes/ЗамерХарактеристик/Ext/ObjectModule.bsl

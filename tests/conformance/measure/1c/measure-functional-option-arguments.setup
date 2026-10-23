@@ -1,0 +1,9 @@
+# Функциональные опции над константой создаются только в отдельной базе замера.
+mkdir Constants
+mkdir FunctionalOptions
+copy tests/conformance/measure/1c/functional-option-constant.xml Constants/ЗначениеОпцииПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробы.xml FunctionalOptions/ОпцияПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробыПривилегированная.xml FunctionalOptions/ОпцияПробыПривилегированная.xml
+child Constant ЗначениеОпцииПробы
+child FunctionalOption ОпцияПробы
+child FunctionalOption ОпцияПробыПривилегированная

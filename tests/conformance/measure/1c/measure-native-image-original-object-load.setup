@@ -1,0 +1,3 @@
+copy target/diagnostics/readonly-startup/original-native-load.Module.bin DataProcessors/Замеры/Ext/ObjectModule.bin
+remove DataProcessors/Замеры/Ext/ObjectModule.bsl
+common-modules tests/conformance/measure/1c/native-frame-context

@@ -1,0 +1,8 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+copy-tree tests/conformance/measure/1c/cfg-src-temp-tables
+child Document ЗамерДокумента
+child Document ЗамерЧужогоДокумента
+child Catalog ЗамерВременныхТаблиц
+copy tests/conformance/measure/1c/document-new-reference-other.xml Documents/ЗамерЧужогоДокумента.xml
+mkdir Documents/ЗамерДокумента/Ext
+copy tests/conformance/measure/1c/document-new-reference-module.bsl Documents/ЗамерДокумента/Ext/ObjectModule.bsl

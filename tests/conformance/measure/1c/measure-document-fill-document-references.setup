@@ -1,0 +1,3 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+copy tests/conformance/measure/1c/document-fill-document-references.xml Documents/ЗамерДокумента.xml

@@ -1,0 +1,5 @@
+# Пробе нужна собственная информационная база.
+own-ib information-register-rights-1016
+
+# Тот же контроль для измеренной периодичности Day, с отдельной квитанцией.
+python docs/research/fixtures/information-register-rights-1016/inject.py day

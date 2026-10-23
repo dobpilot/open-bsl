@@ -1,0 +1,16 @@
+# Функциональные опции над константой создаются только в отдельной базе замера.
+mkdir Constants
+mkdir FunctionalOptions
+copy tests/conformance/measure/1c/functional-option-constant.xml Constants/ЗначениеОпцииПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробы.xml FunctionalOptions/ОпцияПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробыПривилегированная.xml FunctionalOptions/ОпцияПробыПривилегированная.xml
+child Constant ЗначениеОпцииПробы
+child FunctionalOption ОпцияПробы
+child FunctionalOption ОпцияПробыПривилегированная
+
+# Непустой состав опций проверяется в собственной базе без прикладных записей.
+mkdir Catalogs
+copy tests/conformance/measure/1c/functional-option-catalog.xml Catalogs/ЗамерВременныхТаблиц.xml
+child Catalog ЗамерВременныхТаблиц
+copy tests/conformance/measure/1c/functional-option-content-ОпцияПробы.xml FunctionalOptions/ОпцияПробы.xml
+copy tests/conformance/measure/1c/functional-option-content-ОпцияПробыПривилегированная.xml FunctionalOptions/ОпцияПробыПривилегированная.xml

@@ -1,0 +1,4 @@
+copy docs/research/fixtures/task-reference-presentation/Task.xml Tasks/ЗамерЗадачи.xml
+copy docs/research/fixtures/task-reference-presentation/English.xml Languages/English.xml
+child Language English
+default-language English

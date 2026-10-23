@@ -1,0 +1,4 @@
+mkdir SettingsStorages/ЗамерХранилища/Ext
+copy docs/research/fixtures/settings-storage-load/storage.xml SettingsStorages/ЗамерХранилища.xml
+copy docs/research/fixtures/settings-storage-load/manager-module.bsl SettingsStorages/ЗамерХранилища/Ext/ManagerModule.bsl
+child SettingsStorage ЗамерХранилища

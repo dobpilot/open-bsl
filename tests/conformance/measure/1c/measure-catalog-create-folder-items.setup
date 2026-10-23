@@ -1,0 +1,7 @@
+# Создание группы проверяется в четырёх сочетаниях признака и вида иерархии.
+copy-tree tests/conformance/measure/1c/cfg-src-temp-tables
+mkdir Catalogs/ЗамерВременныхТаблиц/Ext
+copy tests/conformance/measure/1c/catalog-folder-flag-module.bsl Catalogs/ЗамерВременныхТаблиц/Ext/ObjectModule.bsl
+child Catalog ЗамерВременныхТаблиц
+sed Catalogs/ЗамерВременныхТаблиц.xml s|<Hierarchical>false</Hierarchical>|<Hierarchical>true</Hierarchical>|
+sed Catalogs/ЗамерВременныхТаблиц.xml s|<HierarchyType>HierarchyFoldersAndItems</HierarchyType>|<HierarchyType>HierarchyOfItems</HierarchyType>|

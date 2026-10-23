@@ -1,0 +1,5 @@
+mkdir Reports/ЗамерОтчета/Ext
+copy docs/research/fixtures/report-object/Report.xml Reports/ЗамерОтчета.xml
+copy docs/research/fixtures/report-object/ObjectModule.bsl Reports/ЗамерОтчета/Ext/ObjectModule.bsl
+copy docs/research/fixtures/report-object/ManagerModule.bsl Reports/ЗамерОтчета/Ext/ManagerModule.bsl
+child Report ЗамерОтчета

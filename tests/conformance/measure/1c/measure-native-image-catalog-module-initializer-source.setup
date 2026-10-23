@@ -1,0 +1,7 @@
+# Минимальный справочник нужен пробам временных таблиц и ссылок менеджера.
+# Запускайте её на отдельной `ONEC_IB`, чтобы состав остальных баз замеров
+# не зависел от уже загруженных дополнительных объектов.
+copy-tree tests/conformance/measure/1c/cfg-src-temp-tables
+child Catalog ЗамерВременныхТаблиц
+mkdir Catalogs/ЗамерВременныхТаблиц/Ext
+copy tests/conformance/measure/1c/native-image-module-initializer-source.bsl Catalogs/ЗамерВременныхТаблиц/Ext/ObjectModule.bsl

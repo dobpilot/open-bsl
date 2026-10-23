@@ -1,0 +1,7 @@
+# Код справочника измеряется на собственном объекте, без записи элементов.
+mkdir Catalogs/ЗамерВременныхТаблиц/Ext
+copy docs/research/fixtures/catalog-new-code/Catalog.source.xml Catalogs/ЗамерВременныхТаблиц.xml
+copy docs/research/fixtures/catalog-new-code/ObjectModule.bsl Catalogs/ЗамерВременныхТаблиц/Ext/ObjectModule.bsl
+copy docs/research/fixtures/catalog-new-code/ObjectModule-numeric.bsl Catalogs/ЗамерВременныхТаблиц/Ext/ObjectModule.bsl
+sed Catalogs/ЗамерВременныхТаблиц.xml s|<CodeType>String</CodeType>|<CodeType>Number</CodeType>|
+child Catalog ЗамерВременныхТаблиц

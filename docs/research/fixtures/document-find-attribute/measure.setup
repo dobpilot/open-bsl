@@ -1,0 +1,6 @@
+# Поиск документа измеряется на собственной записи с откатом транзакции.
+mkdir Documents/ЗамерДокумента/Ext
+copy docs/research/fixtures/document-find-attribute/document.source.xml Documents/ЗамерДокумента.xml
+copy docs/research/fixtures/document-find-attribute/ManagerModule.bsl Documents/ЗамерДокумента/Ext/ManagerModule.bsl
+empty Documents/ЗамерДокумента/Ext/ObjectModule.bsl
+child Document ЗамерДокумента

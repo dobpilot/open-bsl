@@ -1,0 +1,6 @@
+# Уровень объекта справочника измеряется на собственной иерархии с откатом.
+mkdir Catalogs/ЗамерВременныхТаблиц/Ext
+copy docs/research/fixtures/catalog-level/Catalog.source.xml Catalogs/ЗамерВременныхТаблиц.xml
+copy docs/research/fixtures/catalog-level/ObjectModule.bsl Catalogs/ЗамерВременныхТаблиц/Ext/ObjectModule.bsl
+sed Catalogs/ЗамерВременныхТаблиц.xml s|<Hierarchical>true</Hierarchical>|<Hierarchical>false</Hierarchical>|
+child Catalog ЗамерВременныхТаблиц

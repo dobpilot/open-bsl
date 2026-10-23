@@ -1,0 +1,3 @@
+# Проверка обязательного поля использует собственную базу с ShowError.
+mkdir BusinessProcesses/ЗамерБизнесПроцесса/Ext
+copy docs/research/fixtures/business-process-object/check-filling-handler-object.bsl BusinessProcesses/ЗамерБизнесПроцесса/Ext/ObjectModule.bsl

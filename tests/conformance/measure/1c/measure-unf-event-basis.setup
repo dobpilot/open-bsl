@@ -1,0 +1,4 @@
+# Определяемый тип УНФ проверяется целиком в изолированной конфигурации.
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+python tests/conformance/measure/1c/prepare-unf-event-basis.py

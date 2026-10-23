@@ -1,0 +1,6 @@
+copy-tree docs/research/fixtures/document-field-access-1017/native/input-xml
+child Role ControlAdmin
+child Role ControlReadOff
+child Role ControlReadOn
+child Role ControlDenied
+child Document ЗамерДокумента

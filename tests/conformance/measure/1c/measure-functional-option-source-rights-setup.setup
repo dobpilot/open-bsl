@@ -1,0 +1,46 @@
+# Пробе нужна собственная информационная база.
+own-ib functional-option-source-rights-1009
+
+# Проверка привилегированного чтения справочника и регистра только в собственной базе.
+mkdir Catalogs
+mkdir InformationRegisters
+mkdir FunctionalOptions
+mkdir FunctionalOptionsParameters
+copy tests/conformance/measure/1c/functional-option-catalog.xml Catalogs/ЗамерВременныхТаблиц.xml
+copy tests/conformance/measure/1c/functional-option-register.xml InformationRegisters/ОпцииПробы.xml
+copy tests/conformance/measure/1c/functional-option-catalog-parameter.xml FunctionalOptionsParameters/ОбъектОпции.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияСправочника.xml FunctionalOptions/ОпцияСправочника.xml
+child FunctionalOption ОпцияСправочника
+copy tests/conformance/measure/1c/functional-option-ОпцияСправочникаОбычная.xml FunctionalOptions/ОпцияСправочникаОбычная.xml
+child FunctionalOption ОпцияСправочникаОбычная
+copy tests/conformance/measure/1c/functional-option-ОпцияРегистра.xml FunctionalOptions/ОпцияРегистра.xml
+child FunctionalOption ОпцияРегистра
+copy tests/conformance/measure/1c/functional-option-ОпцияРегистраОбычная.xml FunctionalOptions/ОпцияРегистраОбычная.xml
+child FunctionalOption ОпцияРегистраОбычная
+copy tests/conformance/measure/1c/functional-option-ПараметрПервый.xml FunctionalOptionsParameters/ПараметрПервый.xml
+child FunctionalOptionsParameter ПараметрПервый
+copy tests/conformance/measure/1c/functional-option-ПараметрВторой.xml FunctionalOptionsParameters/ПараметрВторой.xml
+child FunctionalOptionsParameter ПараметрВторой
+child Catalog ЗамерВременныхТаблиц
+child InformationRegister ОпцииПробы
+child FunctionalOptionsParameter ОбъектОпции
+
+# Функциональные опции над константой создаются только в отдельной базе замера.
+mkdir Constants
+mkdir FunctionalOptions
+copy tests/conformance/measure/1c/functional-option-constant.xml Constants/ЗначениеОпцииПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробы.xml FunctionalOptions/ОпцияПробы.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияПробыПривилегированная.xml FunctionalOptions/ОпцияПробыПривилегированная.xml
+child Constant ЗначениеОпцииПробы
+child FunctionalOption ОпцияПробы
+child FunctionalOption ОпцияПробыПривилегированная
+
+# Роли для отдельных аутентифицированных сеансов измерения опций.
+mkdir Roles/FunctionalAdmin/Ext
+copy tests/conformance/measure/1c/functional-option-FunctionalAdmin.xml Roles/FunctionalAdmin.xml
+copy tests/conformance/measure/1c/functional-option-FunctionalAdmin.Rights.xml Roles/FunctionalAdmin/Ext/Rights.xml
+child Role FunctionalAdmin
+mkdir Roles/FunctionalDenied/Ext
+copy tests/conformance/measure/1c/functional-option-FunctionalDenied.xml Roles/FunctionalDenied.xml
+copy tests/conformance/measure/1c/functional-option-FunctionalDenied.Rights.xml Roles/FunctionalDenied/Ext/Rights.xml
+child Role FunctionalDenied

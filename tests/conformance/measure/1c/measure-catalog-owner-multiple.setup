@@ -1,0 +1,10 @@
+# Владелец справочника измеряется без сохранения объектов и строк базы.
+mkdir Catalogs/ЗамерВладельца/Ext
+copy tests/conformance/measure/1c/catalog-owner-first.xml Catalogs/ВладелецПробы.xml
+copy tests/conformance/measure/1c/catalog-owner-second.xml Catalogs/ВторойВладелецПробы.xml
+copy tests/conformance/measure/1c/catalog-owner-child.xml Catalogs/ЗамерВладельца.xml
+copy tests/conformance/measure/1c/catalog-owner-child-multiple.xml Catalogs/ЗамерВладельца.xml
+copy tests/conformance/measure/1c/catalog-owner-module.bsl Catalogs/ЗамерВладельца/Ext/ObjectModule.bsl
+child Catalog ВладелецПробы
+child Catalog ВторойВладелецПробы
+child Catalog ЗамерВладельца

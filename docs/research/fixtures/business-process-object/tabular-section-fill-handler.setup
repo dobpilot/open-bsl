@@ -1,0 +1,2 @@
+mkdir BusinessProcesses/ЗамерБизнесПроцесса/Ext
+copy docs/research/fixtures/business-process-object/tabular-section-fill-handler-object.bsl BusinessProcesses/ЗамерБизнесПроцесса/Ext/ObjectModule.bsl

@@ -1,0 +1,4 @@
+mkdir ChartsOfCharacteristicTypes/ЗамерХарактеристик/Ext
+copy docs/research/fixtures/characteristic-manager-create/ЗамерХарактеристик.native.xml ChartsOfCharacteristicTypes/ЗамерХарактеристик.xml
+child ChartOfCharacteristicTypes ЗамерХарактеристик
+copy docs/research/fixtures/characteristic-deletion-mark/ObjectModule.bsl ChartsOfCharacteristicTypes/ЗамерХарактеристик/Ext/ObjectModule.bsl

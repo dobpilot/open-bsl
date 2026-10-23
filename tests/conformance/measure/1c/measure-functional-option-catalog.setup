@@ -1,0 +1,12 @@
+# Параметризованные опции над реквизитами собственного справочника.
+mkdir Catalogs
+mkdir FunctionalOptions
+mkdir FunctionalOptionsParameters
+copy tests/conformance/measure/1c/functional-option-catalog.xml Catalogs/ЗамерВременныхТаблиц.xml
+copy tests/conformance/measure/1c/functional-option-catalog-parameter.xml FunctionalOptionsParameters/ОбъектОпции.xml
+copy tests/conformance/measure/1c/functional-option-ОпцияСправочника.xml FunctionalOptions/ОпцияСправочника.xml
+copy tests/conformance/measure/1c/functional-option-ЧисловаяОпцияСправочника.xml FunctionalOptions/ЧисловаяОпцияСправочника.xml
+child FunctionalOptionsParameter ОбъектОпции
+child FunctionalOption ЧисловаяОпцияСправочника
+child FunctionalOption ОпцияСправочника
+child Catalog ЗамерВременныхТаблиц

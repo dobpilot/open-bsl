@@ -1,0 +1,3 @@
+copy-tree docs/research/fixtures/subsystem-scope-1017/input-xml
+child Subsystem Родитель
+child Subsystem Другой

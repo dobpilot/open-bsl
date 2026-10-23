@@ -1,0 +1,3 @@
+copy-tree docs/research/fixtures/exchange-plan-session-reference-1016/input-xml
+child ExchangePlan ЗамерОбмена
+child ExchangePlan ДругойОбмен

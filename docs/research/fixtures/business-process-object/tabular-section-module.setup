@@ -1,0 +1,3 @@
+# Табличная часть проверяется на отдельной собственной базе с двумя колонками.
+mkdir BusinessProcesses/ЗамерБизнесПроцесса/Ext
+copy docs/research/fixtures/business-process-object/tabular-section-module-object.bsl BusinessProcesses/ЗамерБизнесПроцесса/Ext/ObjectModule.bsl

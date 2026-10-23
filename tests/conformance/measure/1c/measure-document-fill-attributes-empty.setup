@@ -1,0 +1,5 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+copy tests/conformance/measure/1c/document-fill-attributes.xml Documents/ЗамерДокумента.xml
+mkdir Documents/ЗамерДокумента/Ext
+copy tests/conformance/measure/1c/document-fill-attributes-empty-module.bsl Documents/ЗамерДокумента/Ext/ObjectModule.bsl

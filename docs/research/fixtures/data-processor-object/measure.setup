@@ -1,0 +1,3 @@
+mkdir DataProcessors/Замеры/Ext
+copy docs/research/fixtures/data-processor-object/ObjectModule.bsl DataProcessors/Замеры/Ext/ObjectModule.bsl
+copy docs/research/fixtures/data-processor-object/ManagerModule.bsl DataProcessors/Замеры/Ext/ManagerModule.bsl

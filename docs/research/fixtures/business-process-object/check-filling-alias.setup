@@ -1,0 +1,4 @@
+# Собственные реквизиты проверяются на отдельной базе с двумя полями.
+# Меняется только модуль объекта в рабочей копии выгрузки.
+mkdir BusinessProcesses/ЗамерБизнесПроцесса/Ext
+copy docs/research/fixtures/business-process-object/own-fields-module-object.bsl BusinessProcesses/ЗамерБизнесПроцесса/Ext/ObjectModule.bsl

@@ -1,0 +1,5 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+
+# Настройки номера изменяются только в изолированной конфигурации замера.
+sed Documents/ЗамерДокумента.xml s|<NumberType>String</NumberType>|<NumberType>Number</NumberType>|

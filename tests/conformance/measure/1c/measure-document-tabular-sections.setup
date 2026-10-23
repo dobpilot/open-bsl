@@ -1,0 +1,4 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+copy tests/conformance/measure/1c/document-tabular-sections.xml Documents/ЗамерДокумента.xml
+remove Documents/ЗамерДокумента/Ext/ObjectModule.bsl

@@ -1,0 +1,3 @@
+mkdir Enums
+copy tests/conformance/measure/1c/document-attribute-enum.xml Enums/ЗамерПеречисления.xml
+child Enum ЗамерПеречисления

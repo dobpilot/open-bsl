@@ -1,0 +1,5 @@
+copy-tree tests/conformance/measure/1c/cfg-src-document-reference
+child Document ЗамерДокумента
+remove Documents/ЗамерДокумента/Ext/ObjectModule.bsl
+mkdir Documents/ЗамерДокумента/Ext
+copy tests/conformance/measure/1c/document-new-number-numeric-handler-module.bsl Documents/ЗамерДокумента/Ext/ObjectModule.bsl

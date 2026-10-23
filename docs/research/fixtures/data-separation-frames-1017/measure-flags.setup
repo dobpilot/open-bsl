@@ -1,0 +1,7 @@
+copy-tree docs/research/fixtures/data-separation-frames-1017/input-xml
+child SessionParameter НаблюдениеСтарта
+child SessionParameter ОбычныйПараметрПробы
+child SessionParameter ИспользованиеРазделителяПробы
+child SessionParameter ЗначениеРазделителяПробы
+child CommonAttribute НаименованиеЯзык1
+child Catalog ЗамерВременныхТаблиц
