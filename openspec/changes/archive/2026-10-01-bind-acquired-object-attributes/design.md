@@ -1,0 +1,19 @@
+# Design
+
+## Evidence
+The native UNF XML dump lists Catalog.ExternalUsers attribute ObjectAuthorization with GUID d65c4485-7bac-4206-9a6c-7156f4bb876d and type set DefinedType.ExternalUser. Its original object module reads that name at line 47. The 2026-10-01 live startup gets past information-register factory linking and stops on this exact read at semantic resolution.
+
+## Representation
+PropertyDescriptor tables have static callbacks and static names; they cannot represent configuration-owned names without leaks. Add an owned finite name context to the facade and keep the existing descriptor convenience builder by copying its aliases once during engine construction. Semantic resolution needs names only; callbacks remain on the actual object protocol. Dynamic compilation and worker recipes retain the same immutable context. Local variables, parameters and module variables keep priority.
+
+Use measured open-sdbl descriptor ownership to project catalog attributes. Current inspection found that ConfigFieldPurpose classifies register fields only; parse_config_descriptors returns nested catalog descriptors without a sufficient owner/path. The SDK agent measured the catalog own collection on 296 UUID-matched native XML objects: 3540 own attributes and 1453 separate tabular fields, including 19 known-empty catalogs. The accepted minimal API is ConfigDescriptor.catalog_attributes: Option<Vec<Guid>> on the owner only. Projection resolves only these GUIDs through the same decoded descriptor vector; unknown ownership stays None. Do not enable projection until SDK validation and host fixture replay pass. Do not infer attributes from physical SQL columns, source tokens or arbitrary unresolved identifiers. Preserve ownership: only the catalog's own attribute collection contributes; table-section fields and nested descriptors do not silently become object attributes. Verify projection against the native XML and the existing acquired fixtures before enabling it.
+
+## Execution boundary
+A declared attribute whose real typed implementation is unavailable raises a named error on read and write. It does not return Undefined, accept untyped assignment or read foreign state. Creating real defaults, conversions and defined-type/reference values requires separate native measurements before implementation. Declaration is not a claim that these values already work.
+
+## Validation
+Tests cover dynamically supplied names, static and dynamic code, variable shadowing, worker retention, fresh engine/session ownership, unknown identifiers and explicit unsupported reads/writes. Repeat original UNF startup after projection; if an attribute is executed, implement its measured real value behavior instead of treating this linking step as complete startup.
+
+The facade stores owned contexts in Arc<[String]>. Its existing PropertyDescriptor builder copies aliases into that context once. Sema and dynamic compiler inputs now accept name slices; no callbacks or values pass through those compile-time inputs. Worker recipes share the immutable context and reconstruct it through the public facade. Catalog metadata distinguishes None from a known empty name list. The loader decodes each catalog resource once to obtain both owner and nested descriptors.
+
+Final verification: the host native ExternalUsers fixture replay passed for all eight own GUIDs and names, excluding all three tabular fields. Full workspace fmt, Clippy, tests (336.2 s), rustdoc and facade consumer passed without modifying existing expectations. SDK 0.9.5 commits b5f7c33/cabd613 passed 789 tests. Original UNF startup (148.9 s) passed the ExternalUsers module and stopped in GroupsOfUsers on its standard Parent property; no unavailable custom attribute executed on this run. Parent is the next distinct measured surface, not an acquired custom attribute.

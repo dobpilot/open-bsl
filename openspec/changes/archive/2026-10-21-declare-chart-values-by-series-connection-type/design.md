@@ -1,0 +1,2 @@
+# Design
+Reuse existing EnumValue, EnumKind, member/global tables, TypeId, NAMES, DISPLAY and shared enum-kind/type mapping. Native order is None then EdgesConnection, with presentations No and Edge joint. Both language spellings identify the same type. The type presentation is ChartValuesBySeriesConnectionType and the enum presentation EnumChartValuesBySeriesConnectionType. Existing primitive ordering remains rejected. Retain complete vendor member pages and direct native own-file-base controls before code. This step does not implement chart operations.

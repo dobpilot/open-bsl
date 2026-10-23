@@ -1,0 +1,5 @@
+# Design
+
+Invert the existing reference_types owner-to-type association. Compare configuration type identities using the same package/identity contract as TypeRef, then return metadata_object_value for that owner. Do not inspect display names, parse qualified type strings or query the database. Native evidence: docs/research/fixtures/metadata-find-by-type-native-1015, 1C 8.3.27.2342 in an own file infobase. The enumeration reference type returns the same acquired owner as direct metadata access, both method names agree, Number returns Undefined, and a non-Type argument raises.
+
+An additional native control confirms the catalog reference, object and selection types all return the same catalog metadata owner. The first implementation must cover these already declared owner/type associations as well as enumeration references. Other configuration-owned value type families must not be guessed from display names; unsupported owned families should remain explicit until measured. Existing type declarations stay the authority.

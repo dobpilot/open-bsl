@@ -1,0 +1,6 @@
+# Design
+Append the descriptor to DocumentObject METHODS, Russian name first. Its callback requires the existing selected object and returns Boolean False. DocumentObjectData currently represents only new unsaved objects; is_new is already always True and persistence/own Lock is unavailable. No new mutable flag is needed for this supported domain. If Lock or saved-document materialization is added, its owner-state contract must be extended then.
+
+Native 8.3.27.2342 on the own file control establishes False on a new selected document, Boolean type, case-insensitive English alias, bare receiver calls, rejection of one argument, and an error when called in object-module body before selection. Vendor IsLocked373 explicitly describes ownership by this object instance, not arbitrary database locks. Evidence is retained under docs/research/fixtures/document-lock-state-native-1015. Original databases are unchanged; the native document is not saved. Existing local function precedence and standalone undefined-name errors remain unchanged.
+
+Preserve the existing document dispatch convention used by Fill/Write/Copy: a same-named existing module export retains its own direct-call arity and result. Extend only the explicit dispatch allowlist for the new aliases; generic resolver priority remains unchanged.

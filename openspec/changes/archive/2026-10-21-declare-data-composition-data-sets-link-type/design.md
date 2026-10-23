@@ -1,0 +1,2 @@
+# Design
+Use existing EnumValue, EnumKind, member/global tables, TypeId, NAMES, DISPLAY and the shared enum-kind/type mapping. Preserve native member order Outer then Inner. Native presentations are External and Internal; type presentation is DataCompositionDataSetsLinkType and enum presentation EnumDataCompositionDataSetsLinkType. Native primitive ordering is rejected, as the existing generic runtime does. No separate namespace or VM mechanism is introduced. Retain own-file-base control and complete vendor member pages as evidence.

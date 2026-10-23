@@ -1,0 +1,4 @@
+# Design
+Follow the existing SliceLast declaration and its same-named export dispatch. Add a single MethodDescriptor with Arity::range(0,2) to the existing register manager table and the public member projection. Qualify bare calls through the established own-manager context; no global builtin is added.
+
+Syntax Assistant8.3.27.2342, platform-syntax-help:syntax-context:objects/catalog125/catalog161/object163/methods/GetLast368.html, documents both optional arguments and a Structure result for periodic information registers. Invocation deliberately reports the unsupported execution profile until acquired periodic metadata and measured GetLast semantics are implemented. This is a profile limitation, not a fabricated platform result. If original startup actually invokes the method, implement its real read path as a separate reached execution change before claiming successful startup.

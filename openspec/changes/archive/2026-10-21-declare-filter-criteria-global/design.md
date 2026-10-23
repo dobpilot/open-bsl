@@ -1,0 +1,4 @@
+# Design
+Use a zero-argument component factory referenced by GlobalDescriptor, as existing ORM globals do. Reuse the current name resolver and its variable precedence. The factory raises a clear DynamicError while real criterion composition is unavailable, following the existing WSReferences declaration boundary; no fake successful manager is returned. Use an internal factory name rather than pretending the global property is a platform function.
+
+Native own-file-base control confirms both global aliases and their shared manager type. The full vendor manager page is retained separately. This step binds the reached dormant original declaration only; a reached runtime lookup will require measured acquired criterion metadata and actual manager behavior in a further implementation. No native semantics are inferred and no dependencies or hot-path code change.

@@ -1,0 +1,7 @@
+# Design
+
+Replace QueryState.parameters vector with an existing dictionary-backed Value structure. Initialize a fresh empty structure for each query. The getter returns the same Value clone; property assignment has no setter. SetParameter interns the supplied name through CallContext.runtime_shapes and uses the existing structure_insert_spelled, so updates and external Structure mutations share one store. During execution capture ordered entries and their actual spellings into the existing QueryRequest snapshot before invoking the host.
+
+Native 8.3.27.2342 evidence: docs/research/fixtures/query-parameters-property-native-1015. The structure is initially empty; a saved getter result observes later SetParameter, and vice versa. Insert/remove are visible to the query, identity is stable, another query is independent, replacement is refused. Repeating SetParameter with differently cased spelling exposes the latest key spelling. No structure proxy, duplicate vector or independent collection implementation is needed.
+
+The old Rust adapter test expected the first spelling rather than the native latest spelling. Its one-line correction was included in `docs/plans/patches/session-existing-test-expectations-proposal-1016.patch`, explicitly approved by the user and applied. The current test expects the latest spelling; the separate live-structure tests retain the native identity, mutation and isolation controls.

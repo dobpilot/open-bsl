@@ -1,0 +1,9 @@
+# Design
+
+Native empty and configured-interface controls on 8.3.27.2342 establish aliases, case-insensitive reads, Undefined for absence, metadata object for presence and read-only setters. The paired native CF/XML exports have configuration properties tag68/length61; only position11 changes from nil UUID to the exact Interface UUID in reverse-exported XML. Position9 remains nil and is not used. Original BUH has the same measured root profile and a nil UUID at11.
+
+Store an optional acquired [u8;16] UUID on the immutable MetadataCatalog. Existing absence of acquisition remains None; Some([0;16]) means proven absence. Add with_default_interface_id([u8;16]) following existing catalog builders. Reuse facade uuid::parse for the database projection; do not introduce a second UUID parser or a new dependency. The database adapter recognizes only the measured tag68/length61 and scalar UUID at11. Unknown or malformed layouts leave the field unacquired.
+
+The existing property descriptor has no setter. Its getter returns Undefined only for acquired nil; missing data raises an acquisition error, non-nil raises explicit unsupported ordinary-interface metadata access. Non-nil is not converted into Undefined or a fabricated object. Adding Interface metadata kinds/collections is deferred until reached execution needs them. Only the measured empty subset is implemented here; no unmeasured platform default is inferred.
+
+New external tests reproduce the original BUH expression, both aliases and mixed case, writes, unacquired/non-nil failures, independent catalogs and exact native root projection including malformed shapes. Preserve old tests. Retain primary native evidence, regenerate API and run focused and required checks before repeating the immutable original BUH startup under the same read-only isolation and 12 GiB ceiling. No archive until required green validation.

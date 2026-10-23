@@ -1,0 +1,2 @@
+# Design
+Extend EnumValue and its member-name table with ПереводСтроки/LineFeed and Картинка/Picture. The existing EnumKind and TypeId remain shared by all members. Native own-file-base controls confirm presentations LineFeed, Picture and Text; LineBreak and Image are invalid aliases. Add the Russian type lookup name through NAMES and preserve the measured English presentation through DISPLAY. Do not change document item construction or mutation. Native receipts are retained in docs/research/fixtures/formatted-document-items-1016.

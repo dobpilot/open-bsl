@@ -1,0 +1,6 @@
+# Design
+Derive Clone over the existing immutable factory fields and Engine::clone. Engine already shares its registry and compiled configuration; no compilation is called by this path. with_kind consumes and returns the factory with only its kind field replaced. SessionFactory::new always compiles the same server-only/non-external context; kind is used only when constructing SessionRuntime. Therefore a new kind does not require another front end pass.
+
+Factory copies share the same engine-owned services exactly as multiple sessions of one existing factory do. Session state, parameters, host data and supplied connections are not copied by the factory clone. open_background retains its BackgroundJob-only check and explicit parent/parameter-copy path. Connection strings, platform version and code/catalog identity remain attached to the factory. No method changes an already opened Session.
+
+Tests check registry/catalog reuse through existing Engine registry references, independent module state, runtime application-kind selection, unchanged base-factory kind, explicit background opening and parameter isolation. This is a host construction API; native platform behavior is unchanged. No timing or speedup measurement is claimed.

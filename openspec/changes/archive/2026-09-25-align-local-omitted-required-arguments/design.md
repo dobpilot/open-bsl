@@ -1,0 +1,5 @@
+# Design
+
+The local resolver currently combines `Some(None)` (an explicitly empty positional slot) with `None` (no slot supplied). Split those cases. For a required parameter, `Some(None)` becomes the existing `ResolvedArg::Value(RExpr::Undefined)` representation; `None` continues to return `MissingRequiredArgument`. A parameter with a declared default still resolves either form to `ResolvedArg::Default`.
+
+This uses the same representation as the already measured imported-module call path and needs no runtime or bytecode change. The platform probe `tests/conformance/measure/1c/measure-local-omitted-required.platform.txt` records an empty first required slot; `measure-local-omitted-trailing.platform.txt` confirms that an explicit empty final slot is also `Undefined`. The prior `skipping_a_parameter_without_a_default_is_an_error` test asserts the opposite for the final-slot case. Its assertion must be updated deliberately; the public error variant remains valid for an absent required trailing slot.

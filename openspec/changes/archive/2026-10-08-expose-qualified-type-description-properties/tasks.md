@@ -1,0 +1,14 @@
+- [x] Preserve the native empty-balance receipt and reproduce the failure with a new ORM replay.
+- [x] Strictly validate before production changes.
+- [x] Inspect existing type-description and formatting contracts; measure required aliases and boundary cases independently.
+  The separate native `measure-aliases` receipt confirms seven alias/assignment observations; all three facade qualifier replays pass on 2026-10-07. Existing fixed-length and absent-type controls remain preserved.
+  A fourth replay preserves native serialized string policy codes (variable=1, fixed=0). After correcting the inverted codes, all 364 adapter tests, 134 ORM tests, 307 runtime tests, 38 Session object tests, four existing facade description tests and the oracle-backed conformance corpus pass unchanged. Focused Clippy and formatting pass; full workspace approval/gates remain pending.
+- [x] Expose measured qualifiers through existing runtime objects and property dispatch. The saved empty-balance replay now reports string length 12 and number 38/2; only presentation differs. Unmeasured policies remain explicit errors.
+- [x] Resolve measured single-string/number presentation in the existing Russian runtime language; acquire a separate Russian balance receipt and retain the English original. Existing enum-presentation differences remain explicitly documented.
+- [x] Reproduce all nine empty-balance observations using a separately acquired Russian native receipt; retain the original English receipt unchanged. Together with arguments and duplicates, 24 native lines replay and all 134 ORM library tests pass (2026-10-07).
+- [x] Replay the saved empty-table receipt and add focused qualifier regression tests. The independent `measure-values` native driver and facade test reproduce 11 observations; the original raw enum-presentation mismatch remains documented.
+- [x] Regenerate API reference and pass required workspace, consumer and dependency gates; archive separately after success.
+  API reference regenerated and facade consumer built on 2026-10-07. Runtime/format/ORM library regression: 462 passed; four facade type-description suites pass unchanged. Workspace gates and archive remain incomplete.
+  Warning-free workspace rustdoc also passes after the fixed-string implementation; log: `/tmp/open-bsl-qualified-workspace-doc-1007.log`.
+
+Verification on 2026-10-08: workspace tests passed (3313 passed, 0 failed, 1 ignored); fmt, all-target Clippy, warning-free rustdoc and facade consumer build passed. Core/VM normal dependency trees match the previous baseline; checked-in API reference and open-question registry checks passed. Logs: `/tmp/open-bsl-workspace-tests-approved-1008.log`, `/tmp/open-bsl-workspace-clippy-approved-1008.log`, `/tmp/open-bsl-workspace-doc-approved-1008.log`, `/tmp/open-bsl-consumer-approved-1008.log`. Existing test updates were explicitly approved by the user before application.

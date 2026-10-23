@@ -1,0 +1,9 @@
+# Design
+
+Primary source: platform-syntax-help:syntax-context:objects/catalog125/catalog126/object130/methods/Write268.html, installed 8.3.27.2342, Russian locale. Write has no arguments and persists a catalog item, with configured code uniqueness checks.
+
+This change declares the known signature only. It adds no persistence semantics and makes no claim to emulate platform failures: an attempted invocation returns an explicit implementation-boundary error. Reuse the existing MethodDescriptor table and object receiver; do not add builtins, a resolver path, SQL or a successful no-op. No unmeasured platform default is introduced. Real write events, rights, RLS, transactions, code allocation, staged UUID and field encoding require separate measured implementation if reached.
+
+Regression found: an existing object module exports its own Записать procedure. Adding the platform method table row shadows it under existing platform-first dispatch. The implementation and its newly added tests were withdrawn; the pending test source is retained here as a draft. Existing regression expectations are unchanged. Before reimplementation, preserve prior exported procedures without redesigning global resolution or changing other platform-member precedence. The temporary declaration is not achieved.
+
+Add a narrow CallContext::configuration_has_export(module, name) executor query. Reuse FunctionCall transport and the already compiled module Program function_names/exported_functions, returning a boolean without invoking or initializing the module. This is a Rust host contract, not inferred 1C semantics. Only the newly introduced Write descriptor checks existing object-module export first. Preserve all other platform-first behavior. Do not use exception-message matching or invoke a procedure speculatively to detect its existence.

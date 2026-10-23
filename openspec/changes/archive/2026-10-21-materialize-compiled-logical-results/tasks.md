@@ -1,0 +1,12 @@
+# Tasks
+- [x] Confirm identical original demo/UNF discriminator failure.
+- [x] Inspect current scalar conversion and SDK tag protocol.
+- [x] Validate strictly before implementation.
+- [x] Obtain exact SDK logical projection API and own native B|S controls.
+- [x] Materialize complete logical scalar/composite results through existing converters.
+- [x] Test repeated aliases, active-member selection, Null/Undefined, corrupt indices/tags and unavailable shapes.
+- [x] Replay original demo and UNF; run required checks and archive only after green gates.
+
+Verification checkpoint (2026-10-21): `execute_text` requires the complete compiler logical_projection before SQL and takes logical names from it; `data_access/logical_result.rs` validates every index, recipe and tag and converts only the active payload through the existing callback. Six focused tests pass in `docs/research/fixtures/deferred-prepared-module-caches-1021/sdk36-final-checks/workspace-tests.log`, covering repeated logical positions, composite alternatives, Null/Undefined, malformed/duplicate/inactive members and unavailable shapes. Full eight gates pass (4006/0/1). The final combined task remains open until the currently running SDK0.9.36 UNF initialization receipt is available; earlier SDK0.9.35 startup evidence is retained separately.
+
+Final integration verification (2026-10-21): immutable SDK0.9.36 DEMO thin/web/background initialization and UNF ThinClient initialization pass in `docs/research/fixtures/on-demand-session-matrix-sdk36-1021/`; UNF ThinClient exit0/canary passed at258.21s. The remaining matrix is still running, not claimed complete. All eight global checks pass (4006/0/1) in `deferred-prepared-module-caches-1021/sdk36-final-checks/`. Catalog lookup/selection additionally pass all eight actual PostgreSQL controls in `catalog-manager-sql-1021/`, including full24 String and16 typed native lines. Logical-result tests cover exact projections and invalid recipes. Storage boundary proof is explicitly composed from shared SDK decoder tests, runtime/facade snapshot tests and source error propagation, as mapped in `storage-path-audit-sdk36.json`; it is not a direct SQL test of every error input. The native0201 envelope remains unsupported and its negative evidence is retained. Unknown/unresolved storage types fail graph capture; no fabricated values or broader storage grammar are claimed. API freshness, facade closure and unchanged core dependencies pass.

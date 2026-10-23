@@ -1,0 +1,4 @@
+# Design
+Reuse the existing QuerySchemaOrderDirection kind and Descending member. Add only the missing Ascending value, and register the measured Russian type lookup name while preserving the native English type presentation. Both members occur in original BUH sources; hierarchy variants are outside the reached scope. Native1C8.3.27.2342 records the type name QuerySchemaOrderDirection and Ascending/Descending presentations. Asc is not a valid alias. Syntax Assistant from the same installation independently documents both full English names.
+
+Evidence: docs/research/fixtures/query-schema-order-direction-native-1015. Finish the existing frozen-source workspace test before editing runtime sources; then add a red focused test, implementation, regenerated reference and required checks. No standalone query schema parser or object family is needed.

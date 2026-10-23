@@ -547,3 +547,101 @@
 - **WHEN** загрузчик новой версии получает образ без признака глобального импорта
 - **THEN** он отвергает образ по версии
 - **AND** не восстанавливает видимость догадкой
+
+### Requirement: Iteration access has a distinct serialized operation
+The textual bytecode format SHALL represent iteration-element access separately from ordinary indexed access. The operation SHALL be present from format version 44 onward. The printer and parser SHALL share the same operation name and operands, and the existing exhaustive instruction-effects table SHALL describe the new operation.
+
+#### Scenario: Round-trip iteration-element access
+- **WHEN** a program containing iteration-element access is printed and parsed
+- **THEN** its operation and register operands are preserved
+
+#### Scenario: Reject an older format header
+- **WHEN** the current parser receives the preceding format version
+- **THEN** it rejects the image before execution with its existing version diagnostic
+
+#### Scenario: Reject invalid iteration registers
+- **WHEN** an image names an out-of-range register for iteration-element access
+- **THEN** the existing image verifier rejects it before execution
+
+### Requirement: Shared immutable configuration tables in text images
+The version45 configuration text image SHALL represent name and shape tables equal to those of the first module once and reference them from eligible later modules and the optional entry. Parsing SHALL preserve their indices and immutable sharing. Programs with different tables and standalone programs SHALL retain complete table definitions. The existing image verifier SHALL still validate every decoded program.
+
+#### Scenario: Repeated configuration tables
+- **GIVEN** multiple configuration programs with the same large name and shape tables
+- **WHEN** the image is written and parsed
+- **THEN** the shared tables occur once and each eligible later program references them
+- **AND** all program instructions and table indices round-trip unchanged
+- **AND** adding such modules adds their bodies rather than another copy of those tables
+
+#### Scenario: Independent tables
+- **WHEN** a configuration module has different tables from the first module
+- **THEN** its full table definitions remain in the image and are restored independently
+
+#### Scenario: Reference without a base
+- **WHEN** a standalone program or first configuration module requests shared tables
+- **THEN** parsing fails explicitly rather than constructing empty or guessed tables
+
+#### Scenario: Unsupported reference directive
+- **WHEN** a shared-table directive has an unknown target or extra fields
+- **THEN** parsing rejects it explicitly
+
+#### Scenario: Format compatibility boundary
+- **WHEN** a version44 or other unsupported header is supplied
+- **THEN** the existing unsupported-version diagnostic rejects it
+
+### Requirement: Shared ordered configuration import suffixes
+Version45 configuration text SHALL allow a program's import table to comprise its explicit prefix followed by an equal ordered suffix from the first module. The decoded import aliases, target module IDs, global flags and numeric indices SHALL remain identical to the original complete table. Programs without a shared suffix SHALL retain complete import records.
+
+#### Scenario: Different receiver prefixes and the same visible modules
+- **GIVEN** programs with different local import prefixes and the same ordered visible-module suffix
+- **WHEN** the configuration image is written and parsed
+- **THEN** repeated suffix records reference the first module instead of being printed repeatedly
+- **AND** each local prefix and the complete decoded table remain unchanged
+
+#### Scenario: Invalid suffix reference
+- **WHEN** a suffix reference has no first module, exceeds its imports, has an invalid or zero count, or contains extra fields
+- **THEN** parsing fails explicitly without allocating an unbounded import table
+
+#### Scenario: Mixed independent import sets
+- **WHEN** an intermediate module has independent imports followed by a later module sharing the first module's suffix
+- **THEN** the later reference still targets the first module
+- **AND** independent import entries remain complete
+
+### Requirement: Portable fatal module compilation failures
+Bytecode images SHALL preserve a deferred module compilation failure as a distinct operation with a diagnostic string. The image verifier SHALL reject invalid operands. Execution of that operation SHALL produce a module compilation error which a BSL exception handler cannot recover from. The text format version SHALL advance for the new instruction; previous format versions SHALL be rejected by the existing version check.
+
+#### Scenario: Deferred failure survives serialization
+- **WHEN** a configuration containing a deferred common-module compilation failure is written and parsed as a bytecode image
+- **THEN** an unrelated parent export remains callable and first access to the faulty module produces the same fatal diagnostic
+
+#### Scenario: Invalid diagnostic operand
+- **WHEN** the operation refers to a register outside its chunk frame
+- **THEN** image validation rejects it before execution
+
+#### Scenario: Previous image version
+- **WHEN** the reader receives the previous bytecode text version
+- **THEN** it returns the existing unsupported-version diagnostic
+
+### Requirement: Shared immutable configuration name storage
+The public Rust Program.names field SHALL expose immutable shared string-array storage. A single compiled configuration and its optional entry SHALL use one allocation for their common final name table, preserving every string, table order and NameId. Standalone and dynamic compilation SHALL retain their existing name-prefix and execution behavior. No new interpreter dependency SHALL be introduced.
+
+#### Scenario: Compile a multi-module catalog
+- **WHEN** a catalog containing distinct field names in multiple modules is compiled
+- **THEN** all module tables have the same contents and share the same string-array allocation
+- **AND** their name identifiers retain the pre-change meanings
+
+#### Scenario: Append names for a dynamic entry
+- **GIVEN** a catalog with a frozen shared name table
+- **WHEN** an entry or dynamic snippet introduces a new name
+- **THEN** it preserves the catalog prefix without mutating any existing module table
+
+### Requirement: Preserve textual names while sharing decoded storage
+The textual image SHALL retain its current format version and name-table contents. Configuration image reading SHALL share equal module tables without accepting, overwriting or hiding table mismatches that existing verification rejects.
+
+#### Scenario: Decode a valid shared-name configuration
+- **WHEN** a printed configuration with equal module name tables is read back
+- **THEN** equal tables share storage and reprinting preserves the same serialized names
+
+#### Scenario: Decode inconsistent name tables
+- **WHEN** an image has incompatible module name tables
+- **THEN** the existing verification failure remains observable rather than being hidden by replacing a table
