@@ -88,7 +88,7 @@ const COUNTER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
     code: ConstructorCode::new(1),
     names: &["Счётчик", "Counter"],
     arity: Arity::exact(0),
-    call: construct_counter,
+    call: Some(construct_counter),
 }];
 
 fn counter_library() -> LibraryDescriptor {

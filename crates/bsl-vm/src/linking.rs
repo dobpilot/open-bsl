@@ -102,8 +102,10 @@ pub(super) struct LinkedTables {
     /// при отладочном вычислении отдельным исполнителем с ROOT_MODULE.
     pub(super) scope_module: Option<bsl_bytecode::ModuleId>,
 
-    functions: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
-    constructors: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
+    // `Err` хранит имя записи, объявленной без реализации: ошибка
+    // поднимается при исполнении, чтобы недостижимый вызов не мешал прогону.
+    functions: Vec<Vec<Option<ComponentSlot>>>,
+    constructors: Vec<Vec<Option<ComponentSlot>>>,
     // На обычных инструкциях хранится только пустой указатель. Полное
     // описание нужно лишь типизированным вызовам: иначе каждая инструкция
     // платит за него при связывании всего каталога.
@@ -130,6 +132,15 @@ pub(super) struct LinkedTables {
     pub(super) background_jobs: Option<std::rc::Rc<dyn bsl_rt::BackgroundJobService>>,
     pub(super) temp_storage: Option<std::rc::Rc<std::cell::RefCell<bsl_rt::TempStorageSession>>>,
     pub(super) message_sink: Option<std::rc::Rc<dyn bsl_rt::UserMessageSink>>,
+}
+
+type ComponentSlot = Result<bsl_rt::ComponentCall, &'static str>;
+
+fn component_slot(
+    call: Option<bsl_rt::ComponentCall>,
+    names: &'static [&'static str],
+) -> ComponentSlot {
+    call.ok_or(names.first().copied().unwrap_or_default())
 }
 
 #[derive(Clone, Copy)]
@@ -174,7 +185,8 @@ impl LinkedComponents<'_> {
             .and_then(|slot| *slot)
             .ok_or(RtError::InvalidBytecode(
                 "CallComponent не связан с функцией реестра",
-            ))
+            ))?
+            .map_err(bsl_rt::declared_only_error)
     }
 
     pub(super) fn constructor(
@@ -188,7 +200,8 @@ impl LinkedComponents<'_> {
             .and_then(|slot| *slot)
             .ok_or(RtError::InvalidBytecode(
                 "CreateObject не связан с конструктором реестра",
-            ))
+            ))?
+            .map_err(bsl_rt::declared_only_error)
     }
 
     pub(super) fn object_method(
@@ -459,7 +472,7 @@ pub(super) fn link_verified<'a>(
                             "арность CallComponent не совпадает с дескриптором",
                         ));
                     }
-                    function_slots[pc] = Some(descriptor.call);
+                    function_slots[pc] = Some(component_slot(descriptor.call, descriptor.names));
                 }
                 Instr::CreateObject {
                     library,
@@ -504,7 +517,7 @@ pub(super) fn link_verified<'a>(
                             "арность CreateObject не совпадает с дескриптором",
                         ));
                     }
-                    constructor_slots[pc] = Some(descriptor.call);
+                    constructor_slots[pc] = Some(component_slot(descriptor.call, descriptor.names));
                 }
                 Instr::CallLinkedObjectMethod {
                     link_slot,

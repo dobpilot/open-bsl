@@ -14,7 +14,7 @@ static FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["МакетФайла"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: template,
+    call: Some(template),
 }];
 fn native() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

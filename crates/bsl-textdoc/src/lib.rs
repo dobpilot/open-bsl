@@ -821,7 +821,7 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
     code: ConstructorCode::new(1),
     names: &["ТекстовыйДокумент", "TextDocument"],
     arity: Arity::exact(0),
-    call: construct,
+    call: Some(construct),
 }];
 
 /// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.

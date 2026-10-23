@@ -393,7 +393,7 @@ fn component_constructor_without_a_result_type_keeps_methods_open() {
         code: bsl_rt::ConstructorCode::new(1),
         names: &["Внешний"],
         arity: bsl_rt::Arity::exact(0),
-        call: construct,
+        call: Some(construct),
     }];
     const LIBRARY: bsl_rt::LibraryDescriptor =
         bsl_rt::LibraryDescriptor::new("test-world", "0.0.0").with_constructors(CONSTRUCTORS);

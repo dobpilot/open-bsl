@@ -606,3 +606,20 @@ fn the_declaration_kind_survives_the_whole_pipeline() {
 
     let _ = std::fs::remove_file(&listing);
 }
+
+#[test]
+fn declared_only_function_and_constructor_compile_and_raise_the_uniform_error() {
+    let script =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/declared_only_calls.bsl");
+    let out = stdout_of(&run(&[script.to_str().unwrap()]));
+    let lines: Vec<_> = out.lines().collect();
+    assert_eq!(lines.len(), 2, "{out}");
+    assert!(
+        lines[0].contains("ЧислоПрописью: объявлено без реализации"),
+        "{out}"
+    );
+    assert!(
+        lines[1].contains("Шрифт: объявлено без реализации"),
+        "{out}"
+    );
+}

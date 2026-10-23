@@ -170,24 +170,18 @@ fn construct_data_hashing(
 
 // Нативная платформа допускает только ноль или два аргумента. Объявление
 // сохраняет холодный вызов; фиктивный JWT вместо настоящего токена не создаём.
-fn construct_access_token(_: &mut CallContext<'_>, _: &[BslValue]) -> RtResult<BslValue> {
-    Err(RtError::DynamicError(
-        "ТокенДоступа: создание токена не поддерживается".into(),
-    ))
-}
-
 const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
         code: ConstructorCode::new(1),
         names: &["ХешированиеДанных", "DataHashing"],
         arity: Arity::exact(1),
-        call: construct_data_hashing,
+        call: Some(construct_data_hashing),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(2),
         names: &["ТокенДоступа", "AccessToken"],
         arity: Arity::one_of(&[0, 2]),
-        call: construct_access_token,
+        call: None,
     },
 ];
 

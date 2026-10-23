@@ -30,14 +30,14 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         names: &["СбойКомпиляции"],
         arity: Arity::exact(0),
         kind: FunctionKind::Procedure,
-        call: fail,
+        call: Some(fail),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["Отметить"],
         arity: Arity::exact(1),
         kind: FunctionKind::Procedure,
-        call: record,
+        call: Some(record),
     },
 ];
 

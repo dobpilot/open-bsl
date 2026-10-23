@@ -25,7 +25,9 @@ fn windows_certificate_execution_reports_the_missing_store_adapter() {
     ] {
         let error = engine.new_state().exec(source).unwrap_err();
         assert!(
-            error.to_string().contains("хранилище сертификатов Windows"),
+            error
+                .to_string()
+                .contains("Windows: объявлено без реализации"),
             "{error}"
         );
     }
@@ -49,7 +51,9 @@ fn windows_authority_certificates_require_a_store_adapter() {
             .exec(&format!("Новый {name}();"))
             .unwrap_err();
         assert!(
-            error.to_string().contains("хранилище сертификатов Windows"),
+            error
+                .to_string()
+                .contains("Windows: объявлено без реализации"),
             "{error}"
         );
     }

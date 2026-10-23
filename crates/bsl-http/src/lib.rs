@@ -70,17 +70,6 @@ fn construct_system_roots(
     Ok(new_system_roots())
 }
 
-fn construct_windows_certificate(
-    _context: &mut bsl_rt::CallContext<'_>,
-    _arguments: &[bsl_rt::BslValue],
-) -> bsl_rt::RtResult<bsl_rt::BslValue> {
-    // Имена нужны для компиляции платформенных веток конфигурации; получение
-    // сертификатов и закрытого ключа требует адаптера хранилища Windows.
-    Err(bsl_rt::RtError::DynamicError(
-        "хранилище сертификатов Windows не поддерживается хостом".into(),
-    ))
-}
-
 fn construct_linux_roots(
     _context: &mut bsl_rt::CallContext<'_>,
     _arguments: &[bsl_rt::BslValue],
@@ -109,17 +98,6 @@ fn construct_file_client_certificate(
     new_file_client_certificate(arguments, context)
 }
 
-fn construct_service_response(
-    _context: &mut bsl_rt::CallContext<'_>,
-    _arguments: &[bsl_rt::BslValue],
-) -> bsl_rt::RtResult<bsl_rt::BslValue> {
-    // Ответ HTTP-сервиса — выход серверного обработчика. Клиентский
-    // `HTTPОтвет` не имеет того же контракта записи тела и заголовков.
-    Err(bsl_rt::RtError::DynamicError(
-        "ответ HTTP-сервиса пока не поддерживается этим хостом".into(),
-    ))
-}
-
 const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(11),
@@ -128,25 +106,25 @@ const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
             "LinuxCertificationAuthorityCertificates",
         ],
         arity: bsl_rt::Arity::exact(0),
-        call: construct_linux_roots,
+        call: Some(construct_linux_roots),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(1),
         names: &["HTTPЗапрос", "HTTPRequest"],
         arity: bsl_rt::Arity::range(0, 2),
-        call: construct_request,
+        call: Some(construct_request),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(2),
         names: &["HTTPСоединение", "HTTPConnection"],
         arity: bsl_rt::Arity::range(1, 8),
-        call: construct_connection,
+        call: Some(construct_connection),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(3),
         names: &["ИнтернетПрокси", "InternetProxy"],
         arity: bsl_rt::Arity::range(0, 1),
-        call: construct_proxy,
+        call: Some(construct_proxy),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(4),
@@ -155,13 +133,13 @@ const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
             "CertificationAuthorityCertificatesOS",
         ],
         arity: bsl_rt::Arity::exact(0),
-        call: construct_system_roots,
+        call: Some(construct_system_roots),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(5),
         names: &["ЗащищенноеСоединениеOpenSSL", "OpenSSLSecureConnection"],
         arity: bsl_rt::Arity::range(0, 3),
-        call: construct_secure_connection,
+        call: Some(construct_secure_connection),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(6),
@@ -170,25 +148,29 @@ const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
             "FileCertificationAuthorityCertificates",
         ],
         arity: bsl_rt::Arity::exact(1),
-        call: construct_file_roots,
+        call: Some(construct_file_roots),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(7),
         names: &["СертификатКлиентаФайл", "FileClientCertificate"],
         arity: bsl_rt::Arity::range(1, 2),
-        call: construct_file_client_certificate,
+        call: Some(construct_file_client_certificate),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(8),
         names: &["HTTPСервисОтвет", "HTTPServiceResponse"],
         arity: bsl_rt::Arity::range(1, 3),
-        call: construct_service_response,
+        // Ответ HTTP-сервиса — выход серверного обработчика. Клиентский
+        // `HTTPОтвет` не имеет того же контракта записи тела и заголовков.
+        call: None,
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(9),
         names: &["СертификатКлиентаWindows", "WindowsClientCertificate"],
         arity: bsl_rt::Arity::range(0, 1),
-        call: construct_windows_certificate,
+        // Имена нужны для компиляции платформенных веток конфигурации; получение
+        // сертификатов и закрытого ключа требует адаптера хранилища Windows.
+        call: None,
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(10),
@@ -197,7 +179,9 @@ const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
             "WindowsCertificationAuthorityCertificates",
         ],
         arity: bsl_rt::Arity::exact(0),
-        call: construct_windows_certificate,
+        // Имена нужны для компиляции платформенных веток конфигурации; получение
+        // сертификатов и закрытого ключа требует адаптера хранилища Windows.
+        call: None,
     },
 ];
 

@@ -24,14 +24,14 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         names: &["КритическаяПроба"],
         arity: Arity::exact(0),
         kind: FunctionKind::Procedure,
-        call: fail,
+        call: Some(fail),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["ОтметитьПробу"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: tick,
+        call: Some(tick),
     },
 ];
 

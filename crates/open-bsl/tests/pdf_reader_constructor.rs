@@ -19,7 +19,7 @@ fn pdf_reader_declares_documented_arity_and_rejects_unsupported_execution() {
                 .unwrap_err()
                 .to_string();
             assert!(
-                error.contains("ЧтениеPDF") && error.contains("не поддерживается"),
+                error.contains("ЧтениеPDF: объявлено без реализации"),
                 "{error}"
             );
             assert_eq!(engine.new_state().exec(&format!("Попытка Читатель = {expression}; Исключение Возврат Истина; КонецПопытки; Возврат Ложь;")).unwrap(), Value::Boolean(true));

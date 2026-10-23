@@ -103,8 +103,8 @@ pub use component::{
     LibraryDescriptor, LibraryKey, LibraryRequirement, MethodCall, MethodDescriptor,
     ObjectMembersDescriptor, PendingHostCall, PropertyDescriptor, PropertyGet, PropertySet,
     RegistryError, RuntimeBuilder, RuntimeRegistry, SecurityModeControl, SuspendingMethodCall,
-    call_method_from_table, core_library, find_method_from_table, get_property_from_table,
-    set_property_from_table,
+    call_method_from_table, core_library, declared_only_error, find_method_from_table,
+    get_property_from_table, set_property_from_table,
 };
 pub use date::{
     BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,

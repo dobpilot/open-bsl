@@ -648,9 +648,11 @@ impl RunCaches {
     }
 
     fn for_catalog(catalog: &dyn bsl_bytecode::ExecutionCatalog) -> Vec<Self> {
-        // Подготовленный код разделяется сеансами, но его наличие не означает,
-        // что новый сеанс войдёт в модуль. Кэши создаются при первом входе,
-        // иначе каждый дочерний сеанс оплачивает все тела общего каталога.
+        // Граница выделения — модуль: подготовленный код разделяется
+        // сеансами, но его наличие не означает, что новый сеанс войдёт в
+        // модуль. Кэши создаются при первом входе, иначе каждый дочерний
+        // сеанс оплачивает все тела общего каталога. Отдельная программа
+        // (`for_program`) по-прежнему получает все ячейки до первой инструкции.
         (0..catalog.module_count())
             .map(|_| Self::deferred())
             .collect()
@@ -909,8 +911,9 @@ impl ProgramExecution {
     /// контракт у [`Self::poll_with_registry_and_io`]).
     pub fn attach_catalog(&mut self, catalog: &dyn bsl_bytecode::ExecutionCatalog) {
         self.session_modules = SessionModules::for_catalog(catalog);
-        // Неподготовленные модули получают только пустую ячейку. Полный
-        // образ по-прежнему создаёт кэши всех уже имеющихся инструкций.
+        // Каждый модуль получает только отложенную ячейку: кэши его
+        // инструкций создаются при первом входе в модуль (`RunCaches::ready`),
+        // а модуль, в который прогон не вошёл, кэшей не получает.
         self.catalog_caches = RunCaches::for_catalog(catalog);
     }
 
@@ -3887,6 +3890,11 @@ fn step_cold(
                         args.len()
                     )));
                 }
+                let call = descriptor.call.ok_or_else(|| {
+                    bsl_rt::declared_only_error(
+                        descriptor.names.first().copied().unwrap_or_default(),
+                    )
+                })?;
                 let mut context = component_context(
                     bsl_rt::InterpreterServices {
                         runtime_shapes,
@@ -3910,7 +3918,7 @@ fn step_cold(
                 if let Some(env) = host.env.as_ref() {
                     context.set_temporary_files(env.temporary_files());
                 }
-                (descriptor.call)(&mut context, &args)?
+                call(&mut context, &args)?
             };
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;

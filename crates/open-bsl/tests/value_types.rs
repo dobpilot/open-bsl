@@ -42,14 +42,14 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         names: &["ЗначениеКонфигурации"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: make_value,
+        call: Some(make_value),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["КопияТипа"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: copy_type,
+        call: Some(copy_type),
     },
 ];
 

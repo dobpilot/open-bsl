@@ -40,7 +40,7 @@ const HOST_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["ОтветХоста", "HostAnswer"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: host_answer,
+    call: Some(host_answer),
 }];
 
 fn host_library() -> LibraryDescriptor {
@@ -570,7 +570,7 @@ const FAILING_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["ОтказХоста", "HostFailure"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: host_fails,
+    call: Some(host_fails),
 }];
 
 fn failing_library() -> LibraryDescriptor {
@@ -752,7 +752,7 @@ mod host_zone {
         code: ConstructorCode::new(1),
         names: &["Часы", "Watch"],
         arity: Arity::exact(0),
-        call: construct_watch,
+        call: Some(construct_watch),
     }];
 
     fn watch_library() -> LibraryDescriptor {

@@ -20,7 +20,7 @@ static FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["ПрочестьКонтекстПолучателя"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: read,
+    call: Some(read),
 }];
 
 fn recipe() -> ModuleGraphRecipe {

@@ -48,7 +48,7 @@ fn actual_chart_construction_reports_the_missing_object_model() {
         let module = engine.compile(&format!("Возврат Новый {name}();")).unwrap();
         let error = engine.new_state().run(&module).unwrap_err().to_string();
         assert!(
-            error.contains("объектная модель диаграммы пока не реализована"),
+            error.contains("Диаграмма: объявлено без реализации"),
             "{error}"
         );
     }

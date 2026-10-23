@@ -21,3 +21,31 @@ fn function_lookup_matches_every_original_alias_and_case_variant() {
         assert_eq!(BuiltinFn::lookup(name), None);
     }
 }
+
+#[test]
+fn declared_only_builtins_raise_the_uniform_error() {
+    let mut env = HostEnv::process();
+    let mut seen = Vec::new();
+    for &(_, function) in BUILTIN_FN_NAMES {
+        if !function.is_declared_only() || seen.contains(&function) {
+            continue;
+        }
+        seen.push(function);
+        let args = vec![BslValue::Undefined; function.arity_range().0];
+        let result = match function.host_effect() {
+            Some(HostEffect::Env) => call_builtin_env_with_args(function, &args, &mut env),
+            _ => call_builtin_fn(function, &args),
+        };
+        assert_eq!(
+            format!("{result:?}"),
+            format!(
+                "{:?}",
+                Err::<BslValue, _>(crate::declared_only_error(function.name()))
+            ),
+            "{}",
+            function.name()
+        );
+    }
+    assert!(!seen.is_empty());
+    assert!(!BuiltinFn::StrLen.is_declared_only());
+}

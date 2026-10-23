@@ -58,7 +58,7 @@ static HOST: LibraryDescriptor =
         names: &["УстановитьРежимПробы"],
         arity: Arity::exact(0),
         kind: FunctionKind::Procedure,
-        call: set_probe_mode,
+        call: Some(set_probe_mode),
     }]);
 
 fn state(access: Rc<Recording>) -> open_bsl::State {

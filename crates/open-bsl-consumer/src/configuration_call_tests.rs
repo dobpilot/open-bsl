@@ -63,14 +63,14 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         names: &["Мост"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: bridge,
+        call: Some(bridge),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["ТестовыйМенеджер"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: manager,
+        call: Some(manager),
     },
 ];
 
@@ -197,7 +197,7 @@ fn missing_configuration_module_is_an_execution_error() {
         names: &["НетМодуля"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: missing,
+        call: Some(missing),
     };
     const LIBRARY: LibraryDescriptor =
         LibraryDescriptor::new("missing-module-test", "1").with_functions(&[FUNCTION]);

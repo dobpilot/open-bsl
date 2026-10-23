@@ -140,7 +140,7 @@ const WORKER_CHECK: &[open_bsl::FunctionDescriptor] = &[open_bsl::FunctionDescri
     names: &["ПроверитьИзоляциюWorker"],
     arity: open_bsl::Arity::exact(0),
     kind: open_bsl::FunctionKind::Procedure,
-    call: check_worker_isolation,
+    call: Some(check_worker_isolation),
 }];
 
 #[cfg(not(target_arch = "wasm32"))]

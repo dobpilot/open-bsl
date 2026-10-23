@@ -92,37 +92,37 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         code: ConstructorCode::new(1),
         names: &["ПотокВПамяти", "MemoryStream"],
         arity: Arity::range(0, 1),
-        call: construct_memory_stream,
+        call: Some(construct_memory_stream),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(2),
         names: &["ФайловыйПоток", "FileStream"],
         arity: Arity::range(2, 3),
-        call: construct_file_stream,
+        call: Some(construct_file_stream),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(3),
         names: &["ЧтениеДанных", "DataReader"],
         arity: Arity::range(1, 4),
-        call: construct_data_reader,
+        call: Some(construct_data_reader),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(4),
         names: &["ЗаписьДанных", "DataWriter"],
         arity: Arity::range(1, 6),
-        call: construct_data_writer,
+        call: Some(construct_data_writer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(5),
         names: &["ФайловыеПотоки", "FileStreams"],
         arity: Arity::exact(0),
-        call: construct_file_streams_manager,
+        call: Some(construct_file_streams_manager),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(6),
         names: &["ЧтениеТекста", "TextReader"],
         arity: Arity::exact(2),
-        call: construct_text_reader,
+        call: Some(construct_text_reader),
     },
 ];
 

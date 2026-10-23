@@ -17,10 +17,7 @@ fn geographical_constructor_links_dormant_code_and_rejects_execution_explicitly(
         );
         let module = engine.compile(&format!("Возврат Новый {name};")).unwrap();
         let error = engine.new_state().run(&module).unwrap_err().to_string();
-        assert!(
-            error.contains("географической схемы пока не реализована"),
-            "{error}"
-        );
+        assert!(error.contains("объявлено без реализации"), "{error}");
         assert!(
             engine
                 .compile(&format!("Возврат Новый {name}(1);"))

@@ -18,7 +18,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["СбойПробы"],
     arity: Arity::exact(0),
     kind: FunctionKind::Procedure,
-    call: fail,
+    call: Some(fail),
 }];
 
 fn engine(source: &str) -> Engine {

@@ -82,9 +82,7 @@ pub fn call_builtin_env_with_args(
             .ok_or_else(|| {
                 RtError::DynamicError("часовой пояс компьютера не имеет идентификатора".into())
             }),
-        BuiltinFn::GetAvailableTimeZones => Err(RtError::DynamicError(
-            "список допустимых часовых поясов пока не предоставлен этим хостом".into(),
-        )),
+        BuiltinFn::GetAvailableTimeZones => Err(crate::declared_only_error(f.name())),
         _ => Err(RtError::InvalidBytecode(
             "эта встроенная функция не относится к окружению прогона",
         )),
@@ -1158,6 +1156,35 @@ impl BuiltinFn {
         }
     }
 
+    /// Каноническое имя функции — первое написание в [`BUILTIN_FN_NAMES`].
+    pub fn name(self) -> &'static str {
+        BUILTIN_FN_NAMES
+            .iter()
+            .find_map(|(name, candidate)| (*candidate == self).then_some(*name))
+            .unwrap_or("?")
+    }
+
+    /// Функция объявлена без реализации: имя разрешается и проверяется по
+    /// арности, чтобы код конфигураций компилировался, а вызов поднимает
+    /// [`crate::declared_only_error`]. Справочник API помечает такие функции.
+    pub fn is_declared_only(self) -> bool {
+        matches!(
+            self,
+            BuiltinFn::StringWithNumber
+                | BuiltinFn::GetStringDeclensions
+                | BuiltinFn::GetStringDeclensionsByNumber
+                | BuiltinFn::FormDataToValue
+                | BuiltinFn::ValueToFormData
+                | BuiltinFn::CopyFormData
+                | BuiltinFn::EventLogEventPresentation
+                | BuiltinFn::BinDir
+                | BuiltinFn::PeriodPresentation
+                | BuiltinFn::NumberInWords
+                | BuiltinFn::Title
+                | BuiltinFn::GetAvailableTimeZones
+        )
+    }
+
     /// Глобальная ПРОЦЕДУРА: оператором звать можно, а в позиции выражения
     /// платформа отвечает «Обращение к процедуре как к функции». Замер тот
     /// же, что у [`BuiltinFn::is_intrinsic`].
@@ -1782,36 +1809,19 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
             )
         }
         BuiltinFn::ToBoolean => convert_to_boolean(&args[0]).map(BslValue::Boolean),
-        BuiltinFn::StringWithNumber => Err(RtError::DynamicError(
-            "локализованное склонение числа пока не поддерживается".into(),
-        )),
-        BuiltinFn::GetStringDeclensions => Err(RtError::DynamicError(
-            "склонение строки пока не поддерживается".into(),
-        )),
-        BuiltinFn::GetStringDeclensionsByNumber => Err(RtError::DynamicError(
-            "склонение строки по числу пока не поддерживается".into(),
-        )),
-        BuiltinFn::FormDataToValue => Err(RtError::DynamicError(
-            "преобразование данных формы пока не поддерживается этим хостом".into(),
-        )),
-        BuiltinFn::ValueToFormData => Err(RtError::DynamicError(
-            "преобразование значения в данные формы пока не поддерживается этим хостом".into(),
-        )),
-        BuiltinFn::CopyFormData => Err(RtError::DynamicError(
-            "копирование данных формы пока не поддерживается этим хостом".into(),
-        )),
-        BuiltinFn::EventLogEventPresentation => Err(RtError::DynamicError(
-            "представление события журнала регистрации пока не поддерживается".into(),
-        )),
-        BuiltinFn::BinDir => Err(RtError::DynamicError(
-            "каталог программы 1С не задан хостом".into(),
-        )),
-        BuiltinFn::PeriodPresentation => Err(RtError::DynamicError(
-            "локализованное представление периода пока не поддерживается".into(),
-        )),
-        BuiltinFn::NumberInWords => Err(RtError::DynamicError(
-            "локализованная пропись числа пока не поддерживается".into(),
-        )),
+        // Список совпадает с `BuiltinFn::is_declared_only`; совпадение
+        // проверяет `declared_only_builtins_raise_the_uniform_error`.
+        f @ (BuiltinFn::StringWithNumber
+        | BuiltinFn::GetStringDeclensions
+        | BuiltinFn::GetStringDeclensionsByNumber
+        | BuiltinFn::FormDataToValue
+        | BuiltinFn::ValueToFormData
+        | BuiltinFn::CopyFormData
+        | BuiltinFn::EventLogEventPresentation
+        | BuiltinFn::BinDir
+        | BuiltinFn::PeriodPresentation
+        | BuiltinFn::NumberInWords
+        | BuiltinFn::Title) => Err(crate::declared_only_error(f.name())),
         BuiltinFn::StrLen => Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
             args[0].str_len()? as i64,
         ))),
@@ -1820,9 +1830,6 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::Mid => args[0].str_mid(&args[1], &args[2]),
         BuiltinFn::Upper => args[0].str_upper(),
         BuiltinFn::Lower => args[0].str_lower(),
-        BuiltinFn::Title => Err(RtError::DynamicError(
-            "преобразование строки в титульный регистр пока не поддерживается".into(),
-        )),
         BuiltinFn::TrimAll => args[0].str_trim_all(),
         BuiltinFn::TrimLeft => args[0].str_trim_left(),
         BuiltinFn::TrimRight => args[0].str_trim_right(),

@@ -330,7 +330,7 @@ fn a_run_allocates_both_cache_slots_for_every_instruction() {
     builder.register(bsl_rt::core_library());
     let registry = builder.build().expect("ядро реестра собирается");
     let env = bsl_rt::HostEnv::process();
-    let mut execution = ProgramExecution::start_with_registry(&program, &registry, &env)
+    let execution = ProgramExecution::start_with_registry(&program, &registry, &env)
         .expect("программа связывается");
 
     assert_eq!(execution.caches.prop.len(), program.chunks.len());
@@ -348,28 +348,90 @@ fn a_run_allocates_both_cache_slots_for_every_instruction() {
         assert_eq!(open_calls.len(), chunk.instrs.len());
         assert_eq!(imports.len(), chunk.instrs.len());
     }
+}
 
-    let catalog = service_catalog();
+/// Каталог получает ячейки модуля при первом входе VM в модуль, а не
+/// заранее: модуль, в который прогон не входил, остаётся без ячеек.
+#[test]
+fn a_catalog_run_allocates_module_caches_on_first_entry() {
+    let mut catalog = service_catalog();
+    catalog.modules.push(bsl_bytecode::ModuleProgram {
+        entry_visible: true,
+        global: false,
+        name: "Нетронутый".to_string(),
+        program: compile_module("Процедура П() Экспорт\nКонецПроцедуры"),
+    });
+    let entry = entry_over_service(
+        vec![
+            Instr::GetImportedVar {
+                dst: 0,
+                link_slot: 1,
+            },
+            Instr::CallImported {
+                link_slot: 0,
+                base: 0,
+                arg_modes: 0,
+                ret: 1,
+            },
+            Instr::Return { src: Some(1) },
+        ],
+        vec![vec![ArgMode::Value]],
+    );
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().expect("ядро реестра собирается");
+    let mut env = bsl_rt::HostEnv::process();
+    let mut execution = ProgramExecution::start_with_registry(&entry, &registry, &env)
+        .expect("программа связывается");
     execution.attach_catalog(&catalog);
+    let materialized = |execution: &ProgramExecution, module: usize| {
+        execution.catalog_caches[module]
+            .deferred
+            .as_ref()
+            .and_then(|cell| cell.get())
+            .is_some()
+    };
     assert_eq!(execution.catalog_caches.len(), catalog.modules.len());
-    for (module, caches) in catalog.modules.iter().zip(&execution.catalog_caches) {
-        let caches = caches.ready(&module.program);
-        // Длины утверждаются явно: zip молча обрезается по короткому, и
-        // без них модуль с пустыми кэшами прошёл бы проверку зелёным.
-        assert_eq!(caches.prop.len(), module.program.chunks.len());
-        assert_eq!(caches.open_call.len(), module.program.chunks.len());
-        assert_eq!(caches.import.len(), module.program.chunks.len());
-        for (chunk, ((props, open_calls), imports)) in module.program.chunks.iter().zip(
-            caches
-                .prop
-                .iter()
-                .zip(&caches.open_call)
-                .zip(&caches.import),
-        ) {
-            assert_eq!(props.len(), chunk.instrs.len());
-            assert_eq!(open_calls.len(), chunk.instrs.len());
-            assert_eq!(imports.len(), chunk.instrs.len());
+    assert!(!materialized(&execution, 0));
+    assert!(!materialized(&execution, 1));
+
+    loop {
+        match execution
+            .poll_configuration_with_registry_and_io(
+                &entry,
+                &catalog,
+                &registry,
+                &mut Vec::new(),
+                &mut Vec::new(),
+                &mut TestDynamic::bare(),
+                &mut env,
+                usize::MAX,
+            )
+            .expect("вызов служебного модуля исполняется")
+        {
+            ProgramPoll::Complete(..) => break,
+            ProgramPoll::Runnable | ProgramPoll::Waiting => continue,
         }
+    }
+
+    assert!(materialized(&execution, 0));
+    assert!(!materialized(&execution, 1));
+    let program = &catalog.modules[0].program;
+    let caches = execution.catalog_caches[0].ready(program);
+    // Длины утверждаются явно: zip молча обрезается по короткому.
+    assert_eq!(caches.prop.len(), program.chunks.len());
+    assert_eq!(caches.open_call.len(), program.chunks.len());
+    assert_eq!(caches.import.len(), program.chunks.len());
+    for (chunk, ((props, open_calls), imports)) in program.chunks.iter().zip(
+        caches
+            .prop
+            .iter()
+            .zip(&caches.open_call)
+            .zip(&caches.import),
+    ) {
+        assert_eq!(props.len(), chunk.instrs.len());
+        assert_eq!(open_calls.len(), chunk.instrs.len());
+        assert_eq!(imports.len(), chunk.instrs.len());
     }
 }
 
@@ -1284,14 +1346,14 @@ const TEST_COMPONENT_FUNCTIONS: &[bsl_rt::FunctionDescriptor] = &[
         names: &["ОтветПриложения", "ApplicationAnswer"],
         arity: bsl_rt::Arity::exact(0),
         kind: bsl_rt::FunctionKind::Function,
-        call: component_answer,
+        call: Some(component_answer),
     },
     bsl_rt::FunctionDescriptor {
         code: bsl_rt::FunctionCode::new(8),
         names: &["СообщитьПриложения", "ApplicationMessage"],
         arity: bsl_rt::Arity::exact(0),
         kind: bsl_rt::FunctionKind::Procedure,
-        call: component_message,
+        call: Some(component_message),
     },
 ];
 const TEST_COMPONENT_CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
@@ -1299,13 +1361,13 @@ const TEST_COMPONENT_CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
         code: bsl_rt::ConstructorCode::new(9),
         names: &["ТестовыйОбъект", "TestObject"],
         arity: bsl_rt::Arity::exact(0),
-        call: component_construct,
+        call: Some(component_construct),
     },
     bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(10),
         names: &["СчётчикХоста", "HostCounter"],
         arity: bsl_rt::Arity::exact(0),
-        call: component_counter,
+        call: Some(component_counter),
     },
 ];
 
@@ -1372,13 +1434,13 @@ fn component_linking_rejects_gaps_even_in_precompiled_calls() {
         names: &["Раздельная"],
         arity: bsl_rt::Arity::one_of(&[0, 2, 3, 5]),
         kind: bsl_rt::FunctionKind::Function,
-        call,
+        call: Some(call),
     };
     const CONSTRUCTOR: bsl_rt::ConstructorDescriptor = bsl_rt::ConstructorDescriptor {
         code: bsl_rt::ConstructorCode::new(1),
         names: &["Раздельный"],
         arity: bsl_rt::Arity::one_of(&[0, 2, 3, 5]),
-        call,
+        call: Some(call),
     };
     const NARROW: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor::new("arity-test", "0.0.0")
         .with_functions(&[FUNCTION])

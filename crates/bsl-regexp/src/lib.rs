@@ -784,7 +784,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         ],
         arity: Arity::range(2, 7),
         kind: FunctionKind::Function,
-        call: call_find,
+        call: Some(call_find),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
@@ -794,7 +794,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         ],
         arity: Arity::range(2, 4),
         kind: FunctionKind::Function,
-        call: call_find_all,
+        call: Some(call_find_all),
     },
     FunctionDescriptor {
         code: FunctionCode::new(3),
@@ -804,7 +804,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         ],
         arity: Arity::range(3, 5),
         kind: FunctionKind::Function,
-        call: call_replace,
+        call: Some(call_replace),
     },
     FunctionDescriptor {
         code: FunctionCode::new(4),
@@ -814,7 +814,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         ],
         arity: Arity::range(2, 4),
         kind: FunctionKind::Function,
-        call: call_like,
+        call: Some(call_like),
     },
 ];
 

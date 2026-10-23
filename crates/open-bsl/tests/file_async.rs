@@ -242,7 +242,7 @@ fn component_file_promises_survive_direct_and_dynamic_calls() {
         code: open_bsl::ConstructorCode::new(1),
         names: &["FilePromiseProbe"],
         arity: open_bsl::Arity::exact(0),
-        call: construct_probe,
+        call: Some(construct_probe),
     }];
     let library = open_bsl::LibraryDescriptor::new("file-promise-probe", "1.0.0")
         .with_types(TYPES)

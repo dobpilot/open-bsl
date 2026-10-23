@@ -135,39 +135,6 @@ fn construct_xml_writer(
     Ok(new_xml_writer(context.files_rc()?))
 }
 
-fn construct_fast_infoset_writer(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Обычная `ЗаписьXML` выдаёт другой формат; успешный конструктор без
-    // кодировщика Fast Infoset скрыл бы неверный результат записи.
-    Err(RtError::DynamicError(
-        "запись Fast Infoset пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_fast_infoset_reader(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Обычное `ЧтениеXML` не разбирает бинарный Fast Infoset; его подмена
-    // скрыла бы отсутствие декодера до первого чтения.
-    Err(RtError::DynamicError(
-        "чтение Fast Infoset пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_xsl_transform(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Объект должен выполнять XSLT 1.0; пустая оболочка отложила бы ошибку
-    // до загрузки таблицы стилей и выдала бы ложную готовность преобразования.
-    Err(RtError::DynamicError(
-        "преобразование XSL пока не поддерживается этим хостом".into(),
-    ))
-}
-
 fn construct_xml_writer_settings(
     _context: &mut CallContext<'_>,
     arguments: &[BslValue],
@@ -179,17 +146,6 @@ fn construct_xml_writer_settings(
         argument(arguments, 3),
         argument(arguments, 4),
     )
-}
-
-fn construct_xml_reader_settings(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // ЧтениеXML пока не принимает настройки; фиктивный объект молча
-    // проигнорировал бы ограничения чтения, заданные прикладным кодом.
-    Err(RtError::DynamicError(
-        "параметры чтения XML пока не поддерживаются этим хостом".into(),
-    ))
 }
 
 fn construct_serializer(
@@ -275,14 +231,6 @@ fn call_from_xml_type(
     xml_data_type::from_type(arguments)
 }
 
-fn call_xml_type(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Тип метаданных конфигурации нельзя вывести из XML-типа значения:
-    // для него требуется отдельное сопоставление с моделью конфигурации.
-    Err(RtError::DynamicError(
-        "глобальное сопоставление типа с XML пока не поддерживается этим хостом".into(),
-    ))
-}
-
 fn call_xml_value(context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
     let BslValue::Str(lexical) = &arguments[1] else {
         return Err(RtError::Xdto(
@@ -309,32 +257,6 @@ fn call_xml_value(context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtRe
         ));
     }
     xdto::builtin_from_lexical(kind, &lexical, context.zone_rc()?.as_ref())
-}
-
-fn call_write_xml(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Значение может быть объектом конфигурации с правами текущего сеанса;
-    // частичная запись примитива вместо полного объекта была бы обманчивой.
-    Err(RtError::DynamicError(
-        "глобальная запись значения XML пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn call_read_xml(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Нельзя возвращать `Неопределено`, когда содержимое потока не разобрано.
-    Err(RtError::DynamicError(
-        "глобальное чтение значения XML пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn call_can_read_xml(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Ответ определяется XML-типом в текущем положении читателя; без
-    // сопоставления этому типу BSL-значения `Ложь` была бы выдуманным ответом.
-    Err(RtError::DynamicError(
-        "глобальная проверка возможности чтения XML пока не поддерживается этим хостом".into(),
-    ))
 }
 
 fn call_xml_string_processing(
@@ -369,31 +291,31 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         code: ConstructorCode::new(1),
         names: &["ФабрикаXDTO", "XDTOFactory"],
         arity: Arity::range(0, 1),
-        call: construct_factory,
+        call: Some(construct_factory),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(2),
         names: &["СериализаторXDTO", "XDTOSerializer"],
         arity: Arity::exact(1),
-        call: construct_serializer,
+        call: Some(construct_serializer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(3),
         names: &["ПостроительСхемXML", "XMLSchemaBuilder"],
         arity: Arity::exact(0),
-        call: construct_builder,
+        call: Some(construct_builder),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(4),
         names: &["СхемаXML", "XMLSchema"],
         arity: Arity::exact(0),
-        call: construct_schema,
+        call: Some(construct_schema),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(5),
         names: &["НаборСхемXML", "XMLSchemaSet"],
         arity: Arity::exact(0),
-        call: construct_schema_set,
+        call: Some(construct_schema_set),
     },
     ConstructorDescriptor {
         // Английское написание не измерено — есть только русское имя, как
@@ -401,91 +323,99 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         code: ConstructorCode::new(6),
         names: &["РасширенноеИмяXML"],
         arity: Arity::exact(2),
-        call: construct_expanded_name,
+        call: Some(construct_expanded_name),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(7),
         names: &["ПостроительDOM", "DOMBuilder"],
         arity: Arity::exact(0),
-        call: construct_dom_builder,
+        call: Some(construct_dom_builder),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(8),
         names: &["ДокументDOM", "DOMDocument"],
         arity: Arity::exact(0),
-        call: construct_dom_document,
+        call: Some(construct_dom_document),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(9),
         names: &["ЗаписьDOM", "DOMWriter"],
         arity: Arity::exact(0),
-        call: construct_dom_writer,
+        call: Some(construct_dom_writer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(10),
         names: &["РазыменовательПространствИменDOM", "DOMNamespaceResolver"],
         arity: Arity::exact(1),
-        call: construct_ns_resolver,
+        call: Some(construct_ns_resolver),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(11),
         names: &["ЧтениеXML", "XMLReader"],
         arity: Arity::exact(0),
-        call: construct_xml_reader,
+        call: Some(construct_xml_reader),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(12),
         names: &["ЗаписьXML", "XMLWriter"],
         arity: Arity::exact(0),
-        call: construct_xml_writer,
+        call: Some(construct_xml_writer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(13),
         names: &["ПараметрыЗаписиXML", "XMLWriterSettings"],
         arity: Arity::range(0, 5),
-        call: construct_xml_writer_settings,
+        call: Some(construct_xml_writer_settings),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(14),
         names: &["ТипДанныхXML", "XMLDataType"],
         arity: Arity::exact(2),
-        call: construct_xml_data_type,
+        call: Some(construct_xml_data_type),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(15),
         names: &["ПараметрыЧтенияXML", "XMLReaderSettings"],
         arity: Arity::range(0, 11),
-        call: construct_xml_reader_settings,
+        // ЧтениеXML пока не принимает настройки; фиктивный объект молча
+        // проигнорировал бы ограничения чтения, заданные прикладным кодом.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(16),
         names: &["ЗаписьFastInfoset", "FastInfosetWriter"],
         arity: Arity::exact(0),
-        call: construct_fast_infoset_writer,
+        // Обычная `ЗаписьXML` выдаёт другой формат; успешный конструктор без
+        // кодировщика Fast Infoset скрыл бы неверный результат записи.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(17),
         names: &["ЧтениеFastInfoset", "FastInfosetReader"],
         arity: Arity::exact(0),
-        call: construct_fast_infoset_reader,
+        // Обычное `ЧтениеXML` не разбирает бинарный Fast Infoset; его подмена
+        // скрыла бы отсутствие декодера до первого чтения.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(18),
         names: &["ПреобразованиеXSL", "XSLTransform"],
         arity: Arity::exact(0),
-        call: construct_xsl_transform,
+        // Объект должен выполнять XSLT 1.0; пустая оболочка отложила бы ошибку
+        // до загрузки таблицы стилей и выдала бы ложную готовность преобразования.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(19),
         names: &["ДокументHTML", "HTMLDocument"],
         arity: Arity::range(0, 1),
-        call: construct_html_document,
+        call: Some(construct_html_document),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(20),
         names: &["ЗаписьHTML", "HTMLWriter"],
         arity: Arity::exact(0),
-        call: construct_html_writer,
+        call: Some(construct_html_writer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(21),
@@ -494,19 +424,19 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
             "ConversionToCanonicalXML",
         ],
         arity: Arity::exact(0),
-        call: canonicalization::construct,
+        call: Some(canonicalization::construct),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(22),
         names: &["КаноническаяЗаписьXML", "XMLCanonicalizingWriter"],
         arity: Arity::exact(0),
-        call: legacy_canonicalization::construct_writer,
+        call: Some(legacy_canonicalization::construct_writer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(23),
         names: &["КаноническийDOM", "DOMCanonicalization"],
         arity: Arity::exact(0),
-        call: legacy_canonicalization::construct_dom,
+        call: Some(legacy_canonicalization::construct_dom),
     },
 ];
 
@@ -516,98 +446,105 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         names: &["СоздатьФабрикуXDTO", "CreateXDTOFactory"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: call_create_factory,
+        call: Some(call_create_factory),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["ФабрикаXDTO", "XDTOFactory"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: call_configuration_factory,
+        call: Some(call_configuration_factory),
     },
     FunctionDescriptor {
         code: FunctionCode::new(3),
         names: &["XMLСтрока", "XMLString"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: call_xml_string,
+        call: Some(call_xml_string),
     },
     FunctionDescriptor {
         code: FunctionCode::new(4),
         names: &["НайтиНедопустимыеСимволыXML", "FindDisallowedXMLCharacters"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: call_find_disallowed_xml_characters,
+        call: Some(call_find_disallowed_xml_characters),
     },
     FunctionDescriptor {
         code: FunctionCode::new(5),
         names: &["XMLТипЗнч", "XMLTypeOf"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: call_xml_type_of,
+        call: Some(call_xml_type_of),
     },
     FunctionDescriptor {
         code: FunctionCode::new(6),
         names: &["ПолучитьСериализаторXDTO"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: call_configuration_serializer,
+        call: Some(call_configuration_serializer),
     },
     FunctionDescriptor {
         code: FunctionCode::new(7),
         names: &["ПолучитьОбработкуСтрокиXML"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: call_xml_string_processing,
+        call: Some(call_xml_string_processing),
     },
     FunctionDescriptor {
         code: FunctionCode::new(8),
         names: &["XMLЗначение", "XMLValue"],
         arity: Arity::exact(2),
         kind: FunctionKind::Function,
-        call: call_xml_value,
+        call: Some(call_xml_value),
     },
     FunctionDescriptor {
         code: FunctionCode::new(9),
         names: &["ЗаписатьXML", "WriteXML"],
         arity: Arity::range(2, 5),
         kind: FunctionKind::Procedure,
-        call: call_write_xml,
+        // Значение может быть объектом конфигурации с правами текущего сеанса;
+        // частичная запись примитива вместо полного объекта была бы обманчивой.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(10),
         names: &["ПрочитатьXML", "ReadXML"],
         arity: Arity::range(1, 2),
         kind: FunctionKind::Function,
-        call: call_read_xml,
+        // Нельзя возвращать `Неопределено`, когда содержимое потока не разобрано.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(11),
         names: &["ВозможностьЧтенияXML", "CanReadXML"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: call_can_read_xml,
+        // Ответ определяется XML-типом в текущем положении читателя; без
+        // сопоставления этому типу BSL-значения `Ложь` была бы выдуманным ответом.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(12),
         names: &["XMLТип", "XMLType"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: call_xml_type,
+        // Тип метаданных конфигурации нельзя вывести из XML-типа значения:
+        // для него требуется отдельное сопоставление с моделью конфигурации.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(13),
         names: &["ИзXMLТипа", "FromXMLType"],
         arity: Arity::range(1, 2),
         kind: FunctionKind::Function,
-        call: call_from_xml_type,
+        call: Some(call_from_xml_type),
     },
     FunctionDescriptor {
         code: FunctionCode::new(14),
         names: &["ПолучитьXMLТип", "GetXMLType"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: call_get_xml_type,
+        call: Some(call_get_xml_type),
     },
 ];
 

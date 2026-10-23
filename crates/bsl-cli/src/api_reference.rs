@@ -49,7 +49,9 @@ fn render(registry: &RuntimeRegistry) -> String {
     out.push_str("# BSL API open-bsl\n\n");
     out.push_str(
         "Справочник построен из runtime-дескрипторов стандартной сборки `open-bsl`. \
-         Имена регистронезависимы; первым указано каноническое написание.\n\n",
+         Имена регистронезависимы; первым указано каноническое написание. \
+         Пометка «объявлено без реализации» означает, что имя компилируется, \
+         а вызов поднимает ошибку.\n\n",
     );
 
     write_builtin_functions(&mut out);
@@ -104,8 +106,9 @@ fn render(registry: &RuntimeRegistry) -> String {
             for function in library.functions() {
                 writeln!(
                     out,
-                    "| {} | {} | {} |",
+                    "| {}{} | {} | {} |",
                     names(function.names),
+                    declared_only_mark(function.call.is_none()),
                     function_kind(function.kind),
                     function.arity,
                 )
@@ -123,8 +126,9 @@ fn render(registry: &RuntimeRegistry) -> String {
             for constructor in library.constructors() {
                 writeln!(
                     out,
-                    "| {} | {} |",
+                    "| {}{} | {} |",
                     names(constructor.names),
+                    declared_only_mark(constructor.call.is_none()),
                     constructor.arity,
                 )
                 .unwrap();
@@ -161,6 +165,16 @@ fn render(registry: &RuntimeRegistry) -> String {
         out.pop();
     }
     out
+}
+
+/// Пометка записи, объявленной без реализации: имя компилируется, вызов
+/// поднимает единую ошибку, и справочник не должен выдавать его за поддержку.
+fn declared_only_mark(declared_only: bool) -> &'static str {
+    if declared_only {
+        " — *объявлено без реализации*"
+    } else {
+        ""
+    }
 }
 
 fn write_object_members(out: &mut String, library: &LibraryDescriptor) {
@@ -241,8 +255,9 @@ fn write_builtin_functions(out: &mut String) {
         };
         writeln!(
             out,
-            "| {} | {kind} | {} |",
+            "| {}{} | {kind} | {} |",
             names(&aliases),
+            declared_only_mark(function.is_declared_only()),
             arity(min, max),
         )
         .unwrap();
@@ -316,6 +331,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn declared_only_entries_are_marked_and_implemented_ones_are_not() {
+        let engine = open_bsl::Engine::builder()
+            .build()
+            .expect("движок собирается");
+        let text = render(engine.registry());
+        let row = |name: &str| {
+            text.lines()
+                .find(|line| line.starts_with(&format!("| `{name}`")))
+                .unwrap_or_else(|| panic!("нет строки {name}"))
+                .to_string()
+        };
+        for name in ["ЧислоПрописью", "Шрифт", "ДеревоЗначений"] {
+            assert!(row(name).contains(declared_only_mark(true)), "{name}");
+        }
+        for name in ["СтрДлина", "ЗаписьТекста", "Файл"] {
+            assert!(!row(name).contains(declared_only_mark(true)), "{name}");
+        }
+    }
+
+    #[test]
     fn arity_formats_exact_and_ranged_counts() {
         assert_eq!(arity(2, 2), "2");
         assert_eq!(arity(1, 3), "1…3");
@@ -349,14 +384,14 @@ mod tests {
                 code: ConstructorCode::new(1),
                 names: &["Раздельный"],
                 arity: COUNTS,
-                call,
+                call: Some(call),
             }])
             .with_functions(&[FunctionDescriptor {
                 code: FunctionCode::new(1),
                 names: &["Раздельная"],
                 arity: COUNTS,
                 kind: FunctionKind::Function,
-                call,
+                call: Some(call),
             }])
             .with_types(&[&TYPE])
             .with_object_member_groups(&[MEMBERS]);

@@ -94,7 +94,7 @@ const METER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
     code: ConstructorCode::new(1),
     names: &["Счётчик", "Meter"],
     arity: Arity::exact(0),
-    call: construct_meter,
+    call: Some(construct_meter),
 }];
 
 /// Дескриптор компонента — с ОБЪЯВЛЕННОЙ зависимостью, чтобы через фасад

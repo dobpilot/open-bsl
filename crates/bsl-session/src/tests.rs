@@ -902,7 +902,7 @@ fn startup_receives_undefined() {
         names: &["ЗапуститьПробу"],
         arity: Arity::exact(0),
         kind: FunctionKind::Procedure,
-        call: start,
+        call: Some(start),
     };
     const TEST_LIBRARY: LibraryDescriptor =
         LibraryDescriptor::new("bsl-session-start-test", "1").with_functions(&[START]);

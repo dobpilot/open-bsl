@@ -92,14 +92,14 @@ static FUNCTIONS: &[FunctionDescriptor] = &[
         names: &["СоздатьПробуОбработчика"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: create,
+        call: Some(create),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["ВызватьОбработчикПробы"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: invoke,
+        call: Some(invoke),
     },
 ];
 fn engine() -> Engine {

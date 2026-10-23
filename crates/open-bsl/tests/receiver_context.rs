@@ -66,7 +66,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["ПолучитьМенеджерТеста"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: make,
+    call: Some(make),
 }];
 const GLOBALS: &[GlobalDescriptor] = &[GlobalDescriptor {
     names: &["МенеджерТеста"],

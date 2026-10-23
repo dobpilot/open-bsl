@@ -26,28 +26,28 @@ const LIBRARY: LibraryDescriptor = LibraryDescriptor::new("consumer-security-mod
             names: &["ВключитьБезопасныйРежим"],
             arity: Arity::exact(1),
             kind: FunctionKind::Procedure,
-            call: set_safe,
+            call: Some(set_safe),
         },
         FunctionDescriptor {
             code: FunctionCode::new(2),
             names: &["ПроверитьБезопасныйРежим"],
             arity: Arity::exact(0),
             kind: FunctionKind::Function,
-            call: safe,
+            call: Some(safe),
         },
         FunctionDescriptor {
             code: FunctionCode::new(3),
             names: &["ПрочитатьРежимВМодуле"],
             arity: Arity::exact(0),
             kind: FunctionKind::Function,
-            call: read_from_nested_module,
+            call: Some(read_from_nested_module),
         },
         FunctionDescriptor {
             code: FunctionCode::new(4),
             names: &["СнятьРежимВМодуле"],
             arity: Arity::exact(0),
             kind: FunctionKind::Function,
-            call: disable_from_nested_module,
+            call: Some(disable_from_nested_module),
         },
     ]);
 

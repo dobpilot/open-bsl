@@ -12,7 +12,7 @@ const FUNCTIONS: &[bsl_rt::FunctionDescriptor] = &[bsl_rt::FunctionDescriptor {
     names: &["ПолучитьФабрикуПробы"],
     arity: bsl_rt::Arity::exact(0),
     kind: bsl_rt::FunctionKind::Function,
-    call: component,
+    call: Some(component),
 }];
 const GLOBALS: &[bsl_rt::GlobalDescriptor] = &[bsl_rt::GlobalDescriptor {
     names: &["ФабрикаПробы"],

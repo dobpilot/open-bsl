@@ -22,7 +22,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["Отметить"],
     arity: Arity::exact(1),
     kind: FunctionKind::Procedure,
-    call: record,
+    call: Some(record),
 }];
 const PROBE: LibraryDescriptor =
     LibraryDescriptor::new("deferred-error-probe", "1").with_functions(FUNCTIONS);

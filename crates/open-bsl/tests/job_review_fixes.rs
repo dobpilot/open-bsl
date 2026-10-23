@@ -305,7 +305,7 @@ const HOST_FUNCTIONS: &[open_bsl::FunctionDescriptor] = &[open_bsl::FunctionDesc
     names: &["ОтветХоста", "HostAnswer"],
     arity: open_bsl::Arity::exact(0),
     kind: open_bsl::FunctionKind::Function,
-    call: host_answer,
+    call: Some(host_answer),
 }];
 
 fn host_library() -> open_bsl::LibraryDescriptor {

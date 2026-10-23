@@ -1784,7 +1784,10 @@ pub struct FunctionDescriptor {
     pub names: &'static [&'static str],
     pub arity: Arity,
     pub kind: FunctionKind,
-    pub call: ComponentCall,
+    /// Реализация функции. `None` — функция объявлена без реализации: имя
+    /// разрешается и проверяется по арности, а вызов поднимает
+    /// [`declared_only_error`]. Справочник API помечает такие записи.
+    pub call: Option<ComponentCall>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1792,7 +1795,16 @@ pub struct ConstructorDescriptor {
     pub code: ConstructorCode,
     pub names: &'static [&'static str],
     pub arity: Arity,
-    pub call: ComponentCall,
+    /// Реализация конструктора. `None` — конструктор объявлен без
+    /// реализации, как у [`FunctionDescriptor::call`].
+    pub call: Option<ComponentCall>,
+}
+
+/// Единая ошибка вызова функции или конструктора, объявленных без
+/// реализации. Такие имена регистрируются, чтобы код конфигураций
+/// компилировался; ошибка ловится `Попыткой`, как любая ошибка вызова.
+pub fn declared_only_error(name: &str) -> RtError {
+    RtError::DynamicError(format!("{name}: объявлено без реализации в open-bsl"))
 }
 
 /// Связь типа компонента с его существующими таблицами методов и свойств.
@@ -2073,273 +2085,6 @@ fn construct_value_list(
     Ok(crate::value_list::new_value_list())
 }
 
-fn construct_com_object(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Конструктор нужен резолверу для кода под `Попытка`; активация COM
-    // требует внешнего приложения и не подменяется фиктивным объектом.
-    Err(RtError::DynamicError(
-        "создание COM-объекта не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_font(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Описание шрифта требуется для разбора модулей конфигурации; без
-    // объектной модели оформления нельзя выдавать фиктивное значение.
-    Err(RtError::DynamicError(
-        "создание шрифта не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_line(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Внутренняя линия табличного документа не представляет BSL-значение
-    // с типом, толщиной и отступом для всех платформенных потребителей.
-    Err(RtError::DynamicError(
-        "создание линии не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_processing_picture(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Без модели кадров и формата нельзя выдавать пустую картинку за
-    // результат обработки исходного изображения.
-    Err(RtError::DynamicError(
-        "обработка картинки не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_value_tree(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Плоская таблица значений не заменяет иерархию строк дерева.
-    Err(RtError::DynamicError(
-        "дерево значений пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_random_number_generator(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Без измеренной последовательности и источника энтропии нельзя выдавать
-    // другой генератор за платформенный объект.
-    Err(RtError::DynamicError(
-        "генератор случайных чисел пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_formatted_document(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Без модели форматированного документа нельзя выдавать другой объект
-    // за значение платформы.
-    Err(RtError::DynamicError(
-        "форматированный документ пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_deliverable_notification(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Заглушка без адресатов и тела не заменяет объект доставляемого
-    // уведомления платформы.
-    Err(RtError::DynamicError(
-        "доставляемое уведомление пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_ws_definitions(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Имя конструктора нужно для разрешения модуля; чтение WSDL требует
-    // отдельной объектной модели и транспорта.
-    Err(RtError::DynamicError(
-        "WS-определения пока не поддерживаются этим хостом".into(),
-    ))
-}
-
-fn construct_ws_proxy(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Фиктивный прокси скрыл бы отсутствие вызовов веб-сервиса.
-    Err(RtError::DynamicError(
-        "WS-прокси пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_crypto_certificate(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Без разбора сертификата нельзя выдавать замену платформенному значению.
-    Err(RtError::DynamicError(
-        "сертификат криптографии пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_shortcut(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Клиентское сочетание клавиш нельзя заменить числом или строкой.
-    Err(RtError::DynamicError(
-        "сочетание клавиш пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_border(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Рамка элемента управления требует объектной модели управляемой формы.
-    Err(RtError::DynamicError(
-        "рамка элемента управления пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_crypto_manager(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Менеджер нельзя создавать без поставщика криптографии: его методы
-    // зависели бы от несуществующего модуля и ключей текущего сеанса.
-    Err(RtError::DynamicError(
-        "менеджер криптографии не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_html_reader(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Пустой объект скрыл бы отсутствие разбора HTML, необходимого
-    // `ПостроительDOM.Прочитать` после открытия источника.
-    Err(RtError::DynamicError(
-        "чтение HTML пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_representable_document_batch(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Пакет требует модели состава и вывода документов; фиктивный объект
-    // нельзя считать успешной подготовкой печати.
-    Err(RtError::DynamicError(
-        "пакет отображаемых документов пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_data_composition_details_data(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Данные расшифровки хранят настройки и элементы; пустое значение
-    // скрыло бы отсутствие обеих частей объектной модели.
-    Err(RtError::DynamicError(
-        "данные расшифровки компоновки данных пока не поддерживаются этим хостом".into(),
-    ))
-}
-
-fn construct_internet_mail(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Почтового транспорта и объектной модели нет; успешное создание
-    // фиктивного значения скрыло бы невозможность последующего вызова.
-    Err(RtError::DynamicError(
-        "интернет-почта не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_internet_mail_profile(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Профиль хранит изменяемые настройки; пустая подмена лишила бы
-    // вызывающий код возможности обнаружить отсутствие объектной модели.
-    Err(RtError::DynamicError(
-        "интернет-почтовый профиль не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_form_attribute(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Реквизит формы связан с моделью управляемой формы; объект без неё
-    // не смог бы сохранить или отдать свои описанные свойства.
-    Err(RtError::DynamicError(
-        "реквизит формы не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_type_link(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Путь связывает поле формы или метаданные с типом значения; без модели
-    // источника нельзя выдавать объект, который будто бы хранит эту связь.
-    Err(RtError::DynamicError(
-        "связь по типу не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_choice_parameter_link(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Связь должна изменять значение по пути данных формы; без модели формы
-    // объект ошибочно выглядел бы работоспособным.
-    Err(RtError::DynamicError(
-        "связь параметра выбора не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_ftp_connection(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Без транспорта хоста объект соединения не сможет выполнять FTP-операции.
-    Err(RtError::DynamicError(
-        "FTP-соединение не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_com_safe_array(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Массив BSL не сохраняет COM-тип элементов и размерности для маршалинга.
-    Err(RtError::DynamicError(
-        "COMSafeArray не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_choice_parameter(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Параметр выбора имеет собственный тип и два свойства; произвольная
-    // структура исказила бы проверки типа и чтение этих свойств.
-    Err(RtError::DynamicError(
-        "параметр выбора не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_color(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Отдельного значения `Цвет` ещё нет; число или строка исказили бы
-    // проверки типа и последующее чтение цветовых составляющих.
-    Err(RtError::DynamicError(
-        "цвет не поддерживается этим хостом".into(),
-    ))
-}
-
 fn construct_date_qualifiers(
     _context: &mut CallContext<'_>,
     arguments: &[BslValue],
@@ -2425,108 +2170,14 @@ fn construct_text_writer(
     }
 }
 
-fn construct_text_extraction(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Извлечение текста из произвольного формата требует отдельного
-    // сервиса хоста; пустой текст выдавал бы ложный успешный результат.
-    Err(RtError::DynamicError(
-        "ИзвлечениеТекста пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_data_composition_filter(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Пустой объект без элементов и идентификатора настройки не был бы
-    // полноценным отбором компоновки данных.
-    Err(RtError::DynamicError(
-        "ОтборКомпоновкиДанных пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_user_work_favorites(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Избранное — отдельная коллекция с типизированными элементами.
-    // Пустой массив не заменяет её методы и свойства элементов.
-    Err(RtError::DynamicError(
-        "ИзбранноеРаботыПользователя пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_user_work_favorites_item(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Элемент избранного имеет собственные изменяемые свойства; обычная
-    // структура не сохраняет его платформенный тип и поведение.
-    Err(RtError::DynamicError(
-        "ЭлементИзбранногоРаботыПользователя пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_sessions_lock(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Описание блокировки влияет на допуск новых сеансов; пока объект не
-    // реализован, нельзя выдавать фиктивное отключённое состояние.
-    Err(RtError::DynamicError(
-        "БлокировкаСеансов пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_error_message_texts(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Парные тексты — самостоятельный платформенный тип. Обычная структура
-    // скрыла бы отсутствие его свойств и ошибочно позволила бы их менять.
-    Err(RtError::DynamicError(
-        "ТекстыСообщенияОбОшибке пока не поддерживаются этим хостом".into(),
-    ))
-}
-
-fn construct_range(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Диапазон передаётся в настройку блокировки данных; пока это значение
-    // не реализовано, нельзя выдавать обычную структуру вместо его типа.
-    Err(RtError::DynamicError(
-        "Диапазон пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_data_composition_area_template_value_collection(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Макет участвует в построении результата компоновки данных. Пустая
-    // структура скрыла бы отсутствие его типизированных ячеек и коллекций.
-    Err(RtError::DynamicError(
-        "МакетКоллекцииЗначенийОбластиКомпоновкиДанных пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn construct_data_composition_pipeline(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Эти два макета — типизированные части конвейера компоновки. Пока
-    // их нет, ни один не может быть обычной структурой.
-    Err(RtError::DynamicError(
-        "Конвейер компоновки данных пока не поддерживается этим хостом".into(),
-    ))
-}
-
 const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
         code: ConstructorCode::new(60),
         names: &["МакетКомпоновкиДанных", "DataCompositionTemplate"],
         arity: Arity::exact(0),
-        call: construct_data_composition_pipeline,
+        // Эти два макета — типизированные части конвейера компоновки. Пока
+        // их нет, ни один не может быть обычной структурой.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(59),
@@ -2535,7 +2186,9 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
             "DataCompositionAreaTemplateValueCollectionHeader",
         ],
         arity: Arity::exact(0),
-        call: construct_data_composition_pipeline,
+        // Эти два макета — типизированные части конвейера компоновки. Пока
+        // их нет, ни один не может быть обычной структурой.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(58),
@@ -2544,25 +2197,33 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
             "DataCompositionAreaTemplateValueCollection",
         ],
         arity: Arity::exact(0),
-        call: construct_data_composition_area_template_value_collection,
+        // Макет участвует в построении результата компоновки данных. Пустая
+        // структура скрыла бы отсутствие его типизированных ячеек и коллекций.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(57),
         names: &["Диапазон", "Range"],
         arity: Arity::range(1, 2),
-        call: construct_range,
+        // Диапазон передаётся в настройку блокировки данных; пока это значение
+        // не реализовано, нельзя выдавать обычную структуру вместо его типа.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(56),
         names: &["ТекстыСообщенияОбОшибке", "ErrorMessageTexts"],
         arity: Arity::exact(2),
-        call: construct_error_message_texts,
+        // Парные тексты — самостоятельный платформенный тип. Обычная структура
+        // скрыла бы отсутствие его свойств и ошибочно позволила бы их менять.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(55),
         names: &["БлокировкаСеансов", "SessionsLock"],
         arity: Arity::exact(0),
-        call: construct_sessions_lock,
+        // Описание блокировки влияет на допуск новых сеансов; пока объект не
+        // реализован, нельзя выдавать фиктивное отключённое состояние.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(54),
@@ -2571,25 +2232,33 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
             "UserWorkFavoritesItem",
         ],
         arity: Arity::exact(0),
-        call: construct_user_work_favorites_item,
+        // Элемент избранного имеет собственные изменяемые свойства; обычная
+        // структура не сохраняет его платформенный тип и поведение.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(53),
         names: &["ИзбранноеРаботыПользователя", "UserWorkFavorites"],
         arity: Arity::exact(0),
-        call: construct_user_work_favorites,
+        // Избранное — отдельная коллекция с типизированными элементами.
+        // Пустой массив не заменяет её методы и свойства элементов.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(52),
         names: &["ОтборКомпоновкиДанных", "DataCompositionFilter"],
         arity: Arity::exact(0),
-        call: construct_data_composition_filter,
+        // Пустой объект без элементов и идентификатора настройки не был бы
+        // полноценным отбором компоновки данных.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(51),
         names: &["ИзвлечениеТекста", "TextExtraction"],
         arity: Arity::range(0, 1),
-        call: construct_text_extraction,
+        // Извлечение текста из произвольного формата требует отдельного
+        // сервиса хоста; пустой текст выдавал бы ложный успешный результат.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(50),
@@ -2598,43 +2267,49 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
             "InternetMailMessageFlags",
         ],
         arity: Arity::exact(0),
-        call: crate::internet_mail_message_flags::construct,
+        call: Some(crate::internet_mail_message_flags::construct),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(49),
         names: &["МоментВремени", "PointInTime"],
         arity: Arity::range(1, 2),
-        call: crate::point_in_time::construct,
+        call: Some(crate::point_in_time::construct),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(48),
         names: &["ОписаниеПередаваемогоФайла", "TransferableFileDescription"],
         arity: Arity::range(0, 2),
-        call: crate::transferable_file_description::construct,
+        call: Some(crate::transferable_file_description::construct),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(47),
         names: &["COMSafeArray"],
         arity: Arity::range(1, u8::MAX),
-        call: construct_com_safe_array,
+        // Массив BSL не сохраняет COM-тип элементов и размерности для маршалинга.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(46),
         names: &["СвязьПараметраВыбора", "ChoiceParameterLink"],
         arity: Arity::range(2, 3),
-        call: construct_choice_parameter_link,
+        // Связь должна изменять значение по пути данных формы; без модели формы
+        // объект ошибочно выглядел бы работоспособным.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(45),
         names: &["FTPСоединение", "FTPConnection"],
         arity: Arity::range(1, 9),
-        call: construct_ftp_connection,
+        // Без транспорта хоста объект соединения не сможет выполнять FTP-операции.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(44),
         names: &["СвязьПоТипу", "TypeLink"],
         arity: Arity::range(0, 2),
-        call: construct_type_link,
+        // Путь связывает поле формы или метаданные с типом значения; без модели
+        // источника нельзя выдавать объект, который будто бы хранит эту связь.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(43),
@@ -2643,181 +2318,220 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
             "DataCompositionDetailsData",
         ],
         arity: Arity::exact(0),
-        call: construct_data_composition_details_data,
+        // Данные расшифровки хранят настройки и элементы; пустое значение
+        // скрыло бы отсутствие обеих частей объектной модели.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(42),
         names: &["ПакетОтображаемыхДокументов", "RepresentableDocumentBatch"],
         arity: Arity::exact(0),
-        call: construct_representable_document_batch,
+        // Пакет требует модели состава и вывода документов; фиктивный объект
+        // нельзя считать успешной подготовкой печати.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(40),
         names: &["ЧтениеHTML", "HTMLReader"],
         arity: Arity::exact(0),
-        call: construct_html_reader,
+        // Пустой объект скрыл бы отсутствие разбора HTML, необходимого
+        // `ПостроительDOM.Прочитать` после открытия источника.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(39),
         names: &["МенеджерКриптографии", "CryptoManager"],
         arity: Arity::one_of(&[0, 1, 3, 4]),
-        call: construct_crypto_manager,
+        // Менеджер нельзя создавать без поставщика криптографии: его методы
+        // зависели бы от несуществующего модуля и ключей текущего сеанса.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(38),
         names: &["Рамка", "Border"],
         arity: Arity::range(1, 2),
-        call: construct_border,
+        // Рамка элемента управления требует объектной модели управляемой формы.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(37),
         names: &["СочетаниеКлавиш", "Shortcut"],
         arity: Arity::range(1, 4),
-        call: construct_shortcut,
+        // Клиентское сочетание клавиш нельзя заменить числом или строкой.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(36),
         names: &["СертификатКриптографии", "CryptoCertificate"],
         arity: Arity::range(0, 1),
-        call: construct_crypto_certificate,
+        // Без разбора сертификата нельзя выдавать замену платформенному значению.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(35),
         names: &["WSПрокси", "WSProxy"],
         arity: Arity::range(4, 9),
-        call: construct_ws_proxy,
+        // Фиктивный прокси скрыл бы отсутствие вызовов веб-сервиса.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(34),
         names: &["WSОпределения", "WSDefinitions"],
         arity: Arity::range(1, 7),
-        call: construct_ws_definitions,
+        // Имя конструктора нужно для разрешения модуля; чтение WSDL требует
+        // отдельной объектной модели и транспорта.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(33),
         names: &["ДоставляемоеУведомление", "DeliverableNotification"],
         arity: Arity::exact(0),
-        call: construct_deliverable_notification,
+        // Заглушка без адресатов и тела не заменяет объект доставляемого
+        // уведомления платформы.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(32),
         names: &["ФорматированныйДокумент", "FormattedDocument"],
         arity: Arity::exact(0),
-        call: construct_formatted_document,
+        // Без модели форматированного документа нельзя выдавать другой объект
+        // за значение платформы.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(31),
         names: &["ГенераторСлучайныхЧисел", "RandomNumberGenerator"],
         arity: Arity::range(0, 1),
-        call: construct_random_number_generator,
+        // Без измеренной последовательности и источника энтропии нельзя выдавать
+        // другой генератор за платформенный объект.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(30),
         names: &["ОбрабатываемаяКартинка", "ProcessingPicture"],
         arity: Arity::range(0, 3),
-        call: construct_processing_picture,
+        // Без модели кадров и формата нельзя выдавать пустую картинку за
+        // результат обработки исходного изображения.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(29),
         names: &["Линия", "Line"],
         arity: Arity::range(1, 3),
-        call: construct_line,
+        // Внутренняя линия табличного документа не представляет BSL-значение
+        // с типом, толщиной и отступом для всех платформенных потребителей.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(28),
         names: &["ПараметрВыбора", "ChoiceParameter"],
         arity: Arity::exact(2),
-        call: construct_choice_parameter,
+        // Параметр выбора имеет собственный тип и два свойства; произвольная
+        // структура исказила бы проверки типа и чтение этих свойств.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(27),
         names: &["ЗаписьТекста", "TextWriter"],
         arity: Arity::range(0, 5),
-        call: construct_text_writer,
+        call: Some(construct_text_writer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(26),
         names: &["Цвет", "Color"],
         arity: Arity::one_of(&[0, 3]),
-        call: construct_color,
+        // Отдельного значения `Цвет` ещё нет; число или строка исказили бы
+        // проверки типа и последующее чтение цветовых составляющих.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(25),
         names: &["РеквизитФормы", "FormAttribute"],
         arity: Arity::range(2, 5),
-        call: construct_form_attribute,
+        // Реквизит формы связан с моделью управляемой формы; объект без неё
+        // не смог бы сохранить или отдать свои описанные свойства.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(24),
         names: &["ИнтернетПочтовыйПрофиль", "InternetMailProfile"],
         arity: Arity::exact(0),
-        call: construct_internet_mail_profile,
+        // Профиль хранит изменяемые настройки; пустая подмена лишила бы
+        // вызывающий код возможности обнаружить отсутствие объектной модели.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(23),
         names: &["ИнтернетПочта", "InternetMail"],
         arity: Arity::exact(0),
-        call: construct_internet_mail,
+        // Почтового транспорта и объектной модели нет; успешное создание
+        // фиктивного значения скрыло бы невозможность последующего вызова.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(22),
         names: &["ДеревоЗначений", "ValueTree"],
         arity: Arity::exact(0),
-        call: construct_value_tree,
+        // Плоская таблица значений не заменяет иерархию строк дерева.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(21),
         names: &["Шрифт", "Font"],
         arity: Arity::range(0, 8),
-        call: construct_font,
+        // Описание шрифта требуется для разбора модулей конфигурации; без
+        // объектной модели оформления нельзя выдавать фиктивное значение.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(20),
         names: &["COMОбъект", "COMObject"],
         arity: Arity::range(1, 2),
-        call: construct_com_object,
+        // Конструктор нужен резолверу для кода под `Попытка`; активация COM
+        // требует внешнего приложения и не подменяется фиктивным объектом.
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(10),
         names: &["ОписаниеОповещения", "NotifyDescription"],
         arity: Arity::one_of(&[0, 2, 3, 5]),
-        call: crate::notification::construct_notification,
+        call: Some(crate::notification::construct_notification),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(9),
         names: &["Файл", "File"],
         arity: Arity::range(0, 1),
-        call: crate::file::construct_file,
+        call: Some(crate::file::construct_file),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(1),
         names: &["ДвоичныеДанные", "BinaryData"],
         arity: Arity::exact(1),
-        call: construct_binary_data,
+        call: Some(construct_binary_data),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(2),
         names: &["УникальныйИдентификатор", "UUID"],
         arity: Arity::range(0, 1),
-        call: construct_uuid,
+        call: Some(construct_uuid),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(3),
         names: &["СписокЗначений", "ValueList"],
         arity: Arity::exact(0),
-        call: construct_value_list,
+        call: Some(construct_value_list),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(4),
         names: &["КвалификаторыДаты"],
         arity: Arity::exact(1),
-        call: construct_date_qualifiers,
+        call: Some(construct_date_qualifiers),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(5),
         names: &["ОписаниеТипов", "TypeDescription"],
         arity: Arity::range(0, 7),
-        call: construct_qualified_type_description,
+        call: Some(construct_qualified_type_description),
     },
     // Голое имя `ФоновыеЗадания` разрешается конструктором менеджера —
     // как `ФайловыеПотоки` у bsl-stream.
@@ -2825,73 +2539,73 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         code: ConstructorCode::new(6),
         names: &["ФоновыеЗадания", "BackgroundJobs"],
         arity: Arity::exact(0),
-        call: crate::background_jobs::construct_manager,
+        call: Some(crate::background_jobs::construct_manager),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(7),
         names: &["ФиксированныйМассив", "FixedArray"],
         arity: Arity::exact(1),
-        call: crate::fixed_array::construct_fixed_array,
+        call: Some(crate::fixed_array::construct_fixed_array),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(8),
         names: &["СообщениеПользователю", "UserMessage"],
         arity: Arity::exact(0),
-        call: crate::user_message::construct_user_message,
+        call: Some(crate::user_message::construct_user_message),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(11),
         names: &["ФиксированнаяСтруктура", "FixedStructure"],
         arity: Arity::range(0, 1),
-        call: crate::fixed_collections::construct_fixed_structure,
+        call: Some(crate::fixed_collections::construct_fixed_structure),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(12),
         names: &["ФиксированноеСоответствие", "FixedMap"],
         arity: Arity::exact(1),
-        call: crate::fixed_collections::construct_fixed_map,
+        call: Some(crate::fixed_collections::construct_fixed_map),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(13),
         names: &["ПолеКомпоновкиДанных", "DataCompositionField"],
         arity: Arity::exact(1),
-        call: crate::data_composition::construct_field,
+        call: Some(crate::data_composition::construct_field),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(14),
         names: &["СтандартнаяДатаНачала", "StandardBeginningDate"],
         arity: Arity::exact(1),
-        call: crate::data_composition::construct_standard_beginning_date,
+        call: Some(crate::data_composition::construct_standard_beginning_date),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(15),
         names: &["КвалификаторыСтроки", "StringQualifiers"],
         arity: Arity::range(0, 2),
-        call: construct_string_qualifiers,
+        call: Some(construct_string_qualifiers),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(16),
         names: &["КвалификаторыЧисла", "NumberQualifiers"],
         arity: Arity::range(0, 3),
-        call: construct_number_qualifiers,
+        call: Some(construct_number_qualifiers),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(17),
         names: &["ФорматированнаяСтрока", "FormattedString"],
         arity: Arity::range(1, u8::MAX),
-        call: crate::formatted_string::construct_formatted_string,
+        call: Some(crate::formatted_string::construct_formatted_string),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(18),
         names: &["Картинка", "Picture"],
         arity: Arity::range(0, 2),
-        call: crate::picture::construct_picture,
+        call: Some(crate::picture::construct_picture),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(19),
         names: &["ПараметрКомпоновкиДанных", "DataCompositionParameter"],
         arity: Arity::exact(1),
-        call: crate::data_composition::construct_parameter,
+        call: Some(crate::data_composition::construct_parameter),
     },
 ];
 
@@ -3021,73 +2735,6 @@ pub const fn core_library() -> LibraryDescriptor {
         .with_object_member_groups(CORE_OBJECT_MEMBER_GROUPS)
 }
 
-fn style_colors(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Значения цветов зависят от стиля конфигурации; без его данных нельзя
-    // отвечать фиктивными цветами или пустым объектом.
-    Err(RtError::DynamicError(
-        "цвета стиля не предоставлены этим хостом".into(),
-    ))
-}
-
-fn style_fonts(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Шрифты стиля требуют данных конфигурации и объектной модели шрифта.
-    Err(RtError::DynamicError(
-        "шрифты стиля не предоставлены этим хостом".into(),
-    ))
-}
-
-fn web_colors(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Все свойства набора имеют тип `Цвет`; до появления этого значения
-    // нельзя подменять их строками или числами RGB.
-    Err(RtError::DynamicError(
-        "web-цвета не предоставлены этим хостом".into(),
-    ))
-}
-
-fn merge_files(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Обе формы должны собирать файл через ФС этого прогона. До их
-    // реализации нельзя молча отвечать успехом, не создав результат.
-    Err(RtError::DynamicError(
-        "ОбъединитьФайлы пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn split_file(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Части файла должны создаваться через файловую систему прогона.
-    // Пока такой операции нет, ошибка сохраняет границу сеанса и не
-    // сообщает ложный список созданных файлов.
-    Err(RtError::DynamicError(
-        "РазделитьФайл пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn move_file(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // Переименование обязано идти через файловую систему сеанса, а у неё
-    // пока нет такой операции. Прямой вызов ФС процесса нарушил бы изоляцию.
-    Err(RtError::DynamicError(
-        "ПереместитьФайл пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn copy_file(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    // У платформы допустимы и файловые, и URI-источники. Пока граница ФС
-    // сеанса не описывает копирование, нельзя делать его через ФС процесса.
-    Err(RtError::DynamicError(
-        "КопироватьФайл пока не поддерживается этим хостом".into(),
-    ))
-}
-
-fn find_and_highlight_by_appearance(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    // Поиск учитывает границы слов и иерархию, а результат несёт оформление.
-    // Обычная строка потеряла бы сведения о найденных фрагментах.
-    Err(RtError::DynamicError(
-        "СтрНайтиИВыделитьОформлением пока не поддерживается этим хостом".into(),
-    ))
-}
-
 const CORE_GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {
         names: &["ЦветаСтиля", "StyleColors"],
@@ -3112,7 +2759,10 @@ const CORE_FUNCTION_TABLE: &[FunctionDescriptor] = &[
         names: &["РазделитьФайл", "SplitFile"],
         arity: Arity::range(2, 3),
         kind: FunctionKind::Function,
-        call: split_file,
+        // Части файла должны создаваться через файловую систему прогона.
+        // Пока такой операции нет, ошибка сохраняет границу сеанса и не
+        // сообщает ложный список созданных файлов.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(13),
@@ -3122,84 +2772,97 @@ const CORE_FUNCTION_TABLE: &[FunctionDescriptor] = &[
         ],
         arity: Arity::exact(2),
         kind: FunctionKind::Function,
-        call: find_and_highlight_by_appearance,
+        // Поиск учитывает границы слов и иерархию, а результат несёт оформление.
+        // Обычная строка потеряла бы сведения о найденных фрагментах.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(11),
         names: &["КопироватьФайл", "CopyFile"],
         arity: Arity::exact(2),
         kind: FunctionKind::Procedure,
-        call: copy_file,
+        // У платформы допустимы и файловые, и URI-источники. Пока граница ФС
+        // сеанса не описывает копирование, нельзя делать его через ФС процесса.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(10),
         names: &["ПереместитьФайл", "MoveFile"],
         arity: Arity::exact(2),
         kind: FunctionKind::Procedure,
-        call: move_file,
+        // Переименование обязано идти через файловую систему сеанса, а у неё
+        // пока нет такой операции. Прямой вызов ФС процесса нарушил бы изоляцию.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(9),
         names: &["ОбъединитьФайлы", "MergeFiles"],
         arity: Arity::exact(2),
         kind: FunctionKind::Procedure,
-        call: merge_files,
+        // Обе формы должны собирать файл через ФС этого прогона. До их
+        // реализации нельзя молча отвечать успехом, не создав результат.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(8),
         names: &["WebЦвета", "WebColors"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: web_colors,
+        // Все свойства набора имеют тип `Цвет`; до появления этого значения
+        // нельзя подменять их строками или числами RGB.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(7),
         names: &["ШрифтыСтиля", "StyleFonts"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: style_fonts,
+        // Шрифты стиля требуют данных конфигурации и объектной модели шрифта.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(6),
         names: &["ЦветаСтиля", "StyleColors"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: style_colors,
+        // Значения цветов зависят от стиля конфигурации; без его данных нельзя
+        // отвечать фиктивными цветами или пустым объектом.
+        call: None,
     },
     FunctionDescriptor {
         code: FunctionCode::new(1),
         names: &["ПоместитьВоВременноеХранилище", "PutToTempStorage"],
         arity: Arity::range(1, 2),
         kind: FunctionKind::Function,
-        call: crate::temp_storage::put_to_temp_storage,
+        call: Some(crate::temp_storage::put_to_temp_storage),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["ПолучитьИзВременногоХранилища", "GetFromTempStorage"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: crate::temp_storage::get_from_temp_storage,
+        call: Some(crate::temp_storage::get_from_temp_storage),
     },
     FunctionDescriptor {
         code: FunctionCode::new(3),
         names: &["УдалитьИзВременногоХранилища", "DeleteFromTempStorage"],
         arity: Arity::exact(1),
         kind: FunctionKind::Procedure,
-        call: crate::temp_storage::delete_from_temp_storage,
+        call: Some(crate::temp_storage::delete_from_temp_storage),
     },
     FunctionDescriptor {
         code: FunctionCode::new(4),
         names: &["ПолучитьСообщенияПользователю", "GetUserMessages"],
         arity: Arity::range(0, 1),
         kind: FunctionKind::Function,
-        call: crate::user_message::get_user_messages,
+        call: Some(crate::user_message::get_user_messages),
     },
     FunctionDescriptor {
         code: FunctionCode::new(5),
         names: &["ЭтоАдресВременногоХранилища", "IsTempStorageURL"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: crate::temp_storage::is_temp_storage_url,
+        call: Some(crate::temp_storage::is_temp_storage_url),
     },
 ];
 
@@ -4093,13 +3756,13 @@ mod tests {
         names: &["Сообщить", "Message"],
         arity: Arity::exact(1),
         kind: FunctionKind::Procedure,
-        call: no_call,
+        call: Some(no_call),
     }];
     const JSON_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
         code: ConstructorCode::new(1),
         names: &["ЧтениеJSON", "JSONReader"],
         arity: Arity::exact(0),
-        call: no_call,
+        call: Some(no_call),
     }];
     static JSON_READER_TYPE: crate::TypeDescriptor =
         crate::TypeDescriptor::new("bsl-json", "ЧтениеJSON");
@@ -4152,7 +3815,7 @@ mod tests {
             names: &["message"],
             arity: Arity::exact(1),
             kind: FunctionKind::Function,
-            call: no_call,
+            call: Some(no_call),
         }];
         let mut builder = RuntimeBuilder::new();
         builder

@@ -19,7 +19,7 @@ static FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["ЗагрузитьСнимок"],
     arity: Arity::range(0, 1),
     kind: FunctionKind::Function,
-    call: load,
+    call: Some(load),
 }];
 
 #[test]

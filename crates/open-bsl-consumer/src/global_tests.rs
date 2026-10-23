@@ -33,7 +33,7 @@ const FUNCTION: FunctionDescriptor = FunctionDescriptor {
     names: &["ПолучитьГлобал"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: getter,
+    call: Some(getter),
 };
 const GLOBALS: &[GlobalDescriptor] = &[
     GlobalDescriptor {

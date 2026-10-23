@@ -19,7 +19,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["ПроверитьЭкспорт"],
     arity: Arity::exact(2),
     kind: FunctionKind::Function,
-    call: inspect,
+    call: Some(inspect),
 }];
 
 fn engine(configuration: bool) -> Engine {

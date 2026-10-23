@@ -9,7 +9,7 @@ static FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["РежимВходаПробы"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: current_mode,
+    call: Some(current_mode),
 }];
 
 #[test]

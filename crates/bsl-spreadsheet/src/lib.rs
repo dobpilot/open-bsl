@@ -11,7 +11,7 @@ mod xlsx;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDescriptor,
-    RtError, RtResult, TypeDescriptor,
+    RtResult, TypeDescriptor,
 };
 
 pub use document::{
@@ -35,23 +35,8 @@ fn construct_document(
     Ok(new_document(context.files_rc()?))
 }
 
-fn construct_geographical_schema(
-    _context: &mut CallContext<'_>,
-    _arguments: &[BslValue],
-) -> RtResult<BslValue> {
-    Err(RtError::DynamicError(
-        "объектная модель географической схемы пока не реализована".into(),
-    ))
-}
-
 // Декларация позволяет компилировать исходные менеджеры конфигурации.
 // Выполнение явно сообщает об отсутствующей объектной модели диаграммы.
-fn construct_chart(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
-    Err(RtError::DynamicError(
-        "объектная модель диаграммы пока не реализована".into(),
-    ))
-}
-
 // Представление типа измерено на 1С 8.3.27.2342; оно отличается от имени.
 static GEOGRAPHICAL_SCHEMA_TYPE: TypeDescriptor = TypeDescriptor {
     package: PACKAGE_NAME,
@@ -73,25 +58,25 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         code: ConstructorCode::new(1),
         names: &["ТабличныйДокумент", "SpreadsheetDocument"],
         arity: Arity::exact(0),
-        call: construct_document,
+        call: Some(construct_document),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(2),
         names: &["ГеографическаяСхема", "GeographicalSchema"],
         arity: Arity::exact(0),
-        call: construct_geographical_schema,
+        call: None,
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(3),
         names: &["ГрафическаяСхема", "GraphicalSchema"],
         arity: Arity::exact(0),
-        call: graphical_schema::construct,
+        call: Some(graphical_schema::construct),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(4),
         names: &["Диаграмма", "Chart"],
         arity: Arity::exact(0),
-        call: construct_chart,
+        call: None,
     },
 ];
 

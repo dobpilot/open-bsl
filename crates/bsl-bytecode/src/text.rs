@@ -892,11 +892,7 @@ fn write_instr(instr: &Instr) -> String {
 /// Разбор идёт обратно через `BuiltinFn::lookup`, так что таблица —
 /// единственный источник и здесь.
 fn builtin_name(f: bsl_rt::BuiltinFn) -> &'static str {
-    bsl_rt::BUILTIN_FN_NAMES
-        .iter()
-        .find(|(_, v)| *v == f)
-        .map(|(n, _)| *n)
-        .unwrap_or("?")
+    f.name()
 }
 
 fn builtin_method_name(method: bsl_rt::BuiltinMethod) -> &'static str {

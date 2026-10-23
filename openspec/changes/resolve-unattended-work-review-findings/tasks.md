@@ -1,9 +1,9 @@
 # Tasks
 
 ## 1. Specification divergences
-- [ ] 1.1 Replace `a_run_allocates_both_cache_slots_for_every_instruction` with a test that enters a catalog module through the VM and observes its cells; keep an eager-allocation test for a standalone `Program`.
-- [ ] 1.2 Correct the `attach_catalog`/`RunCaches::for_catalog` comments to describe the per-module boundary.
-- [ ] 1.3 Add a declared-only flag to builtin and component descriptors, raise one uniform error from every declared-only entry, and print the flag in the generated API reference; regenerate `docs/reference/bsl-api/api.md`.
+- [x] 1.1 Replace `a_run_allocates_both_cache_slots_for_every_instruction` with a test that enters a catalog module through the VM and observes its cells; keep an eager-allocation test for a standalone `Program`.
+- [x] 1.2 Correct the `attach_catalog`/`RunCaches::for_catalog` comments to describe the per-module boundary.
+- [x] 1.3 Add a declared-only flag to builtin and component descriptors, raise one uniform error from every declared-only entry, and print the flag in the generated API reference; regenerate `docs/reference/bsl-api/api.md`.
 - [ ] 1.4 Implement `ТРег` (and any other declared-only member that needs no new platform semantics) instead of keeping it as a stub.
 
 ## 2. Measurement discipline

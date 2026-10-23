@@ -3378,14 +3378,14 @@ mod tests {
             code: bsl_rt::ConstructorCode::new(1),
             names: &["Тестовый"],
             arity: bsl_rt::Arity::range(0, 2),
-            call: construct,
+            call: Some(construct),
         }];
         const FUNCTIONS: &[bsl_rt::FunctionDescriptor] = &[bsl_rt::FunctionDescriptor {
             code: bsl_rt::FunctionCode::new(1),
             names: &["ТестоваяПроцедура"],
             arity: bsl_rt::Arity::exact(1),
             kind: bsl_rt::FunctionKind::Procedure,
-            call,
+            call: Some(call),
         }];
         const LIBRARY: bsl_rt::LibraryDescriptor =
             bsl_rt::LibraryDescriptor::new("test-lib", "0.0.0")
@@ -3432,14 +3432,14 @@ mod tests {
                     code: bsl_rt::ConstructorCode::new(1),
                     names: &["Раздельный"],
                     arity: COUNTS,
-                    call,
+                    call: Some(call),
                 }])
                 .with_functions(&[bsl_rt::FunctionDescriptor {
                     code: bsl_rt::FunctionCode::new(1),
                     names: &["Раздельная"],
                     arity: COUNTS,
                     kind: bsl_rt::FunctionKind::Function,
-                    call,
+                    call: Some(call),
                 }]);
         let mut builder = bsl_rt::RuntimeBuilder::new();
         builder.register(bsl_rt::core_library()).register(LIBRARY);
@@ -4413,7 +4413,7 @@ mod tests {
             code: bsl_rt::ConstructorCode::new(1),
             names: &["Массив", "Array"],
             arity: bsl_rt::Arity::exact(0),
-            call: construct,
+            call: Some(construct),
         }];
         const LIBRARY: bsl_rt::LibraryDescriptor =
             bsl_rt::LibraryDescriptor::new("shadow", "0.0.0").with_constructors(CONSTRUCTORS);

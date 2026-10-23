@@ -38,14 +38,14 @@ static FUNCTIONS: &[FunctionDescriptor] = &[
         names: &["ПредставитьПробу"],
         arity: Arity::exact(1),
         kind: FunctionKind::Function,
-        call: render,
+        call: Some(render),
     },
     FunctionDescriptor {
         code: FunctionCode::new(2),
         names: &["СоздатьПробуПредставления"],
         arity: Arity::exact(0),
         kind: FunctionKind::Function,
-        call: create,
+        call: Some(create),
     },
 ];
 

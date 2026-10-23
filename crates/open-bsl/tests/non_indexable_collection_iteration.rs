@@ -35,7 +35,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["КоллекцияДляОбхода"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: make,
+    call: Some(make),
 }];
 
 #[test]

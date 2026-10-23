@@ -12,7 +12,7 @@ fn globals_are_rendered_from_the_registered_descriptor() {
             names: &["ПолучитьОбъект"],
             arity: Arity::exact(0),
             kind: FunctionKind::Function,
-            call: get,
+            call: Some(get),
         }])
         .with_globals(&[GlobalDescriptor {
             names: &["ОбъектХоста", "HostObject"],

@@ -73,25 +73,25 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         code: ConstructorCode::new(1),
         names: &["ЧтениеZipФайла", "ZipFileReader"],
         arity: Arity::range(0, 2),
-        call: construct_zip_reader,
+        call: Some(construct_zip_reader),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(2),
         names: &["ЧтениеФайлаАрхива", "ArchiveFileReader"],
         arity: Arity::range(0, 3),
-        call: construct_archive_reader,
+        call: Some(construct_archive_reader),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(3),
         names: &["ЗаписьZipФайла", "ZipFileWriter"],
         arity: Arity::range(0, 7),
-        call: construct_zip_writer,
+        call: Some(construct_zip_writer),
     },
     ConstructorDescriptor {
         code: ConstructorCode::new(4),
         names: &["ЗаписьФайлаАрхива", "ArchiveFileWriter"],
         arity: Arity::range(0, 8),
-        call: construct_archive_writer,
+        call: Some(construct_archive_writer),
     },
 ];
 

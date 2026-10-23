@@ -72,14 +72,14 @@ pub(super) const fn library() -> LibraryDescriptor {
                 names: &["ДанныеХоста"],
                 arity: Arity::exact(0),
                 kind: FunctionKind::Function,
-                call: read,
+                call: Some(read),
             },
             FunctionDescriptor {
                 code: FunctionCode::new(2),
                 names: &["НетДанныхХоста"],
                 arity: Arity::exact(0),
                 kind: FunctionKind::Function,
-                call: absent,
+                call: Some(absent),
             },
         ])
         .with_types(TYPES)
@@ -87,7 +87,7 @@ pub(super) const fn library() -> LibraryDescriptor {
             code: ConstructorCode::new(1),
             names: &["ОбъектХоста"],
             arity: Arity::exact(0),
-            call: construct,
+            call: Some(construct),
         }]);
     LIBRARY
 }

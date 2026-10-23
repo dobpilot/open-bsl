@@ -18,7 +18,7 @@ static FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
     names: &["ПроверитьПараметрыФункций"],
     arity: Arity::exact(0),
     kind: FunctionKind::Function,
-    call: inspect,
+    call: Some(inspect),
 }];
 
 #[test]

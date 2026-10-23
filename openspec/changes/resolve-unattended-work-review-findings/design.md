@@ -21,7 +21,12 @@ checks succeed, with no implementation behind it. It is useful — real
 configurations compile and only the unreached call fails — but it must not
 look like support. Each such entry carries a flag in its descriptor; the
 call raises one uniform runtime error naming the function or type; the API
-reference generator prints the flag. Trivial members (`ТРег`) are
+reference generator prints the flag. The flag is the absence of an
+implementation (`call: None` on component functions and constructors,
+`BuiltinFn::is_declared_only` for core builtins), so a flagged entry cannot
+carry a body by construction. Component types are reachable only through
+their constructors, so no type needs its own flag; methods of configuration
+objects that raise are outside this requirement. Trivial members (`ТРег`) are
 implemented instead of being kept as stubs. No platform semantics are
 invented: anything implemented later goes through the usual measurement.
 

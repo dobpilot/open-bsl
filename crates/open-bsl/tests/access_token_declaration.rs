@@ -20,7 +20,7 @@ fn access_token_declares_only_native_constructor_arities_and_fails_explicitly() 
                 .unwrap_err()
                 .to_string();
             assert!(
-                error.contains("ТокенДоступа") && error.contains("не поддерживается"),
+                error.contains("ТокенДоступа: объявлено без реализации"),
                 "{error}"
             );
         }
