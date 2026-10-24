@@ -1,0 +1,32 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 583  of event 'cpu/cycles/Pu'
+# Event count (approx.): 824726821
+#
+# Overhead  Symbol                                                                                                                                                                                                       IPC   [IPC Coverage]
+# ........  ...........................................................................................................................................................................................................  ....................
+#
+    37.85%  [.] bsl_vm::step                                                                                                                                                                                             -      -            
+    17.35%  [.] <bsl_vm::ProgramExecution>::poll_linked                                                                                                                                                                  -      -            
+    10.13%  [.] __memmove_avx_unaligned_erms                                                                                                                                                                             -      -            
+     5.33%  [.] bsl_vm::add_rhs_op                                                                                                                                                                                       -      -            
+     4.97%  [.] <bsl_rt::value::BslValue>::add                                                                                                                                                                           -      -            
+     3.28%  [.] <alloc::vec::Vec<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>>>>::resize_with::<<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>> as core::default::Default>::default>  -      -            
+     2.49%  [.] bsl_vm::numeric_for_next_regular                                                                                                                                                                         -      -            
+     2.40%  [.] __memset_avx2_unaligned_erms                                                                                                                                                                             -      -            
+     2.22%  [.] <alloc::vec::Vec<bsl_rt::value::BslValue>>::resize                                                                                                                                                       -      -            
+     2.02%  [.] core::ptr::drop_glue::<bsl_rt::value::BslValue>                                                                                                                                                          -      -            
+     1.98%  [.] <bsl_number::number::BslNumber>::add_sub                                                                                                                                                                 -      -            
+     1.31%  [.] bsl_vm::do_return_with_value                                                                                                                                                                             -      -            
+     1.30%  [.] <bsl_rt::value::BslValue as core::clone::Clone>::clone                                                                                                                                                   -      -            
+     1.30%  [.] <alloc::vec::Vec<bsl_rt::value::BslValue>>::extend_with                                                                                                                                                  -      -            
+     1.29%  [.] core::ptr::drop_glue::<bsl_vm::modules::ModuleState>                                                                                                                                                     -      -            
+     1.10%  [.] <bsl_number::number::BslNumber>::add                                                                                                                                                                     -      -            
+     0.74%  [.] core::ptr::drop_glue::<bsl_vm::Frame>                                                                                                                                                                    -      -            
+     0.62%  [.] cfree@GLIBC_2.2.5                                                                                                                                                                                        -      -            
+#
+# (Tip: To not record events from perf itself add --exclude-perf)
+#

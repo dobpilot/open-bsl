@@ -1,0 +1,48 @@
+# Event 'cpu/cycles/Pu'
+#
+# Baseline  Delta Abs  Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+# ........  .........  ..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+     0.24%     +9.89%  [.] __memmove_avx_unaligned_erms
+     8.14%     +9.21%  [.] <bsl_vm::ProgramExecution>::poll_linked
+     6.17%     -5.98%  [.] <alloc::vec::Vec<bsl_vm::Frame>>::push_mut
+    42.98%     -5.13%  [.] bsl_vm::step
+               +3.28%  [.] <alloc::vec::Vec<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>>>>::resize_with::<<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>> as core::default::Default>::default>
+     4.69%     -2.71%  [.] <bsl_number::number::BslNumber>::add_sub
+               +2.40%  [.] __memset_avx2_unaligned_erms
+     3.46%     -2.15%  [.] bsl_vm::do_return_with_value
+               +2.02%  [.] core::ptr::drop_glue::<bsl_rt::value::BslValue>
+     7.16%     -1.84%  [.] bsl_vm::add_rhs_op
+     1.86%     -1.81%  [.] core::unicode::unicode_data::conversions::to_upper
+     3.94%     -1.72%  [.] <alloc::vec::Vec<bsl_rt::value::BslValue>>::resize
+     1.89%     -1.65%  [.] core::unicode::unicode_data::conversions::lookup
+     1.48%     -1.29%  [.] bsl_vm::copy_back_module_arguments
+     1.22%     -1.22%  [.] malloc
+     3.95%     +1.02%  [.] <bsl_rt::value::BslValue>::add
+     1.48%     +1.01%  [.] bsl_vm::numeric_for_next_regular
+               +0.74%  [.] core::ptr::drop_glue::<bsl_vm::Frame>
+     1.97%     -0.68%  [.] <bsl_rt::value::BslValue as core::clone::Clone>::clone
+     1.97%     -0.68%  [.] core::ptr::drop_glue::<bsl_vm::modules::ModuleState>
+     0.49%     +0.61%  [.] <bsl_number::number::BslNumber>::add
+     0.04%     +0.38%  [k] 0xffffffff8cb098a2
+               +0.37%  [.] core::ptr::drop_glue::<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>>>
+     0.49%     -0.31%  [.] __rustc::__rust_dealloc
+     0.99%     +0.31%  [.] <alloc::vec::Vec<bsl_rt::value::BslValue>>::extend_with
+               +0.19%  [.] __rustc::__rust_alloc
+     0.49%     +0.13%  [.] cfree@GLIBC_2.2.5
+               +0.08%  [.] check_match
+               +0.08%  [.] do_lookup_x
+               +0.07%  [.] bsl_rt::component::build_type_catalog
+     0.25%     -0.06%  [.] __rustc::__rdl_alloc
+               +0.06%  [.] _int_malloc
+               +0.01%  [.] __vfscanf_internal
+               +0.00%  [.] __libc_early_init
+     1.97%             [.] core::ptr::drop_glue::<[bsl_rt::value::BslValue]>
+     0.69%             [.] <str>::to_uppercase
+     0.50%             [.] <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+     0.49%             [.] bsl_vm::push_own_registers
+     0.25%             [.] <core::iter::adapters::map::Map<core::iter::adapters::map::Map<core::slice::iter::Iter<&bsl_syntax::ast::Item>, bsl_sema::resolver::resolve_program_impl::{closure#4}>, bsl_sema::resolver::resolve_program_impl::{closure#5}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<(alloc::string::String, alloc::vec::Vec<bool>), <hashbrown::map::HashMap<alloc::string::String, alloc::vec::Vec<bool>, std::hash::random::RandomState> as core::iter::traits::collect::Extend<(alloc::string::String, alloc::vec::Vec<bool>)>>::extend<core::iter::adapters::map::Map<core::iter::adapters::map::Map<core::slice::iter::Iter<&bsl_syntax::ast::Item>, bsl_sema::resolver::resolve_program_impl::{closure#4}>, bsl_sema::resolver::resolve_program_impl::{closure#5}>>::{closure#0}>::{closure#0}>
+     0.25%             [.] <str>::trim_matches::<<char>::is_whitespace>
+     0.25%             [.] _int_realloc
+     0.21%             [.] realloc
+     0.00%             [.] update_active.constprop.0

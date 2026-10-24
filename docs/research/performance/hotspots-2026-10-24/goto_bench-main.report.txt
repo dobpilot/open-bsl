@@ -1,0 +1,27 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu/cycles/Pu'
+# Event count (approx.): 2261860373
+#
+# Overhead  Symbol                                                           IPC   [IPC Coverage]
+# ........  ...............................................................  ....................
+#
+    51.85%  [.] bsl_vm::step                                                 -      -            
+    10.69%  [.] <bsl_vm::ProgramExecution>::poll_linked                      -      -            
+     7.93%  [.] <bsl_number::number::BslNumber as core::cmp::Ord>::cmp       -      -            
+     6.04%  [.] bsl_vm::add_rhs_op                                           -      -            
+     5.50%  [.] <bsl_rt::value::BslValue>::add                               -      -            
+     4.31%  [.] <bsl_number::number::BslNumber>::add_sub                     -      -            
+     2.95%  [.] core::ptr::drop_glue::<[bsl_rt::value::BslValue]>            -      -            
+     2.67%  [.] <bsl_rt::value::BslValue as core::cmp::PartialEq>::eq        -      -            
+     1.95%  [.] bsl_vm::add_const_op                                         -      -            
+     1.59%  [.] <bsl_rt::value::BslValue>::eq_value                          -      -            
+     1.27%  [.] core::ptr::drop_glue::<bsl_vm::modules::ModuleState>         -      -            
+     0.87%  [.] <bsl_number::number::BslNumber>::add                         -      -            
+     0.56%  [.] core::unicode::unicode_data::conversions::lookup             -      -            
+#
+# (Tip: To browse sample contexts use perf report --sample 10 and select in context menu)
+#

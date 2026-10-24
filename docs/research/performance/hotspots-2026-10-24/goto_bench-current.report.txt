@@ -1,0 +1,27 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cpu/cycles/Pu'
+# Event count (approx.): 3302862516
+#
+# Overhead  Symbol                                                                                                                                                                                                       IPC   [IPC Coverage]
+# ........  ...........................................................................................................................................................................................................  ....................
+#
+    48.99%  [.] bsl_vm::step                                                                                                                                                                                             -      -            
+    16.83%  [.] <bsl_vm::ProgramExecution>::poll_linked                                                                                                                                                                  -      -            
+     5.60%  [.] <bsl_number::number::BslNumber as core::cmp::Ord>::cmp                                                                                                                                                   -      -            
+     4.36%  [.] bsl_vm::add_rhs_op                                                                                                                                                                                       -      -            
+     4.32%  [.] <alloc::vec::Vec<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>>>>::resize_with::<<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>> as core::default::Default>::default>  -      -            
+     4.17%  [.] <bsl_number::number::BslNumber as core::cmp::PartialEq>::eq                                                                                                                                              -      -            
+     3.96%  [.] <bsl_rt::value::BslValue>::add                                                                                                                                                                           -      -            
+     3.39%  [.] <bsl_number::number::BslNumber>::add_sub                                                                                                                                                                 -      -            
+     2.90%  [.] bsl_vm::add_const_op                                                                                                                                                                                     -      -            
+     1.60%  [.] core::ptr::drop_glue::<bsl_vm::modules::ModuleState>                                                                                                                                                     -      -            
+     1.24%  [.] core::ptr::drop_glue::<bsl_rt::value::BslValue>                                                                                                                                                          -      -            
+     0.97%  [.] <bsl_rt::value::BslValue as core::cmp::PartialEq>::eq                                                                                                                                                    -      -            
+     0.88%  [.] <bsl_rt::value::BslValue>::eq_value                                                                                                                                                                      -      -            
+#
+# (Tip: To collect Processor Trace with samples use perf record -e '{intel_pt//,cycles}' ; perf script --call-trace or --insn-trace --xed -F +ipc (remove --xed if no xed))
+#

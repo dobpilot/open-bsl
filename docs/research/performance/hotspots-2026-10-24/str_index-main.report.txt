@@ -1,0 +1,36 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 221  of event 'cpu/cycles/Pu'
+# Event count (approx.): 312541068
+#
+# Overhead  Symbol                                                                           IPC   [IPC Coverage]
+# ........  ...............................................................................  ....................
+#
+    46.66%  [.] bsl_vm::step                                                                 -      -            
+    12.15%  [.] <bsl_vm::CallArgs>::load                                                     -      -            
+     3.98%  [.] core::unicode::unicode_data::conversions::lookup                             -      -            
+     3.09%  [.] <str>::to_uppercase                                                          -      -            
+     2.95%  [.] <bsl_rt::string::BslString>::substring                                       -      -            
+     2.92%  [.] core::ptr::drop_glue::<bsl_rt::error::RtError>                               -      -            
+     2.84%  [.] malloc                                                                       -      -            
+     2.61%  [.] <bsl_rt::value::BslValue>::add                                               -      -            
+     2.24%  [.] __memmove_avx_unaligned_erms                                                 -      -            
+     2.14%  [.] core::unicode::unicode_data::conversions::to_upper                           -      -            
+     1.94%  [.] <bsl_number::number::BslNumber>::to_i64_exact                                -      -            
+     1.69%  [.] <bsl_rt::value::BslValue>::char_code                                         -      -            
+     1.46%  [.] bsl_rt::builtin::call_builtin_fn                                             -      -            
+     1.45%  [.] <bsl_number::number::BslNumber>::add_sub                                     -      -            
+     1.45%  [.] bsl_vm::numeric_for_next_regular                                             -      -            
+     1.38%  [.] cfree@GLIBC_2.2.5                                                            -      -            
+     1.04%  [.] core::ptr::drop_glue::<[bsl_rt::value::BslValue]>                            -      -            
+     0.98%  [.] <bsl_vm::ProgramExecution>::poll_linked                                      -      -            
+     0.97%  [.] __rustc::__rust_no_alloc_shim_is_unstable_v2                                 -      -            
+     0.97%  [.] bsl_vm::call_builtin_with_format                                             -      -            
+     0.97%  [.] core::ptr::drop_glue::<[bsl_rt::value::BslValue; 3]>                         -      -            
+     0.84%  [.] bsl_rt::types::squash                                                        -      -            
+#
+# (Tip: To show assembler sample context control flow use perf record -b / perf report --samples 10 and then browse context)
+#

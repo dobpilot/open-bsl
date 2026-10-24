@@ -1,0 +1,49 @@
+# Event 'cpu/cycles/Pu'
+#
+# Baseline  Delta Abs  Symbol                                                                                                                                                                                                     
+# ........  .........  ...........................................................................................................................................................................................................
+#
+    12.15%     -4.89%  [.] <bsl_vm::CallArgs>::load
+               +4.53%  [.] core::ptr::drop_glue::<bsl_rt::value::BslValue>
+     3.98%     -3.50%  [.] core::unicode::unicode_data::conversions::lookup
+     0.49%     +3.18%  [.] bsl_vm::add_rhs_op
+     0.98%     +2.83%  [.] <bsl_vm::ProgramExecution>::poll_linked
+               +2.71%  [.] core::ptr::drop_glue::<bsl_vm::CallArgs>
+     3.09%     -2.68%  [.] <str>::to_uppercase
+     2.24%     -1.79%  [.] __memmove_avx_unaligned_erms
+    46.66%     +1.59%  [.] bsl_vm::step
+     2.95%     +1.33%  [.] <bsl_rt::string::BslString>::substring
+     1.45%     +1.25%  [.] <bsl_number::number::BslNumber>::add_sub
+               +1.14%  [.] <bsl_rt::value::BslValue>::str_mid
+     2.61%     +1.01%  [.] <bsl_rt::value::BslValue>::add
+     2.84%     -0.99%  [.] malloc
+     1.94%     -0.98%  [.] <bsl_number::number::BslNumber>::to_i64_exact
+     1.46%     +0.79%  [.] bsl_rt::builtin::call_builtin_fn
+     1.45%     -0.53%  [.] bsl_vm::numeric_for_next_regular
+     0.97%     -0.52%  [.] __rustc::__rust_no_alloc_shim_is_unstable_v2
+     0.97%     -0.52%  [.] bsl_vm::call_builtin_with_format
+     0.49%     +0.52%  [.] <alloc::rc::Rc<bsl_rt::string::BslStringData>>::drop_slow
+               +0.45%  [.] __rustc::__rust_alloc
+               +0.45%  [.] <bsl_number::number::BslNumber>::add
+               +0.45%  [.] <bsl_vm::CallArgs>::as_slice
+               +0.45%  [.] <alloc::vec::Vec<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>>>>::resize_with::<<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>> as core::default::Default>::default>
+               +0.40%  [.] <std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&alloc::string::String>
+     2.92%     +0.32%  [.] core::ptr::drop_glue::<bsl_rt::error::RtError>
+     0.29%     +0.32%  [k] 0xffffffff8c8d7d98
+               +0.16%  [.] __GI_____strtoull_l_internal
+               +0.15%  [.] _dl_relocate_object_no_relro
+               +0.15%  [.] strcmp
+     0.49%     -0.04%  [.] bsl_rt::builtin::call_builtin_fn_ctx
+     0.49%     -0.04%  [.] core::ptr::drop_glue::<bsl_vm::modules::ModuleState>
+     1.38%     -0.03%  [.] cfree@GLIBC_2.2.5
+               +0.00%  [.] __GI___tunables_init
+     2.14%             [.] core::unicode::unicode_data::conversions::to_upper
+     1.69%             [.] <bsl_rt::value::BslValue>::char_code
+     1.04%             [.] core::ptr::drop_glue::<[bsl_rt::value::BslValue]>
+     0.97%             [.] core::ptr::drop_glue::<[bsl_rt::value::BslValue; 3]>
+     0.84%             [.] bsl_rt::types::squash
+     0.49%             [.] __rustc::__rdl_alloc
+     0.49%             [.] <alloc::sync::Arc<dyn bsl_rt::application::ApplicationLauncher>>::drop_slow
+     0.06%             [.] do_lookup_x
+     0.00%             [.] _dl_sort_maps_init
+     0.00%             [.] <str>::trim_matches::<<char>::is_whitespace>

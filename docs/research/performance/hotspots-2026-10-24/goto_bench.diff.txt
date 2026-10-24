@@ -1,0 +1,36 @@
+# Event 'cpu/cycles/Pu'
+#
+# Baseline  Delta Abs  Symbol                                                                                                                                                                                                     
+# ........  .........  ...........................................................................................................................................................................................................
+#
+    10.69%     +6.13%  [.] <bsl_vm::ProgramExecution>::poll_linked
+               +4.32%  [.] <alloc::vec::Vec<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>>>>::resize_with::<<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>> as core::default::Default>::default>
+     0.20%     +3.97%  [.] <bsl_number::number::BslNumber as core::cmp::PartialEq>::eq
+    51.85%     -2.86%  [.] bsl_vm::step
+     7.93%     -2.34%  [.] <bsl_number::number::BslNumber as core::cmp::Ord>::cmp
+     2.67%     -1.70%  [.] <bsl_rt::value::BslValue as core::cmp::PartialEq>::eq
+     6.04%     -1.68%  [.] bsl_vm::add_rhs_op
+     5.50%     -1.55%  [.] <bsl_rt::value::BslValue>::add
+               +1.24%  [.] core::ptr::drop_glue::<bsl_rt::value::BslValue>
+     1.95%     +0.95%  [.] bsl_vm::add_const_op
+     4.31%     -0.92%  [.] <bsl_number::number::BslNumber>::add_sub
+     1.59%     -0.70%  [.] <bsl_rt::value::BslValue>::eq_value
+     0.87%     -0.51%  [.] <bsl_number::number::BslNumber>::add
+     0.56%     -0.44%  [.] core::unicode::unicode_data::conversions::lookup
+     1.27%     +0.33%  [.] core::ptr::drop_glue::<bsl_vm::modules::ModuleState>
+     0.27%     -0.14%  [.] <bsl_rt::value::BslValue>::compare
+     0.07%     +0.07%  [k] 0xffffffff8c911419
+               +0.03%  [.] __memcmp_avx2_movbe
+               +0.03%  [.] <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
+               +0.00%  [.] handle_amd
+     2.95%             [.] core::ptr::drop_glue::<[bsl_rt::value::BslValue]>
+     0.45%             [.] <str>::to_uppercase
+     0.43%             [.] core::unicode::unicode_data::conversions::to_upper
+     0.19%             [.] bsl_rt::types::squash
+     0.17%             [.] cfree@GLIBC_2.2.5
+     0.03%             [.] do_lookup_x
+     0.00%             [.] _dl_cache_libcmp
+     0.00%             [.] __GI___tunables_init
+     0.00%             [.] _int_malloc
+     0.00%             [.] __libc_malloc2
+     0.00%             [.] bsl_rt::component::build_type_catalog

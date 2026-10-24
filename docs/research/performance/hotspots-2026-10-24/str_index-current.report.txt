@@ -1,0 +1,32 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 248  of event 'cpu/cycles/Pu'
+# Event count (approx.): 336710974
+#
+# Overhead  Symbol                                                                                                                                                                                                       IPC   [IPC Coverage]
+# ........  ...........................................................................................................................................................................................................  ....................
+#
+    48.24%  [.] bsl_vm::step                                                                                                                                                                                             -      -            
+     7.26%  [.] <bsl_vm::CallArgs>::load                                                                                                                                                                                 -      -            
+     4.53%  [.] core::ptr::drop_glue::<bsl_rt::value::BslValue>                                                                                                                                                          -      -            
+     4.29%  [.] <bsl_rt::string::BslString>::substring                                                                                                                                                                   -      -            
+     3.81%  [.] <bsl_vm::ProgramExecution>::poll_linked                                                                                                                                                                  -      -            
+     3.67%  [.] bsl_vm::add_rhs_op                                                                                                                                                                                       -      -            
+     3.61%  [.] <bsl_rt::value::BslValue>::add                                                                                                                                                                           -      -            
+     2.71%  [.] core::ptr::drop_glue::<bsl_vm::CallArgs>                                                                                                                                                                 -      -            
+     2.71%  [.] <bsl_number::number::BslNumber>::add_sub                                                                                                                                                                 -      -            
+     2.33%  [.] core::ptr::drop_glue::<bsl_rt::error::RtError>                                                                                                                                                           -      -            
+     2.26%  [.] bsl_rt::builtin::call_builtin_fn                                                                                                                                                                         -      -            
+     1.85%  [.] malloc                                                                                                                                                                                                   -      -            
+     1.35%  [.] cfree@GLIBC_2.2.5                                                                                                                                                                                        -      -            
+     1.14%  [.] <bsl_rt::value::BslValue>::str_mid                                                                                                                                                                       -      -            
+     1.01%  [.] <alloc::rc::Rc<bsl_rt::string::BslStringData>>::drop_slow                                                                                                                                                -      -            
+     0.96%  [.] <bsl_number::number::BslNumber>::to_i64_exact                                                                                                                                                            -      -            
+     0.92%  [.] bsl_vm::numeric_for_next_regular                                                                                                                                                                         -      -            
+     0.90%  [.] core::ptr::drop_glue::<bsl_rt::error::RtError>                                                                                                                                                           -      -            
+#
+# (Tip: To show assembler sample context control flow use perf record -b / perf report --samples 10 and then browse context)
+#

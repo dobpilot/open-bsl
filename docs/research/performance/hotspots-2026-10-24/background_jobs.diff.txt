@@ -1,0 +1,60 @@
+# Event 'cpu/cycles/Pu'
+#
+# Baseline  Delta Abs  Symbol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+# ........  .........  ............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+#
+               +4.71%  [.] <bsl_vm::modules::CatalogContext>::execution_parts
+               +2.93%  [.] <alloc::vec::Vec<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>>>>::resize_with::<<core::cell::RefCell<alloc::vec::Vec<(alloc::rc::Rc<str>, u32)>> as core::default::Default>::default>
+               +2.91%  [.] core::ptr::drop_glue::<bsl_rt::value::BslValue>
+               +1.97%  [.] <bsl_bytecode::configuration::ConfigurationProgram as bsl_bytecode::catalog::ExecutionCatalog>::module_code
+    19.92%     -1.74%  [.] <bsl_vm::ProgramExecution>::poll_linked
+     3.72%     -1.38%  [.] <bsl_rt::table::ValueTableData>::column_index
+               +1.16%  [.] <bsl_bytecode::configuration::ConfigurationProgram as bsl_bytecode::catalog::ExecutionCatalog>::module_name
+     2.12%     -0.93%  [.] <bsl_rt::table::ValueTableData>::set_cell
+    44.22%     -0.88%  [.] bsl_vm::step
+     1.77%     -0.77%  [.] __memcmp_avx2_movbe
+     2.30%     -0.73%  [.] <bsl_rt::table::ValueTableData>::add_row
+     4.70%     +0.71%  [.] core::ptr::drop_glue::<bsl_rt::error::RtError>
+     1.39%     -0.64%  [.] __memmove_avx_unaligned_erms
+     1.83%     -0.58%  [.] <bsl_rt::value::BslValue>::set_field_by_name
+     1.12%     -0.49%  [.] <bsl_rt::value::BslValue>::set_field_cached
+               +0.41%  [.] <bsl_rt::value::BslValue as core::clone::Clone>::clone
+     0.41%     -0.40%  [.] core::unicode::unicode_data::conversions::lookup
+     0.72%     -0.30%  [.] <bsl_rt::value::BslValue>::table_add_row
+     0.73%     -0.30%  [.] <bsl_number::number::BslNumber>::add_sub
+     0.60%     -0.29%  [.] <bsl_rt::table::ValueTableData>::get_cell
+               +0.28%  [.] <alloc::vec::Vec<alloc::vec::Vec<bsl_rt::value::BslValue>> as core::ops::drop::Drop>::drop
+     0.74%     -0.25%  [.] <bsl_number::number::BslNumber>::mul
+     0.82%     -0.22%  [k] 0xffffffff8c400005
+     0.79%     -0.21%  [.] bsl_vm::add_rhs_op
+     0.63%     -0.19%  [.] <bsl_rt::value::BslValue>::get_field_by_name
+     0.65%     -0.19%  [.] <bsl_rt::value::BslValue>::add
+     0.19%     -0.13%  [.] <alloc::rc::Rc<bsl_rt::object::BslObject>>::drop_slow
+     1.03%     +0.13%  [.] core::ptr::drop_glue::<bsl_vm::modules::ModuleState>
+     0.13%     -0.12%  [.] core::unicode::unicode_data::conversions::to_upper
+     0.11%     -0.11%  [.] <str>::to_uppercase
+     0.52%     -0.11%  [.] <bsl_rt::value::BslValue>::get_index
+     0.76%     -0.11%  [.] malloc
+               +0.10%  [.] <bsl_rt::value::BslValue>::collection_item
+     0.39%     -0.08%  [.] <bsl_rt::value::BslValue>::mul
+     0.38%     -0.08%  [.] <bsl_number::number::BslNumber as core::cmp::Ord>::cmp
+     0.18%     -0.07%  [.] bsl_rt::builtin::call_builtin_method_ctx
+     0.14%     -0.07%  [.] <bsl_rt::value::BslValue>::get_field_cached
+     0.15%     -0.06%  [.] <bsl_rt::value::BslValue>::compare
+     0.16%     -0.06%  [.] <bsl_rt::value::BslValue>::as_condition
+     0.08%     -0.05%  [.] __rustc::__rdl_alloc
+     0.14%     -0.05%  [.] bsl_bytecode::analysis::effects
+               +0.05%  [.] bsl_bytecode::image::verify_with_shared_tables
+     0.11%     -0.04%  [.] <bsl_number::number::BslNumber>::to_i64_exact
+     0.04%     -0.04%  [.] bsl_rt::types::squash
+     0.10%     -0.04%  [.] <bsl_number::number::BslNumber>::add
+     0.30%     -0.04%  [.] bsl_vm::numeric_for_next_regular
+     0.27%     -0.03%  [.] cfree@GLIBC_2.2.5
+     0.05%     -0.03%  [.] __rustc::__rust_alloc
+     0.11%     -0.03%  [.] <bsl_vm::CallArgs>::load
+     0.15%     -0.03%  [.] bsl_rt::builtin::call_builtin_method
+     0.02%     -0.02%  [.] core::slice::memchr::memchr_aligned
+     0.02%     -0.02%  [.] bsl_vm::linking::link_components
+               +0.02%  [.] bsl_vm::linking::link_verified
+     0.11%     +0.02%  [.] __rustc::__rust_no_alloc_shim_is_unstable_v2
+     0.02%     -0.02%  [.] <alloc::raw_vec::RawVecInner>::finish_grow
