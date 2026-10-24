@@ -1,0 +1,36 @@
+--- crates/bsl-cli/src/main.rs	2026-10-24 01:38:35.042437397 +0300
++++ crates/bsl-cli/src/main.rs	2026-10-24 01:35:39.525146891 +0300
+@@ -209,7 +209,21 @@
+     out
+ }
+ 
++// ПЛАЦЕБО для A/B: код без влияния на поведение, только сдвигает раскладку.
++#[inline(never)]
++fn placebo_layout_shift(seed: u64) -> u64 {
++    let mut x = seed;
++    for i in 0..96u64 {
++        x = x.wrapping_mul(6364136223846793005).wrapping_add(i ^ (x >> 7));
++        x ^= x.rotate_left((i % 31) as u32);
++        x = x.wrapping_add(x.count_ones() as u64 * 0x9E37_79B9);
++    }
++    x
++}
++
+ fn main() {
++    std::hint::black_box(bsl_vm::placebo_extra_0(std::hint::black_box(0)));
++    std::hint::black_box(placebo_layout_shift(std::hint::black_box(1)));
+     let mut args: Vec<String> = std::env::args().collect();
+     // Единственное место, где читается переключатель диагностики запуска:
+     // библиотеки получают его от хоста.
+--- crates/bsl-vm/src/lib.rs	2026-10-24 01:38:35.040437387 +0300
++++ crates/bsl-vm/src/lib.rs	2026-10-24 01:35:39.524513957 +0300
+@@ -5996,3 +5996,9 @@
+         None => context,
+     }
+ }
++
++/// ПЛАЦЕБО для A/B раскладки: поведения не меняет.
++#[inline(never)]
++pub fn placebo_extra_0(x: u64) -> u64 {
++    x.wrapping_mul(3).rotate_left(1)
++}

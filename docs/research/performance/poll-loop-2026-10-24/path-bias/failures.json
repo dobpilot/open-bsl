@@ -1,0 +1,18 @@
+[
+  {
+    "run": "cbr_rates-plain-1-main",
+    "reason": "exit=1"
+  },
+  {
+    "run": "cbr_rates-plain-1-current",
+    "reason": "exit=1"
+  },
+  {
+    "run": "cbr_rates-optimize-1-main",
+    "reason": "exit=1"
+  },
+  {
+    "run": "cbr_rates-optimize-1-current",
+    "reason": "exit=1"
+  }
+]
